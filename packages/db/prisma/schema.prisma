@@ -1,0 +1,1538 @@
+// ─────────────────────────────────────────────────────────────────────────
+// NPI Solar ERP — Prisma schema
+// Scope: W0 (shared kernel) + W1 (Sell & Contract vertical slice).
+//
+// Design decisions carried from the build spec (§4):
+//   • Every tenant-scoped row carries organizationId (row-level tenancy).
+//   • AuditLog is append-only (corrections are new rows, never edits).
+//   • Bilingual reference data uses paired *_ar / *_en fields, not a join table.
+//   • Money is Decimal(18,2); capacity is Decimal(12,3) kWp.
+// The remaining ~55 entities (project, procurement, finance/ZATCA, O&M,
+// telemetry, PPA) attach onto this spine in later waves — see README roadmap.
+// ─────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ─────────────────────────────────────────────────────────────────
+
+enum Locale {
+  AR
+  EN
+}
+
+enum CustomerType {
+  RESIDENTIAL
+  CI // commercial & industrial
+  UTILITY
+  GOVERNMENT
+}
+
+enum LeadSource {
+  WEBSITE
+  REFERRAL
+  CAMPAIGN
+  DIRECT
+  WHATSAPP
+  OTHER
+}
+
+enum LeadStatus {
+  NEW
+  QUALIFIED
+  DISQUALIFIED
+  CONVERTED
+}
+
+enum OpportunityStage {
+  PROSPECTING
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum ItemCategory {
+  MODULE
+  INVERTER
+  MOUNTING
+  CABLE
+  BOS // balance of system
+  SPARE
+  SERVICE
+}
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+}
+
+enum ContractType {
+  EPC
+  PPA
+  OM
+  LEASE
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  CLOSED
+  CANCELLED
+}
+
+enum MilestoneTriggerType {
+  DATE
+  PROGRESS
+  EVENT
+}
+
+enum MilestoneStatus {
+  PENDING
+  VERIFIED
+  INVOICED
+}
+
+// ─── Finance & ZATCA (W3) ───────────────────────────────────────────────────
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum TaxType {
+  VAT_STANDARD
+  VAT_ZERO
+  VAT_EXEMPT
+  REVERSE_CHARGE
+  WITHHOLDING
+}
+
+enum InvoiceType {
+  MILESTONE
+  SETTLEMENT
+  SERVICE
+  CREDIT_NOTE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  CLEARED
+  PAID
+  CANCELLED
+}
+
+// ZATCA invoice transaction type: standard (B2B, cleared) vs simplified (B2C, reported).
+enum SubmissionMode {
+  CLEARANCE
+  REPORTING
+}
+
+enum AuthorityStatus {
+  PENDING
+  CLEARED
+  REPORTED
+  REJECTED
+}
+
+enum RetentionStatus {
+  WITHHELD
+  RELEASED
+}
+
+// ─── Shared kernel (W0) ─────────────────────────────────────────────────────
+
+model Organization {
+  id                   String   @id @default(cuid())
+  legalNameAr          String
+  legalNameEn          String
+  vatNumber            String?
+  crNumber             String?
+  baseCurrency         String   @default("SAR")
+  isTenantRoot         Boolean  @default(true)
+  parentOrganizationId String?
+  parent               Organization?  @relation("OrgHierarchy", fields: [parentOrganizationId], references: [id])
+  children             Organization[] @relation("OrgHierarchy")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  users               User[]
+  roles               Role[]
+  customers           Customer[]
+  leads               Lead[]
+  opportunities       Opportunity[]
+  items               Item[]
+  pricingSchemes      PricingScheme[]
+  designVersions      DesignVersion[]
+  proposals           Proposal[]
+  contracts           Contract[]
+  numberingSequences  NumberingSequence[]
+  auditLogs           AuditLog[]
+  accounts            Account[]
+  taxCodes            TaxCode[]
+  invoices            Invoice[]
+  journalEntries      JournalEntry[]
+  retentionEntries    RetentionEntry[]
+  vendors             Vendor[]
+  projects            Project[]
+  purchaseOrders      PurchaseOrder[]
+  goodsReceipts       GoodsReceipt[]
+  serialUnits         SerialUnit[]
+  projectCostEntries  ProjectCostEntry[]
+  vendorBills         VendorBill[]
+  changeOrders        ChangeOrder[]
+  subcontracts        SubcontractAgreement[]
+  progressClaims      ProgressClaim[]
+  locations           Location[]
+  stockLevels         StockLevel[]
+  stockMovements      StockMovement[]
+  assets              Asset[]
+  workOrders          WorkOrder[]
+  maintenancePlans    MaintenancePlan[]
+  telemetryReadings   TelemetryReading[]
+  performanceAlerts   PerformanceAlert[]
+  ppaTerms            PpaTerm[]
+  settlementRuns      SettlementRun[]
+  warrantyClaims      WarrantyClaim[]
+  paymentReceipts     PaymentReceipt[]
+  timesheets          Timesheet[]
+
+  @@index([parentOrganizationId])
+}
+
+model Role {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  nameAr         String
+  nameEn         String
+  // Flat list of permission keys, e.g. ["crm.lead.read", "commercial.contract.write"].
+  permissions    String[]
+  users          User[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String   @unique
+  passwordHash   String
+  nameAr         String
+  nameEn         String
+  locale         Locale   @default(AR)
+  roleId         String
+  role           Role     @relation(fields: [roleId], references: [id])
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  ownedLeads         Lead[]        @relation("LeadOwner")
+  ownedOpportunities Opportunity[] @relation("OpportunityOwner")
+  verifiedMilestones ContractMilestone[] @relation("MilestoneVerifier")
+  assignedWorkOrders WorkOrder[]   @relation("WoAssignee")
+  timesheets         Timesheet[]
+
+  @@index([organizationId])
+}
+
+model NumberingSequence {
+  id             String @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documentType   String // e.g. "LEAD", "OPPORTUNITY", "PROPOSAL", "CONTRACT"
+  prefix         String
+  nextValue      Int    @default(1)
+  fiscalYear     Int
+  padding        Int    @default(5)
+
+  @@unique([organizationId, documentType, fiscalYear])
+}
+
+// Append-only. Never updated or deleted — corrections are new rows.
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorId        String?
+  entityType     String
+  entityId       String
+  action         String // CREATE | UPDATE | DELETE | LOGIN | CONVERT | VERIFY ...
+  beforeJson     Json?
+  afterJson      Json?
+  ip             String?
+  occurredAt     DateTime @default(now())
+
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, occurredAt])
+}
+
+// ─── Commercial slice (W1: Sell & Contract) ─────────────────────────────────
+
+model Customer {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  nameAr         String
+  nameEn         String
+  customerType   CustomerType @default(CI)
+  vatNumber      String?
+  crNumber       String?
+  creditTermsDays Int     @default(0)
+  phone          String?
+  email          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  leads          Lead[]
+  opportunities  Opportunity[]
+  contracts      Contract[]
+  invoices       Invoice[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model Lead {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  contactName    String
+  companyName    String?
+  source         LeadSource @default(DIRECT)
+  status         LeadStatus @default(NEW)
+  estimatedKwp   Decimal? @db.Decimal(12, 3)
+  phone          String?
+  email          String?
+  notes          String?
+  ownerId        String?
+  owner          User?    @relation("LeadOwner", fields: [ownerId], references: [id])
+  customerId     String?
+  customer       Customer? @relation(fields: [customerId], references: [id])
+  convertedOpportunityId String? @unique
+  convertedOpportunity   Opportunity? @relation("LeadConversion", fields: [convertedOpportunityId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+}
+
+model Opportunity {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id])
+  stage          OpportunityStage @default(PROSPECTING)
+  estimatedKwp   Decimal? @db.Decimal(12, 3)
+  estimatedValue Decimal? @db.Decimal(18, 2)
+  currency       String   @default("SAR")
+  expectedCloseDate DateTime?
+  ownerId        String?
+  owner          User?    @relation("OpportunityOwner", fields: [ownerId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sourceLead     Lead?    @relation("LeadConversion")
+  designVersions DesignVersion[]
+  proposals      Proposal[]
+  contracts      Contract[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, stage])
+}
+
+model Item {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sku            String
+  nameAr         String
+  nameEn         String
+  itemCategory   ItemCategory
+  uom            String   @default("unit")
+  isSerialised   Boolean  @default(false)
+  unitCost       Decimal  @default(0) @db.Decimal(18, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  bomLines       BomLine[]
+  poLines        PurchaseOrderLine[]
+  serialUnits    SerialUnit[]
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  workOrderParts WorkOrderPart[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId])
+}
+
+model PricingScheme {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  nameAr         String
+  nameEn         String
+  marginPct      Decimal  @default(0) @db.Decimal(6, 3)
+  currency       String   @default("SAR")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  revisions      ProposalRevision[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model DesignVersion {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  opportunityId  String?
+  opportunity    Opportunity? @relation(fields: [opportunityId], references: [id])
+  sourceTool     String   @default("manual") // aurora | pvsyst | helioscope | opensolar | manual
+  externalRef    String?
+  versionNo      Int      @default(1)
+  capacityKwp    Decimal  @default(0) @db.Decimal(12, 3)
+  expectedAnnualKwh Decimal @default(0) @db.Decimal(18, 2)
+  importedAt     DateTime @default(now())
+
+  revisions      ProposalRevision[]
+
+  @@index([organizationId])
+  @@index([opportunityId])
+}
+
+model Proposal {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  opportunityId  String
+  opportunity    Opportunity @relation(fields: [opportunityId], references: [id])
+  status         ProposalStatus @default(DRAFT)
+  currency       String   @default("SAR")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  revisions      ProposalRevision[]
+  contracts      Contract[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model ProposalRevision {
+  id             String   @id @default(cuid())
+  proposalId     String
+  proposal       Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  revisionNo     Int
+  designVersionId String?
+  designVersion  DesignVersion? @relation(fields: [designVersionId], references: [id])
+  pricingSchemeId String?
+  pricingScheme  PricingScheme? @relation(fields: [pricingSchemeId], references: [id])
+  subtotal       Decimal  @default(0) @db.Decimal(18, 2)
+  marginAmount   Decimal  @default(0) @db.Decimal(18, 2)
+  totalAmount    Decimal  @default(0) @db.Decimal(18, 2)
+  status         ProposalStatus @default(DRAFT)
+  isWinning      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  bomLines       BomLine[]
+  contract       Contract?
+
+  @@unique([proposalId, revisionNo])
+}
+
+model BomLine {
+  id                 String @id @default(cuid())
+  proposalRevisionId String
+  proposalRevision   ProposalRevision @relation(fields: [proposalRevisionId], references: [id], onDelete: Cascade)
+  itemId             String
+  item               Item   @relation(fields: [itemId], references: [id])
+  qty                Decimal @default(1) @db.Decimal(14, 3)
+  unitPrice          Decimal @default(0) @db.Decimal(18, 2)
+  isAdder            Boolean @default(false)
+  lineTotal          Decimal @default(0) @db.Decimal(18, 2)
+
+  @@index([proposalRevisionId])
+}
+
+model Contract {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code               String
+  customerId         String
+  customer           Customer @relation(fields: [customerId], references: [id])
+  opportunityId      String?
+  opportunity        Opportunity? @relation(fields: [opportunityId], references: [id])
+  proposalId         String?
+  proposal           Proposal? @relation(fields: [proposalId], references: [id])
+  proposalRevisionId String?  @unique
+  proposalRevision   ProposalRevision? @relation(fields: [proposalRevisionId], references: [id])
+  contractType       ContractType @default(EPC)
+  status             ContractStatus @default(DRAFT)
+  startDate          DateTime?
+  endDate            DateTime?
+  currency           String   @default("SAR")
+  totalValue         Decimal  @default(0) @db.Decimal(18, 2)
+  retentionPct       Decimal  @default(0) @db.Decimal(6, 3)
+  advancePct         Decimal  @default(0) @db.Decimal(6, 3)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  milestones         ContractMilestone[]
+  invoices           Invoice[]
+  retentionEntries   RetentionEntry[]
+  project            Project?
+  changeOrders       ChangeOrder[]
+  ppaTerm            PpaTerm?
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+}
+
+model ContractMilestone {
+  id             String   @id @default(cuid())
+  contractId     String
+  contract       Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  sequence       Int
+  descriptionAr  String
+  descriptionEn  String
+  triggerType    MilestoneTriggerType @default(PROGRESS)
+  amount         Decimal  @default(0) @db.Decimal(18, 2)
+  dueDate        DateTime?
+  status         MilestoneStatus @default(PENDING)
+  verifiedAt     DateTime?
+  verifiedById   String?
+  verifiedBy     User?    @relation("MilestoneVerifier", fields: [verifiedById], references: [id])
+  invoiceId      String?  @unique
+  invoice        Invoice? @relation(fields: [invoiceId], references: [id])
+
+  @@unique([contractId, sequence])
+  @@index([contractId])
+}
+
+// ─── Finance & ZATCA (W3) ───────────────────────────────────────────────────
+
+model Account {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  nameAr         String
+  nameEn         String
+  accountType    AccountType
+  createdAt      DateTime @default(now())
+
+  journalLines   JournalLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model TaxCode {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  nameAr         String
+  nameEn         String
+  taxType        TaxType
+  rate           Decimal  @default(0) @db.Decimal(6, 3) // e.g. 15.000 for standard VAT
+  createdAt      DateTime @default(now())
+
+  invoiceLines   InvoiceLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model Invoice {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  invoiceType    InvoiceType @default(MILESTONE)
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id])
+  contractId     String?
+  contract       Contract? @relation(fields: [contractId], references: [id])
+  issueDate      DateTime @default(now())
+  currency       String   @default("SAR")
+  subtotal       Decimal  @default(0) @db.Decimal(18, 2) // net of VAT, before retention
+  vatAmount      Decimal  @default(0) @db.Decimal(18, 2)
+  retentionAmount Decimal @default(0) @db.Decimal(18, 2) // withheld from this invoice
+  total          Decimal  @default(0) @db.Decimal(18, 2) // subtotal + vat (gross billed)
+  netPayable     Decimal  @default(0) @db.Decimal(18, 2) // total - retention (amount due now)
+  status         InvoiceStatus @default(DRAFT)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lines          InvoiceLine[]
+  eInvoice       EInvoiceDocument?
+  milestone      ContractMilestone?
+  journalEntries JournalEntry[]
+  retentionEntry RetentionEntry?
+  settlementRun  SettlementRun?
+  payments       PaymentReceipt[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+}
+
+model InvoiceLine {
+  id             String   @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  descriptionAr  String
+  descriptionEn  String
+  qty            Decimal  @default(1) @db.Decimal(14, 3)
+  unitPrice      Decimal  @default(0) @db.Decimal(18, 2)
+  taxCodeId      String?
+  taxCode        TaxCode? @relation(fields: [taxCodeId], references: [id])
+  lineSubtotal   Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount      Decimal  @default(0) @db.Decimal(18, 2)
+
+  @@index([invoiceId])
+}
+
+// ZATCA Phase 2 compliance record — append-only. Holds the chained hash, the
+// QR TLV, the cryptographic stamp and the authority response.
+model EInvoiceDocument {
+  id                 String   @id @default(cuid())
+  invoiceId          String   @unique
+  invoice            Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  uuid               String   @unique
+  invoiceHash        String   // base64 SHA-256 of the canonical XML
+  previousInvoiceHash String  // PIH — chains invoices per organization
+  qrTlv              String   // base64 TLV (ZATCA QR)
+  cryptographicStamp String   // base64 ECDSA signature over the hash
+  publicKey          String   // base64 signing public key (SPKI)
+  xmlPayload         String   // the UBL 2.1 XML document
+  submissionMode     SubmissionMode @default(CLEARANCE)
+  authorityStatus    AuthorityStatus @default(PENDING)
+  authorityResponseRef String?
+  isSimulated        Boolean  @default(true) // true until a real ZATCA CSID is wired in
+  submittedAt        DateTime @default(now())
+}
+
+model JournalEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  postingDate    DateTime @default(now())
+  sourceType     String   // "Invoice", "Payment", ...
+  sourceId       String
+  memo           String?
+  invoiceId      String?
+  invoice        Invoice? @relation(fields: [invoiceId], references: [id])
+  isReversal     Boolean  @default(false)
+  reversedEntryId String?
+  createdAt      DateTime @default(now())
+
+  lines          JournalLine[]
+
+  @@index([organizationId, postingDate])
+  @@index([sourceType, sourceId])
+}
+
+model JournalLine {
+  id             String   @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        Account  @relation(fields: [accountId], references: [id])
+  debit          Decimal  @default(0) @db.Decimal(18, 2)
+  credit         Decimal  @default(0) @db.Decimal(18, 2)
+  currency       String   @default("SAR")
+
+  @@index([journalEntryId])
+  @@index([accountId])
+}
+
+model RetentionEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contractId     String
+  contract       Contract @relation(fields: [contractId], references: [id])
+  invoiceId      String   @unique
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id])
+  withheldAmount Decimal  @db.Decimal(18, 2)
+  releaseDueDate DateTime?
+  status         RetentionStatus @default(WITHHELD)
+  releasedInvoiceId String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([contractId])
+}
+
+// ─── Projects & Procurement (W2: Deliver & Cost) ────────────────────────────
+
+enum ProjectStage {
+  PLANNING
+  PROCUREMENT
+  EXECUTION
+  COMMISSIONING
+  CLOSED
+}
+
+enum VendorType {
+  SUPPLIER
+  SUBCONTRACTOR
+  OEM
+  SERVICE
+}
+
+enum PoStatus {
+  DRAFT
+  APPROVED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+enum SerialState {
+  IN_STOCK
+  INSTALLED
+  FAULTY
+  RETURNED
+  SCRAPPED
+}
+
+enum CostType {
+  MATERIAL
+  LABOUR
+  SUBCONTRACT
+  EQUIPMENT
+  OVERHEAD
+}
+
+enum BillStatus {
+  DRAFT
+  POSTED
+  PAID
+}
+
+model Vendor {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  nameAr         String
+  nameEn         String
+  vendorType     VendorType @default(SUPPLIER)
+  vatNumber      String?
+  crNumber       String?
+  phone          String?
+  email          String?
+  isManufacturer Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+  serialUnits    SerialUnit[]
+  vendorBills    VendorBill[]
+  subcontracts   SubcontractAgreement[]
+  warrantyClaims WarrantyClaim[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+// PRJ-01/02/03: the execution container born from a contract.
+model Project {
+  id               String   @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code             String
+  contractId       String   @unique
+  contract         Contract @relation(fields: [contractId], references: [id])
+  nameAr           String
+  nameEn           String
+  stage            ProjectStage @default(PLANNING)
+  siteRef          String?
+  capacityKwp      Decimal? @db.Decimal(12, 3)
+  plannedStart     DateTime?
+  plannedEnd       DateTime?
+  projectManagerId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  wbsElements    WbsElement[]
+  purchaseOrders PurchaseOrder[]
+  costEntries    ProjectCostEntry[]
+  serialUnits    SerialUnit[]
+  changeOrders   ChangeOrder[]
+  subcontracts   SubcontractAgreement[]
+  locations      Location[]
+  assets         Asset[]
+  workOrders     WorkOrder[]
+  maintenancePlans MaintenancePlan[]
+  ppaTerms       PpaTerm[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, stage])
+}
+
+// PRJ-02/04: flat WBS carrying the budget (parent link reserved for deep WBS).
+model WbsElement {
+  id           String  @id @default(cuid())
+  projectId    String
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentWbsId  String?
+  code         String
+  nameAr       String
+  nameEn       String
+  budgetAmount Decimal @default(0) @db.Decimal(18, 2)
+  createdAt    DateTime @default(now())
+
+  poLines      PurchaseOrderLine[]
+  costEntries  ProjectCostEntry[]
+  changeOrders ChangeOrder[]
+  subcontracts SubcontractAgreement[]
+
+  @@unique([projectId, code])
+  @@index([projectId])
+}
+
+// SCM-01/02: committed cost against the project.
+model PurchaseOrder {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  vendorId       String
+  vendor         Vendor   @relation(fields: [vendorId], references: [id])
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id])
+  status         PoStatus @default(DRAFT)
+  currency       String   @default("SAR")
+  subtotal       Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount      Decimal  @default(0) @db.Decimal(18, 2)
+  total          Decimal  @default(0) @db.Decimal(18, 2)
+  approvedAt     DateTime?
+  approvedById   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lines          PurchaseOrderLine[]
+  goodsReceipts  GoodsReceipt[]
+  vendorBills    VendorBill[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([projectId])
+}
+
+model PurchaseOrderLine {
+  id              String  @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  itemId          String
+  item            Item    @relation(fields: [itemId], references: [id])
+  wbsElementId    String?
+  wbsElement      WbsElement? @relation(fields: [wbsElementId], references: [id])
+  qty             Decimal @default(1) @db.Decimal(14, 3)
+  unitPrice       Decimal @default(0) @db.Decimal(18, 2)
+  lineTotal       Decimal @default(0) @db.Decimal(18, 2)
+  receivedQty     Decimal @default(0) @db.Decimal(14, 3)
+
+  grnLines        GoodsReceiptLine[]
+
+  @@index([purchaseOrderId])
+}
+
+// SCM-01: receipt against a PO; the registration point for serials (SCM-05).
+model GoodsReceipt {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  purchaseOrderId String
+  purchaseOrder  PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  receivedAt     DateTime @default(now())
+  receivedById   String?
+  notes          String?
+
+  lines          GoodsReceiptLine[]
+  serialUnits    SerialUnit[]
+  vendorBills    VendorBill[]
+
+  @@unique([organizationId, code])
+  @@index([purchaseOrderId])
+}
+
+model GoodsReceiptLine {
+  id                  String @id @default(cuid())
+  goodsReceiptId      String
+  goodsReceipt        GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderLineId String
+  purchaseOrderLine   PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id])
+  qty                 Decimal @default(0) @db.Decimal(14, 3)
+
+  @@index([goodsReceiptId])
+}
+
+// SCM-05 / AST-01: the procurement↔operations joint. An entity, not a field.
+model SerialUnit {
+  id                   String   @id @default(cuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  itemId               String
+  item                 Item     @relation(fields: [itemId], references: [id])
+  serialNo             String
+  batchNo              String?
+  manufacturerVendorId String?
+  manufacturerVendor   Vendor?  @relation(fields: [manufacturerVendorId], references: [id])
+  goodsReceiptId       String?
+  goodsReceipt         GoodsReceipt? @relation(fields: [goodsReceiptId], references: [id])
+  projectId            String?
+  project              Project? @relation(fields: [projectId], references: [id])
+  currentState         SerialState @default(IN_STOCK)
+  locationId           String?
+  location             Location? @relation(fields: [locationId], references: [id])
+  installedAt          DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  stockMovements       StockMovement[]
+  asset                Asset?
+  warrantyClaims       WarrantyClaim[] @relation("ClaimedSerial")
+  replacementFor       WarrantyClaim?  @relation("ReplacementSerial")
+
+  @@unique([organizationId, itemId, serialNo])
+  @@index([organizationId, currentState])
+  @@index([projectId])
+}
+
+// PRJ-03: append-only actual-cost ledger. Corrections are reversing rows.
+model ProjectCostEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  wbsElementId   String?
+  wbsElement     WbsElement? @relation(fields: [wbsElementId], references: [id])
+  costType       CostType
+  sourceType     String   // "GoodsReceipt", "VendorBill", "WorkOrder", "Reversal"
+  sourceId       String
+  amount         Decimal  @db.Decimal(18, 2) // negative only on reversing rows
+  memo           String?
+  postedAt       DateTime @default(now())
+
+  @@index([organizationId, projectId])
+  @@index([sourceType, sourceId])
+}
+
+// ─── W2 remainder: change orders, subcontracts, multi-location stock ────────
+
+enum ChangeOrderStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+}
+
+enum SubcontractStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  TERMINATED
+}
+
+enum ClaimStatus {
+  SUBMITTED
+  APPROVED
+  PAID
+  REJECTED
+}
+
+enum LocationType {
+  WAREHOUSE
+  LAYDOWN_YARD
+  SITE
+  VAN
+}
+
+// PRJ-06: variations with cost impact; approval adjusts the contract value
+// (and optionally a WBS budget), which flows into POC and profitability.
+model ChangeOrder {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  contractId     String
+  contract       Contract @relation(fields: [contractId], references: [id])
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id])
+  wbsElementId   String?
+  wbsElement     WbsElement? @relation(fields: [wbsElementId], references: [id])
+  descriptionAr  String
+  descriptionEn  String
+  amountDelta    Decimal  @db.Decimal(18, 2) // signed: additions +, omissions −
+  scheduleImpactDays Int  @default(0)
+  status         ChangeOrderStatus @default(DRAFT)
+  approvedAt     DateTime?
+  approvedById   String?
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, code])
+  @@index([contractId])
+}
+
+// PRJ-07: subcontractor scope with back-to-back progress claims.
+model SubcontractAgreement {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  vendorId       String
+  vendor         Vendor   @relation(fields: [vendorId], references: [id])
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  wbsElementId   String?
+  wbsElement     WbsElement? @relation(fields: [wbsElementId], references: [id])
+  scopeAr        String
+  scopeEn        String
+  amount         Decimal  @db.Decimal(18, 2)
+  retentionPct   Decimal  @default(0) @db.Decimal(6, 3)
+  status         SubcontractStatus @default(ACTIVE)
+  createdAt      DateTime @default(now())
+
+  claims         ProgressClaim[]
+
+  @@unique([organizationId, code])
+  @@index([projectId])
+}
+
+// PRJ-07: المستخلص — approval posts SUBCONTRACT actuals + AP journal.
+model ProgressClaim {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  agreementId    String
+  agreement      SubcontractAgreement @relation(fields: [agreementId], references: [id])
+  sequence       Int
+  descriptionAr  String?
+  descriptionEn  String?
+  claimedAmount  Decimal  @db.Decimal(18, 2) // work value before VAT
+  vatAmount      Decimal  @default(0) @db.Decimal(18, 2)
+  retentionWithheld Decimal @default(0) @db.Decimal(18, 2)
+  netPayable     Decimal  @default(0) @db.Decimal(18, 2)
+  status         ClaimStatus @default(SUBMITTED)
+  approvedAt     DateTime?
+  approvedById   String?
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, code])
+  @@unique([agreementId, sequence])
+}
+
+// SCM-04: warehouse / laydown yard / job site / technician van.
+model Location {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  nameAr         String
+  nameEn         String
+  locationType   LocationType @default(WAREHOUSE)
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id])
+  createdAt      DateTime @default(now())
+
+  serialUnits    SerialUnit[]
+  stockLevels    StockLevel[]
+  movementsFrom  StockMovement[] @relation("MoveFrom")
+  movementsTo    StockMovement[] @relation("MoveTo")
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+// Bulk (non-serialised) stock per item per location.
+model StockLevel {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  itemId         String
+  item           Item     @relation(fields: [itemId], references: [id])
+  locationId     String
+  location       Location @relation(fields: [locationId], references: [id])
+  qty            Decimal  @default(0) @db.Decimal(14, 3)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, itemId, locationId])
+}
+
+// Append-only movement trail: receipts, transfers, issues.
+model StockMovement {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  itemId         String
+  item           Item     @relation(fields: [itemId], references: [id], map: "StockMovement_item_fkey")
+  serialUnitId   String?
+  serialUnit     SerialUnit? @relation(fields: [serialUnitId], references: [id])
+  fromLocationId String?
+  fromLocation   Location? @relation("MoveFrom", fields: [fromLocationId], references: [id])
+  toLocationId   String?
+  toLocation     Location? @relation("MoveTo", fields: [toLocationId], references: [id])
+  qty            Decimal  @default(1) @db.Decimal(14, 3)
+  movementType   String   // RECEIPT | TRANSFER | ISSUE
+  sourceType     String?  // "GoodsReceipt", ...
+  sourceId       String?
+  movedAt        DateTime @default(now())
+
+  @@index([organizationId, itemId])
+  @@index([serialUnitId])
+}
+
+// ─── O&M / Field Service (W4: Operate) ─────────────────────────────────────
+
+enum AssetType {
+  PLANT
+  BLOCK
+  ARRAY
+  STRING
+  MODULE
+  INVERTER
+  TRANSFORMER
+  TRACKER
+  METER
+  COMBINER
+  EQUIPMENT
+}
+
+enum AssetStatus {
+  OPERATING
+  FAULTY
+  UNDER_MAINTENANCE
+  RETIRED
+}
+
+enum WoType {
+  CORRECTIVE
+  PREVENTIVE
+  CLEANING
+  INSPECTION
+  COMMISSIONING
+}
+
+enum WoOrigin {
+  MANUAL
+  PLAN
+  ALERT
+  TICKET
+}
+
+enum WoPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum WoStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CLOSED
+  CANCELLED
+}
+
+// AST-01: the operating register. Born automatically when a serial installs;
+// PLANT roots are created per project on first install.
+model Asset {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  parentAssetId  String?
+  parent         Asset?   @relation("AssetHierarchy", fields: [parentAssetId], references: [id])
+  children       Asset[]  @relation("AssetHierarchy")
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id])
+  assetType      AssetType @default(EQUIPMENT)
+  nameAr         String
+  nameEn         String
+  serialUnitId   String?  @unique
+  serialUnit     SerialUnit? @relation(fields: [serialUnitId], references: [id])
+  status         AssetStatus @default(OPERATING)
+  installDate    DateTime?
+  warrantyEndDate DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workOrders     WorkOrder[]
+  maintenancePlans MaintenancePlan[]
+  telemetryReadings TelemetryReading[]
+  performanceAlerts PerformanceAlert[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, assetType])
+  @@index([projectId])
+}
+
+// FSM-01: corrective/preventive work orders with dispatch and lifecycle.
+model WorkOrder {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  assetId        String?
+  asset          Asset?   @relation(fields: [assetId], references: [id])
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id])
+  woType         WoType   @default(CORRECTIVE)
+  origin         WoOrigin @default(MANUAL)
+  priority       WoPriority @default(MEDIUM)
+  status         WoStatus @default(OPEN)
+  titleAr        String
+  titleEn        String
+  description    String?
+  assignedToId   String?
+  assignedTo     User?    @relation("WoAssignee", fields: [assignedToId], references: [id])
+  scheduledAt    DateTime?
+  slaDueAt       DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  closedAt       DateTime?
+  // FSM-04: checklist results captured at completion [{label, done, note}].
+  checklistJson  Json?
+  maintenancePlanId String?
+  maintenancePlan MaintenancePlan? @relation(fields: [maintenancePlanId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  parts          WorkOrderPart[]
+  alert          PerformanceAlert?
+  warrantyClaims WarrantyClaim[]
+  timesheets     Timesheet[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([assetId])
+  @@index([assignedToId])
+}
+
+// Spare-part consumption: draws from a stock location, posts O&M cost.
+model WorkOrderPart {
+  id             String   @id @default(cuid())
+  workOrderId    String
+  workOrder      WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  itemId         String
+  item           Item     @relation(fields: [itemId], references: [id])
+  qty            Decimal  @default(1) @db.Decimal(14, 3)
+  fromLocationId String?
+  unitCost       Decimal  @default(0) @db.Decimal(18, 2)
+  totalCost      Decimal  @default(0) @db.Decimal(18, 2)
+  createdAt      DateTime @default(now())
+
+  @@index([workOrderId])
+}
+
+// FSM-02: calendar-triggered plans that generate preventive work orders.
+model MaintenancePlan {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  nameAr         String
+  nameEn         String
+  assetId        String?
+  asset          Asset?   @relation(fields: [assetId], references: [id])
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id])
+  intervalDays   Int      @default(90)
+  nextDueAt      DateTime
+  // FSM-04: checklist template items [{labelAr, labelEn, mandatory}].
+  checklistTemplateJson Json?
+  isActive       Boolean  @default(true)
+  lastGeneratedAt DateTime?
+  createdAt      DateTime @default(now())
+
+  workOrders     WorkOrder[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, nextDueAt])
+}
+
+// ─── Telemetry bridge (W5: Connect the plant) ──────────────────────────────
+
+enum AlertType {
+  UNDERPERFORMANCE
+  OFFLINE
+  COMM_LOSS
+  OVERTEMP
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  WORK_ORDERED
+  RESOLVED
+}
+
+// TEL-01: daily production readings per asset, append-only. The real SCADA /
+// inverter-API connectors live in the separate integration service (§5.1);
+// `source` marks what fed each row (SIMULATED until that service ships).
+model TelemetryReading {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assetId        String
+  asset          Asset    @relation(fields: [assetId], references: [id])
+  readingDate    DateTime // day granularity (UTC midnight)
+  energyKwh      Decimal  @db.Decimal(14, 3)
+  expectedKwh    Decimal? @db.Decimal(14, 3)
+  performanceRatio Decimal? @db.Decimal(6, 3) // actual / expected
+  source         String   @default("SIMULATED") // SIMULATED | SCADA | API
+  createdAt      DateTime @default(now())
+
+  alerts         PerformanceAlert[]
+
+  @@unique([assetId, readingDate])
+  @@index([organizationId, readingDate])
+}
+
+// TEL-03/04 + FSM-11: the metering-to-money joint — an alert that can raise
+// a work order, whose closure resolves the alert.
+model PerformanceAlert {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  assetId        String
+  asset          Asset    @relation(fields: [assetId], references: [id])
+  readingId      String?
+  reading        TelemetryReading? @relation(fields: [readingId], references: [id])
+  alertType      AlertType
+  severity       AlertSeverity @default(WARNING)
+  status         AlertStatus @default(OPEN)
+  message        String
+  ruleRef        String? // which rule fired, e.g. "PR<0.5"
+  detectedAt     DateTime @default(now())
+  acknowledgedById String?
+  acknowledgedAt DateTime?
+  workOrderId    String?  @unique
+  workOrder      WorkOrder? @relation(fields: [workOrderId], references: [id])
+  resolvedAt     DateTime?
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([assetId])
+}
+
+// ─── Recurring revenue (W6: PPA & settlement) ──────────────────────────────
+
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+}
+
+enum PpaStatus {
+  ACTIVE
+  SUSPENDED
+  ENDED
+}
+
+enum SettlementStatus {
+  INVOICED
+  CANCELLED
+}
+
+// PPA-01/02: commercial terms + tariff with annual escalation, attached to a
+// PPA/O&M contract. fixedMonthlyFee covers the O&M fixed+variable case (PPA-07).
+model PpaTerm {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code                String
+  contractId          String   @unique
+  contract            Contract @relation(fields: [contractId], references: [id])
+  projectId           String
+  project             Project  @relation(fields: [projectId], references: [id])
+  ratePerKwh          Decimal  @db.Decimal(10, 4)
+  escalationPctPerYear Decimal @default(0) @db.Decimal(6, 3)
+  fixedMonthlyFee     Decimal  @default(0) @db.Decimal(18, 2)
+  billingCycle        BillingCycle @default(MONTHLY)
+  startDate           DateTime
+  endDate             DateTime?
+  status              PpaStatus @default(ACTIVE)
+  createdAt           DateTime @default(now())
+
+  settlementRuns      SettlementRun[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+}
+
+// PPA-03: the per-kWh settlement — computed from telemetry readings, fully
+// recomputable (inputs stored), and it produces exactly one invoice.
+model SettlementRun {
+  id                String   @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code              String
+  ppaTermId         String
+  ppaTerm           PpaTerm  @relation(fields: [ppaTermId], references: [id])
+  periodStart       DateTime
+  periodEnd         DateTime
+  energyKwh         Decimal  @db.Decimal(14, 3)
+  appliedRate       Decimal  @db.Decimal(10, 4) // after escalation
+  escalationApplied Decimal  @default(0) @db.Decimal(6, 3)
+  variableAmount    Decimal  @db.Decimal(18, 2)
+  fixedAmount       Decimal  @default(0) @db.Decimal(18, 2)
+  subtotal          Decimal  @db.Decimal(18, 2)
+  status            SettlementStatus @default(INVOICED)
+  invoiceId         String?  @unique
+  invoice           Invoice? @relation(fields: [invoiceId], references: [id])
+  computedAt        DateTime @default(now())
+
+  @@unique([organizationId, code])
+  @@index([ppaTermId, periodStart])
+}
+
+// ─── W7: warranty RMA, payments, labour time ───────────────────────────────
+
+enum WarrantyClaimStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REPLACED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CHEQUE
+  CASH
+}
+
+// FSM-09: the serial-to-manufacturer RMA. Replacement swaps the asset's serial
+// so the operating history survives the hardware change.
+model WarrantyClaim {
+  id                     String   @id @default(cuid())
+  organizationId         String
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code                   String
+  serialUnitId           String
+  serialUnit             SerialUnit @relation("ClaimedSerial", fields: [serialUnitId], references: [id])
+  manufacturerVendorId   String?
+  manufacturerVendor     Vendor?  @relation(fields: [manufacturerVendorId], references: [id])
+  workOrderId            String?
+  workOrder              WorkOrder? @relation(fields: [workOrderId], references: [id])
+  defectAr               String
+  defectEn               String
+  status                 WarrantyClaimStatus @default(DRAFT)
+  submittedAt            DateTime?
+  resolvedAt             DateTime?
+  replacementSerialUnitId String? @unique
+  replacementSerialUnit  SerialUnit? @relation("ReplacementSerial", fields: [replacementSerialUnitId], references: [id])
+  createdAt              DateTime @default(now())
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([serialUnitId])
+}
+
+// Customer payment against an invoice: Dr Bank / Cr AR.
+model PaymentReceipt {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id])
+  amount         Decimal  @db.Decimal(18, 2)
+  method         PaymentMethod @default(BANK_TRANSFER)
+  reference      String?
+  receivedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, code])
+  @@index([invoiceId])
+}
+
+// FSM-07: field labour hours on a work order → LABOUR project cost.
+model Timesheet {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workOrderId    String
+  workOrder      WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  workDate       DateTime @default(now())
+  hours          Decimal  @db.Decimal(6, 2)
+  hourlyRate     Decimal  @db.Decimal(10, 2)
+  amount         Decimal  @db.Decimal(18, 2)
+  memo           String?
+  createdAt      DateTime @default(now())
+
+  @@index([workOrderId])
+  @@index([organizationId, userId])
+}
+
+// SCM↔FIN bridge: the supplier invoice that makes input VAT real.
+model VendorBill {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  vendorId       String
+  vendor         Vendor   @relation(fields: [vendorId], references: [id])
+  purchaseOrderId String?
+  purchaseOrder  PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  goodsReceiptId String?
+  goodsReceipt   GoodsReceipt? @relation(fields: [goodsReceiptId], references: [id])
+  billDate       DateTime @default(now())
+  subtotal       Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount      Decimal  @default(0) @db.Decimal(18, 2)
+  total          Decimal  @default(0) @db.Decimal(18, 2)
+  status         BillStatus @default(DRAFT)
+  vendorRef      String?
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+}

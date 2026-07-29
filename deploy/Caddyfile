@@ -1,0 +1,14 @@
+# NPI Solar ERP — single-origin gateway.
+# SITE_ADDRESS=":80"            → plain HTTP on the server IP (no domain needed).
+# SITE_ADDRESS="1-2-3-4.sslip.io" or "demo.example.com" → automatic HTTPS.
+{$SITE_ADDRESS} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

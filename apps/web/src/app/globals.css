@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  font-family: var(--font-sans), 'Segoe UI', Tahoma, system-ui, sans-serif;
+}
+
+body {
+  @apply bg-[#f4f6f8] text-slate-800 antialiased;
+}
+
+/* Slim, unobtrusive scrollbars. */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-slate-300/70;
+}
+*::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400/80;
+}
+
+/* Reusable component classes for the ERP shell. */
+@layer components {
+  .card {
+    @apply rounded-xl border border-slate-200/80 bg-white shadow-card;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
+  }
+  .btn-primary {
+    @apply btn bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-sm shadow-brand-700/25 hover:from-brand-500 hover:to-brand-600 focus-visible:ring-brand-400;
+  }
+  .btn-ghost {
+    @apply btn border border-slate-200 bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 focus-visible:ring-slate-300;
+  }
+  .btn-solar {
+    @apply btn bg-gradient-to-b from-solar-400 to-solar-500 text-white shadow-sm shadow-solar-500/30 hover:from-solar-500 hover:to-solar-600 focus-visible:ring-solar-300;
+  }
+  .btn-danger {
+    @apply btn border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 focus-visible:ring-rose-300;
+  }
+  .input {
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-semibold text-slate-500;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none;
+  }
+  /* No uppercase/tracking: letter-spacing breaks connected Arabic glyphs. */
+  .th {
+    @apply whitespace-nowrap px-4 py-3 text-start text-xs font-bold text-slate-500;
+  }
+  /* Wide tables scroll inside their card instead of breaking the page on
+     small screens. */
+  .card:has(table) {
+    @apply overflow-x-auto;
+  }
+  .td {
+    @apply px-4 py-3 text-sm text-slate-700;
+  }
+  /* Section heading inside cards. */
+  .card-title {
+    @apply border-b border-slate-100 px-5 py-3.5 text-sm font-bold text-slate-800;
+  }
+  /* KPI stat card. */
+  .stat {
+    @apply card relative overflow-hidden p-5 transition-shadow hover:shadow-card-hover;
+  }
+  .stat::before {
+    content: '';
+    @apply absolute inset-x-0 top-0 h-0.5 bg-gradient-to-l from-brand-400/0 via-brand-400/60 to-brand-400/0;
+  }
+}

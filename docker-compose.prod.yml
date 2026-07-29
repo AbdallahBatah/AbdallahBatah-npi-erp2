@@ -1,0 +1,94 @@
+# NPI Solar ERP — production/demo stack.
+#   1) cp deploy/.env.example deploy/.env   (then edit the secrets)
+#   2) docker compose -f docker-compose.prod.yml --env-file deploy/.env up -d --build
+#   3) docker compose -f docker-compose.prod.yml --env-file deploy/.env run --rm reset
+name: npi-erp
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: npi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_DB: npi_erp
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U npi -d npi_erp"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: npi-erp-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://npi:${POSTGRES_PASSWORD}@postgres:5432/npi_erp?schema=public
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in deploy/.env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(4000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: npi-erp-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - api
+
+  # One-shot demo reset: wipes the DB, re-applies migrations, base seed, then the
+  # rich HTTP demo dataset. Run manually or from a nightly cron:
+  #   docker compose -f docker-compose.prod.yml --env-file deploy/.env run --rm reset
+  reset:
+    image: npi-erp-api
+    pull_policy: never
+    profiles: ["reset"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://npi:${POSTGRES_PASSWORD}@postgres:5432/npi_erp?schema=public
+      API_URL: http://api:4000/api
+      # No tsconfig.json exists at /app in the runtime image; pin ts-node's compiler options.
+      TS_NODE_COMPILER_OPTIONS: '{"module":"commonjs","moduleResolution":"node","target":"ES2022","esModuleInterop":true,"skipLibCheck":true}'
+    depends_on:
+      api:
+        condition: service_healthy
+    command: >
+      sh -c "npx prisma migrate reset --force --skip-generate --skip-seed --schema packages/db/prisma/schema.prisma
+      && npx ts-node --transpile-only packages/db/prisma/seed.ts
+      && node scripts/seed-demo.js"
+
+volumes:
+  pg_data:
+  caddy_data:
+  caddy_config:

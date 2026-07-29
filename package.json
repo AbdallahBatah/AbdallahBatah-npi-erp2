@@ -1,0 +1,27 @@
+{
+  "name": "npi-solar-erp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NPI Solar ERP — ZATCA-native vertical solar ERP for the Saudi/GCC market (modular monolith).",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:generate": "npm run generate -w @npi/db",
+    "db:migrate": "npm run migrate -w @npi/db",
+    "db:seed": "npm run seed -w @npi/db",
+    "db:studio": "npm run studio -w @npi/db",
+    "dev:api": "npm run dev -w @npi/api",
+    "dev:web": "npm run dev -w @npi/web",
+    "build": "npm run build -w @npi/shared && npm run generate -w @npi/db && npm run build -w @npi/api && npm run build -w @npi/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "db:start": "C:/Users/eyadq/.npi-erp/pgsql/bin/pg_ctl.exe -D C:/Users/eyadq/.npi-erp/data -l C:/Users/eyadq/.npi-erp/server.log start",
+    "db:stop": "C:/Users/eyadq/.npi-erp/pgsql/bin/pg_ctl.exe -D C:/Users/eyadq/.npi-erp/data stop"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

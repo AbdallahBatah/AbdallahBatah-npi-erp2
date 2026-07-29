@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>دليل الاستخدام — نظام NPI للطاقة الشمسية</title>
+<style>
+  :root{
+    --ink:#0f172a; --ink-2:#334155; --muted:#64748b; --line:#e2e8f0;
+    --brand:#0d9488; --brand-soft:#ccfbf1; --brand-ink:#115e59;
+    --amber:#b45309; --amber-soft:#fef3c7;
+    --violet:#6d28d9; --violet-soft:#ede9fe;
+    --blue:#1d4ed8; --blue-soft:#dbeafe;
+    --rose:#be123c; --rose-soft:#ffe4e6;
+    --bg:#f8fafc; --card:#ffffff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.75;padding:32px 20px 64px}
+  .wrap{max-width:920px;margin:0 auto}
+  header.hero{background:linear-gradient(135deg,#134e4a,#0f172a);color:#fff;border-radius:20px;padding:32px 36px;margin-bottom:24px}
+  header.hero h1{font-size:26px;margin-bottom:6px}
+  header.hero p{color:#99f6e4;font-size:14px}
+
+  /* TOC */
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 22px;margin-bottom:36px}
+  .toc b{font-size:13px;color:var(--muted)}
+  .toc ol{margin:8px 0 0;padding-inline-start:22px;font-size:13.5px;columns:2;column-gap:32px}
+  .toc a{color:var(--brand-ink);text-decoration:none;font-weight:600}
+  .toc a:hover{text-decoration:underline}
+
+  h2.sec{font-size:20px;margin:44px 0 6px;display:flex;align-items:center;gap:10px;scroll-margin-top:16px}
+  h2.sec .ico{font-size:22px}
+  p.sub{color:var(--muted);font-size:13.5px;margin-bottom:16px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin-bottom:14px}
+  .card h3{font-size:15.5px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .card h3 .role{font-size:10.5px;border-radius:99px;padding:1px 10px;font-weight:700;margin-inline-start:auto;white-space:nowrap}
+  .r-sales{background:var(--brand-soft);color:var(--brand-ink)}
+  .r-pm{background:var(--amber-soft);color:var(--amber)}
+  .r-eng{background:var(--violet-soft);color:var(--violet)}
+  .r-acc{background:var(--blue-soft);color:var(--blue)}
+  ol.steps{padding-inline-start:22px;font-size:13.5px;color:var(--ink-2)}
+  ol.steps li{margin-bottom:7px}
+  ol.steps b{color:var(--ink)}
+  .btn{display:inline-block;background:#0f172a;color:#fff;border-radius:7px;padding:0 9px;font-size:12px;font-weight:700;white-space:nowrap}
+  .btn.lite{background:#f1f5f9;color:var(--ink-2);border:1px solid var(--line)}
+  .path{background:var(--brand-soft);color:var(--brand-ink);border-radius:7px;padding:0 9px;font-size:12px;font-weight:700;white-space:nowrap}
+
+  .tip{border-radius:12px;padding:10px 14px;font-size:12.5px;margin-top:10px}
+  .tip.good{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}
+  .tip.warn{background:var(--amber-soft);border:1px solid #fcd34d;color:var(--amber)}
+  .tip.info{background:var(--blue-soft);border:1px solid #bfdbfe;color:var(--blue)}
+  .tip b{font-weight:800}
+
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:right}
+  thead th{background:#f1f5f9;font-size:12.5px}
+  td code, .mono{font-family:Consolas,monospace;direction:ltr;display:inline-block;font-size:12px;background:#f1f5f9;border-radius:6px;padding:0 6px}
+
+  /* FAQ */
+  details{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden}
+  summary{cursor:pointer;padding:13px 18px;font-weight:700;font-size:14px;list-style:none;display:flex;align-items:center;gap:10px}
+  summary::before{content:"＋";color:var(--brand);font-weight:800}
+  details[open] summary::before{content:"−"}
+  details .body{padding:0 18px 14px 18px;font-size:13.5px;color:var(--ink-2)}
+  details .body b{color:var(--ink)}
+
+  footer{margin-top:40px;text-align:center;color:var(--muted);font-size:12px}
+  @media (max-width:640px){ body{padding:16px 10px 48px} header.hero{padding:22px 20px} .toc ol{columns:1} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>📖 دليل الاستخدام — نظام NPI للطاقة الشمسية</h1>
+  <p>دليل عملي بخطوات مرقمة، مكتوب لغير المتخصصين — لا يحتاج أي خبرة تقنية سابقة</p>
+</header>
+
+<div class="toc">
+  <b>المحتويات</b>
+  <ol>
+    <li><a href="#login">الدخول إلى النظام</a></li>
+    <li><a href="#basics">أساسيات الواجهة</a></li>
+    <li><a href="#sales">مهام المبيعات</a></li>
+    <li><a href="#delivery">مهام التنفيذ والتوريد</a></li>
+    <li><a href="#ops">مهام التشغيل والصيانة</a></li>
+    <li><a href="#finance">مهام المالية</a></li>
+    <li><a href="#faq">أسئلة شائعة وحلول</a></li>
+  </ol>
+</div>
+
+<!-- ═══════ الدخول ═══════ -->
+<h2 class="sec" id="login"><span class="ico">🔐</span>الدخول إلى النظام</h2>
+<div class="card">
+  <ol class="steps">
+    <li>افتح المتصفح على رابط النظام (في بيئة العرض: <span class="mono">http://localhost:3000</span>).</li>
+    <li>أدخل بريدك الإلكتروني وكلمة المرور ثم اضغط <span class="btn">تسجيل الدخول</span>.</li>
+    <li>ستصل إلى <b>لوحة المتابعة</b> — وستجد في القائمة الجانبية صفحات دورك فقط، لا أكثر.</li>
+  </ol>
+  <div class="tip info">حسابات بيئة العرض التجريبية:</div>
+  <table style="margin-top:8px">
+    <thead><tr><th>الدور</th><th>البريد</th><th>كلمة المرور</th></tr></thead>
+    <tbody>
+      <tr><td>👑 مسؤول النظام</td><td><code>admin@npi.sa</code></td><td><code>Admin@123</code></td></tr>
+      <tr><td>💼 مبيعات</td><td><code>sales@npi.sa</code></td><td><code>Sales@123</code></td></tr>
+      <tr><td>🧮 محاسب</td><td><code>accountant@npi.sa</code></td><td><code>Acc@12345</code></td></tr>
+      <tr><td>🏗️ مدير مشاريع</td><td><code>pm@npi.sa</code></td><td><code>Pm@123456</code></td></tr>
+      <tr><td>👷 مهندس موقع</td><td><code>engineer@npi.sa</code></td><td><code>Eng@12345</code></td></tr>
+    </tbody>
+  </table>
+  <div class="tip warn"><b>انتهت جلستك؟</b> إذا أعادك النظام لصفحة الدخول مع رسالة «انتهت الجلسة» فهذا طبيعي بعد فترة خمول — سجل دخولك من جديد وستعود لعملك.</div>
+</div>
+
+<!-- ═══════ الأساسيات ═══════ -->
+<h2 class="sec" id="basics"><span class="ico">🧭</span>أساسيات الواجهة</h2>
+<div class="card">
+  <ol class="steps">
+    <li><b>القائمة الجانبية</b> تجمع الصفحات في أربعة أقسام: المبيعات والتعاقد، التنفيذ والتوريد، التشغيل، المالية. الصفحة الحالية مضاءة بشريط أخضر.</li>
+    <li><b>تغيير اللغة</b>: أسفل القائمة الجانبية زران «العربية / English» — الواجهة كاملة تنقلب فوراً.</li>
+    <li><b>البحث والتنقل بين الصفحات</b>: القوائم الطويلة (كالعملاء المحتملين والأصول) فيها حقل بحث وفلترة بالحالة، وأسفلها أزرار <span class="btn lite">السابق</span> <span class="btn lite">التالي</span> مع عداد «١–٢٥ من ١٢٠».</li>
+    <li><b>الرسائل الفورية</b>: بعد كل عملية تظهر رسالة خضراء (نجاح) أو حمراء (خطأ بالعربية توضح السبب) أعلى الشاشة ثم تختفي وحدها.</li>
+    <li><b>التأكيد قبل الخطوات المهمة</b>: أي إجراء لا يمكن التراجع عنه (اعتماد، إصدار، حذف) يسبقه صندوق تأكيد — اقرأه ثم اضغط <span class="btn">تأكيد</span> أو تراجع بأمان.</li>
+    <li><b>عدم فقدان ما كتبت</b>: إن حاولت إغلاق نموذج فيه بيانات لم تُحفظ، سيسألك النظام قبل التجاهل.</li>
+    <li><b>من الجوال</b>: افتح القائمة من زر ☰ أعلى الشاشة — كل الصفحات تعمل على الشاشات الصغيرة.</li>
+  </ol>
+  <div class="tip good"><b>قاعدة ذهبية:</b> الحقول الإنجليزية اختيارية في كل النماذج — يكفي إدخال العربية وسيكمل النظام الباقي تلقائياً.</div>
+</div>
+
+<!-- ═══════ المبيعات ═══════ -->
+<h2 class="sec" id="sales"><span class="ico">💼</span>مهام المبيعات</h2>
+
+<div class="card">
+  <h3>تسجيل عميل محتمل ومتابعته حتى الفرصة <span class="role r-sales">مبيعات</span></h3>
+  <ol class="steps">
+    <li>افتح <span class="path">العملاء المحتملون</span> واضغط <span class="btn">إضافة</span>.</li>
+    <li>أدخل الاسم بالعربية ورقم الجوال ومصدر التواصل، ثم احفظ.</li>
+    <li>بعد التواصل مع العميل وتأكد جديته، افتح سجله واضغط <span class="btn">تأهيل</span> — سينشئ النظام <b>فرصة بيعية</b> تلقائياً.</li>
+    <li>في <span class="path">الفرص البيعية</span> حدّث القيمة المتوقعة وحرّك المرحلة مع تقدم التفاوض.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h3>إعداد عرض سعر وتحويله إلى عقد <span class="role r-sales">مبيعات</span></h3>
+  <ol class="steps">
+    <li>افتح <span class="path">عروض الأسعار</span> واضغط <span class="btn">إضافة</span> واختر العميل.</li>
+    <li>ادخل على العرض وأضف البنود من الكتالوج (ألواح، عاكس، تركيب…) — الكميات والأسعار والضريبة تُحسب تلقائياً.</li>
+    <li>اضغط <span class="btn">إرسال</span> لتحويل حالته من «مسودة» إلى «مرسل».</li>
+    <li>عند موافقة العميل اضغط <span class="btn">قبول</span> — سيتولد <b>العقد تلقائياً</b> بكل البنود.</li>
+    <li>افتح العقد من <span class="path">العقود</span> وأضف جدول الدفعات (مثلاً: ٣٠٪ توقيع، ٤٠٪ توريد، ٣٠٪ تسليم) ثم <span class="btn">تفعيل</span>.</li>
+  </ol>
+  <div class="tip warn">بعد قبول العرض لا يمكن تعديل بنوده — راجع الأسعار قبل الضغط على «قبول».</div>
+</div>
+
+<!-- ═══════ التنفيذ ═══════ -->
+<h2 class="sec" id="delivery"><span class="ico">🏗️</span>مهام التنفيذ والتوريد</h2>
+
+<div class="card">
+  <h3>إنشاء مشروع من عقد ومتابعة مراحله <span class="role r-pm">مدير مشاريع</span></h3>
+  <ol class="steps">
+    <li>من صفحة العقد المفعّل اضغط <span class="btn">إنشاء مشروع</span> — تتولد مراحل التنفيذ الجاهزة (مسح الموقع، التصميم، التراخيص، التركيب، الفحص، الربط بالشبكة).</li>
+    <li>افتح المشروع من <span class="path">المشاريع</span> وعلّم كل مرحلة <span class="btn">إنجاز</span> عند اكتمالها فعلياً.</li>
+    <li>أي تعديل على النطاق أثناء التنفيذ سجّله <b>أمر تغيير</b> بقيمته واعتمده قبل العمل به.</li>
+  </ol>
+  <div class="tip info">إنجاز المراحل ليس شكلياً — هو ما يفتح فوترة الدفعات المرتبطة بها ويغذي تقرير الاعتراف بالإيراد.</div>
+</div>
+
+<div class="card">
+  <h3>أمر شراء واستلام البضاعة بالأرقام التسلسلية <span class="role r-pm">مدير مشاريع</span></h3>
+  <ol class="steps">
+    <li>افتح <span class="path">المشتريات</span> واضغط <span class="btn">إضافة</span>: اختر المورد وأضف الأصناف والكميات.</li>
+    <li>اضغط <span class="btn">اعتماد</span> (سيطلب تأكيداً) — الأمر الآن رسمي وبانتظار التوريد.</li>
+    <li>عند وصول الشحنة اضغط <span class="btn">استلام</span>: اختر <b>موقع التخزين</b>، ثم أدخل الرقم التسلسلي لكل قطعة — عدّاد بجانب كل صنف يبين «المدخل/المطلوب» ويتحول أخضر عند الاكتمال، وينبهك فوراً لأي رقم مكرر.</li>
+    <li>سجّل <b>فاتورة المورد</b> على الأمر ليدخل مبلغها في إقرار الضريبة تلقائياً.</li>
+  </ol>
+  <div class="tip good">كل قطعة استلمتها صارت أصلاً متتبعاً في صفحة <span class="path">الأصول</span> — من المستودع إلى سطح العميل.</div>
+</div>
+
+<!-- ═══════ التشغيل ═══════ -->
+<h2 class="sec" id="ops"><span class="ico">⚙️</span>مهام التشغيل والصيانة</h2>
+
+<div class="card">
+  <h3>الصيانة الدورية بقائمة الفحص <span class="role r-eng">مهندس موقع</span></h3>
+  <ol class="steps">
+    <li>افتح <span class="path">أوامر العمل</span> واضغط <span class="btn">توليد أوامر الصيانة المستحقة</span> — سينشئ النظام أمراً لكل نظام حان موعد صيانته.</li>
+    <li>افتح أمر العمل، وابدأ التنفيذ في الموقع بعلامة ✓ على كل بند من قائمة الفحص (تنظيف الألواح، فحص التوصيلات، قراءة العاكس…).</li>
+    <li>سجّل قطع الغيار المستخدمة وساعات العمل — تُحمَّل تلقائياً على تكلفة النظام.</li>
+    <li>اضغط <span class="btn">إنجاز</span>. <b>لن يقبل النظام الإغلاق</b> إن بقي بند إلزامي دون إنجاز، وسيخبرك باسمه بالضبط.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h3>إنذار انخفاض الإنتاج وقطعة معطلة <span class="role r-eng">مهندس موقع</span></h3>
+  <ol class="steps">
+    <li>صفحة <span class="path">مراقبة الأداء</span> تعرض إنتاج كل نظام — عند انخفاض غير طبيعي يظهر <b>إنذار</b>.</li>
+    <li>اضغط على الإنذار ثم <span class="btn">إنشاء أمر عمل</span> لفتح أمر تصحيحي مربوط بالنظام مباشرة.</li>
+    <li>إن وجدت قطعة معطلة: من <span class="path">الأصول</span> افتحها واضغط <span class="btn">إرجاع للمورد</span> (مطالبة ضمان)، ثم اختر <b>بديلاً من المخزون</b> من القائمة ليستمر النظام بالعمل.</li>
+  </ol>
+</div>
+
+<!-- ═══════ المالية ═══════ -->
+<h2 class="sec" id="finance"><span class="ico">💰</span>مهام المالية</h2>
+
+<div class="card">
+  <h3>إصدار فاتورة وتحصيلها <span class="role r-acc">محاسب</span></h3>
+  <ol class="steps">
+    <li>من صفحة العقد اضغط <span class="btn">فوترة دفعة</span> على المرحلة المنجزة — أو من <span class="path">عقود الطاقة</span> اضغط <span class="btn">توليد فاتورة شهرية</span> لعملاء الكيلوواط/ساعة.</li>
+    <li>افتح الفاتورة من <span class="path">الفواتير</span> وراجعها ثم اضغط <span class="btn">إصدار</span> (سيطلب تأكيداً) — يختمها النظام إلكترونياً حسب متطلبات «فاتورة» ويولّد رمز QR.</li>
+    <li>عند وصول المبلغ اضغط <span class="btn">تسجيل دفعة</span>: أدخل المبلغ يدوياً أو اضغط <span class="btn lite">المبلغ كاملاً</span>.</li>
+    <li>إن كان بالعقد <b>محجوز ضمان</b>، سيظهر محتجزاً حتى تضغط <span class="btn">إفراج</span> بعد انتهاء فترة الضمان.</li>
+  </ol>
+  <div class="tip warn"><b>الفاتورة المصدرة لا تُعدّل ولا تُحذف</b> — هذا مطلب نظامي. للتصحيح أنشئ <b>إشعاراً دائناً</b> من صفحة الفاتورة نفسها.</div>
+</div>
+
+<div class="card">
+  <h3>التقارير المالية وإقرار الضريبة <span class="role r-acc">محاسب</span></h3>
+  <ol class="steps">
+    <li>افتح <span class="path">التقارير المالية</span> — أعلى الصفحة خمسة مؤشرات: قيمة العقود، الإيراد المعترف به، المفوتر، الضريبة المستحقة، متوسط هامش الربح.</li>
+    <li><b>الاعتراف بالإيراد</b>: لكل عقد نسبة الإنجاز الفعلية من مراحل مشروعه — اضغط <span class="btn">اعتراف</span> لتسجيل إيراد الفترة (سيعرض التأكيد المبلغ قبل التنفيذ).</li>
+    <li><b>إقرار ضريبة القيمة المضافة</b>: صافي المستحق محسوب تلقائياً (ضريبة المبيعات − ضريبة المشتريات) — وإن كان سالباً يظهر بالأخضر «مبلغ مسترد».</li>
+    <li><b>ربحية المشاريع</b>: لكل مشروع الإيراد والتكلفة الفعلية والهامش بشريط ملون — الأحمر خسارة تستحق وقفة.</li>
+  </ol>
+  <div class="tip good">كل فاتورة ودفعة تولّد قيدها المحاسبي تلقائياً في دفتر الأستاذ — لا تحتاج أي إدخال يدوي للقيود.</div>
+</div>
+
+<!-- ═══════ FAQ ═══════ -->
+<h2 class="sec" id="faq"><span class="ico">❓</span>أسئلة شائعة وحلول</h2>
+
+<details>
+  <summary>لا أرى صفحة معينة في قائمتي الجانبية</summary>
+  <div class="body">هذا مقصود — القائمة تعرض فقط ما يسمح به دورك. المهندس مثلاً لا يرى الفواتير، والمحاسب لا يرى أوامر العمل. إن كنت تحتاج صلاحية إضافية لعملك، اطلبها من <b>مسؤول النظام</b>.</div>
+</details>
+<details>
+  <summary>ظهرت رسالة «البند الإلزامي … لم يُنجز بعد» عند إغلاق أمر العمل</summary>
+  <div class="body">النظام يذكر اسم البند بالضبط — ارجع لقائمة الفحص وعلّم البند المذكور ✓ ثم أعد الضغط على <b>إنجاز</b>. البنود الإلزامية لا يمكن تجاوزها لأنها ضمان جودة الصيانة.</div>
+</details>
+<details>
+  <summary>أخطأت في فاتورة بعد إصدارها — كيف أصححها؟</summary>
+  <div class="body">لا يمكن تعديل أو حذف فاتورة مختومة (مطلب هيئة الزكاة والضريبة). افتح الفاتورة وأنشئ <b>إشعاراً دائناً</b> بقيمة التصحيح، ثم أصدر فاتورة جديدة صحيحة إن لزم.</div>
+</details>
+<details>
+  <summary>ظهرت رسالة «تعذر الاتصال بالخادم»</summary>
+  <div class="body">تحقق من اتصالك بالشبكة ثم اضغط زر <b>إعادة المحاولة</b> الظاهر مكان القائمة. بياناتك التي كتبتها في النموذج المفتوح لا تضيع بمجرد فشل الحفظ — أعد المحاولة فقط.</div>
+</details>
+<details>
+  <summary>هل يجب أن أملأ الحقول الإنجليزية؟</summary>
+  <div class="body">لا — كل الحقول الإنجليزية اختيارية. اكتب العربية فقط وسيستخدمها النظام في الموضعين. والعكس صحيح لمن يعمل بالإنجليزية.</div>
+</details>
+<details>
+  <summary>أعادني النظام فجأة لصفحة الدخول</summary>
+  <div class="body">انتهت صلاحية جلستك بعد فترة خمول — إجراء أمني طبيعي. سجّل دخولك مرة أخرى وستجد كل شيء كما تركته.</div>
+</details>
+<details>
+  <summary>أدخلت رقماً تسلسلياً مكرراً أثناء الاستلام</summary>
+  <div class="body">النظام ينبهك فوراً تحت الحقل ولن يقبل الحفظ — راجع ملصق القطعة وأدخل الرقم الصحيح. التكرار غالباً خطأ نسخ أو قطعة أُدخلت مرتين.</div>
+</details>
+<details>
+  <summary>أريد التأكد قبل ضغط زر خطير — هل هناك حماية؟</summary>
+  <div class="body">نعم. كل الإجراءات غير القابلة للتراجع (اعتماد، إصدار، حذف، إفراج عن محجوز) تسبقها نافذة تأكيد تشرح الأثر — لن ينفذ شيء نهائي بضغطة واحدة عابرة.</div>
+</details>
+
+<footer>نظام NPI للطاقة الشمسية · دليل الاستخدام · 2026/07/27</footer>
+</div>
+</body>
+</html>

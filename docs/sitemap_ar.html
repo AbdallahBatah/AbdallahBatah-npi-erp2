@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>خريطة الموقع — نظام NPI للطاقة الشمسية</title>
+<style>
+  :root{
+    --ink:#0f172a; --ink-2:#334155; --muted:#64748b; --line:#e2e8f0;
+    --brand:#0d9488; --brand-soft:#ccfbf1; --brand-ink:#115e59;
+    --amber:#b45309; --amber-soft:#fef3c7;
+    --violet:#6d28d9; --violet-soft:#ede9fe;
+    --rose:#be123c; --rose-soft:#ffe4e6;
+    --blue:#1d4ed8; --blue-soft:#dbeafe;
+    --bg:#f8fafc; --card:#ffffff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.7;padding:32px 20px 64px}
+  .wrap{max-width:1080px;margin:0 auto}
+  header.hero{background:linear-gradient(135deg,#134e4a,#0f172a);color:#fff;border-radius:20px;padding:32px 36px;margin-bottom:36px}
+  header.hero h1{font-size:26px;margin-bottom:6px}
+  header.hero p{color:#99f6e4;font-size:14px}
+  header.hero .meta{margin-top:14px;display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:#cbd5e1}
+  header.hero .meta b{color:#fff}
+
+  h2.sec{font-size:19px;margin:40px 0 6px;display:flex;align-items:center;gap:10px}
+  h2.sec .dot{width:10px;height:10px;border-radius:99px;background:var(--brand)}
+  p.sub{color:var(--muted);font-size:13.5px;margin-bottom:18px}
+
+  /* ---- tree ---- */
+  .group{background:var(--card);border:1px solid var(--line);border-radius:16px;margin-bottom:18px;overflow:hidden}
+  .group>.head{padding:14px 20px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+  .group>.head .tag{font-size:11px;font-weight:600;padding:2px 10px;border-radius:99px}
+  .g-sales>.head{background:var(--brand-soft);color:var(--brand-ink)} .g-sales .tag{background:#fff;color:var(--brand-ink)}
+  .g-delivery>.head{background:var(--amber-soft);color:var(--amber)} .g-delivery .tag{background:#fff;color:var(--amber)}
+  .g-ops>.head{background:var(--violet-soft);color:var(--violet)} .g-ops .tag{background:#fff;color:var(--violet)}
+  .g-fin>.head{background:var(--blue-soft);color:var(--blue)} .g-fin .tag{background:#fff;color:var(--blue)}
+  .g-auth>.head{background:#f1f5f9;color:var(--ink-2)} .g-auth .tag{background:#fff;color:var(--ink-2)}
+
+  .page{display:grid;grid-template-columns:210px 1fr;gap:16px;padding:14px 20px;border-bottom:1px solid var(--line)}
+  .page:last-child{border-bottom:none}
+  .page .route{font-family:Consolas,monospace;direction:ltr;text-align:left;font-size:13px;color:var(--brand-ink);font-weight:700;white-space:nowrap}
+  .page .route small{display:block;font-family:inherit;color:var(--muted);font-weight:400;direction:rtl;text-align:right;font-size:12px}
+  .page .desc{font-size:13.5px;color:var(--ink-2)}
+  .page .desc b{color:var(--ink)}
+  .page .acts{margin-top:5px;display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:11px;background:#f1f5f9;border:1px solid var(--line);color:var(--ink-2);border-radius:99px;padding:1px 10px}
+  .chip.detail{background:var(--brand-soft);border-color:#99f6e4;color:var(--brand-ink)}
+
+  /* ---- matrix ---- */
+  .matrix-card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow-x:auto}
+  table{border-collapse:collapse;width:100%;min-width:760px}
+  th,td{padding:9px 12px;font-size:13px;text-align:center;border-bottom:1px solid var(--line)}
+  thead th{background:#f1f5f9;font-size:12.5px;position:sticky;top:0}
+  th.pg,td.pg{text-align:right;font-weight:600;white-space:nowrap}
+  td.pg small{font-family:Consolas,monospace;direction:ltr;display:inline-block;color:var(--muted);font-weight:400;margin-inline-start:6px;font-size:11px}
+  .yes{color:#059669;font-weight:800} .yes.w::after{content:" ✎";font-size:10px;color:#0d9488}
+  .no{color:#e2e8f0}
+  tr.grp td{background:#f8fafc;font-weight:700;font-size:12px;color:var(--muted);text-align:right;padding:6px 12px}
+  tfoot td{font-weight:800;background:#f8fafc}
+  .legend{display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);padding:12px 16px;border-top:1px solid var(--line)}
+
+  .rolecards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:24px}
+  .rc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .rc h3{font-size:14px;margin-bottom:2px}
+  .rc .cnt{font-size:22px;font-weight:800}
+  .rc p{font-size:12px;color:var(--muted)}
+  .rc.admin .cnt{color:var(--ink)} .rc.sales .cnt{color:var(--brand)} .rc.acc .cnt{color:var(--blue)}
+  .rc.pm .cnt{color:var(--amber)} .rc.eng .cnt{color:var(--violet)}
+
+  footer{margin-top:40px;text-align:center;color:var(--muted);font-size:12px}
+  @media (max-width:640px){ .page{grid-template-columns:1fr;gap:4px} body{padding:16px 10px 48px} header.hero{padding:22px 20px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>🗺️ خريطة الموقع — نظام NPI للطاقة الشمسية</h1>
+  <p>ERP متكامل للطاقة الشمسية، متوافق مع «فاتورة» (ZATCA)، عربي أولاً</p>
+  <div class="meta">
+    <span>الصفحات: <b>22</b> (17 قائمة/رئيسية + 5 تفاصيل)</span>
+    <span>الأقسام: <b>4</b> + الدخول</span>
+    <span>الأدوار: <b>5</b></span>
+    <span>آخر تحديث: <b>2026/07/27</b></span>
+  </div>
+</header>
+
+<h2 class="sec"><span class="dot"></span>هيكل الصفحات</h2>
+<p class="sub">القائمة الجانبية تعرض لكل مستخدم صفحاته المصرّح بها فقط — الشجرة أدناه هي الهيكل الكامل (كما يراه مسؤول النظام).</p>
+
+<div class="group g-auth">
+  <div class="head">🔐 الدخول والعامة <span class="tag">بدون صلاحيات</span></div>
+  <div class="page">
+    <div class="route">/login<small>تسجيل الدخول</small></div>
+    <div class="desc">الدخول بالبريد وكلمة المرور. يُعاد المستخدم إليها تلقائياً عند انتهاء الجلسة مع تنبيه «انتهت الجلسة».</div>
+  </div>
+  <div class="page">
+    <div class="route">/<small>الجذر</small></div>
+    <div class="desc">تحويل تلقائي: إلى لوحة المتابعة إن كنت مسجلاً، وإلا إلى صفحة الدخول.</div>
+  </div>
+  <div class="page">
+    <div class="route">/dashboard<small>لوحة المتابعة</small></div>
+    <div class="desc"><b>الصفحة الرئيسية للجميع.</b> مؤشرات سريعة: قيمة الفرص المتوقعة، العقود النشطة، الفواتير، أوامر العمل المستحقة.</div>
+  </div>
+</div>
+
+<div class="group g-sales">
+  <div class="head">📈 المبيعات والتعاقد <span class="tag">5 صفحات</span></div>
+  <div class="page">
+    <div class="route">/leads<small>العملاء المحتملون</small></div>
+    <div class="desc">مسار البيع من أوله: تسجيل المهتمين ومتابعتهم حتى التأهيل.
+      <div class="acts"><span class="chip">بحث وترقيم من الخادم</span><span class="chip">فلترة بالحالة</span><span class="chip">إضافة عميل محتمل</span><span class="chip">تأهيل → فرصة</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="route">/customers<small>العملاء</small></div>
+    <div class="desc">سجل العملاء الفعليين (أفراد وشركات) مع الرقم الضريبي والعنوان.
+      <div class="acts"><span class="chip">بحث فوري</span><span class="chip">إنشاء عميل (العربية تكفي)</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="route">/opportunities<small>الفرص البيعية</small></div>
+    <div class="desc">الفرص المؤهلة بقيمتها المتوقعة ومرحلتها في المسار.
+      <div class="acts"><span class="chip">تحريك المرحلة</span><span class="chip">ربح / خسارة</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="route">/proposals<small>عروض الأسعار</small></div>
+    <div class="desc">تسعير الأنظمة الشمسية: بنود، كميات، ضريبة، محاكاة الإنتاج.
+      <div class="acts"><span class="chip detail">/proposals/[id] — تفاصيل العرض</span><span class="chip">إضافة بنود</span><span class="chip">إرسال</span><span class="chip">قبول → عقد تلقائياً</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="route">/contracts<small>العقود</small></div>
+    <div class="desc">عقود التوريد والتركيب مع جدول الدفعات (المراحل).
+      <div class="acts"><span class="chip detail">/contracts/[id] — تفاصيل العقد</span><span class="chip">جدولة دفعات</span><span class="chip">تفعيل</span><span class="chip">إنشاء مشروع</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="group g-delivery">
+  <div class="head">🏗️ التنفيذ والتوريد <span class="tag">4 صفحات</span></div>
+  <div class="page">
+    <div class="route">/projects<small>المشاريع</small></div>
+    <div class="desc">تنفيذ العقود: مراحل التركيب من المسح حتى الربط بالشبكة.
+      <div class="acts"><span class="chip detail">/projects/[id] — تفاصيل المشروع</span><span class="chip">إنجاز مراحل</span><span class="chip">أمر شراء من المشروع</span><span class="chip">تسليم وتشغيل</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="route">/procurement<small>المشتريات</small></div>
+    <div class="desc">أوامر الشراء من الموردين: ألواح، عواكس، بطاريات.
+      <div class="acts"><span class="chip detail">/procurement/[id] — تفاصيل أمر الشراء</span><span class="chip">اعتماد</span><span class="chip">استلام بالأرقام التسلسلية + موقع التخزين</span><span class="chip">فاتورة مورد</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="route">/assets<small>الأصول</small></div>
+    <div class="desc">تتبع كل قطعة بالرقم التسلسلي: بالمخزون، مركّبة، معطّلة.
+      <div class="acts"><span class="chip">بحث وترقيم من الخادم</span><span class="chip">فلترة بالحالة</span><span class="chip">إرجاع للمورد (RMA)</span><span class="chip">استبدال من المخزون</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="route">/items<small>الأصناف</small></div>
+    <div class="desc">كتالوج المنتجات والخدمات بأسعارها ووحداتها.
+      <div class="acts"><span class="chip">إضافة صنف</span><span class="chip">تعديل الأسعار</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="group g-ops">
+  <div class="head">⚙️ التشغيل <span class="tag">3 صفحات</span></div>
+  <div class="page">
+    <div class="route">/workorders<small>أوامر العمل</small></div>
+    <div class="desc">الصيانة الدورية والطارئة مع قوائم فحص إلزامية.
+      <div class="acts"><span class="chip detail">/workorders/[id] — تفاصيل أمر العمل</span><span class="chip">توليد أوامر الصيانة المستحقة</span><span class="chip">إسناد لمهندس</span><span class="chip">قائمة فحص + إنجاز</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="route">/telemetry<small>مراقبة الأداء</small></div>
+    <div class="desc">قراءات إنتاج الأنظمة المركّبة ومؤشر الأداء، وإنذارات انخفاض الإنتاج.
+      <div class="acts"><span class="chip">تسجيل قراءة</span><span class="chip">إنذار → أمر عمل</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="route">/ppa<small>عقود الطاقة (PPA)</small></div>
+    <div class="desc">بيع الطاقة بالكيلوواط/ساعة: التعرفة، الزيادة السنوية، الفوترة الشهرية من القراءات.
+      <div class="acts"><span class="chip">إنشاء عقد طاقة</span><span class="chip">توليد فاتورة شهرية</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="group g-fin">
+  <div class="head">💰 المالية <span class="tag">2 صفحة</span></div>
+  <div class="page">
+    <div class="route">/invoices<small>الفواتير</small></div>
+    <div class="desc">فواتير «فاتورة» الإلكترونية (ZATCA): إصدار، رمز QR، تحصيل.
+      <div class="acts"><span class="chip detail">/invoices/[id] — تفاصيل الفاتورة</span><span class="chip">إصدار وختم</span><span class="chip">تسجيل دفعة (كامل/جزئي)</span><span class="chip">إشعار دائن</span></div>
+    </div>
+  </div>
+  <div class="page">
+    <div class="route">/finance<small>التقارير المالية</small></div>
+    <div class="desc">لوحة القرار المالي: 5 مؤشرات، الاعتراف بالإيراد حسب نسبة الإنجاز، إقرار ضريبة القيمة المضافة، ربحية المشاريع.
+      <div class="acts"><span class="chip">اعتراف بإيراد مرحلة</span><span class="chip">صافي الضريبة المستحقة/المستردة</span><span class="chip">هوامش الربح بالمشروع</span></div>
+    </div>
+  </div>
+</div>
+
+<h2 class="sec"><span class="dot"></span>من يرى ماذا؟</h2>
+<p class="sub">القائمة الجانبية تُرشَّح تلقائياً حسب صلاحيات الدور — والخادم يمنع الوصول حتى لو عُرف الرابط.</p>
+
+<div class="rolecards">
+  <div class="rc admin"><h3>👑 مسؤول النظام</h3><div class="cnt">15</div><p>كل الصفحات + إدارة كاملة</p></div>
+  <div class="rc sales"><h3>💼 مبيعات</h3><div class="cnt">10</div><p>المسار البيعي والفوترة — بلا تنفيذ</p></div>
+  <div class="rc acc"><h3>🧮 محاسب</h3><div class="cnt">9</div><p>المال وسياقه — بلا مسار بيع أو تشغيل</p></div>
+  <div class="rc pm"><h3>🏗️ مدير مشاريع</h3><div class="cnt">11</div><p>التنفيذ كاملاً + قراءة العقود والفواتير</p></div>
+  <div class="rc eng"><h3>👷 مهندس موقع</h3><div class="cnt">7</div><p>ميداني فقط — صفر وصول مالي</p></div>
+</div>
+
+<div class="matrix-card">
+<table>
+  <thead>
+    <tr>
+      <th class="pg">الصفحة</th>
+      <th>👑 مسؤول</th><th>💼 مبيعات</th><th>🧮 محاسب</th><th>🏗️ مدير مشاريع</th><th>👷 مهندس موقع</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td class="pg">لوحة المتابعة<small>/dashboard</small></td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td></tr>
+    <tr class="grp"><td colspan="6">المبيعات والتعاقد</td></tr>
+    <tr><td class="pg">العملاء المحتملون<small>/leads</small></td><td class="yes w">✔</td><td class="yes w">✔</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+    <tr><td class="pg">العملاء<small>/customers</small></td><td class="yes w">✔</td><td class="yes w">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">—</td></tr>
+    <tr><td class="pg">الفرص البيعية<small>/opportunities</small></td><td class="yes w">✔</td><td class="yes w">✔</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+    <tr><td class="pg">عروض الأسعار<small>/proposals</small></td><td class="yes w">✔</td><td class="yes w">✔</td><td class="yes">✔</td><td class="no">—</td><td class="no">—</td></tr>
+    <tr><td class="pg">العقود<small>/contracts</small></td><td class="yes w">✔</td><td class="yes w">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">—</td></tr>
+    <tr class="grp"><td colspan="6">التنفيذ والتوريد</td></tr>
+    <tr><td class="pg">المشاريع<small>/projects</small></td><td class="yes w">✔</td><td class="no">—</td><td class="no">—</td><td class="yes w">✔</td><td class="yes">✔</td></tr>
+    <tr><td class="pg">المشتريات<small>/procurement</small></td><td class="yes w">✔</td><td class="no">—</td><td class="yes w">✔</td><td class="yes w">✔</td><td class="yes">✔</td></tr>
+    <tr><td class="pg">الأصول<small>/assets</small></td><td class="yes w">✔</td><td class="no">—</td><td class="no">—</td><td class="yes">✔</td><td class="yes">✔</td></tr>
+    <tr><td class="pg">الأصناف<small>/items</small></td><td class="yes w">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td></tr>
+    <tr class="grp"><td colspan="6">التشغيل</td></tr>
+    <tr><td class="pg">أوامر العمل<small>/workorders</small></td><td class="yes w">✔</td><td class="no">—</td><td class="no">—</td><td class="yes">✔</td><td class="yes w">✔</td></tr>
+    <tr><td class="pg">مراقبة الأداء<small>/telemetry</small></td><td class="yes w">✔</td><td class="no">—</td><td class="no">—</td><td class="yes">✔</td><td class="yes w">✔</td></tr>
+    <tr><td class="pg">عقود الطاقة<small>/ppa</small></td><td class="yes w">✔</td><td class="yes w">✔</td><td class="yes w">✔</td><td class="yes">✔</td><td class="no">—</td></tr>
+    <tr class="grp"><td colspan="6">المالية</td></tr>
+    <tr><td class="pg">الفواتير<small>/invoices</small></td><td class="yes w">✔</td><td class="yes w">✔</td><td class="yes w">✔</td><td class="yes">✔</td><td class="no">—</td></tr>
+    <tr><td class="pg">التقارير المالية<small>/finance</small></td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">—</td><td class="no">—</td></tr>
+  </tbody>
+  <tfoot>
+    <tr><td class="pg">الإجمالي</td><td>15</td><td>10</td><td>9</td><td>11</td><td>7</td></tr>
+  </tfoot>
+</table>
+<div class="legend">
+  <span><b class="yes">✔</b> يرى الصفحة (قراءة)</span>
+  <span><b class="yes w">✔</b> مع صلاحية تعديل/إنشاء</span>
+  <span><b>—</b> مخفية من قائمته ويمنعها الخادم</span>
+</div>
+</div>
+
+<footer>نظام NPI للطاقة الشمسية · خريطة الموقع مستخرجة من الكود الفعلي (المسارات وصلاحيات الأدوار) · 2026/07/27</footer>
+</div>
+</body>
+</html>

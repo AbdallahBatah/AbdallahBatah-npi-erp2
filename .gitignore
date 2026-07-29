@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Prisma
+packages/db/prisma/*.db
+packages/db/prisma/migrations/dev.db*
+
+# Packed deploy artifacts
+*.tar.gz
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
