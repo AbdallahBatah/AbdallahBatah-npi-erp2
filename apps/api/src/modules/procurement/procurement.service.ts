@@ -6,6 +6,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
+import { PostingService } from '../../common/posting.service';
+import { TaxService } from '../../common/tax.service';
 import type { AuthUser } from '../../common/auth-user';
 import type {
   CreateBillDto,
@@ -18,7 +20,6 @@ import type {
 } from './dto';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
-const VAT_RATE = 15;
 
 @Injectable()
 export class ProcurementService {
@@ -26,6 +27,8 @@ export class ProcurementService {
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
+    private readonly posting: PostingService,
+    private readonly tax: TaxService,
   ) {}
 
   // ── Vendors (SCM master data) ─────────────────────────────────────────────
@@ -139,7 +142,8 @@ export class ProcurementService {
       lineTotal: round2(l.qty * l.unitPrice),
     }));
     const subtotal = round2(lines.reduce((s, l) => s + l.lineTotal, 0));
-    const vatAmount = round2(subtotal * (VAT_RATE / 100));
+    const { rate: vatRate } = await this.tax.standardVat(user.organizationId);
+    const vatAmount = round2(subtotal * (vatRate / 100));
 
     return this.prisma.$transaction(async (tx) => {
       const code = await this.numbering.next(user.organizationId, 'PURCHASE_ORDER', tx);
@@ -383,17 +387,15 @@ export class ProcurementService {
     const subtotal = round2(
       grn.lines.reduce((s, l) => s + Number(l.qty) * Number(l.purchaseOrderLine.unitPrice), 0),
     );
-    const vatAmount = round2(subtotal * (VAT_RATE / 100));
+    const { rate: vatRate } = await this.tax.standardVat(user.organizationId);
+    const vatAmount = round2(subtotal * (vatRate / 100));
     const total = round2(subtotal + vatAmount);
 
-    const accounts = await this.prisma.account.findMany({
-      where: { organizationId: user.organizationId, code: { in: ['1300', '1400', '2000'] } },
-    });
-    const acc = (code: string) => {
-      const a = accounts.find((x) => x.code === code);
-      if (!a) throw new BadRequestException(`Missing GL account ${code} — re-run the seed`);
-      return a.id;
-    };
+    const acc = await this.posting.accounts(user.organizationId, [
+      'WIP',
+      'VAT_INPUT',
+      'AP',
+    ] as const);
 
     return this.prisma.$transaction(async (tx) => {
       const code = await this.numbering.next(user.organizationId, 'VENDOR_BILL', tx);
@@ -420,9 +422,9 @@ export class ProcurementService {
           memo: `Vendor bill ${code} — ${grn.purchaseOrder.vendor.nameEn} (${grn.code})`,
           lines: {
             create: [
-              { accountId: acc('1300'), debit: subtotal, credit: 0, currency: grn.purchaseOrder.currency },
-              { accountId: acc('1400'), debit: vatAmount, credit: 0, currency: grn.purchaseOrder.currency },
-              { accountId: acc('2000'), debit: 0, credit: total, currency: grn.purchaseOrder.currency },
+              { accountId: acc.WIP, debit: subtotal, credit: 0, currency: grn.purchaseOrder.currency },
+              { accountId: acc.VAT_INPUT, debit: vatAmount, credit: 0, currency: grn.purchaseOrder.currency },
+              { accountId: acc.AP, debit: 0, credit: total, currency: grn.purchaseOrder.currency },
             ],
           },
         },
@@ -563,7 +565,8 @@ export class ProcurementService {
       );
     }
 
-    const vatAmount = round2(dto.claimedAmount * (VAT_RATE / 100));
+    const { rate: vatRate } = await this.tax.standardVat(user.organizationId);
+    const vatAmount = round2(dto.claimedAmount * (vatRate / 100));
     const retention = round2(dto.claimedAmount * (Number(agreement.retentionPct) / 100));
     const netPayable = round2(dto.claimedAmount + vatAmount - retention);
     const sequence = agreement.claims.length + 1;
@@ -619,14 +622,12 @@ export class ProcurementService {
     const retention = Number(claim.retentionWithheld);
     const net = Number(claim.netPayable);
 
-    const accounts = await this.prisma.account.findMany({
-      where: { organizationId: user.organizationId, code: { in: ['1300', '1400', '2000', '2050'] } },
-    });
-    const acc = (code: string) => {
-      const a = accounts.find((x) => x.code === code);
-      if (!a) throw new BadRequestException(`Missing GL account ${code} — re-run the seed`);
-      return a.id;
-    };
+    const acc = await this.posting.accounts(user.organizationId, [
+      'WIP',
+      'VAT_INPUT',
+      'AP',
+      'RETENTION_PAYABLE',
+    ] as const);
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.progressClaim.update({
@@ -648,11 +649,11 @@ export class ProcurementService {
       });
 
       const lines = [
-        { accountId: acc('1300'), debit: claimed, credit: 0 },
-        { accountId: acc('1400'), debit: vat, credit: 0 },
-        { accountId: acc('2000'), debit: 0, credit: net },
+        { accountId: acc.WIP, debit: claimed, credit: 0 },
+        { accountId: acc.VAT_INPUT, debit: vat, credit: 0 },
+        { accountId: acc.AP, debit: 0, credit: net },
       ];
-      if (retention > 0) lines.push({ accountId: acc('2050'), debit: 0, credit: retention });
+      if (retention > 0) lines.push({ accountId: acc.RETENTION_PAYABLE, debit: 0, credit: retention });
       await tx.journalEntry.create({
         data: {
           organizationId: user.organizationId,

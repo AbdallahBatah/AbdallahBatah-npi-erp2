@@ -257,12 +257,47 @@ async function main() {
     { code: '2050', nameAr: 'محتجزات دائنة — مقاولو باطن', nameEn: 'Retention Payable (Subcontractors)', accountType: 'LIABILITY' },
     // W7 payments.
     { code: '1000', nameAr: 'البنك — الحساب الجاري', nameEn: 'Bank — Current Account', accountType: 'ASSET' },
+    // M1: the two sides the statements could not be drawn without — cost of
+    // revenue (WIP relieved on recognition) and equity.
+    { code: '5000', nameAr: 'تكلفة الإيرادات', nameEn: 'Cost of Revenue', accountType: 'EXPENSE' },
+    { code: '3000', nameAr: 'رأس المال', nameEn: "Owners' Capital", accountType: 'EQUITY' },
+    { code: '3100', nameAr: 'أرباح مبقاة', nameEn: 'Retained Earnings', accountType: 'EQUITY' },
   ];
+  const accountsByCode = new Map<string, string>();
   for (const a of accounts) {
-    await prisma.account.upsert({
+    const saved = await prisma.account.upsert({
       where: { organizationId_code: { organizationId: org.id, code: a.code } },
       update: {},
       create: { organizationId: org.id, ...a },
+    });
+    accountsByCode.set(a.code, saved.id);
+  }
+
+  // Posting rules: purpose → account. Automatic journals resolve accounts
+  // through this table, never through a hardcoded code, so an organization can
+  // repoint any purpose at its own chart of accounts without touching code.
+  const postingRules: Array<[string, string]> = [
+    ['AR', '1100'],
+    ['RETENTION_RECEIVABLE', '1200'],
+    ['CONTRACT_ASSET', '1150'],
+    ['CONTRACT_LIABILITY', '2400'],
+    ['VAT_OUTPUT', '2100'],
+    ['REVENUE', '4000'],
+    ['WIP', '1300'],
+    ['COST_OF_REVENUE', '5000'],
+    ['VAT_INPUT', '1400'],
+    ['AP', '2000'],
+    ['RETENTION_PAYABLE', '2050'],
+    ['BANK', '1000'],
+    ['CAPITAL', '3000'],
+    ['RETAINED_EARNINGS', '3100'],
+  ];
+  for (const [purpose, code] of postingRules) {
+    const accountId = accountsByCode.get(code)!;
+    await prisma.accountMapping.upsert({
+      where: { organizationId_purpose: { organizationId: org.id, purpose: purpose as any } },
+      update: { accountId },
+      create: { organizationId: org.id, purpose: purpose as any, accountId },
     });
   }
 

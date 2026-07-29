@@ -209,6 +209,7 @@ model Organization {
   warrantyClaims      WarrantyClaim[]
   paymentReceipts     PaymentReceipt[]
   timesheets          Timesheet[]
+  accountMappings     AccountMapping[]
 
   @@index([parentOrganizationId])
 }
@@ -554,6 +555,7 @@ model Account {
   createdAt      DateTime @default(now())
 
   journalLines   JournalLine[]
+  mappings       AccountMapping[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -1543,4 +1545,43 @@ model VendorBill {
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
+}
+
+// ── M1: posting rules ───────────────────────────────────────────────────────
+// Every automatic journal used to name its GL account by a hardcoded string
+// ('1100', '2000', ...). That made the chart of accounts un-swappable: a
+// customer with its own COA could not use the system at all. Posting code now
+// asks for a *purpose* and this table answers with the account.
+
+enum PostingPurpose {
+  AR                   // trade receivables
+  RETENTION_RECEIVABLE // retention withheld by our customers
+  CONTRACT_ASSET       // IFRS-15 unbilled work performed
+  CONTRACT_LIABILITY   // IFRS-15 over-billed revenue
+  VAT_OUTPUT           // VAT charged on sales
+  REVENUE              // project / settlement revenue
+  WIP                  // project costs capitalised before recognition
+  COST_OF_REVENUE      // WIP relieved as work is recognised
+  VAT_INPUT            // deductible VAT on purchases
+  AP                   // trade payables
+  RETENTION_PAYABLE    // retention we withhold from subcontractors
+  BANK                 // operating bank account
+  CAPITAL              // owners' capital
+  RETAINED_EARNINGS    // accumulated result carried forward
+}
+
+model AccountMapping {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purpose        PostingPurpose
+  accountId      String
+  // Restrict: an account that posting rules point at must not vanish.
+  account        Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, purpose])
+  @@index([organizationId])
+  @@index([accountId])
 }

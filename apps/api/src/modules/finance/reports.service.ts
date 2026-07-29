@@ -1,16 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
+import { PostingService } from '../../common/posting.service';
 import type { AuthUser } from '../../common/auth-user';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /** Journal source type for IFRS-15 recognition adjustments. */
 const REVREC_SOURCE = 'RevenueRecognition';
-/** Accounts used by the recognition engine. */
-const CONTRACT_ASSET = '1150'; // unbilled work performed
-const CONTRACT_LIABILITY = '2400'; // deferred (over-billed) revenue
-const REVENUE = '4000';
 
 export interface PocRow {
   contractId: string;
@@ -31,6 +28,7 @@ export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly posting: PostingService,
   ) {}
 
   /**
@@ -52,14 +50,6 @@ export class ReportsService {
     }
     if (to < from) throw new BadRequestException('Period end is before its start');
     return { from, to };
-  }
-
-  private async account(organizationId: string, code: string) {
-    const a = await this.prisma.account.findFirst({ where: { organizationId, code } });
-    if (!a) {
-      throw new BadRequestException(`Missing GL account ${code} — re-run the seed to add IFRS-15 accounts`);
-    }
-    return a;
   }
 
   // ── FIN-05: IFRS-15 percentage of completion (output method) ──────────────
@@ -86,12 +76,18 @@ export class ReportsService {
     });
     if (contracts.length === 0) return [];
 
+    const acc = await this.posting.accounts(user.organizationId, [
+      'CONTRACT_ASSET',
+      'CONTRACT_LIABILITY',
+    ] as const);
+
     // Signed recognition position already posted per contract:
     // Σ(debit − credit) on the contract-asset and contract-liability accounts.
     const posted = await this.prisma.journalLine.findMany({
       where: {
-        account: { organizationId: user.organizationId, code: { in: [CONTRACT_ASSET, CONTRACT_LIABILITY] } },
+        accountId: { in: [acc.CONTRACT_ASSET, acc.CONTRACT_LIABILITY] },
         journalEntry: {
+          organizationId: user.organizationId,
           sourceType: REVREC_SOURCE,
           sourceId: { in: contracts.map((c) => c.id) },
         },
@@ -151,18 +147,18 @@ export class ReportsService {
       throw new BadRequestException('Nothing to recognize — ledger already matches the IFRS-15 position');
     }
 
-    const [asset, liability, revenue] = await Promise.all([
-      this.account(user.organizationId, CONTRACT_ASSET),
-      this.account(user.organizationId, CONTRACT_LIABILITY),
-      this.account(user.organizationId, REVENUE),
-    ]);
+    const acc = await this.posting.accounts(user.organizationId, [
+      'CONTRACT_ASSET',
+      'CONTRACT_LIABILITY',
+      'REVENUE',
+    ] as const);
 
     // Current per-account recognition balances for this contract, so a move in
     // the opposite direction unwinds the existing position before opening the
     // other side — IFRS-15 presents a single *net* asset OR liability per contract.
     const recLines = await this.prisma.journalLine.findMany({
       where: {
-        accountId: { in: [asset.id, liability.id] },
+        accountId: { in: [acc.CONTRACT_ASSET, acc.CONTRACT_LIABILITY] },
         journalEntry: { sourceType: REVREC_SOURCE, sourceId: contractId },
       },
       select: { accountId: true, debit: true, credit: true },
@@ -171,24 +167,24 @@ export class ReportsService {
       recLines
         .filter((l) => l.accountId === accountId)
         .reduce((s, l) => s + Number(l.debit) - Number(l.credit), 0);
-    const assetNet = round2(net(asset.id)); // ≥ 0 (net debit)
-    const liabilityNet = round2(-net(liability.id)); // ≥ 0 (net credit)
+    const assetNet = round2(net(acc.CONTRACT_ASSET)); // ≥ 0 (net debit)
+    const liabilityNet = round2(-net(acc.CONTRACT_LIABILITY)); // ≥ 0 (net credit)
 
     // delta > 0 → accrue unbilled revenue; delta < 0 → defer over-billed revenue.
     const amount = round2(Math.abs(delta));
     const lines: Array<{ accountId: string; debit: number; credit: number }> = [];
     if (delta > 0) {
-      lines.push({ accountId: revenue.id, debit: 0, credit: amount });
+      lines.push({ accountId: acc.REVENUE, debit: 0, credit: amount });
       const unwind = round2(Math.min(amount, Math.max(0, liabilityNet)));
-      if (unwind > 0) lines.push({ accountId: liability.id, debit: unwind, credit: 0 });
+      if (unwind > 0) lines.push({ accountId: acc.CONTRACT_LIABILITY, debit: unwind, credit: 0 });
       const rest = round2(amount - unwind);
-      if (rest > 0) lines.push({ accountId: asset.id, debit: rest, credit: 0 });
+      if (rest > 0) lines.push({ accountId: acc.CONTRACT_ASSET, debit: rest, credit: 0 });
     } else {
-      lines.push({ accountId: revenue.id, debit: amount, credit: 0 });
+      lines.push({ accountId: acc.REVENUE, debit: amount, credit: 0 });
       const unwind = round2(Math.min(amount, Math.max(0, assetNet)));
-      if (unwind > 0) lines.push({ accountId: asset.id, debit: 0, credit: unwind });
+      if (unwind > 0) lines.push({ accountId: acc.CONTRACT_ASSET, debit: 0, credit: unwind });
       const rest = round2(amount - unwind);
-      if (rest > 0) lines.push({ accountId: liability.id, debit: 0, credit: rest });
+      if (rest > 0) lines.push({ accountId: acc.CONTRACT_LIABILITY, debit: 0, credit: rest });
     }
 
     const entry = await this.prisma.$transaction(async (tx) => {

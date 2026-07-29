@@ -6,13 +6,13 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
+import { TaxService } from '../../common/tax.service';
 import type { AuthUser } from '../../common/auth-user';
 import type { CreatePpaTermDto, SettleDto } from './dto';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const round3 = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
 const round4 = (n: number) => Math.round((n + Number.EPSILON) * 10000) / 10000;
-const VAT_RATE = 15;
 
 /**
  * W6: recurring revenue. PPA-01/02 terms + tariff escalation; PPA-03 per-kWh
@@ -27,6 +27,7 @@ export class PpaService {
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
+    private readonly tax: TaxService,
   ) {}
 
   listTerms(user: AuthUser) {
@@ -181,12 +182,9 @@ export class PpaService {
     const variableAmount = round2(energyKwh * appliedRate);
     const fixedAmount = round2(Number(term.fixedMonthlyFee));
     const subtotal = round2(variableAmount + fixedAmount);
-    const vatAmount = round2(subtotal * (VAT_RATE / 100));
+    const taxCode = await this.tax.standardVat(user.organizationId);
+    const vatAmount = round2(subtotal * (taxCode.rate / 100));
     const total = round2(subtotal + vatAmount);
-
-    const taxCode = await this.prisma.taxCode.findFirst({
-      where: { organizationId: user.organizationId, taxType: 'VAT_STANDARD' },
-    });
 
     const periodLabel = `${start.toISOString().slice(0, 10)} → ${end.toISOString().slice(0, 10)}`;
 
@@ -201,9 +199,9 @@ export class PpaService {
           descriptionEn: `Energy supplied ${periodLabel} — ${energyKwh} kWh`,
           qty: energyKwh,
           unitPrice: appliedRate,
-          taxCodeId: taxCode?.id,
+          taxCodeId: taxCode.id,
           lineSubtotal: variableAmount,
-          vatAmount: round2(variableAmount * (VAT_RATE / 100)),
+          vatAmount: round2(variableAmount * (taxCode.rate / 100)),
         },
       ];
       if (fixedAmount > 0) {
@@ -212,9 +210,9 @@ export class PpaService {
           descriptionEn: `Fixed service fee — ${periodLabel}`,
           qty: 1,
           unitPrice: fixedAmount,
-          taxCodeId: taxCode?.id,
+          taxCodeId: taxCode.id,
           lineSubtotal: fixedAmount,
-          vatAmount: round2(fixedAmount * (VAT_RATE / 100)),
+          vatAmount: round2(fixedAmount * (taxCode.rate / 100)),
         });
       }
 

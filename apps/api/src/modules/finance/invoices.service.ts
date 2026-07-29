@@ -6,6 +6,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
+import { PostingService } from '../../common/posting.service';
+import { TaxService } from '../../common/tax.service';
 import { ZatcaService } from './zatca.service';
 import type { AuthUser } from '../../common/auth-user';
 
@@ -17,14 +19,13 @@ export class InvoicesService {
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
+    private readonly posting: PostingService,
+    private readonly tax: TaxService,
     private readonly zatca: ZatcaService,
   ) {}
 
-  private async standardVatRate(organizationId: string): Promise<{ id: string; rate: number }> {
-    const tc = await this.prisma.taxCode.findFirst({
-      where: { organizationId, taxType: 'VAT_STANDARD' },
-    });
-    return { id: tc?.id ?? '', rate: tc ? Number(tc.rate) : 15 };
+  private standardVatRate(organizationId: string): Promise<{ id: string; rate: number }> {
+    return this.tax.standardVat(organizationId);
   }
 
   list(user: AuthUser) {
@@ -169,27 +170,25 @@ export class InvoicesService {
     const grandTotal = Number(invoice.total);
     const { rate } = await this.standardVatRate(user.organizationId);
 
-    // Resolve posting accounts by code.
-    const accounts = await this.prisma.account.findMany({
-      where: { organizationId: user.organizationId, code: { in: ['1100', '1200', '2100', '4000'] } },
-    });
-    const acc = (code: string) => {
-      const a = accounts.find((x) => x.code === code);
-      if (!a) throw new BadRequestException(`Missing GL account ${code} — seed the chart of accounts`);
-      return a.id;
-    };
+    // Resolve posting accounts by purpose (see PostingService).
+    const acc = await this.posting.accounts(user.organizationId, [
+      'AR',
+      'RETENTION_RECEIVABLE',
+      'VAT_OUTPUT',
+      'REVENUE',
+    ] as const);
 
     const retentionAmount = Number(invoice.retentionAmount);
     const netPayable = Number(invoice.netPayable);
 
     const journalLines: Array<{ accountId: string; debit: number; credit: number }> = [
-      { accountId: acc('1100'), debit: netPayable, credit: 0 }, // AR (due now)
+      { accountId: acc.AR, debit: netPayable, credit: 0 }, // AR (due now)
     ];
     if (retentionAmount > 0) {
-      journalLines.push({ accountId: acc('1200'), debit: retentionAmount, credit: 0 }); // Retention receivable
+      journalLines.push({ accountId: acc.RETENTION_RECEIVABLE, debit: retentionAmount, credit: 0 });
     }
-    journalLines.push({ accountId: acc('4000'), debit: 0, credit: subtotal }); // Revenue
-    journalLines.push({ accountId: acc('2100'), debit: 0, credit: vatTotal }); // VAT output
+    journalLines.push({ accountId: acc.REVENUE, debit: 0, credit: subtotal });
+    journalLines.push({ accountId: acc.VAT_OUTPUT, debit: 0, credit: vatTotal });
 
     // Sanity: the journal must balance.
     const dr = round2(journalLines.reduce((s, l) => s + l.debit, 0));
@@ -324,14 +323,7 @@ export class InvoicesService {
       throw new BadRequestException(`Payment exceeds outstanding balance ${outstanding}`);
     }
 
-    const accounts = await this.prisma.account.findMany({
-      where: { organizationId: user.organizationId, code: { in: ['1000', '1100'] } },
-    });
-    const acc = (code: string) => {
-      const a = accounts.find((x) => x.code === code);
-      if (!a) throw new BadRequestException(`Missing GL account ${code} — re-run the seed`);
-      return a.id;
-    };
+    const acc = await this.posting.accounts(user.organizationId, ['BANK', 'AR'] as const);
 
     return this.prisma.$transaction(async (tx) => {
       const code = await this.numbering.next(user.organizationId, 'PAYMENT', tx);
@@ -354,8 +346,8 @@ export class InvoicesService {
           memo: `Payment ${code} for ${invoice.code}`,
           lines: {
             create: [
-              { accountId: acc('1000'), debit: dto.amount, credit: 0, currency: invoice.currency },
-              { accountId: acc('1100'), debit: 0, credit: dto.amount, currency: invoice.currency },
+              { accountId: acc.BANK, debit: dto.amount, credit: 0, currency: invoice.currency },
+              { accountId: acc.AR, debit: 0, credit: dto.amount, currency: invoice.currency },
             ],
           },
         },
@@ -392,14 +384,10 @@ export class InvoicesService {
     if (entry.status !== 'WITHHELD') throw new BadRequestException(`Retention is ${entry.status}`);
 
     const amount = Number(entry.withheldAmount);
-    const accounts = await this.prisma.account.findMany({
-      where: { organizationId: user.organizationId, code: { in: ['1100', '1200'] } },
-    });
-    const acc = (code: string) => {
-      const a = accounts.find((x) => x.code === code);
-      if (!a) throw new BadRequestException(`Missing GL account ${code}`);
-      return a.id;
-    };
+    const acc = await this.posting.accounts(user.organizationId, [
+      'AR',
+      'RETENTION_RECEIVABLE',
+    ] as const);
 
     return this.prisma.$transaction(async (tx) => {
       await tx.journalEntry.create({
@@ -411,8 +399,13 @@ export class InvoicesService {
           memo: `Retention release for ${entry.invoice.code}`,
           lines: {
             create: [
-              { accountId: acc('1100'), debit: amount, credit: 0, currency: entry.invoice.currency },
-              { accountId: acc('1200'), debit: 0, credit: amount, currency: entry.invoice.currency },
+              { accountId: acc.AR, debit: amount, credit: 0, currency: entry.invoice.currency },
+              {
+                accountId: acc.RETENTION_RECEIVABLE,
+                debit: 0,
+                credit: amount,
+                currency: entry.invoice.currency,
+              },
             ],
           },
         },
