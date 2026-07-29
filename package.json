@@ -19,7 +19,8 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "db:start": "C:/Users/eyadq/.npi-erp/pgsql/bin/pg_ctl.exe -D C:/Users/eyadq/.npi-erp/data -l C:/Users/eyadq/.npi-erp/server.log start",
-    "db:stop": "C:/Users/eyadq/.npi-erp/pgsql/bin/pg_ctl.exe -D C:/Users/eyadq/.npi-erp/data stop"
+    "db:stop": "C:/Users/eyadq/.npi-erp/pgsql/bin/pg_ctl.exe -D C:/Users/eyadq/.npi-erp/data stop",
+    "test": "npm run test -w @npi/api"
   },
   "engines": {
     "node": ">=20"
