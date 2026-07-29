@@ -19,28 +19,27 @@ export class NumberingService {
     const client = tx ?? this.prisma;
     const fiscalYear = new Date().getUTCFullYear();
 
-    const seq = await client.numberingSequence.findUnique({
-      where: {
-        organizationId_documentType_fiscalYear: {
-          organizationId,
-          documentType,
-          fiscalYear,
+    // Single atomic UPDATE ... RETURNING on the composite key: two concurrent
+    // callers each get their own increment — no read-then-write window.
+    let updated;
+    try {
+      updated = await client.numberingSequence.update({
+        where: {
+          organizationId_documentType_fiscalYear: {
+            organizationId,
+            documentType,
+            fiscalYear,
+          },
         },
-      },
-    });
-
-    if (!seq) {
+        data: { nextValue: { increment: 1 } },
+      });
+    } catch {
       throw new InternalServerErrorException(
         `No numbering sequence configured for ${documentType} (${fiscalYear}).`,
       );
     }
 
-    const updated = await client.numberingSequence.update({
-      where: { id: seq.id },
-      data: { nextValue: { increment: 1 } },
-    });
-
     const value = updated.nextValue - 1;
-    return `${seq.prefix}-${String(value).padStart(seq.padding, '0')}`;
+    return `${updated.prefix}-${String(value).padStart(updated.padding, '0')}`;
   }
 }

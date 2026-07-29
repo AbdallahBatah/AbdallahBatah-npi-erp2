@@ -1,7 +1,12 @@
 import { Controller, Get } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CurrentUser } from '../../common/decorators';
+import {
+  CurrentUser,
+  RequirePermissions,
+  SkipPermissions,
+} from '../../common/decorators';
 import type { AuthUser } from '../../common/auth-user';
+import { PERMISSIONS } from '@npi/shared';
 import {
   CUSTOMER_TYPES,
   LEAD_SOURCES,
@@ -44,6 +49,8 @@ import {
 export class ReferenceController {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Static bilingual labels needed by every page — permission-free by design. */
+  @SkipPermissions()
   @Get('enums')
   enums() {
     return {
@@ -81,6 +88,7 @@ export class ReferenceController {
     };
   }
 
+  @RequirePermissions(PERMISSIONS.PROPOSAL_READ)
   @Get('pricing-schemes')
   pricingSchemes(@CurrentUser() user: AuthUser) {
     return this.prisma.pricingScheme.findMany({
@@ -89,7 +97,9 @@ export class ReferenceController {
     });
   }
 
-  /** Dashboard summary (BI-01 seed): pipeline counts and open contract value. */
+  /** Dashboard summary (BI-01 seed): pipeline counts and open contract value.
+   *  Aggregates CRM + contract data, so it requires CRM read access. */
+  @RequirePermissions(PERMISSIONS.LEAD_READ)
   @Get('dashboard')
   async dashboard(@CurrentUser() user: AuthUser) {
     const org = user.organizationId;

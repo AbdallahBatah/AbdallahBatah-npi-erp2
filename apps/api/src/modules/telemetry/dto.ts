@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsInt,
   IsNumber,
@@ -20,7 +22,12 @@ export class ReadingDto {
 }
 
 export class IngestDto {
-  @IsArray() @ValidateNested({ each: true }) @Type(() => ReadingDto)
+  /** Bounded: ingestion loops per reading — an unbounded array is a DoS lever. */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => ReadingDto)
   readings!: ReadingDto[];
 }
 

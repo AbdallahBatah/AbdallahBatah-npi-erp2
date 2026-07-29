@@ -13,6 +13,12 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * Burned once at module load so the unknown-email path costs the same bcrypt
+   * work as a real comparison — no timing oracle for user enumeration.
+   */
+  private static readonly DUMMY_HASH = bcrypt.hashSync('timing-equalizer', 10);
+
   async login(dto: LoginDto, ip?: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
@@ -20,11 +26,16 @@ export class AuthService {
     });
 
     if (!user || !user.isActive) {
+      await bcrypt.compare(dto.password, AuthService.DUMMY_HASH);
+      if (user) {
+        await this.recordFailedLogin(user.organizationId, user.id, ip);
+      }
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) {
+      await this.recordFailedLogin(user.organizationId, user.id, ip);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -60,6 +71,26 @@ export class AuthService {
         },
       },
     };
+  }
+
+  private async recordFailedLogin(
+    organizationId: string,
+    userId: string,
+    ip?: string,
+  ) {
+    // Best-effort: an audit hiccup must never mask the 401 itself.
+    try {
+      await this.audit.record({
+        organizationId,
+        actorId: userId,
+        entityType: 'User',
+        entityId: userId,
+        action: 'LOGIN_FAILED',
+        ip,
+      });
+    } catch {
+      /* ignore */
+    }
   }
 
   async me(userId: string) {

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
+import { AddPaymentDto } from './dto';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
 import { PERMISSIONS } from '@npi/shared';
@@ -43,7 +44,7 @@ export class InvoicesController {
   addPayment(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() dto: { amount: number; method?: 'BANK_TRANSFER' | 'CHEQUE' | 'CASH'; reference?: string },
+    @Body() dto: AddPaymentDto,
   ) {
     return this.invoices.addPayment(user, id, dto);
   }

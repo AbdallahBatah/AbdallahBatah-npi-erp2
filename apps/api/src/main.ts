@@ -1,16 +1,26 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import helmet from 'helmet';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { assertJwtSecret } from './modules/auth/jwt.constants';
 
 async function bootstrap() {
-  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-    throw new Error('JWT_SECRET must be set in production');
-  }
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  const app = await NestFactory.create(AppModule);
+  // ConfigModule has loaded .env by now — enforce a real secret in EVERY
+  // environment (presence alone is not enough; placeholders are rejected).
+  assertJwtSecret();
 
   app.setGlobalPrefix('api');
+  app.use(helmet());
+  app.use(json({ limit: '1mb' }));
+  app.use(urlencoded({ extended: true, limit: '1mb' }));
+  // Behind Caddy/any reverse proxy: trust X-Forwarded-For so the throttler
+  // and audit IPs see the real client, not the proxy.
+  app.set('trust proxy', 1);
 
   app.useGlobalPipes(
     new ValidationPipe({
