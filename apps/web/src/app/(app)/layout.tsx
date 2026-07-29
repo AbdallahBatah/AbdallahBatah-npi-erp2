@@ -57,6 +57,7 @@ const NAV_SECTIONS: NavSection[] = [
     labelEn: 'Finance',
     items: [
       { href: '/invoices', key: 'nav.invoices', icon: 'receipt', perm: 'finance.invoice.read' },
+      { href: '/payables', key: 'nav.payables', icon: 'wallet', perm: 'finance.payment.read' },
       { href: '/finance', key: 'nav.finance', icon: 'bar-chart', perm: 'finance.ledger.read' },
       { href: '/ledger', key: 'nav.ledger', icon: 'book', perm: 'finance.ledger.read' },
     ],
