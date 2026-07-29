@@ -41,6 +41,15 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   },
   // payables
   { re: /exceeds its outstanding balance/i, ar: 'المبلغ المدخل يتجاوز المتبقي على هذا المستند' },
+  // credit notes
+  { re: /credit amount exceeds the remaining/i, ar: 'مبلغ الإشعار يتجاوز المتبقي من الفاتورة' },
+  { re: /already fully credited/i, ar: 'صدرت إشعارات دائنة بكامل قيمة الفاتورة' },
+  { re: /credit note cannot itself be credited/i, ar: 'لا يمكن إصدار إشعار دائن على إشعار دائن' },
+  { re: /only a reported invoice can be credited/i, ar: 'الإشعار الدائن يُصدر على فاتورة مُبلَّغة فقط' },
+  {
+    re: /retention on a cancelled invoice/i,
+    ar: 'الفاتورة ملغاة بإشعار دائن — لا يمكن الإفراج عن محتجزاتها',
+  },
   { re: /is not an open payable/i, ar: 'هذا المستند ليس ضمن المستحقات القائمة لهذا المورد' },
   { re: /needs at least one allocation/i, ar: 'حدّد مستنداً واحداً على الأقل للسداد' },
   // fiscal calendar

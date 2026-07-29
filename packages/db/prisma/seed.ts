@@ -206,6 +206,7 @@ async function main() {
     { documentType: 'RMA', prefix: 'RMA' },
     { documentType: 'PAYMENT', prefix: 'RCPT' },
     { documentType: 'VENDOR_PAYMENT', prefix: 'VPAY' },
+    { documentType: 'CREDIT_NOTE', prefix: 'CN' },
   ];
   for (const s of seqDefs) {
     await prisma.numberingSequence.upsert({

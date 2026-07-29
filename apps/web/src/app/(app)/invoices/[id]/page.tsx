@@ -8,7 +8,8 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, LoadError, useConfirm } from '@/components/ui';
+// NB: this page defines its own read-only `Field` below — do not import ui's.
+import { PageHeader, StatusBadge, LoadError, Modal, useConfirm } from '@/components/ui';
 
 interface Line { id: string; descriptionAr: string; descriptionEn: string; qty: string; unitPrice: string; lineSubtotal: string; vatAmount: string }
 interface JLine { id: string; debit: string; credit: string; account: { code: string; nameAr: string; nameEn: string } }
@@ -36,7 +37,21 @@ interface Invoice {
   journalEntries: { id: string; memo?: string; lines: JLine[] }[];
   retentionEntry?: { id: string; withheldAmount: string; status: string } | null;
   payments: Payment[];
+  invoiceType: string;
+  creditReason?: string | null;
+  creditedTotal: number;
+  outstanding: number;
+  creditNotes: Array<{
+    id: string;
+    code: string;
+    total: string;
+    creditReason?: string | null;
+    issueDate: string;
+  }>;
+  creditedInvoice?: { id: string; code: string } | null;
 }
+
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
@@ -56,6 +71,8 @@ export default function InvoiceDetailPage() {
   const [payAmount, setPayAmount] = useState(0);
   const [payMethod, setPayMethod] = useState('BANK_TRANSFER');
   const [payRef, setPayRef] = useState('');
+  const [cnOpen, setCnOpen] = useState(false);
+  const [cnFull, setCnFull] = useState(true);
   const { act, busy } = useAct();
   const { confirm, confirmNode } = useConfirm();
 
@@ -92,12 +109,30 @@ export default function InvoiceDetailPage() {
     if (await act('release', () => api.post(`/finance/retention/${entryId}/release`, {}))) load();
   }
 
+  async function createCreditNote(reason: string, amount?: number) {
+    const ok = await act(
+      'creditNote',
+      () => api.post(`/finance/invoices/${id}/credit-note`, { reason, amount }),
+      { success: t('common.done') },
+    );
+    if (ok) {
+      setCnOpen(false);
+      load();
+    }
+  }
+
   if (loadErr) return <LoadError message={loadErr} onRetry={load} />;
   if (!inv) return <div className="text-slate-400">{t('common.loading')}</div>;
   const e = inv.eInvoice;
-  const paid = inv.payments.reduce((s, p) => s + Number(p.amount), 0);
-  const outstanding = Math.max(0, Number(inv.netPayable) - paid);
+  // Outstanding comes from the server: it also nets off credit notes, which
+  // the payments list alone cannot see.
+  const outstanding = Math.max(0, inv.outstanding);
   const canPay = ['ISSUED', 'CLEARED'].includes(inv.status) && outstanding > 0.009;
+  const isCreditNote = inv.invoiceType === 'CREDIT_NOTE';
+  // Only a reported invoice can be corrected, and only up to what is left.
+  const creditable = round2(Number(inv.total) - inv.creditedTotal);
+  const canCredit =
+    !isCreditNote && ['ISSUED', 'CLEARED', 'PAID'].includes(inv.status) && creditable > 0.009;
 
   return (
     <div>
@@ -109,6 +144,11 @@ export default function InvoiceDetailPage() {
             {inv.status === 'DRAFT' && (
               <button className="btn-primary text-xs" onClick={issue} disabled={busy()}>
                 {busy('issue') ? t('common.loading') : `🔏 ${t('inv.issue')}`}
+              </button>
+            )}
+            {canCredit && (
+              <button className="btn-ghost text-xs" onClick={() => setCnOpen(true)}>
+                {t('cn.new')}
               </button>
             )}
             <Link href="/invoices" className="btn-ghost text-xs">{t('common.back')}</Link>
@@ -265,7 +305,19 @@ export default function InvoiceDetailPage() {
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
               <h3 className="text-sm font-bold text-slate-800">{t('pay.title')}</h3>
               <span className="text-xs text-slate-400">
-                {t('pay.outstanding')}: <b className={outstanding > 0.009 ? 'text-amber-600' : 'text-emerald-600'}>{formatMoney(outstanding, locale)}</b>
+                {inv.outstanding < -0.009 ? (
+                  <>
+                    {t('cn.refundDue')}:{' '}
+                    <b className="text-rose-600">{formatMoney(-inv.outstanding, locale)}</b>
+                  </>
+                ) : (
+                  <>
+                    {t('pay.outstanding')}:{' '}
+                    <b className={outstanding > 0.009 ? 'text-amber-600' : 'text-emerald-600'}>
+                      {formatMoney(outstanding, locale)}
+                    </b>
+                  </>
+                )}
               </span>
             </div>
             <div className="p-5">
@@ -341,8 +393,126 @@ export default function InvoiceDetailPage() {
               ) : null}
             </div>
           </div>
+
+          {/* Credit notes: this invoice's corrections, or what it corrects. */}
+          {inv.creditNotes.length > 0 || isCreditNote ? (
+            <div className="card overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
+                <h3 className="text-sm font-bold text-slate-800">{t('cn.title')}</h3>
+                {inv.creditedTotal > 0 ? (
+                  <span className="text-xs text-slate-400">
+                    {t('cn.credited')}:{' '}
+                    <b className="text-rose-600">{formatMoney(inv.creditedTotal, locale)}</b>
+                  </span>
+                ) : null}
+              </div>
+              <div className="p-5 text-xs">
+                {isCreditNote ? (
+                  <p className="text-slate-600">
+                    {t('cn.against')}{' '}
+                    {inv.creditedInvoice ? (
+                      <Link
+                        href={`/invoices/${inv.creditedInvoice.id}`}
+                        className="font-mono text-brand-600 hover:underline"
+                      >
+                        {inv.creditedInvoice.code}
+                      </Link>
+                    ) : (
+                      '—'
+                    )}
+                    {inv.creditReason ? ` — ${inv.creditReason}` : ''}
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {inv.creditNotes.map((c) => (
+                      <li
+                        key={c.id}
+                        className="flex items-center justify-between rounded-lg bg-rose-50/60 px-3 py-2"
+                      >
+                        <span>
+                          <Link
+                            href={`/invoices/${c.id}`}
+                            className="font-mono text-brand-600 hover:underline"
+                          >
+                            {c.code}
+                          </Link>
+                          <span className="ms-2 text-slate-500">
+                            {formatDate(c.issueDate, locale)}
+                          </span>
+                          {c.creditReason ? (
+                            <span className="ms-2 text-slate-400">{c.creditReason}</span>
+                          ) : null}
+                        </span>
+                        <span className="font-bold text-rose-700">
+                          −{formatMoney(c.total, locale)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
+
+      <Modal open={cnOpen} title={t('cn.new')} onClose={() => setCnOpen(false)}>
+        <form
+          className="grid gap-4"
+          onSubmit={(ev) => {
+            ev.preventDefault();
+            const f = new FormData(ev.currentTarget);
+            const amount = cnFull ? undefined : Number(f.get('amount'));
+            createCreditNote(String(f.get('reason') || '').trim(), amount);
+          }}
+        >
+          <p className="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+            {t('cn.hint')}
+          </p>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-600">{t('cn.reason')}</span>
+            <input name="reason" className="input" required maxLength={300} />
+          </label>
+          <div className="flex gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="radio" checked={cnFull} onChange={() => setCnFull(true)} />
+              {t('cn.full')}
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" checked={!cnFull} onChange={() => setCnFull(false)} />
+              {t('cn.partial')}
+            </label>
+          </div>
+          {cnFull ? (
+            <p className="text-xs text-slate-500">
+              {t('cn.fullAmount')}: <b>{formatMoney(creditable, locale)}</b>
+            </p>
+          ) : (
+            <label className="block">
+              <span className="mb-1 block text-sm text-slate-600">{t('cn.amount')}</span>
+              <input
+                name="amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                max={creditable}
+                className="input"
+                required
+                dir="ltr"
+              />
+            </label>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-ghost" onClick={() => setCnOpen(false)}>
+              {t('common.cancel')}
+            </button>
+            <button type="submit" className="btn-danger" disabled={busy()}>
+              {busy('creditNote') ? t('common.loading') : t('cn.issue')}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
       {confirmNode}
     </div>
   );

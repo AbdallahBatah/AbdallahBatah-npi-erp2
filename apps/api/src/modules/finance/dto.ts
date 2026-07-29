@@ -56,6 +56,13 @@ export class PayVendorDto {
   @IsOptional() @IsString() @MaxLength(500) memo?: string;
 }
 
+/** Credit note against a reported invoice. Omit `amount` to credit in full. */
+export class CreateCreditNoteDto {
+  @IsString() @MaxLength(300) reason!: string;
+
+  @IsOptional() @IsNumber() @IsPositive() amount?: number;
+}
+
 /** Opens a calendar fiscal year and its twelve periods. */
 export class OpenYearDto {
   @IsInt() @Min(2000) @Max(2100) year!: number;

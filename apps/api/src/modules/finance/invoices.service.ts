@@ -54,6 +54,11 @@ export class InvoicesService {
           include: { lines: { include: { account: true } } },
           orderBy: { postingDate: 'asc' },
         },
+        creditNotes: {
+          select: { id: true, code: true, total: true, creditReason: true, issueDate: true },
+          orderBy: { issueDate: 'asc' },
+        },
+        creditedInvoice: { select: { id: true, code: true } },
       },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
@@ -65,7 +70,35 @@ export class InvoicesService {
       const QRCode = await import('qrcode');
       qrDataUrl = await QRCode.toDataURL(invoice.eInvoice.qrTlv, { margin: 1, width: 220 });
     }
-    return { ...invoice, qrDataUrl };
+    const creditedTotal = round2(
+      invoice.creditNotes.reduce((s, c) => s + Number(c.total), 0),
+    );
+    const paid = round2(invoice.payments.reduce((s, p) => s + Number(p.amount), 0));
+    return {
+      ...invoice,
+      qrDataUrl,
+      creditedTotal,
+      // What the customer still owes: due now, less received, less the part of
+      // the credits that reduced AR (the rest reduced retention receivable).
+      // Negative means we owe the customer a refund.
+      outstanding: round2(
+        Number(invoice.netPayable) - paid - this.creditedAr(invoice, creditedTotal),
+      ),
+    };
+  }
+
+  /**
+   * The AR share of credit notes issued against an invoice. Credits are split
+   * between AR and retention receivable in the invoice's own proportion, so
+   * only the AR share reduces what is collectible now.
+   */
+  private creditedAr(
+    invoice: { netPayable: unknown; total: unknown },
+    creditedTotal: number,
+  ): number {
+    const total = Number(invoice.total);
+    if (total <= 0 || creditedTotal <= 0) return 0;
+    return round2((creditedTotal * Number(invoice.netPayable)) / total);
   }
 
   /**
@@ -283,6 +316,228 @@ export class InvoicesService {
     return this.get(user, invoice.id);
   }
 
+  // ── Credit notes (ZATCA InvoiceTypeCode 381) ──────────────────────────────
+
+  /**
+   * Correct a reported invoice by issuing a credit note against it.
+   *
+   * A cleared e-invoice is a statutory record — it is never edited or deleted.
+   * The credit note is its own document: it carries its own UUID, joins the
+   * same PIH hash chain, references the original through BillingReference, and
+   * posts the mirror-image journal (Dr Revenue + Dr VAT output / Cr AR).
+   *
+   * Omit `amount` to credit the invoice in full, which also cancels it.
+   */
+  async createCreditNote(
+    user: AuthUser,
+    invoiceId: string,
+    dto: { reason: string; amount?: number },
+  ) {
+    const source = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, organizationId: user.organizationId },
+      include: {
+        customer: true,
+        organization: true,
+        lines: true,
+        creditNotes: { select: { total: true } },
+      },
+    });
+    if (!source) throw new NotFoundException('Invoice not found');
+    if (source.invoiceType === 'CREDIT_NOTE') {
+      throw new BadRequestException('A credit note cannot itself be credited');
+    }
+    if (!['ISSUED', 'CLEARED', 'PAID'].includes(source.status)) {
+      throw new BadRequestException(
+        `Only a reported invoice can be credited — this one is ${source.status}`,
+      );
+    }
+
+    const { rate } = await this.standardVatRate(user.organizationId);
+    const alreadyCredited = round2(source.creditNotes.reduce((s, c) => s + Number(c.total), 0));
+    const sourceTotal = Number(source.total);
+    const remaining = round2(sourceTotal - alreadyCredited);
+    if (remaining <= 0.009) throw new BadRequestException('Invoice is already fully credited');
+
+    const isFull = dto.amount === undefined || dto.amount === null;
+    if (!isFull && (dto.amount! <= 0 || dto.amount! > remaining + 0.009)) {
+      throw new BadRequestException(`Credit amount exceeds the remaining ${remaining}`);
+    }
+    const grossCredit = round2(isFull ? remaining : dto.amount!);
+    const subtotal = round2(grossCredit / (1 + rate / 100));
+    const vatAmount = round2(grossCredit - subtotal);
+
+    // Only an untouched invoice can be mirrored line for line. Once part of it
+    // has been credited, "credit the rest" is an amount, not a copy — mirroring
+    // there would credit the original total a second time.
+    const mirrorsOriginal = isFull && alreadyCredited < 0.009;
+    const lines = mirrorsOriginal
+      ? source.lines.map((l) => ({
+          descriptionAr: l.descriptionAr,
+          descriptionEn: l.descriptionEn,
+          qty: Number(l.qty),
+          unitPrice: Number(l.unitPrice),
+          taxCodeId: l.taxCodeId,
+          lineSubtotal: Number(l.lineSubtotal),
+          vatAmount: Number(l.vatAmount),
+        }))
+      : [
+          {
+            descriptionAr: `إشعار دائن جزئي على ${source.code}`,
+            descriptionEn: `Partial credit against ${source.code}`,
+            qty: 1,
+            unitPrice: subtotal,
+            taxCodeId: source.lines[0]?.taxCodeId ?? null,
+            lineSubtotal: subtotal,
+            vatAmount,
+          },
+        ];
+    // A mirrored credit reproduces the original lines exactly, so its totals
+    // are the original's — not the recomputed split above.
+    const noteSubtotal = mirrorsOriginal ? Number(source.subtotal) : subtotal;
+    const noteVat = mirrorsOriginal ? Number(source.vatAmount) : vatAmount;
+    const noteTotal = round2(noteSubtotal + noteVat);
+
+    const acc = await this.posting.accounts(user.organizationId, [
+      'AR',
+      'RETENTION_RECEIVABLE',
+      'REVENUE',
+      'VAT_OUTPUT',
+    ] as const);
+
+    // The original split its receivable between AR and retention receivable.
+    // Credit both back in the same proportion — crediting the whole amount to
+    // AR would understate it and strand the retention balance forever.
+    const creditRetention =
+      Number(source.retentionAmount) > 0 && sourceTotal > 0
+        ? round2((noteTotal * Number(source.retentionAmount)) / sourceTotal)
+        : 0;
+    const creditAr = round2(noteTotal - creditRetention);
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        const code = await this.numbering.next(user.organizationId, 'CREDIT_NOTE', tx);
+        const note = await tx.invoice.create({
+          data: {
+            organizationId: user.organizationId,
+            code,
+            invoiceType: 'CREDIT_NOTE',
+            customerId: source.customerId,
+            contractId: source.contractId,
+            currency: source.currency,
+            subtotal: noteSubtotal,
+            vatAmount: noteVat,
+            retentionAmount: 0,
+            total: noteTotal,
+            netPayable: noteTotal,
+            status: 'CLEARED',
+            creditedInvoiceId: source.id,
+            creditReason: dto.reason,
+            lines: { create: lines },
+          },
+        });
+
+        // Same hash chain as any other reported document.
+        const prev = await tx.eInvoiceDocument.findFirst({
+          where: { invoice: { organizationId: user.organizationId } },
+          orderBy: { submittedAt: 'desc' },
+          select: { invoiceHash: true },
+        });
+        const zatca = this.zatca.generate(user.organizationId, {
+          invoiceCode: code,
+          issuedAt: new Date(),
+          currency: source.currency,
+          documentType: 'CREDIT_NOTE',
+          billingReference: {
+            invoiceCode: source.code,
+            issueDate: source.issueDate,
+            reason: dto.reason,
+          },
+          lines: lines.map((l) => ({
+            descriptionEn: l.descriptionEn,
+            qty: l.qty,
+            unitPrice: l.unitPrice,
+            vatRate: rate,
+          })),
+          subtotal: noteSubtotal,
+          vatTotal: noteVat,
+          grandTotal: noteTotal,
+          parties: {
+            sellerNameAr: source.organization.legalNameAr,
+            sellerNameEn: source.organization.legalNameEn,
+            sellerVat: source.organization.vatNumber ?? '',
+            buyerNameAr: source.customer.nameAr,
+            buyerNameEn: source.customer.nameEn,
+            buyerVat: source.customer.vatNumber,
+          },
+          previousInvoiceHash: prev?.invoiceHash ?? null,
+        });
+
+        await tx.eInvoiceDocument.create({
+          data: {
+            invoiceId: note.id,
+            uuid: zatca.uuid,
+            invoiceHash: zatca.invoiceHash,
+            previousInvoiceHash: zatca.previousInvoiceHash,
+            qrTlv: zatca.qrTlv,
+            cryptographicStamp: zatca.cryptographicStamp,
+            publicKey: zatca.publicKey,
+            xmlPayload: zatca.xml,
+            submissionMode: zatca.submissionMode,
+            authorityStatus: zatca.authorityStatus,
+            authorityResponseRef: zatca.authorityResponseRef,
+            isSimulated: zatca.isSimulated,
+          },
+        });
+
+        // Mirror image of the original sale.
+        await this.posting.journal(tx, {
+          organizationId: user.organizationId,
+          sourceType: 'CreditNote',
+          sourceId: note.id,
+          invoiceId: note.id,
+          memo: `Credit note ${code} against ${source.code} — ${dto.reason}`,
+          lines: [
+            { accountId: acc.REVENUE, debit: noteSubtotal, credit: 0, currency: source.currency },
+            { accountId: acc.VAT_OUTPUT, debit: noteVat, credit: 0, currency: source.currency },
+            ...(creditAr > 0
+              ? [{ accountId: acc.AR, debit: 0, credit: creditAr, currency: source.currency }]
+              : []),
+            ...(creditRetention > 0
+              ? [
+                  {
+                    accountId: acc.RETENTION_RECEIVABLE,
+                    debit: 0,
+                    credit: creditRetention,
+                    currency: source.currency,
+                  },
+                ]
+              : []),
+          ],
+        });
+
+        // Fully credited: the original no longer represents a receivable.
+        if (alreadyCredited + noteTotal >= sourceTotal - 0.009) {
+          await tx.invoice.update({ where: { id: source.id }, data: { status: 'CANCELLED' } });
+        }
+
+        await this.audit.record(
+          {
+            organizationId: user.organizationId,
+            actorId: user.userId,
+            entityType: 'Invoice',
+            entityId: note.id,
+            action: 'CREDIT_NOTE',
+            after: { code, against: source.code, total: noteTotal, reason: dto.reason, isFull },
+          },
+          tx,
+        );
+      },
+      { isolationLevel: 'Serializable' },
+    );
+
+    return this.get(user, source.id);
+  }
+
   // ── Payments & retention release (W7) ─────────────────────────────────────
 
   /** Customer payment: Dr Bank (1000) / Cr AR (1100); invoice → PAID when settled. */
@@ -293,7 +548,7 @@ export class InvoicesService {
   ) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id: invoiceId, organizationId: user.organizationId },
-      include: { payments: true },
+      include: { payments: true, creditNotes: { select: { total: true } } },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
     if (!['ISSUED', 'CLEARED'].includes(invoice.status)) {
@@ -302,7 +557,12 @@ export class InvoicesService {
     if (!dto.amount || dto.amount <= 0) throw new BadRequestException('Amount must be positive');
 
     const paidSoFar = round2(invoice.payments.reduce((s, p) => s + Number(p.amount), 0));
-    const outstanding = round2(Number(invoice.netPayable) - paidSoFar);
+    // Credited amounts are no longer collectible.
+    const credited = this.creditedAr(
+      invoice,
+      round2(invoice.creditNotes.reduce((s, c) => s + Number(c.total), 0)),
+    );
+    const outstanding = round2(Number(invoice.netPayable) - paidSoFar - credited);
     if (dto.amount > outstanding + 0.009) {
       throw new BadRequestException(`Payment exceeds outstanding balance ${outstanding}`);
     }
@@ -332,7 +592,7 @@ export class InvoicesService {
           { accountId: acc.AR, debit: 0, credit: dto.amount, currency: invoice.currency },
         ],
       });
-      const fullyPaid = paidSoFar + dto.amount >= Number(invoice.netPayable) - 0.009;
+      const fullyPaid = paidSoFar + credited + dto.amount >= Number(invoice.netPayable) - 0.009;
       if (fullyPaid) {
         await tx.invoice.update({ where: { id: invoice.id }, data: { status: 'PAID' } });
       }
@@ -362,6 +622,11 @@ export class InvoicesService {
     });
     if (!entry) throw new NotFoundException('Retention entry not found');
     if (entry.status !== 'WITHHELD') throw new BadRequestException(`Retention is ${entry.status}`);
+    // A credited-away invoice has had its retention reversed with it; releasing
+    // it would recreate a receivable for an invoice that no longer exists.
+    if (entry.invoice.status === 'CANCELLED') {
+      throw new BadRequestException('Cannot release retention on a cancelled invoice');
+    }
 
     const amount = Number(entry.withheldAmount);
     const acc = await this.posting.accounts(user.organizationId, [

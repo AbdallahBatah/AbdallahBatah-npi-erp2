@@ -44,6 +44,13 @@ export interface ZatcaInvoiceInput {
   grandTotal: number; // subtotal + vat
   parties: ZatcaSellerBuyer;
   previousInvoiceHash: string | null;
+  /** 388 tax invoice (default) or 381 credit note. */
+  documentType?: 'INVOICE' | 'CREDIT_NOTE';
+  /**
+   * Required on a credit note: ZATCA will not accept 381 without a reference
+   * to the invoice being corrected, plus the reason for the correction.
+   */
+  billingReference?: { invoiceCode: string; issueDate: Date; reason: string };
 }
 
 export interface ZatcaResult {
@@ -118,9 +125,23 @@ export class ZatcaService {
   <cbc:UUID>${uuid}</cbc:UUID>
   <cbc:IssueDate>${input.issuedAt.toISOString().slice(0, 10)}</cbc:IssueDate>
   <cbc:IssueTime>${input.issuedAt.toISOString().slice(11, 19)}Z</cbc:IssueTime>
-  <cbc:InvoiceTypeCode name="${isStandard ? '0100000' : '0200000'}">388</cbc:InvoiceTypeCode>
+  <cbc:InvoiceTypeCode name="${isStandard ? '0100000' : '0200000'}">${input.documentType === 'CREDIT_NOTE' ? '381' : '388'}</cbc:InvoiceTypeCode>
   <cbc:DocumentCurrencyCode>${input.currency}</cbc:DocumentCurrencyCode>
-  <cac:AdditionalDocumentReference>
+${
+  input.billingReference
+    ? `  <cac:BillingReference>
+    <cac:InvoiceDocumentReference>
+      <cbc:ID>${this.xmlEscape(input.billingReference.invoiceCode)}</cbc:ID>
+      <cbc:IssueDate>${input.billingReference.issueDate.toISOString().slice(0, 10)}</cbc:IssueDate>
+    </cac:InvoiceDocumentReference>
+  </cac:BillingReference>
+  <cac:PaymentMeans>
+    <cbc:PaymentMeansCode>1</cbc:PaymentMeansCode>
+    <cbc:InstructionNote>${this.xmlEscape(input.billingReference.reason)}</cbc:InstructionNote>
+  </cac:PaymentMeans>
+`
+    : ''
+}  <cac:AdditionalDocumentReference>
     <cbc:ID>PIH</cbc:ID>
     <cac:Attachment><cbc:EmbeddedDocumentBinaryObject mimeCode="text/plain">${pih}</cbc:EmbeddedDocumentBinaryObject></cac:Attachment>
   </cac:AdditionalDocumentReference>

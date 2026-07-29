@@ -108,4 +108,57 @@ describe('ZatcaService.generate', () => {
   it('is always flagged as simulated (no real CSID yet)', () => {
     expect(svc.generate('org1', input()).isSimulated).toBe(true);
   });
+
+  describe('credit notes', () => {
+    const note = () =>
+      svc.generate(
+        'org1',
+        input({
+          invoiceCode: 'CN-00001',
+          documentType: 'CREDIT_NOTE',
+          billingReference: {
+            invoiceCode: 'INV-00001',
+            issueDate: new Date('2026-01-15T10:00:00Z'),
+            reason: 'Scope reduced by change order',
+          },
+        }),
+      );
+
+    it('carries InvoiceTypeCode 381, not 388', () => {
+      expect(note().xml).toContain('>381</cbc:InvoiceTypeCode>');
+      expect(svc.generate('org1', input()).xml).toContain('>388</cbc:InvoiceTypeCode>');
+    });
+
+    it('references the corrected invoice and the reason', () => {
+      // ZATCA rejects a 381 that does not say what it corrects and why.
+      const xml = note().xml;
+      expect(xml).toContain('<cac:BillingReference>');
+      expect(xml).toContain('<cbc:ID>INV-00001</cbc:ID>');
+      expect(xml).toContain('<cbc:IssueDate>2026-01-15</cbc:IssueDate>');
+      expect(xml).toContain('Scope reduced by change order');
+    });
+
+    it('joins the same hash chain as ordinary invoices', () => {
+      const inv = svc.generate('org1', input());
+      const cn = svc.generate(
+        'org1',
+        input({
+          invoiceCode: 'CN-00001',
+          documentType: 'CREDIT_NOTE',
+          previousInvoiceHash: inv.invoiceHash,
+          billingReference: {
+            invoiceCode: 'INV-00001',
+            issueDate: new Date('2026-01-15T10:00:00Z'),
+            reason: 'Cancelled',
+          },
+        }),
+      );
+      expect(cn.previousInvoiceHash).toBe(inv.invoiceHash);
+      expect(cn.invoiceHash).toBe(createHash('sha256').update(cn.xml, 'utf8').digest('base64'));
+    });
+
+    it('an ordinary invoice carries no billing reference', () => {
+      expect(svc.generate('org1', input()).xml).not.toContain('<cac:BillingReference>');
+    });
+  });
 });

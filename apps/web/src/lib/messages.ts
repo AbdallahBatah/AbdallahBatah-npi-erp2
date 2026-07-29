@@ -282,6 +282,20 @@ export const messages: Record<Locale, Record<string, string>> = {
     'inv.summary.issued': 'فواتير مُصدَرة',
 
     // `ap.*` — the payables side. `pay.*` is already taken by customer receipts.
+    'cn.title': 'الإشعارات الدائنة',
+    'cn.new': 'إشعار دائن',
+    'cn.issue': 'إصدار الإشعار',
+    'cn.reason': 'سبب الإشعار',
+    'cn.full': 'إلغاء الفاتورة بالكامل',
+    'cn.partial': 'مبلغ جزئي',
+    'cn.amount': 'المبلغ (شامل الضريبة)',
+    'cn.fullAmount': 'المبلغ الذي سيُعاد',
+    'cn.credited': 'المُعاد',
+    'cn.against': 'إشعار دائن على الفاتورة',
+    'cn.refundDue': 'مبلغ مستحق الرد للعميل',
+    'cn.hint':
+      'الفاتورة المُبلَّغة لهيئة الزكاة والضريبة لا تُعدَّل ولا تُحذف — يُصدر إشعار دائن مستقل يُبلَّغ بدوره ويشير إلى الفاتورة الأصلية.',
+
     'nav.payables': 'مستحقات الموردين',
     'ap.title': 'مستحقات الموردين',
     'ap.hint': 'كل ما هو مستحق للموردين ومقاولي الباطن، وسداده من البنك.',
@@ -883,6 +897,20 @@ export const messages: Record<Locale, Record<string, string>> = {
     'inv.summary.issued': 'Issued invoices',
 
     // `ap.*` — the payables side. `pay.*` is already taken by customer receipts.
+    'cn.title': 'Credit notes',
+    'cn.new': 'Credit note',
+    'cn.issue': 'Issue credit note',
+    'cn.reason': 'Reason',
+    'cn.full': 'Cancel the invoice in full',
+    'cn.partial': 'Partial amount',
+    'cn.amount': 'Amount (VAT inclusive)',
+    'cn.fullAmount': 'Amount to be credited',
+    'cn.credited': 'Credited',
+    'cn.against': 'Credit note against invoice',
+    'cn.refundDue': 'Refund due to the customer',
+    'cn.hint':
+      'An invoice already reported to ZATCA is never edited or deleted — a separate credit note is issued, reported in turn, and references the original.',
+
     'nav.payables': 'Vendor payables',
     'ap.title': 'Vendor payables',
     'ap.hint': 'Everything owed to vendors and subcontractors, and paying it from the bank.',

@@ -600,6 +600,13 @@ model Invoice {
   total          Decimal  @default(0) @db.Decimal(18, 2) // subtotal + vat (gross billed)
   netPayable     Decimal  @default(0) @db.Decimal(18, 2) // total - retention (amount due now)
   status         InvoiceStatus @default(DRAFT)
+  // Credit notes (ZATCA InvoiceTypeCode 381) point back at the invoice they
+  // correct. The original is never edited — a cleared e-invoice is a statutory
+  // record, so a correction is always a new, separately-reported document.
+  creditedInvoiceId String?
+  creditedInvoice   Invoice? @relation("InvoiceCredits", fields: [creditedInvoiceId], references: [id])
+  creditNotes       Invoice[] @relation("InvoiceCredits")
+  creditReason      String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -613,6 +620,7 @@ model Invoice {
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
+  @@index([creditedInvoiceId])
 }
 
 model InvoiceLine {

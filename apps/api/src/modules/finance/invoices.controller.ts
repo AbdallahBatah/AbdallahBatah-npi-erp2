@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
-import { AddPaymentDto } from './dto';
+import { AddPaymentDto, CreateCreditNoteDto } from './dto';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
 import { PERMISSIONS } from '@npi/shared';
@@ -47,6 +47,17 @@ export class InvoicesController {
     @Body() dto: AddPaymentDto,
   ) {
     return this.invoices.addPayment(user, id, dto);
+  }
+
+  /** ZATCA credit note (381) against a reported invoice. */
+  @Post('invoices/:id/credit-note')
+  @RequirePermissions(PERMISSIONS.INVOICE_WRITE)
+  creditNote(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: CreateCreditNoteDto,
+  ) {
+    return this.invoices.createCreditNote(user, id, dto);
   }
 
   @Post('retention/:id/release')
