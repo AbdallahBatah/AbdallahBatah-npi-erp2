@@ -21,6 +21,7 @@ export const PERMISSIONS = {
   LEDGER_READ: 'finance.ledger.read',
   PAYMENT_READ: 'finance.payment.read',
   PAYMENT_WRITE: 'finance.payment.write',
+  PERIOD_MANAGE: 'finance.period.manage',
   PROJECT_READ: 'projects.project.read',
   PROJECT_WRITE: 'projects.project.write',
   PROCUREMENT_READ: 'scm.procurement.read',

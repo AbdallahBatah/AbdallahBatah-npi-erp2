@@ -5,13 +5,15 @@ import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { PayablesController } from './payables.controller';
 import { PayablesService } from './payables.service';
+import { FiscalController } from './fiscal.controller';
+import { FiscalService } from './fiscal.service';
 import { ZatcaService } from './zatca.service';
 
 @Module({
-  // ReportsController first: its 'finance/reports/*' paths must not be
-  // swallowed by InvoicesController's parameterised 'finance/...' routes.
-  // PayablesController ('finance/payables/*') is fixed-prefix for the same reason.
-  controllers: [ReportsController, PayablesController, InvoicesController],
-  providers: [InvoicesService, ReportsService, PayablesService, ZatcaService],
+  // Fixed-prefix controllers first: their 'finance/reports/*',
+  // 'finance/payables/*' and 'finance/fiscal/*' paths must not be swallowed by
+  // InvoicesController's parameterised 'finance/...' routes.
+  controllers: [ReportsController, PayablesController, FiscalController, InvoicesController],
+  providers: [InvoicesService, ReportsService, PayablesService, FiscalService, ZatcaService],
 })
 export class FinanceModule {}

@@ -23,7 +23,7 @@ const ALL_PERMISSIONS = [
   'commercial.proposal.read', 'commercial.proposal.write',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
-  'finance.payment.read', 'finance.payment.write',
+  'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
   'projects.project.read', 'projects.project.write',
   'scm.procurement.read', 'scm.procurement.write',
   'assets.serialunit.read',
@@ -44,7 +44,7 @@ const SALES_PERMISSIONS = [
 // المحاسب: كل المال + قراءة سياقه (عقود/عملاء/مشتريات لفواتير الموردين)
 const ACCOUNTANT_PERMISSIONS = [
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
-  'finance.payment.read', 'finance.payment.write',
+  'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
   'crm.customer.read',
   'commercial.contract.read', 'commercial.proposal.read', 'commercial.item.read',
   'scm.procurement.read', 'scm.procurement.write',

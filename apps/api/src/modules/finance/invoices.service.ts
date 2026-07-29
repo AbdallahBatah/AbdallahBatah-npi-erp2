@@ -190,13 +190,6 @@ export class InvoicesService {
     journalLines.push({ accountId: acc.REVENUE, debit: 0, credit: subtotal });
     journalLines.push({ accountId: acc.VAT_OUTPUT, debit: 0, credit: vatTotal });
 
-    // Sanity: the journal must balance.
-    const dr = round2(journalLines.reduce((s, l) => s + l.debit, 0));
-    const cr = round2(journalLines.reduce((s, l) => s + l.credit, 0));
-    if (dr !== cr) {
-      throw new BadRequestException(`Journal not balanced: Dr ${dr} != Cr ${cr}`);
-    }
-
     await this.prisma.$transaction(async (tx) => {
       // Chain to the previous e-invoice hash (PIH) *inside* the transaction so
       // two concurrent issues cannot both chain onto the same predecessor.
@@ -248,22 +241,13 @@ export class InvoicesService {
         },
       });
 
-      await tx.journalEntry.create({
-        data: {
-          organizationId: user.organizationId,
-          sourceType: 'Invoice',
-          sourceId: invoice.id,
-          invoiceId: invoice.id,
-          memo: `Milestone invoice ${invoice.code}`,
-          lines: {
-            create: journalLines.map((l) => ({
-              accountId: l.accountId,
-              debit: l.debit,
-              credit: l.credit,
-              currency: invoice.currency,
-            })),
-          },
-        },
+      await this.posting.journal(tx, {
+        organizationId: user.organizationId,
+        sourceType: 'Invoice',
+        sourceId: invoice.id,
+        invoiceId: invoice.id,
+        memo: `Milestone invoice ${invoice.code}`,
+        lines: journalLines.map((l) => ({ ...l, currency: invoice.currency })),
       });
 
       if (retentionAmount > 0 && invoice.contractId) {
@@ -337,20 +321,16 @@ export class InvoicesService {
           reference: dto.reference,
         },
       });
-      await tx.journalEntry.create({
-        data: {
-          organizationId: user.organizationId,
-          sourceType: 'PaymentReceipt',
-          sourceId: receipt.id,
-          invoiceId: invoice.id,
-          memo: `Payment ${code} for ${invoice.code}`,
-          lines: {
-            create: [
-              { accountId: acc.BANK, debit: dto.amount, credit: 0, currency: invoice.currency },
-              { accountId: acc.AR, debit: 0, credit: dto.amount, currency: invoice.currency },
-            ],
-          },
-        },
+      await this.posting.journal(tx, {
+        organizationId: user.organizationId,
+        sourceType: 'PaymentReceipt',
+        sourceId: receipt.id,
+        invoiceId: invoice.id,
+        memo: `Payment ${code} for ${invoice.code}`,
+        lines: [
+          { accountId: acc.BANK, debit: dto.amount, credit: 0, currency: invoice.currency },
+          { accountId: acc.AR, debit: 0, credit: dto.amount, currency: invoice.currency },
+        ],
       });
       const fullyPaid = paidSoFar + dto.amount >= Number(invoice.netPayable) - 0.009;
       if (fullyPaid) {
@@ -390,25 +370,21 @@ export class InvoicesService {
     ] as const);
 
     return this.prisma.$transaction(async (tx) => {
-      await tx.journalEntry.create({
-        data: {
-          organizationId: user.organizationId,
-          sourceType: 'RetentionRelease',
-          sourceId: entry.id,
-          invoiceId: entry.invoiceId,
-          memo: `Retention release for ${entry.invoice.code}`,
-          lines: {
-            create: [
-              { accountId: acc.AR, debit: amount, credit: 0, currency: entry.invoice.currency },
-              {
-                accountId: acc.RETENTION_RECEIVABLE,
-                debit: 0,
-                credit: amount,
-                currency: entry.invoice.currency,
-              },
-            ],
+      await this.posting.journal(tx, {
+        organizationId: user.organizationId,
+        sourceType: 'RetentionRelease',
+        sourceId: entry.id,
+        invoiceId: entry.invoiceId,
+        memo: `Retention release for ${entry.invoice.code}`,
+        lines: [
+          { accountId: acc.AR, debit: amount, credit: 0, currency: entry.invoice.currency },
+          {
+            accountId: acc.RETENTION_RECEIVABLE,
+            debit: 0,
+            credit: amount,
+            currency: entry.invoice.currency,
           },
-        },
+        ],
       });
       const updated = await tx.retentionEntry.update({
         where: { id: entry.id },

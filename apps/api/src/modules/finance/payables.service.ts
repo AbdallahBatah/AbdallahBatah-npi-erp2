@@ -198,19 +198,15 @@ export class PayablesService {
         include: { allocations: true },
       });
 
-      await tx.journalEntry.create({
-        data: {
-          organizationId: user.organizationId,
-          sourceType: 'VendorPayment',
-          sourceId: payment.id,
-          memo: `Vendor payment ${code} — ${vendor.nameEn}`,
-          lines: {
-            create: [
-              { accountId: acc.AP, debit: total, credit: 0 },
-              { accountId: acc.BANK, debit: 0, credit: total },
-            ],
-          },
-        },
+      await this.posting.journal(tx, {
+        organizationId: user.organizationId,
+        sourceType: 'VendorPayment',
+        sourceId: payment.id,
+        memo: `Vendor payment ${code} — ${vendor.nameEn}`,
+        lines: [
+          { accountId: acc.AP, debit: total, credit: 0 },
+          { accountId: acc.BANK, debit: 0, credit: total },
+        ],
       });
 
       // Flip each fully-settled document to PAID.
@@ -273,20 +269,16 @@ export class PayablesService {
     ] as const);
 
     return this.prisma.$transaction(async (tx) => {
-      await tx.journalEntry.create({
-        data: {
-          organizationId: user.organizationId,
-          sourceType: 'SubcontractRetentionRelease',
-          sourceId: claim.id,
-          projectId: claim.agreement.projectId,
-          memo: `Subcontractor retention release for ${claim.code} — ${claim.agreement.vendor.nameEn}`,
-          lines: {
-            create: [
-              { accountId: acc.RETENTION_PAYABLE, debit: amount, credit: 0 },
-              { accountId: acc.AP, debit: 0, credit: amount },
-            ],
-          },
-        },
+      await this.posting.journal(tx, {
+        organizationId: user.organizationId,
+        sourceType: 'SubcontractRetentionRelease',
+        sourceId: claim.id,
+        projectId: claim.agreement.projectId,
+        memo: `Subcontractor retention release for ${claim.code} — ${claim.agreement.vendor.nameEn}`,
+        lines: [
+          { accountId: acc.RETENTION_PAYABLE, debit: amount, credit: 0 },
+          { accountId: acc.AP, debit: 0, credit: amount },
+        ],
       });
 
       const updated = await tx.progressClaim.update({

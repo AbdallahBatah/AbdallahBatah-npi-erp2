@@ -414,23 +414,19 @@ export class ProcurementService {
         },
       });
 
-      await tx.journalEntry.create({
-        data: {
-          organizationId: user.organizationId,
-          sourceType: 'VendorBill',
-          sourceId: bill.id,
-          // Project dimension: this is what makes the WIP balance readable per
-          // project when cost of revenue is recognised.
-          projectId: grn.purchaseOrder.projectId,
-          memo: `Vendor bill ${code} — ${grn.purchaseOrder.vendor.nameEn} (${grn.code})`,
-          lines: {
-            create: [
-              { accountId: acc.WIP, debit: subtotal, credit: 0, currency: grn.purchaseOrder.currency },
-              { accountId: acc.VAT_INPUT, debit: vatAmount, credit: 0, currency: grn.purchaseOrder.currency },
-              { accountId: acc.AP, debit: 0, credit: total, currency: grn.purchaseOrder.currency },
-            ],
-          },
-        },
+      await this.posting.journal(tx, {
+        organizationId: user.organizationId,
+        sourceType: 'VendorBill',
+        sourceId: bill.id,
+        // Project dimension: this is what makes the WIP balance readable per
+        // project when cost of revenue is recognised.
+        projectId: grn.purchaseOrder.projectId,
+        memo: `Vendor bill ${code} — ${grn.purchaseOrder.vendor.nameEn} (${grn.code})`,
+        lines: [
+          { accountId: acc.WIP, debit: subtotal, credit: 0, currency: grn.purchaseOrder.currency },
+          { accountId: acc.VAT_INPUT, debit: vatAmount, credit: 0, currency: grn.purchaseOrder.currency },
+          { accountId: acc.AP, debit: 0, credit: total, currency: grn.purchaseOrder.currency },
+        ],
       });
 
       await this.audit.record(
@@ -657,15 +653,13 @@ export class ProcurementService {
         { accountId: acc.AP, debit: 0, credit: net },
       ];
       if (retention > 0) lines.push({ accountId: acc.RETENTION_PAYABLE, debit: 0, credit: retention });
-      await tx.journalEntry.create({
-        data: {
-          organizationId: user.organizationId,
-          sourceType: 'ProgressClaim',
-          sourceId: claim.id,
-          projectId: claim.agreement.projectId,
-          memo: `Progress claim ${claim.code} — ${claim.agreement.vendor.nameEn}`,
-          lines: { create: lines.map((l) => ({ ...l, currency: 'SAR' })) },
-        },
+      await this.posting.journal(tx, {
+        organizationId: user.organizationId,
+        sourceType: 'ProgressClaim',
+        sourceId: claim.id,
+        projectId: claim.agreement.projectId,
+        memo: `Progress claim ${claim.code} — ${claim.agreement.vendor.nameEn}`,
+        lines,
       });
 
       await this.audit.record(

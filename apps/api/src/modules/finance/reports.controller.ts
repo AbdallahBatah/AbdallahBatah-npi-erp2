@@ -53,6 +53,24 @@ export class ReportsController {
     return this.reports.trialBalance(user, from, to);
   }
 
+  /** FIN-01: profit and loss for a period. */
+  @Get('income-statement')
+  @RequirePermissions(PERMISSIONS.LEDGER_READ)
+  incomeStatement(
+    @CurrentUser() user: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.reports.incomeStatement(user, from, to);
+  }
+
+  /** FIN-01: financial position at a date. */
+  @Get('balance-sheet')
+  @RequirePermissions(PERMISSIONS.LEDGER_READ)
+  balanceSheet(@CurrentUser() user: AuthUser, @Query('asOf') asOf?: string) {
+    return this.reports.balanceSheet(user, asOf);
+  }
+
   /** FIN-01: general ledger for one account, with a running balance. */
   @Get('general-ledger/:accountId')
   @RequirePermissions(PERMISSIONS.LEDGER_READ)

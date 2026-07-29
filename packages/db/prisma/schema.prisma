@@ -211,6 +211,8 @@ model Organization {
   timesheets          Timesheet[]
   accountMappings     AccountMapping[]
   vendorPayments      VendorPayment[]
+  fiscalYears         FiscalYear[]
+  fiscalPeriods       FiscalPeriod[]
 
   @@index([parentOrganizationId])
 }
@@ -1642,4 +1644,49 @@ model AccountMapping {
   @@unique([organizationId, purpose])
   @@index([organizationId])
   @@index([accountId])
+}
+
+// ── M1: fiscal calendar ─────────────────────────────────────────────────────
+// Journals could be posted to any date forever — nothing could be closed, so
+// nothing could be relied on. A closed period refuses new postings, and
+// closing a year sweeps the result into retained earnings.
+
+enum FiscalStatus {
+  OPEN
+  CLOSED
+}
+
+model FiscalYear {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  year           Int
+  startDate      DateTime
+  endDate        DateTime
+  status         FiscalStatus @default(OPEN)
+  closedAt       DateTime?
+  closedById     String?
+  createdAt      DateTime @default(now())
+
+  periods        FiscalPeriod[]
+
+  @@unique([organizationId, year])
+  @@index([organizationId])
+}
+
+model FiscalPeriod {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fiscalYearId   String
+  fiscalYear     FiscalYear @relation(fields: [fiscalYearId], references: [id], onDelete: Cascade)
+  month          Int      // 1–12
+  startDate      DateTime
+  endDate        DateTime // inclusive: the last instant of the month
+  status         FiscalStatus @default(OPEN)
+  closedAt       DateTime?
+  closedById     String?
+
+  @@unique([fiscalYearId, month])
+  @@index([organizationId, startDate])
 }

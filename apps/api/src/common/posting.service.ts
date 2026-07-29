@@ -1,6 +1,26 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Prisma, PostingPurpose } from '@npi/db';
+
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+export interface JournalLineInput {
+  accountId: string;
+  debit: number;
+  credit: number;
+  currency?: string;
+}
+
+export interface JournalInput {
+  organizationId: string;
+  sourceType: string;
+  sourceId: string;
+  memo?: string;
+  invoiceId?: string | null;
+  projectId?: string | null;
+  postingDate?: Date;
+  lines: JournalLineInput[];
+}
 
 /**
  * Resolves a posting *purpose* to the GL account that purpose is mapped to.
@@ -54,5 +74,68 @@ export class PostingService {
   ): Promise<string> {
     const map = await this.accounts(organizationId, [purpose], tx);
     return map[purpose];
+  }
+
+  // ── The one door into the general ledger ──────────────────────────────────
+
+  /**
+   * Writes a journal entry. Every automatic posting goes through here rather
+   * than calling `journalEntry.create` directly, so the two invariants that
+   * matter are checked in one place instead of nine: the entry balances, and
+   * its period is still open.
+   */
+  async journal(tx: Prisma.TransactionClient, input: JournalInput) {
+    if (input.lines.length === 0) {
+      throw new InternalServerErrorException('Journal has no lines');
+    }
+    const postingDate = input.postingDate ?? new Date();
+    await this.assertPeriodOpen(input.organizationId, postingDate, tx);
+
+    const dr = round2(input.lines.reduce((s, l) => s + l.debit, 0));
+    const cr = round2(input.lines.reduce((s, l) => s + l.credit, 0));
+    if (dr !== cr) {
+      throw new BadRequestException(`Journal not balanced: Dr ${dr} != Cr ${cr}`);
+    }
+
+    return tx.journalEntry.create({
+      data: {
+        organizationId: input.organizationId,
+        postingDate,
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        memo: input.memo,
+        invoiceId: input.invoiceId ?? null,
+        projectId: input.projectId ?? null,
+        lines: {
+          create: input.lines.map((l) => ({
+            accountId: l.accountId,
+            debit: l.debit,
+            credit: l.credit,
+            currency: l.currency ?? 'SAR',
+          })),
+        },
+      },
+      include: { lines: { include: { account: true } } },
+    });
+  }
+
+  /**
+   * Refuses a posting whose date falls in a closed period or a closed year.
+   *
+   * Permissive when no period covers the date: an organization that has not
+   * set up a fiscal calendar keeps posting exactly as before. Closing is
+   * opt-in, and only what has been explicitly closed is locked.
+   */
+  async assertPeriodOpen(organizationId: string, date: Date, tx?: Prisma.TransactionClient) {
+    const client = tx ?? this.prisma;
+    const period = await client.fiscalPeriod.findFirst({
+      where: { organizationId, startDate: { lte: date }, endDate: { gte: date } },
+      include: { fiscalYear: { select: { year: true, status: true } } },
+    });
+    if (!period) return;
+    if (period.status === 'CLOSED' || period.fiscalYear.status === 'CLOSED') {
+      const label = `${period.fiscalYear.year}-${String(period.month).padStart(2, '0')}`;
+      throw new BadRequestException(`Accounting period ${label} is closed`);
+    }
   }
 }

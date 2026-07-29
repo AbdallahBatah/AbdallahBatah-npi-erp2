@@ -285,18 +285,15 @@ export class ReportsService {
             ];
 
     const result = await this.prisma.$transaction(async (tx) => {
-      let created = null as Awaited<ReturnType<typeof tx.journalEntry.create>> | null;
+      let created = null as Awaited<ReturnType<PostingService['journal']>> | null;
       if (lines.length > 0) {
-        created = await tx.journalEntry.create({
-          data: {
-            organizationId: user.organizationId,
-            sourceType: REVREC_SOURCE,
-            sourceId: contractId,
-            projectId: row.projectId,
-            memo: `IFRS-15 POC adjustment for ${row.code} (progress ${row.progressPct}%)`,
-            lines: { create: lines.map((l) => ({ ...l, currency: 'SAR' })) },
-          },
-          include: { lines: { include: { account: true } } },
+        created = await this.posting.journal(tx, {
+          organizationId: user.organizationId,
+          sourceType: REVREC_SOURCE,
+          sourceId: contractId,
+          projectId: row.projectId,
+          memo: `IFRS-15 POC adjustment for ${row.code} (progress ${row.progressPct}%)`,
+          lines,
         });
         await this.audit.record(
           {
@@ -311,18 +308,15 @@ export class ReportsService {
         );
       }
 
-      let costEntry = null as Awaited<ReturnType<typeof tx.journalEntry.create>> | null;
+      let costEntry = null as Awaited<ReturnType<PostingService['journal']>> | null;
       if (costLines.length > 0) {
-        costEntry = await tx.journalEntry.create({
-          data: {
-            organizationId: user.organizationId,
-            sourceType: COSTREC_SOURCE,
-            sourceId: contractId,
-            projectId: row.projectId,
-            memo: `Cost of revenue for ${row.code} (progress ${row.progressPct}%)`,
-            lines: { create: costLines.map((l) => ({ ...l, currency: 'SAR' })) },
-          },
-          include: { lines: { include: { account: true } } },
+        costEntry = await this.posting.journal(tx, {
+          organizationId: user.organizationId,
+          sourceType: COSTREC_SOURCE,
+          sourceId: contractId,
+          projectId: row.projectId,
+          memo: `Cost of revenue for ${row.code} (progress ${row.progressPct}%)`,
+          lines: costLines,
         });
         await this.audit.record(
           {
@@ -562,6 +556,154 @@ export class ReportsService {
       },
       // Both checks must hold; either failing means a journal was written unbalanced.
       isBalanced: Math.abs(totalDebit - totalCredit) < 0.01 && Math.abs(closingDebit - closingCredit) < 0.01,
+    };
+  }
+
+  // ── FIN-01 reporting: income statement & balance sheet ────────────────────
+
+  /** Signed net (debit − credit) per account over a window, plus the account rows. */
+  private async netByAccount(organizationId: string, from: Date | null, to: Date) {
+    const [accounts, grouped] = await Promise.all([
+      this.prisma.account.findMany({ where: { organizationId }, orderBy: { code: 'asc' } }),
+      this.prisma.journalLine.groupBy({
+        by: ['accountId'],
+        where: {
+          journalEntry: {
+            organizationId,
+            postingDate: from ? { gte: from, lte: to } : { lte: to },
+          },
+        },
+        _sum: { debit: true, credit: true },
+      }),
+    ]);
+    const net = new Map(
+      grouped.map((r) => [
+        r.accountId,
+        round2(Number(r._sum.debit ?? 0) - Number(r._sum.credit ?? 0)),
+      ]),
+    );
+    return { accounts, net };
+  }
+
+  /**
+   * Profit and loss for a period. Revenue and expense are reported as positive
+   * magnitudes — a revenue account's natural credit balance reads as income,
+   * not as a negative number.
+   *
+   * Cost of revenue is split out from other expenses through the posting rule,
+   * so gross profit is meaningful whatever the customer numbered its accounts.
+   */
+  async incomeStatement(user: AuthUser, fromStr?: string, toStr?: string) {
+    const { from, to } = this.parsePeriod(fromStr, toStr);
+    const organizationId = user.organizationId;
+    const [{ accounts, net }, acc] = await Promise.all([
+      this.netByAccount(organizationId, from, to),
+      this.posting.accounts(organizationId, ['COST_OF_REVENUE'] as const),
+    ]);
+
+    const line = (a: (typeof accounts)[number], signedAmount: number) => ({
+      accountId: a.id,
+      code: a.code,
+      nameAr: a.nameAr,
+      nameEn: a.nameEn,
+      amount: signedAmount,
+    });
+
+    // Revenue is credit-natural, expense debit-natural: flip revenue's sign so
+    // both sections read as positive amounts.
+    const revenue = accounts
+      .filter((a) => a.accountType === 'REVENUE')
+      .map((a) => line(a, round2(-(net.get(a.id) ?? 0))))
+      .filter((r) => r.amount !== 0);
+    const costOfRevenue = accounts
+      .filter((a) => a.accountType === 'EXPENSE' && a.id === acc.COST_OF_REVENUE)
+      .map((a) => line(a, round2(net.get(a.id) ?? 0)))
+      .filter((r) => r.amount !== 0);
+    const otherExpenses = accounts
+      .filter((a) => a.accountType === 'EXPENSE' && a.id !== acc.COST_OF_REVENUE)
+      .map((a) => line(a, round2(net.get(a.id) ?? 0)))
+      .filter((r) => r.amount !== 0);
+
+    const total = (rows: Array<{ amount: number }>) =>
+      round2(rows.reduce((s, r) => s + r.amount, 0));
+    const totalRevenue = total(revenue);
+    const totalCostOfRevenue = total(costOfRevenue);
+    const totalOtherExpenses = total(otherExpenses);
+    const grossProfit = round2(totalRevenue - totalCostOfRevenue);
+
+    return {
+      period: { from: from.toISOString(), to: to.toISOString() },
+      revenue,
+      costOfRevenue,
+      otherExpenses,
+      totals: {
+        revenue: totalRevenue,
+        costOfRevenue: totalCostOfRevenue,
+        grossProfit,
+        grossMarginPct: totalRevenue > 0 ? round2((grossProfit / totalRevenue) * 100) : 0,
+        otherExpenses: totalOtherExpenses,
+        netResult: round2(grossProfit - totalOtherExpenses),
+      },
+    };
+  }
+
+  /**
+   * Financial position at a date — cumulative from inception, not per period.
+   *
+   * The result of the current, not-yet-closed year appears as its own equity
+   * line: it is simply every revenue and expense balance still standing. A
+   * year that has been closed contributes zero here because the year-end sweep
+   * already moved it into retained earnings, so the two never double-count.
+   */
+  async balanceSheet(user: AuthUser, asOfStr?: string) {
+    const { to } = this.parsePeriod(undefined, asOfStr, new Date(0));
+    const organizationId = user.organizationId;
+    const { accounts, net } = await this.netByAccount(organizationId, null, to);
+
+    const section = (type: 'ASSET' | 'LIABILITY' | 'EQUITY', creditNatural: boolean) =>
+      accounts
+        .filter((a) => a.accountType === type)
+        .map((a) => {
+          const signed = net.get(a.id) ?? 0;
+          return {
+            accountId: a.id,
+            code: a.code,
+            nameAr: a.nameAr,
+            nameEn: a.nameEn,
+            amount: round2(creditNatural ? -signed : signed),
+          };
+        })
+        .filter((r) => r.amount !== 0);
+
+    const assets = section('ASSET', false);
+    const liabilities = section('LIABILITY', true);
+    const equity = section('EQUITY', true);
+
+    const total = (rows: Array<{ amount: number }>) =>
+      round2(rows.reduce((s, r) => s + r.amount, 0));
+    const currentResult = round2(
+      -accounts
+        .filter((a) => a.accountType === 'REVENUE' || a.accountType === 'EXPENSE')
+        .reduce((s, a) => s + (net.get(a.id) ?? 0), 0),
+    );
+
+    const totalAssets = total(assets);
+    const totalLiabilities = total(liabilities);
+    const totalEquity = round2(total(equity) + currentResult);
+
+    return {
+      asOf: to.toISOString(),
+      assets,
+      liabilities,
+      equity,
+      currentResult,
+      totals: {
+        assets: totalAssets,
+        liabilities: totalLiabilities,
+        equity: totalEquity,
+        liabilitiesAndEquity: round2(totalLiabilities + totalEquity),
+      },
+      isBalanced: Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01,
     };
   }
 

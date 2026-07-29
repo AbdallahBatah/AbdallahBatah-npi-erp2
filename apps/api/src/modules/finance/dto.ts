@@ -4,11 +4,14 @@ import {
   ArrayMinSize,
   IsArray,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -51,4 +54,9 @@ export class PayVendorDto {
   @IsOptional() @IsString() @MaxLength(200) reference?: string;
 
   @IsOptional() @IsString() @MaxLength(500) memo?: string;
+}
+
+/** Opens a calendar fiscal year and its twelve periods. */
+export class OpenYearDto {
+  @IsInt() @Min(2000) @Max(2100) year!: number;
 }

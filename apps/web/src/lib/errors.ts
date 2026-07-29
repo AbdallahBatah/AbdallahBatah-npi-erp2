@@ -28,8 +28,31 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   { re: /period overlaps/i, ar: 'الفترة المحددة تتداخل مع تسوية سابقة' },
   { re: /no telemetry readings/i, ar: 'لا توجد قراءات إنتاج في الفترة المحددة' },
   { re: /nothing to recognize/i, ar: 'لا يوجد فرق مستحق للترحيل' },
-  { re: /retention already released/i, ar: 'تم الإفراج عن المحتجزات مسبقاً' },
-  { re: /missing GL account|re-run the seed/i, ar: 'خطأ في إعدادات دليل الحسابات — راجع مسؤول النظام' },
+  { re: /retention (is )?already released/i, ar: 'تم الإفراج عن المحتجزات مسبقاً' },
+  { re: /withheld no retention/i, ar: 'لا توجد محتجزات على هذا المستخلص' },
+  { re: /cannot release retention on a/i, ar: 'حالة المستخلص لا تسمح بالإفراج عن المحتجز' },
+  {
+    re: /missing GL account|re-run the seed|missing posting rule/i,
+    ar: 'خطأ في إعدادات دليل الحسابات — راجع مسؤول النظام',
+  },
+  {
+    re: /missing standard VAT tax code/i,
+    ar: 'لم تُضبط نسبة ضريبة القيمة المضافة — راجع مسؤول النظام',
+  },
+  // payables
+  { re: /exceeds its outstanding balance/i, ar: 'المبلغ المدخل يتجاوز المتبقي على هذا المستند' },
+  { re: /is not an open payable/i, ar: 'هذا المستند ليس ضمن المستحقات القائمة لهذا المورد' },
+  { re: /needs at least one allocation/i, ar: 'حدّد مستنداً واحداً على الأقل للسداد' },
+  // fiscal calendar
+  {
+    re: /accounting period .* is closed/i,
+    ar: 'الفترة المحاسبية لهذا التاريخ مقفلة — أعد فتحها أولاً',
+  },
+  { re: /fiscal year .* already exists/i, ar: 'السنة المالية مفتوحة مسبقاً' },
+  { re: /fiscal year is already closed/i, ar: 'السنة المالية مقفلة مسبقاً' },
+  { re: /fiscal year is already open/i, ar: 'السنة المالية مفتوحة مسبقاً' },
+  { re: /the fiscal year is closed/i, ar: 'السنة المالية مقفلة — أعد فتح السنة أولاً' },
+  { re: /period is already (closed|open)/i, ar: 'الفترة بالفعل في هذه الحالة' },
   { re: /journal not balanced/i, ar: 'قيد محاسبي غير متوازن — راجع مسؤول النظام' },
   { re: /invalid from\/to date/i, ar: 'تاريخ غير صالح — اختر التاريخ من التقويم' },
   { re: /period end is before/i, ar: 'تاريخ نهاية الفترة أسبق من تاريخ بدايتها' },
