@@ -1,0 +1,32 @@
+# ⚠️ DESTRUCTIVE — DEMO SERVERS ONLY ⚠️
+#
+# This job WIPES THE ENTIRE DATABASE (prisma migrate reset --force), then
+# re-applies migrations, the base seed, and the rich demo dataset.
+#
+# It lives in its own file — separate from docker-compose.prod.yml — so that
+# no typo or copy-pasted command against the production stack can ever reach
+# it. Running it requires naming BOTH files explicitly:
+#
+#   docker compose -f docker-compose.prod.yml -f deploy/docker-compose.demo-reset.yml \
+#     --env-file deploy/.env run --rm demo-reset
+#
+# Never install the nightly cron for this on a server holding real data.
+name: npi-erp
+
+services:
+  demo-reset:
+    image: npi-erp-api
+    pull_policy: never
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://npi:${POSTGRES_PASSWORD}@postgres:5432/npi_erp?schema=public
+      API_URL: http://api:4000/api
+      # No tsconfig.json exists at /app in the runtime image; pin ts-node's compiler options.
+      TS_NODE_COMPILER_OPTIONS: '{"module":"commonjs","moduleResolution":"node","target":"ES2022","esModuleInterop":true,"skipLibCheck":true}'
+    depends_on:
+      api:
+        condition: service_healthy
+    command: >
+      sh -c "npx prisma migrate reset --force --skip-generate --skip-seed --schema packages/db/prisma/schema.prisma
+      && npx ts-node --transpile-only packages/db/prisma/seed.ts
+      && node scripts/seed-demo.js"
