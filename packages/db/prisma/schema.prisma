@@ -271,7 +271,9 @@ model NumberingSequence {
 model AuditLog {
   id             String   @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Restrict (not Cascade): deleting an Organization must never erase the
+  // audit trail — statutory records outlive tenant rows.
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   actorId        String?
   entityType     String
   entityId       String
@@ -577,7 +579,8 @@ model TaxCode {
 model Invoice {
   id             String   @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Restrict: issued (ZATCA) invoices are legally retained — see AuditLog.
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   code           String
   invoiceType    InvoiceType @default(MILESTONE)
   customerId     String
@@ -646,7 +649,8 @@ model EInvoiceDocument {
 model JournalEntry {
   id             String   @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Restrict: the general ledger is a statutory record — see AuditLog.
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   postingDate    DateTime @default(now())
   sourceType     String   // "Invoice", "Payment", ...
   sourceId       String
@@ -1429,7 +1433,11 @@ model SettlementRun {
   computedAt        DateTime @default(now())
 
   @@unique([organizationId, code])
-  @@index([ppaTermId, periodStart])
+  // One settlement per PPA term per period — the DB, not the service, is what
+  // ultimately prevents double-billing a period. If run cancellation is ever
+  // implemented, convert this to a partial unique index (WHERE status =
+  // 'INVOICED') in raw SQL.
+  @@unique([ppaTermId, periodStart, periodEnd])
 }
 
 // ─── W7: warranty RMA, payments, labour time ───────────────────────────────
