@@ -210,6 +210,7 @@ model Organization {
   paymentReceipts     PaymentReceipt[]
   timesheets          Timesheet[]
   accountMappings     AccountMapping[]
+  vendorPayments      VendorPayment[]
 
   @@index([parentOrganizationId])
 }
@@ -659,6 +660,11 @@ model JournalEntry {
   memo           String?
   invoiceId      String?
   invoice        Invoice? @relation(fields: [invoiceId], references: [id])
+  // Project dimension: set on every entry that belongs to one project, so the
+  // WIP balance can be read per project without joining back through the
+  // source document. Cost recognition depends on it.
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id])
   isReversal     Boolean  @default(false)
   reversedEntryId String?
   createdAt      DateTime @default(now())
@@ -667,6 +673,7 @@ model JournalEntry {
 
   @@index([organizationId, postingDate])
   @@index([sourceType, sourceId])
+  @@index([projectId])
 }
 
 model JournalLine {
@@ -770,6 +777,7 @@ model Vendor {
   vendorBills    VendorBill[]
   subcontracts   SubcontractAgreement[]
   warrantyClaims WarrantyClaim[]
+  payments       VendorPayment[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -805,6 +813,7 @@ model Project {
   workOrders     WorkOrder[]
   maintenancePlans MaintenancePlan[]
   ppaTerms       PpaTerm[]
+  journalEntries JournalEntry[]
 
   @@unique([organizationId, code])
   @@index([organizationId, stage])
@@ -1059,7 +1068,12 @@ model ProgressClaim {
   status         ClaimStatus @default(SUBMITTED)
   approvedAt     DateTime?
   approvedById   String?
+  // Subcontractor retention: withheld at approval, released later into AP so it
+  // is settled by the ordinary payment run (mirrors the customer-side release).
+  retentionReleasedAt DateTime?
   createdAt      DateTime @default(now())
+
+  paymentAllocations VendorPaymentAllocation[]
 
   @@unique([organizationId, code])
   @@unique([agreementId, sequence])
@@ -1543,8 +1557,52 @@ model VendorBill {
   vendorRef      String?
   createdAt      DateTime @default(now())
 
+  paymentAllocations VendorPaymentAllocation[]
+
   @@unique([organizationId, code])
   @@index([organizationId, status])
+}
+
+// ── M1: the payables side of the cash cycle ─────────────────────────────────
+// AP was only ever credited — vendor bills and approved subcontractor claims
+// piled up with no way to settle them, and the bank account only ever received.
+
+model VendorPayment {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  vendorId       String
+  vendor         Vendor   @relation(fields: [vendorId], references: [id])
+  paymentDate    DateTime @default(now())
+  amount         Decimal  @db.Decimal(18, 2)
+  method         PaymentMethod @default(BANK_TRANSFER)
+  reference      String?
+  memo           String?
+  createdAt      DateTime @default(now())
+
+  allocations    VendorPaymentAllocation[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, vendorId])
+}
+
+// One payment can settle several documents and one document can take several
+// payments — the allocation row is what makes part-payment expressible at all.
+// Exactly one of vendorBillId / progressClaimId is set (enforced in the service).
+model VendorPaymentAllocation {
+  id              String   @id @default(cuid())
+  vendorPaymentId String
+  vendorPayment   VendorPayment @relation(fields: [vendorPaymentId], references: [id], onDelete: Cascade)
+  vendorBillId    String?
+  vendorBill      VendorBill? @relation(fields: [vendorBillId], references: [id])
+  progressClaimId String?
+  progressClaim   ProgressClaim? @relation(fields: [progressClaimId], references: [id])
+  amount          Decimal  @db.Decimal(18, 2)
+
+  @@index([vendorPaymentId])
+  @@index([vendorBillId])
+  @@index([progressClaimId])
 }
 
 // ── M1: posting rules ───────────────────────────────────────────────────────

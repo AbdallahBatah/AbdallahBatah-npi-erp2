@@ -6,8 +6,10 @@ import type { AuthUser } from '../../common/auth-user';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-/** Journal source type for IFRS-15 recognition adjustments. */
+/** Journal source type for IFRS-15 revenue recognition adjustments. */
 const REVREC_SOURCE = 'RevenueRecognition';
+/** Journal source type for the matching cost-of-revenue relief. */
+const COSTREC_SOURCE = 'CostRecognition';
 
 export interface PocRow {
   contractId: string;
@@ -21,6 +23,12 @@ export interface PocRow {
   targetAdjustment: number; // recognized − billed (signed)
   unpostedDelta: number; // target − posted (what "recognize" would post now)
   position: 'CONTRACT_ASSET' | 'CONTRACT_LIABILITY' | 'BALANCED';
+  // ── matching cost side ──
+  projectId: string | null;
+  incurredCost: number; // costs capitalised into project WIP so far
+  recognizedCost: number; // incurredCost × progress — the target cost of revenue
+  postedCost: number; // WIP already relieved to cost of revenue
+  unpostedCostDelta: number; // what "recognize" would relieve now
 }
 
 @Injectable()
@@ -60,6 +68,10 @@ export class ReportsService {
    * Recognized revenue = contract value × progress. The difference between
    * recognized and billed revenue is a contract asset (unbilled) or contract
    * liability (over-billed).
+   *
+   * The same progress drives the matching cost side: project costs sit in WIP
+   * until recognition relieves `incurredCost × progress` of them into cost of
+   * revenue, so revenue and its cost land in the same period.
    */
   async poc(user: AuthUser): Promise<PocRow[]> {
     const contracts = await this.prisma.contract.findMany({
@@ -71,33 +83,79 @@ export class ReportsService {
           where: { status: { in: ['ISSUED', 'CLEARED', 'PAID'] } },
           select: { subtotal: true },
         },
+        project: { select: { id: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
     if (contracts.length === 0) return [];
 
+    const contractIds = contracts.map((c) => c.id);
+    const projectIds = contracts.map((c) => c.project?.id).filter((id): id is string => !!id);
+
     const acc = await this.posting.accounts(user.organizationId, [
       'CONTRACT_ASSET',
       'CONTRACT_LIABILITY',
+      'WIP',
+      'COST_OF_REVENUE',
     ] as const);
 
-    // Signed recognition position already posted per contract:
-    // Σ(debit − credit) on the contract-asset and contract-liability accounts.
-    const posted = await this.prisma.journalLine.findMany({
-      where: {
-        accountId: { in: [acc.CONTRACT_ASSET, acc.CONTRACT_LIABILITY] },
-        journalEntry: {
-          organizationId: user.organizationId,
-          sourceType: REVREC_SOURCE,
-          sourceId: { in: contracts.map((c) => c.id) },
+    const [posted, wipLines, costLines] = await Promise.all([
+      // Signed recognition position already posted per contract:
+      // Σ(debit − credit) on the contract-asset and contract-liability accounts.
+      this.prisma.journalLine.findMany({
+        where: {
+          accountId: { in: [acc.CONTRACT_ASSET, acc.CONTRACT_LIABILITY] },
+          journalEntry: {
+            organizationId: user.organizationId,
+            sourceType: REVREC_SOURCE,
+            sourceId: { in: contractIds },
+          },
         },
-      },
-      select: { debit: true, credit: true, journalEntry: { select: { sourceId: true } } },
-    });
+        select: { debit: true, credit: true, journalEntry: { select: { sourceId: true } } },
+      }),
+      // Costs capitalised into each project's WIP. Recognition entries are
+      // excluded so the base stays "costs incurred", not "costs still unrelieved".
+      projectIds.length
+        ? this.prisma.journalLine.findMany({
+            where: {
+              accountId: acc.WIP,
+              journalEntry: {
+                organizationId: user.organizationId,
+                projectId: { in: projectIds },
+                sourceType: { not: COSTREC_SOURCE },
+              },
+            },
+            select: { debit: true, credit: true, journalEntry: { select: { projectId: true } } },
+          })
+        : Promise.resolve([]),
+      // Cost of revenue already recognised per contract.
+      this.prisma.journalLine.findMany({
+        where: {
+          accountId: acc.COST_OF_REVENUE,
+          journalEntry: {
+            organizationId: user.organizationId,
+            sourceType: COSTREC_SOURCE,
+            sourceId: { in: contractIds },
+          },
+        },
+        select: { debit: true, credit: true, journalEntry: { select: { sourceId: true } } },
+      }),
+    ]);
+
     const postedByContract = new Map<string, number>();
     for (const l of posted) {
       const key = l.journalEntry.sourceId;
       postedByContract.set(key, (postedByContract.get(key) ?? 0) + Number(l.debit) - Number(l.credit));
+    }
+    const incurredByProject = new Map<string, number>();
+    for (const l of wipLines) {
+      const key = l.journalEntry.projectId!;
+      incurredByProject.set(key, (incurredByProject.get(key) ?? 0) + Number(l.debit) - Number(l.credit));
+    }
+    const costByContract = new Map<string, number>();
+    for (const l of costLines) {
+      const key = l.journalEntry.sourceId;
+      costByContract.set(key, (costByContract.get(key) ?? 0) + Number(l.debit) - Number(l.credit));
     }
 
     return contracts.map((c) => {
@@ -114,6 +172,13 @@ export class ReportsService {
       const postedAdjustment = round2(postedByContract.get(c.id) ?? 0);
       const targetAdjustment = round2(recognizedRevenue - billedRevenue);
       const unpostedDelta = round2(targetAdjustment - postedAdjustment);
+
+      const projectId = c.project?.id ?? null;
+      const incurredCost = round2(projectId ? (incurredByProject.get(projectId) ?? 0) : 0);
+      const recognizedCost = round2(incurredCost * progress);
+      const postedCost = round2(costByContract.get(c.id) ?? 0);
+      const unpostedCostDelta = round2(recognizedCost - postedCost);
+
       return {
         contractId: c.id,
         code: c.code,
@@ -127,6 +192,11 @@ export class ReportsService {
         unpostedDelta,
         position:
           targetAdjustment > 0 ? 'CONTRACT_ASSET' : targetAdjustment < 0 ? 'CONTRACT_LIABILITY' : 'BALANCED',
+        projectId,
+        incurredCost,
+        recognizedCost,
+        postedCost,
+        unpostedCostDelta,
       };
     });
   }
@@ -137,13 +207,20 @@ export class ReportsService {
    *  - over-billed  (billed > recognized): Dr Revenue / Cr Contract Liability
    * Re-running after further billing posts only the *delta*, and reverses
    * automatically as billing catches up with recognition.
+   *
+   * The matching cost relief posts in the same transaction:
+   *  - Dr Cost of Revenue / Cr WIP for the newly earned share of project costs
+   *  - reversed the same way if progress or the cost base moves back.
+   * Recognising revenue without its cost would have left every contract
+   * looking pure profit until the project closed.
    */
   async recognize(user: AuthUser, contractId: string) {
     const rows = await this.poc(user);
     const row = rows.find((r) => r.contractId === contractId);
     if (!row) throw new NotFoundException('Contract not found or not active');
     const delta = row.unpostedDelta;
-    if (Math.abs(delta) < 0.01) {
+    const costDelta = row.unpostedCostDelta;
+    if (Math.abs(delta) < 0.01 && Math.abs(costDelta) < 0.01) {
       throw new BadRequestException('Nothing to recognize — ledger already matches the IFRS-15 position');
     }
 
@@ -151,6 +228,8 @@ export class ReportsService {
       'CONTRACT_ASSET',
       'CONTRACT_LIABILITY',
       'REVENUE',
+      'WIP',
+      'COST_OF_REVENUE',
     ] as const);
 
     // Current per-account recognition balances for this contract, so a move in
@@ -173,7 +252,9 @@ export class ReportsService {
     // delta > 0 → accrue unbilled revenue; delta < 0 → defer over-billed revenue.
     const amount = round2(Math.abs(delta));
     const lines: Array<{ accountId: string; debit: number; credit: number }> = [];
-    if (delta > 0) {
+    if (Math.abs(delta) < 0.01) {
+      // Cost-only move: progress unchanged but more cost landed in WIP.
+    } else if (delta > 0) {
       lines.push({ accountId: acc.REVENUE, debit: 0, credit: amount });
       const unwind = round2(Math.min(amount, Math.max(0, liabilityNet)));
       if (unwind > 0) lines.push({ accountId: acc.CONTRACT_LIABILITY, debit: unwind, credit: 0 });
@@ -187,32 +268,87 @@ export class ReportsService {
       if (rest > 0) lines.push({ accountId: acc.CONTRACT_LIABILITY, debit: 0, credit: rest });
     }
 
-    const entry = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.journalEntry.create({
-        data: {
-          organizationId: user.organizationId,
-          sourceType: REVREC_SOURCE,
-          sourceId: contractId,
-          memo: `IFRS-15 POC adjustment for ${row.code} (progress ${row.progressPct}%)`,
-          lines: { create: lines.map((l) => ({ ...l, currency: 'SAR' })) },
-        },
-        include: { lines: { include: { account: true } } },
-      });
-      await this.audit.record(
-        {
-          organizationId: user.organizationId,
-          actorId: user.userId,
-          entityType: 'JournalEntry',
-          entityId: created.id,
-          action: 'REVENUE_RECOGNITION',
-          after: { contractId, delta, progressPct: row.progressPct },
-        },
-        tx,
-      );
-      return created;
+    // Matching cost relief. Positive → more of WIP has been earned; negative →
+    // give it back to WIP (progress or the cost base moved down).
+    const costAmount = round2(Math.abs(costDelta));
+    const costLines: Array<{ accountId: string; debit: number; credit: number }> =
+      Math.abs(costDelta) < 0.01
+        ? []
+        : costDelta > 0
+          ? [
+              { accountId: acc.COST_OF_REVENUE, debit: costAmount, credit: 0 },
+              { accountId: acc.WIP, debit: 0, credit: costAmount },
+            ]
+          : [
+              { accountId: acc.WIP, debit: costAmount, credit: 0 },
+              { accountId: acc.COST_OF_REVENUE, debit: 0, credit: costAmount },
+            ];
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      let created = null as Awaited<ReturnType<typeof tx.journalEntry.create>> | null;
+      if (lines.length > 0) {
+        created = await tx.journalEntry.create({
+          data: {
+            organizationId: user.organizationId,
+            sourceType: REVREC_SOURCE,
+            sourceId: contractId,
+            projectId: row.projectId,
+            memo: `IFRS-15 POC adjustment for ${row.code} (progress ${row.progressPct}%)`,
+            lines: { create: lines.map((l) => ({ ...l, currency: 'SAR' })) },
+          },
+          include: { lines: { include: { account: true } } },
+        });
+        await this.audit.record(
+          {
+            organizationId: user.organizationId,
+            actorId: user.userId,
+            entityType: 'JournalEntry',
+            entityId: created.id,
+            action: 'REVENUE_RECOGNITION',
+            after: { contractId, delta, progressPct: row.progressPct },
+          },
+          tx,
+        );
+      }
+
+      let costEntry = null as Awaited<ReturnType<typeof tx.journalEntry.create>> | null;
+      if (costLines.length > 0) {
+        costEntry = await tx.journalEntry.create({
+          data: {
+            organizationId: user.organizationId,
+            sourceType: COSTREC_SOURCE,
+            sourceId: contractId,
+            projectId: row.projectId,
+            memo: `Cost of revenue for ${row.code} (progress ${row.progressPct}%)`,
+            lines: { create: costLines.map((l) => ({ ...l, currency: 'SAR' })) },
+          },
+          include: { lines: { include: { account: true } } },
+        });
+        await this.audit.record(
+          {
+            organizationId: user.organizationId,
+            actorId: user.userId,
+            entityType: 'JournalEntry',
+            entityId: costEntry.id,
+            action: 'COST_RECOGNITION',
+            after: { contractId, costDelta, progressPct: row.progressPct },
+          },
+          tx,
+        );
+      }
+      return { entry: created, costEntry };
     });
 
-    return { entry, row: { ...row, postedAdjustment: row.targetAdjustment, unpostedDelta: 0 } };
+    return {
+      ...result,
+      row: {
+        ...row,
+        postedAdjustment: row.targetAdjustment,
+        unpostedDelta: 0,
+        postedCost: row.recognizedCost,
+        unpostedCostDelta: 0,
+      },
+    };
   }
 
   // ── FIN-03 extension: VAT return (box-style, ZATCA layout) ────────────────

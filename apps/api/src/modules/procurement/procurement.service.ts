@@ -366,9 +366,9 @@ export class ProcurementService {
   // ── Vendor bill (SCM↔FIN): AP journal + deductible input VAT ─────────────
 
   /**
-   * Bill the received value of a GRN: Dr Project WIP (1300) + Dr VAT Input
-   * (1400) / Cr Accounts Payable (2000). This is what turns the VAT-return
-   * input side from zero into real numbers.
+   * Bill the received value of a GRN: Dr Project WIP + Dr VAT Input /
+   * Cr Accounts Payable. This is what turns the VAT-return input side from
+   * zero into real numbers.
    */
   async createBill(user: AuthUser, dto: CreateBillDto) {
     const grn = await this.prisma.goodsReceipt.findFirst({
@@ -419,6 +419,9 @@ export class ProcurementService {
           organizationId: user.organizationId,
           sourceType: 'VendorBill',
           sourceId: bill.id,
+          // Project dimension: this is what makes the WIP balance readable per
+          // project when cost of revenue is recognised.
+          projectId: grn.purchaseOrder.projectId,
           memo: `Vendor bill ${code} — ${grn.purchaseOrder.vendor.nameEn} (${grn.code})`,
           lines: {
             create: [
@@ -659,6 +662,7 @@ export class ProcurementService {
           organizationId: user.organizationId,
           sourceType: 'ProgressClaim',
           sourceId: claim.id,
+          projectId: claim.agreement.projectId,
           memo: `Progress claim ${claim.code} — ${claim.agreement.vendor.nameEn}`,
           lines: { create: lines.map((l) => ({ ...l, currency: 'SAR' })) },
         },

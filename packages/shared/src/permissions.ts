@@ -19,6 +19,8 @@ export const PERMISSIONS = {
   INVOICE_READ: 'finance.invoice.read',
   INVOICE_WRITE: 'finance.invoice.write',
   LEDGER_READ: 'finance.ledger.read',
+  PAYMENT_READ: 'finance.payment.read',
+  PAYMENT_WRITE: 'finance.payment.write',
   PROJECT_READ: 'projects.project.read',
   PROJECT_WRITE: 'projects.project.write',
   PROCUREMENT_READ: 'scm.procurement.read',
