@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
-import { formatDate, formatNumber } from '@/lib/format';
+import { formatNumber } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, LoadError, useConfirm } from '@/components/ui';
 
 interface Dash {
@@ -39,7 +39,7 @@ const SEV_STYLE: Record<string, string> = {
 };
 
 export default function TelemetryPage() {
-  const { t, locale, pick } = useI18n();
+  const { t, locale } = useI18n();
   const enums = useEnums();
   const [dash, setDash] = useState<Dash | null>(null);
   const [alerts, setAlerts] = useState<Alert[] | null>(null);

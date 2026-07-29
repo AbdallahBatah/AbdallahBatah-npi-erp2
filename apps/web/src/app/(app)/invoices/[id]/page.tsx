@@ -198,7 +198,6 @@ export default function InvoiceDetailPage() {
               <div className="p-5">
                 {inv.qrDataUrl && (
                   <div className="mb-4 flex flex-col items-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={inv.qrDataUrl} alt="ZATCA QR" width={180} height={180} className="rounded border border-slate-200" />
                     <span className="mt-1 text-[11px] text-slate-400">{t('inv.qr')}</span>
                   </div>

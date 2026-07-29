@@ -760,7 +760,7 @@ export class FsmService {
           mandatory: !!i.mandatory,
           done: false,
         }));
-        const wo = await tx.workOrder.create({
+        await tx.workOrder.create({
           data: {
             organizationId: user.organizationId,
             code,

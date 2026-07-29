@@ -20,9 +20,17 @@
     "docker:down": "docker compose down",
     "db:start": "C:/Users/eyadq/.npi-erp/pgsql/bin/pg_ctl.exe -D C:/Users/eyadq/.npi-erp/data -l C:/Users/eyadq/.npi-erp/server.log start",
     "db:stop": "C:/Users/eyadq/.npi-erp/pgsql/bin/pg_ctl.exe -D C:/Users/eyadq/.npi-erp/data stop",
-    "test": "npm run test -w @npi/api"
+    "test": "npm run test -w @npi/api",
+    "lint": "eslint ."
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "eslint": "^10.8.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.65.0"
   }
 }

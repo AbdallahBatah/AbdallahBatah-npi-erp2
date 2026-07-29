@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
-import { useEnums, optionLabel } from '@/lib/useEnums';
+import { useEnums } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
 import { PageHeader, StatusBadge, Modal, Field, EmptyRow, LoadError } from '@/components/ui';
 
@@ -23,7 +23,7 @@ interface Opportunity {
 
 export default function OpportunitiesPage() {
   const { t, locale, pick } = useI18n();
-  const enums = useEnums();
+  useEnums();
   const router = useRouter();
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
