@@ -283,7 +283,7 @@ export default function InvoiceDetailPage() {
                 <span className="text-slate-500">{t('inv.retention')}</span>
                 <span className="flex items-center gap-2">
                   <span className="text-slate-700">{formatMoney(inv.retentionEntry.withheldAmount, locale)}</span>
-                  {inv.retentionEntry.status === 'WITHHELD' ? (
+                  {inv.retentionEntry.status === 'WITHHELD' && inv.status !== 'CANCELLED' ? (
                     <button
                       className="btn-solar !px-2 !py-0.5 text-[11px]"
                       disabled={busy()}
