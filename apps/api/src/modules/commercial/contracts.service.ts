@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
+import { NotificationService } from '../../common/notification.service';
 import type { AuthUser } from '../../common/auth-user';
 import { CreateContractDto } from './dto';
 
@@ -15,6 +16,7 @@ export class ContractsService {
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationService,
   ) {}
 
   list(user: AuthUser) {
@@ -190,6 +192,23 @@ export class ContractsService {
       action: 'VERIFY',
       before: milestone,
       after: updated,
+    });
+    // The people who can invoice are the ones who need to hear a milestone
+    // just became billable.
+    const contract = await this.prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { code: true },
+    });
+    await this.notifications.notify({
+      organizationId: user.organizationId,
+      permission: 'finance.invoice.write',
+      excludeUserId: user.userId,
+      type: 'MILESTONE_VERIFIED',
+      titleAr: `مرحلة معتمدة في العقد ${contract?.code ?? ''} — جاهزة للفوترة`,
+      titleEn: `Milestone verified on ${contract?.code ?? ''} — ready to invoice`,
+      bodyAr: milestone.descriptionAr,
+      bodyEn: milestone.descriptionEn,
+      linkPath: `/contracts/${contractId}`,
     });
     return updated;
   }

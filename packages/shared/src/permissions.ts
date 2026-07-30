@@ -31,6 +31,10 @@ export const PERMISSIONS = {
   WORKORDER_WRITE: 'fsm.workorder.write',
   ORG_MANAGE: 'admin.org.manage',
   USER_MANAGE: 'admin.user.manage',
+  // Attachments are cross-module: holding these alone is not enough — the
+  // service also requires the read permission of the parent entity type.
+  ATTACHMENT_READ: 'platform.attachment.read',
+  ATTACHMENT_WRITE: 'platform.attachment.write',
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

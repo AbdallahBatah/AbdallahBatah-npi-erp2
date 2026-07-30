@@ -8,6 +8,7 @@ import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
 import { PostingService } from '../../common/posting.service';
 import { TaxService } from '../../common/tax.service';
+import { NotificationService } from '../../common/notification.service';
 import { ZatcaService } from './zatca.service';
 import type { AuthUser } from '../../common/auth-user';
 
@@ -22,6 +23,7 @@ export class InvoicesService {
     private readonly posting: PostingService,
     private readonly tax: TaxService,
     private readonly zatca: ZatcaService,
+    private readonly notifications: NotificationService,
   ) {}
 
   private standardVatRate(organizationId: string): Promise<{ id: string; rate: number }> {
@@ -45,6 +47,8 @@ export class InvoicesService {
       where: { id, organizationId: user.organizationId },
       include: {
         customer: true,
+        // Seller identity for the printable fiscal document.
+        organization: { select: { legalNameAr: true, legalNameEn: true, vatNumber: true, crNumber: true } },
         contract: { select: { id: true, code: true, retentionPct: true } },
         lines: { include: { taxCode: true } },
         eInvoice: true,
@@ -313,6 +317,19 @@ export class InvoicesService {
       );
     }, { isolationLevel: 'Serializable' });
 
+    // Post-commit: a rolled-back issue must never announce itself.
+    await this.notifications.notify({
+      organizationId: user.organizationId,
+      permission: 'finance.invoice.read',
+      excludeUserId: user.userId,
+      type: 'INVOICE_ISSUED',
+      titleAr: `صدرت الفاتورة ${invoice.code}`,
+      titleEn: `Invoice ${invoice.code} issued`,
+      bodyAr: `${invoice.customer.nameAr} — الإجمالي ${grandTotal.toLocaleString('en-US')} ${invoice.currency}`,
+      bodyEn: `${invoice.customer.nameEn} — total ${grandTotal.toLocaleString('en-US')} ${invoice.currency}`,
+      linkPath: `/invoices/${invoice.id}`,
+    });
+
     return this.get(user, invoice.id);
   }
 
@@ -535,6 +552,18 @@ export class InvoicesService {
       { isolationLevel: 'Serializable' },
     );
 
+    await this.notifications.notify({
+      organizationId: user.organizationId,
+      permission: 'finance.invoice.read',
+      excludeUserId: user.userId,
+      type: 'CREDIT_NOTE',
+      titleAr: `إشعار دائن على الفاتورة ${source.code}`,
+      titleEn: `Credit note issued against ${source.code}`,
+      bodyAr: `السبب: ${dto.reason}`,
+      bodyEn: `Reason: ${dto.reason}`,
+      linkPath: `/invoices/${source.id}`,
+    });
+
     return this.get(user, source.id);
   }
 
@@ -569,7 +598,7 @@ export class InvoicesService {
 
     const acc = await this.posting.accounts(user.organizationId, ['BANK', 'AR'] as const);
 
-    return this.prisma.$transaction(async (tx) => {
+    const receipt = await this.prisma.$transaction(async (tx) => {
       const code = await this.numbering.next(user.organizationId, 'PAYMENT', tx);
       const receipt = await tx.paymentReceipt.create({
         data: {
@@ -609,6 +638,20 @@ export class InvoicesService {
       );
       return receipt;
     });
+
+    await this.notifications.notify({
+      organizationId: user.organizationId,
+      permission: 'finance.invoice.read',
+      excludeUserId: user.userId,
+      type: 'PAYMENT_RECEIVED',
+      titleAr: `دفعة محصّلة على الفاتورة ${invoice.code}`,
+      titleEn: `Payment received for ${invoice.code}`,
+      bodyAr: `المبلغ ${dto.amount.toLocaleString('en-US')} ${invoice.currency}`,
+      bodyEn: `Amount ${dto.amount.toLocaleString('en-US')} ${invoice.currency}`,
+      linkPath: `/invoices/${invoice.id}`,
+    });
+
+    return receipt;
   }
 
   /**

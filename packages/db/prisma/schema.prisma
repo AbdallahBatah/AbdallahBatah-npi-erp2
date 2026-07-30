@@ -213,6 +213,8 @@ model Organization {
   vendorPayments      VendorPayment[]
   fiscalYears         FiscalYear[]
   fiscalPeriods       FiscalPeriod[]
+  attachments         Attachment[]
+  notifications       Notification[]
 
   @@index([parentOrganizationId])
 }
@@ -254,6 +256,8 @@ model User {
   verifiedMilestones ContractMilestone[] @relation("MilestoneVerifier")
   assignedWorkOrders WorkOrder[]   @relation("WoAssignee")
   timesheets         Timesheet[]
+  attachments        Attachment[]
+  notifications      Notification[]
 
   @@index([organizationId])
 }
@@ -1697,4 +1701,58 @@ model FiscalPeriod {
 
   @@unique([fiscalYearId, month])
   @@index([organizationId, startDate])
+}
+
+// ── M2: attachments ─────────────────────────────────────────────────────────
+// Files live on disk under UPLOADS_DIR (a docker volume in production); the DB
+// row is the source of truth for existence, ownership and the download name.
+// storageKey is always server-generated — client-supplied names never touch
+// the filesystem path.
+
+enum AttachmentEntity {
+  CONTRACT
+  INVOICE
+  PROJECT
+  WORK_ORDER
+}
+
+model Attachment {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entityType     AttachmentEntity
+  entityId       String
+  fileName       String   // original upload name — shown in the UI and used on download
+  mimeType       String
+  sizeBytes      Int
+  storageKey     String   @unique // relative path under UPLOADS_DIR
+  uploadedById   String?
+  uploadedBy     User?    @relation(fields: [uploadedById], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, entityType, entityId])
+}
+
+// ── M2: in-app notifications ────────────────────────────────────────────────
+// Rendered bilingual text is stored (paired *_ar/_en, the project convention)
+// so the bell needs no key/params plumbing. Rows are per-recipient; readAt
+// null = unread.
+
+model Notification {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           String   // INVOICE_ISSUED | PAYMENT_RECEIVED | CREDIT_NOTE | ALERT_WORKORDER | CLAIM_APPROVED | MILESTONE_CERTIFIED ...
+  titleAr        String
+  titleEn        String
+  bodyAr         String?
+  bodyEn         String?
+  linkPath       String?  // web route, e.g. /invoices/<id>
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
 }

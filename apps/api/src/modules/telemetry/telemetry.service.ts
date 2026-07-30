@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
+import { NotificationService } from '../../common/notification.service';
 import type { AuthUser } from '../../common/auth-user';
 import type { IngestDto, SimulateDto } from './dto';
 
@@ -27,6 +28,7 @@ export class TelemetryService {
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationService,
   ) {}
 
   /** Expected daily kWh for a plant: design yield / 365, else capacity × 4.5h. */
@@ -179,6 +181,20 @@ export class TelemetryService {
           where: { id: alert.id },
           data: { status: 'WORK_ORDERED', workOrderId: wo.id },
         });
+        // Inside the tx: an alert that rolls back must not ping anyone.
+        await this.notifications.notify(
+          {
+            organizationId: user.organizationId,
+            permission: 'fsm.workorder.read',
+            type: 'ALERT_WORKORDER',
+            titleAr: `إنذار حرج ${code} — أُنشئ أمر العمل ${woCode} تلقائياً`,
+            titleEn: `Critical alert ${code} — work order ${woCode} auto-created`,
+            bodyAr: asset?.nameAr ?? undefined,
+            bodyEn: asset?.nameEn ?? undefined,
+            linkPath: `/workorders/${wo.id}`,
+          },
+          tx,
+        );
       }
 
       await this.audit.record(
@@ -307,6 +323,20 @@ export class TelemetryService {
           entityId: alert.id,
           action: 'RAISE_WO',
           after: { workOrderCode: woCode },
+        },
+        tx,
+      );
+      await this.notifications.notify(
+        {
+          organizationId: user.organizationId,
+          permission: 'fsm.workorder.read',
+          excludeUserId: user.userId,
+          type: 'ALERT_WORKORDER',
+          titleAr: `أمر العمل ${woCode} أُنشئ من الإنذار ${alert.code}`,
+          titleEn: `Work order ${woCode} raised from alert ${alert.code}`,
+          bodyAr: alert.asset.nameAr,
+          bodyEn: alert.asset.nameEn,
+          linkPath: `/workorders/${wo.id}`,
         },
         tx,
       );

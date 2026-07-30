@@ -3,6 +3,7 @@ import { NumberingService } from './numbering.service';
 import { AuditService } from './audit.service';
 import { PostingService } from './posting.service';
 import { TaxService } from './tax.service';
+import { NotificationService } from './notification.service';
 
 /**
  * Shared kernel services (numbering, audit, posting rules, tax) available to
@@ -11,7 +12,7 @@ import { TaxService } from './tax.service';
  */
 @Global()
 @Module({
-  providers: [NumberingService, AuditService, PostingService, TaxService],
-  exports: [NumberingService, AuditService, PostingService, TaxService],
+  providers: [NumberingService, AuditService, PostingService, TaxService, NotificationService],
+  exports: [NumberingService, AuditService, PostingService, TaxService, NotificationService],
 })
 export class KernelModule {}

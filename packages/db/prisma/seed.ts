@@ -29,6 +29,7 @@ const ALL_PERMISSIONS = [
   'assets.serialunit.read',
   'fsm.workorder.read', 'fsm.workorder.write',
   'admin.org.manage', 'admin.user.manage',
+  'platform.attachment.read', 'platform.attachment.write',
 ];
 
 const SALES_PERMISSIONS = [
@@ -39,6 +40,7 @@ const SALES_PERMISSIONS = [
   'commercial.proposal.read', 'commercial.proposal.write',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'platform.attachment.read', 'platform.attachment.write',
 ];
 
 // المحاسب: كل المال + قراءة سياقه (عقود/عملاء/مشتريات لفواتير الموردين)
@@ -48,6 +50,7 @@ const ACCOUNTANT_PERMISSIONS = [
   'crm.customer.read',
   'commercial.contract.read', 'commercial.proposal.read', 'commercial.item.read',
   'scm.procurement.read', 'scm.procurement.write',
+  'platform.attachment.read', 'platform.attachment.write',
 ];
 
 // مدير المشاريع: التنفيذ والتوريد كاملاً + قراءة العقود والتشغيل والفوترة
@@ -59,6 +62,7 @@ const PM_PERMISSIONS = [
   'crm.customer.read',
   'fsm.workorder.read',
   'finance.invoice.read',
+  'platform.attachment.read', 'platform.attachment.write',
 ];
 
 // مهندس الموقع: أوامر العمل والأصول والمخزون — بلا مال ولا عقود
@@ -68,6 +72,7 @@ const SITE_ENGINEER_PERMISSIONS = [
   'scm.procurement.read',
   'commercial.item.read',
   'projects.project.read',
+  'platform.attachment.read', 'platform.attachment.write',
 ];
 
 async function main() {

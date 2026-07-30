@@ -34,6 +34,10 @@ services:
       DATABASE_URL: postgresql://npi:${POSTGRES_PASSWORD}@postgres:5432/npi_erp?schema=public
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in deploy/.env}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+      # M2 attachments live on this volume — they survive rebuilds.
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,3 +80,4 @@ volumes:
   pg_data:
   caddy_data:
   caddy_config:
+  uploads_data:
