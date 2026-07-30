@@ -72,4 +72,60 @@ export const api = {
     apiFetch<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   patch: <T = any>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  del: <T = any>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
 };
+
+/** Multipart upload — no Content-Type header: the browser sets the boundary. */
+export async function apiUpload<T = any>(path: string, file: File): Promise<T> {
+  const token = getToken();
+  const form = new FormData();
+  form.append('file', file);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api${path}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+  } catch {
+    throw new ApiError(0, 'Network unreachable');
+  }
+  const text = await res.text();
+  let body: any;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    throw new ApiError(res.status, res.statusText || 'Invalid server response');
+  }
+  if (!res.ok) throw new ApiError(res.status, body?.message ?? res.statusText);
+  return body as T;
+}
+
+/** Authenticated file download via blob (the token cannot ride a plain <a href>). */
+export async function apiDownload(path: string, fileName: string): Promise<void> {
+  const token = getToken();
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+  } catch {
+    throw new ApiError(0, 'Network unreachable');
+  }
+  if (!res.ok) {
+    let message = res.statusText;
+    try {
+      message = (await res.json())?.message ?? message;
+    } catch { /* non-JSON error body */ }
+    throw new ApiError(res.status, message);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

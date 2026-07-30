@@ -10,6 +10,7 @@ import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
 import { PageHeader, StatusBadge, LoadError, useConfirm } from '@/components/ui';
+import { AttachmentsCard } from '@/components/attachments';
 
 interface Milestone {
   id: string;
@@ -196,6 +197,9 @@ export default function ContractDetailPage() {
             )}
           </tbody>
         </table>
+      </div>
+      <div className="mt-6">
+        <AttachmentsCard entityType="CONTRACT" entityId={id} />
       </div>
       {confirmNode}
     </div>

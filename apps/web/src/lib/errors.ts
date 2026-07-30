@@ -66,6 +66,13 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   { re: /invalid from\/to date/i, ar: 'تاريخ غير صالح — اختر التاريخ من التقويم' },
   { re: /period end is before/i, ar: 'تاريخ نهاية الفترة أسبق من تاريخ بدايتها' },
   { re: /account not found/i, ar: 'الحساب غير موجود في دليل الحسابات' },
+  // attachments
+  { re: /no file uploaded/i, ar: 'لم يُحدد ملف — اختر ملفاً أولاً' },
+  { re: /exceeds the 10 MB limit|file too large/i, ar: 'حجم الملف يتجاوز الحد الأقصى 10MB' },
+  { re: /file type .* is not allowed/i, ar: 'نوع الملف غير مسموح — الأنواع المتاحة: PDF، صور، Excel، Word، CSV، ZIP، DWG' },
+  { re: /stored file is missing/i, ar: 'ملف المرفق مفقود من الخادم — راجع مسؤول النظام' },
+  { re: /attachment not found/i, ar: 'المرفق غير موجود' },
+  { re: /unknown attachment entity/i, ar: 'نوع السجل غير مدعوم للمرفقات' },
 ];
 
 export function translateError(e: unknown, locale: Locale): string {

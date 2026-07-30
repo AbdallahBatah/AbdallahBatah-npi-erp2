@@ -296,6 +296,36 @@ export const messages: Record<Locale, Record<string, string>> = {
     'cn.hint':
       'الفاتورة المُبلَّغة لهيئة الزكاة والضريبة لا تُعدَّل ولا تُحذف — يُصدر إشعار دائن مستقل يُبلَّغ بدوره ويشير إلى الفاتورة الأصلية.',
 
+    // M2: in-app notifications
+    'notif.title': 'التنبيهات',
+    'notif.empty': 'لا توجد تنبيهات بعد',
+    'notif.markAll': 'تعليم الكل كمقروء',
+    'notif.open': 'التنبيهات',
+
+    // M2: attachments
+    'att.title': 'المرفقات',
+    'att.empty': 'لا توجد مرفقات — أرفق عقداً موقعاً أو صورة أو مستنداً.',
+    'att.upload': 'رفع ملف',
+    'att.uploading': 'جارٍ الرفع…',
+    'att.download': 'تنزيل',
+    'att.delete': 'حذف',
+    'att.deleteTitle': 'حذف المرفق',
+    'att.deleteMsg': 'سيُحذف الملف نهائياً من النظام. هل أنت متأكد؟',
+    'att.hint': 'الأنواع المسموحة: PDF، صور، Excel، Word، CSV، ZIP، DWG — بحد أقصى 10MB.',
+
+    // M2: printable invoice
+    'print.button': 'طباعة / PDF',
+    'print.taxInvoice': 'فاتورة ضريبية',
+    'print.creditNote': 'إشعار دائن',
+    'print.seller': 'البائع',
+    'print.buyer': 'المشتري',
+    'print.vatNo': 'الرقم الضريبي',
+    'print.crNo': 'السجل التجاري',
+    'print.issueDate': 'تاريخ الإصدار',
+    'print.contract': 'العقد',
+    'print.hintScreen': 'استخدم زر الطباعة ثم «حفظ كـ PDF» للحصول على نسخة PDF.',
+    'print.generatedBy': 'أُنشئت إلكترونياً عبر نظام NPI — فاتورة مطابقة لمتطلبات هيئة الزكاة والضريبة والجمارك (المرحلة الثانية).',
+
     'nav.payables': 'مستحقات الموردين',
     'ap.title': 'مستحقات الموردين',
     'ap.hint': 'كل ما هو مستحق للموردين ومقاولي الباطن، وسداده من البنك.',
@@ -910,6 +940,36 @@ export const messages: Record<Locale, Record<string, string>> = {
     'cn.refundDue': 'Refund due to the customer',
     'cn.hint':
       'An invoice already reported to ZATCA is never edited or deleted — a separate credit note is issued, reported in turn, and references the original.',
+
+    // M2: in-app notifications
+    'notif.title': 'Notifications',
+    'notif.empty': 'No notifications yet',
+    'notif.markAll': 'Mark all as read',
+    'notif.open': 'Notifications',
+
+    // M2: attachments
+    'att.title': 'Attachments',
+    'att.empty': 'No attachments — attach a signed contract, a photo or a document.',
+    'att.upload': 'Upload file',
+    'att.uploading': 'Uploading…',
+    'att.download': 'Download',
+    'att.delete': 'Delete',
+    'att.deleteTitle': 'Delete attachment',
+    'att.deleteMsg': 'The file will be permanently removed. Are you sure?',
+    'att.hint': 'Allowed: PDF, images, Excel, Word, CSV, ZIP, DWG — up to 10MB.',
+
+    // M2: printable invoice
+    'print.button': 'Print / PDF',
+    'print.taxInvoice': 'Tax Invoice',
+    'print.creditNote': 'Credit Note',
+    'print.seller': 'Seller',
+    'print.buyer': 'Buyer',
+    'print.vatNo': 'VAT number',
+    'print.crNo': 'CR number',
+    'print.issueDate': 'Issue date',
+    'print.contract': 'Contract',
+    'print.hintScreen': 'Use the print button, then “Save as PDF” to get a PDF copy.',
+    'print.generatedBy': 'Generated electronically by the NPI system — compliant with ZATCA Phase 2 e-invoicing.',
 
     'nav.payables': 'Vendor payables',
     'ap.title': 'Vendor payables',

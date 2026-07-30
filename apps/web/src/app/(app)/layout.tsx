@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { Icon } from '@/components/icons';
+import { NotificationsBell } from '@/components/notifications';
 
 interface NavItem {
   href: string;
@@ -239,7 +240,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-x-auto p-4 pt-20 lg:ms-[264px] lg:p-8">
+      <NotificationsBell />
+
+      {/* lg:pt-16 keeps page headers clear of the floating bell. */}
+      <main className="flex-1 overflow-x-auto p-4 pt-20 lg:ms-[264px] lg:p-8 lg:pt-16">
         <div className="mx-auto max-w-7xl">{children}</div>
       </main>
     </div>

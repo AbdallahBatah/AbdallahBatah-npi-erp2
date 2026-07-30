@@ -10,6 +10,7 @@ import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm } from '@/components/ui';
+import { AttachmentsCard } from '@/components/attachments';
 
 interface Wbs {
   id: string;
@@ -616,6 +617,10 @@ export default function ProjectDetailPage() {
           </button>
         </div>
       </Modal>
+
+      <div className="mt-6">
+        <AttachmentsCard entityType="PROJECT" entityId={id} />
+      </div>
     </div>
   );
 }

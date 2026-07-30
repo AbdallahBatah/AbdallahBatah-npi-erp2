@@ -10,6 +10,7 @@ import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm } from '@/components/ui';
+import { AttachmentsCard } from '@/components/attachments';
 
 interface Part {
   id: string;
@@ -438,6 +439,10 @@ export default function WorkOrderDetailPage() {
           </button>
         </div>
       </Modal>
+
+      <div className="mt-6">
+        <AttachmentsCard entityType="WORK_ORDER" entityId={id} />
+      </div>
     </div>
   );
 }

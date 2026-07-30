@@ -79,3 +79,29 @@ body {
     @apply absolute inset-x-0 top-0 h-0.5 bg-gradient-to-l from-brand-400/0 via-brand-400/60 to-brand-400/0;
   }
 }
+
+/* ── M2: printable documents ──────────────────────────────────────────────
+   The invoice print view renders as an A4 sheet; printing hides the app
+   chrome so the browser's "Save as PDF" produces a clean fiscal document. */
+@media print {
+  aside,
+  header,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  .print-sheet {
+    margin: 0 !important;
+    max-width: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+}

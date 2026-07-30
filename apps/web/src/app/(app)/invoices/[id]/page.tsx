@@ -10,6 +10,7 @@ import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate } from '@/lib/format';
 // NB: this page defines its own read-only `Field` below — do not import ui's.
 import { PageHeader, StatusBadge, LoadError, Modal, useConfirm } from '@/components/ui';
+import { AttachmentsCard } from '@/components/attachments';
 
 interface Line { id: string; descriptionAr: string; descriptionEn: string; qty: string; unitPrice: string; lineSubtotal: string; vatAmount: string }
 interface JLine { id: string; debit: string; credit: string; account: { code: string; nameAr: string; nameEn: string } }
@@ -151,6 +152,9 @@ export default function InvoiceDetailPage() {
                 {t('cn.new')}
               </button>
             )}
+            <Link href={`/invoices/${id}/print`} className="btn-ghost text-xs">
+              🖨️ {t('print.button')}
+            </Link>
             <Link href="/invoices" className="btn-ghost text-xs">{t('common.back')}</Link>
           </div>
         }
@@ -453,6 +457,9 @@ export default function InvoiceDetailPage() {
               </div>
             </div>
           ) : null}
+
+          {/* M2: documents attached to this invoice */}
+          <AttachmentsCard entityType="INVOICE" entityId={id} />
         </div>
       </div>
 
