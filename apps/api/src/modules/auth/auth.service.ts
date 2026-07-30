@@ -1,9 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
-import { LoginDto } from './dto';
+import { ChangePasswordDto, LoginDto } from './dto';
 
 @Injectable()
 export class AuthService {
@@ -62,6 +62,8 @@ export class AuthService {
         nameEn: user.nameEn,
         locale: user.locale,
         roleKey: user.role.key,
+        roleNameAr: user.role.nameAr,
+        roleNameEn: user.role.nameEn,
         permissions: user.role.permissions,
         organization: {
           id: user.organization.id,
@@ -105,6 +107,8 @@ export class AuthService {
       nameEn: user.nameEn,
       locale: user.locale,
       roleKey: user.role.key,
+      roleNameAr: user.role.nameAr,
+      roleNameEn: user.role.nameEn,
       permissions: user.role.permissions,
       organization: {
         id: user.organization.id,
@@ -113,5 +117,28 @@ export class AuthService {
         baseCurrency: user.organization.baseCurrency,
       },
     };
+  }
+
+  /** Self-service password change — requires proving the current password. */
+  async changePassword(userId: string, dto: ChangePasswordDto, ip?: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const ok = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!ok) throw new BadRequestException('Current password is incorrect');
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException('New password must differ from the current one');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await bcrypt.hash(dto.newPassword, 10) },
+    });
+    await this.audit.record({
+      organizationId: user.organizationId,
+      actorId: userId,
+      entityType: 'User',
+      entityId: userId,
+      action: 'PASSWORD_CHANGE',
+      ip,
+    });
+    return { ok: true };
   }
 }

@@ -19,6 +19,7 @@ import { TelemetryModule } from './modules/telemetry/telemetry.module';
 import { PpaModule } from './modules/ppa/ppa.module';
 import { ReferenceModule } from './modules/reference/reference.module';
 import { PlatformModule } from './modules/platform/platform.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { PlatformModule } from './modules/platform/platform.module';
     PpaModule,
     ReferenceModule,
     PlatformModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [

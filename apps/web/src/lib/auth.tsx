@@ -17,6 +17,8 @@ export interface AuthUser {
   nameEn: string;
   locale: 'AR' | 'EN';
   roleKey: string;
+  roleNameAr?: string;
+  roleNameEn?: string;
   permissions: string[];
   organization: { id: string; nameAr: string; nameEn: string; baseCurrency: string };
 }

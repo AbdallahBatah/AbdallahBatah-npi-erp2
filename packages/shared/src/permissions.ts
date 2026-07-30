@@ -40,3 +40,66 @@ export const PERMISSIONS = {
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
 export const ALL_PERMISSIONS: PermissionKey[] = Object.values(PERMISSIONS);
+
+/**
+ * Bilingual catalog for the role editor UI. Served by /admin/permissions so
+ * the web app has exactly one source of truth for what each key means.
+ * Grouped in sidebar order.
+ */
+export interface PermissionMeta {
+  key: PermissionKey;
+  groupAr: string;
+  groupEn: string;
+  labelAr: string;
+  labelEn: string;
+}
+
+const g = (
+  groupAr: string,
+  groupEn: string,
+  rows: Array<[PermissionKey, string, string]>,
+): PermissionMeta[] => rows.map(([key, labelAr, labelEn]) => ({ key, groupAr, groupEn, labelAr, labelEn }));
+
+export const PERMISSION_CATALOG: PermissionMeta[] = [
+  ...g('المبيعات والتعاقد', 'Sales & contracting', [
+    [PERMISSIONS.LEAD_READ, 'عرض العملاء المحتملين', 'View leads'],
+    [PERMISSIONS.LEAD_WRITE, 'إدارة العملاء المحتملين', 'Manage leads'],
+    [PERMISSIONS.CUSTOMER_READ, 'عرض العملاء', 'View customers'],
+    [PERMISSIONS.CUSTOMER_WRITE, 'إدارة العملاء', 'Manage customers'],
+    [PERMISSIONS.OPPORTUNITY_READ, 'عرض الفرص', 'View opportunities'],
+    [PERMISSIONS.OPPORTUNITY_WRITE, 'إدارة الفرص', 'Manage opportunities'],
+    [PERMISSIONS.PROPOSAL_READ, 'عرض العروض', 'View proposals'],
+    [PERMISSIONS.PROPOSAL_WRITE, 'إدارة العروض', 'Manage proposals'],
+    [PERMISSIONS.CONTRACT_READ, 'عرض العقود', 'View contracts'],
+    [PERMISSIONS.CONTRACT_WRITE, 'إدارة العقود', 'Manage contracts'],
+    [PERMISSIONS.ITEM_READ, 'عرض الأصناف', 'View items'],
+    [PERMISSIONS.ITEM_WRITE, 'إدارة الأصناف', 'Manage items'],
+  ]),
+  ...g('التنفيذ والتوريد', 'Delivery & supply', [
+    [PERMISSIONS.PROJECT_READ, 'عرض المشاريع', 'View projects'],
+    [PERMISSIONS.PROJECT_WRITE, 'إدارة المشاريع', 'Manage projects'],
+    [PERMISSIONS.PROCUREMENT_READ, 'عرض المشتريات والمخزون', 'View procurement & stock'],
+    [PERMISSIONS.PROCUREMENT_WRITE, 'إدارة المشتريات والمخزون', 'Manage procurement & stock'],
+    [PERMISSIONS.ASSET_READ, 'عرض الأصول المتسلسلة', 'View serialised assets'],
+  ]),
+  ...g('التشغيل', 'Operations', [
+    [PERMISSIONS.WORKORDER_READ, 'عرض أوامر العمل والمراقبة', 'View work orders & telemetry'],
+    [PERMISSIONS.WORKORDER_WRITE, 'إدارة أوامر العمل', 'Manage work orders'],
+  ]),
+  ...g('المالية', 'Finance', [
+    [PERMISSIONS.INVOICE_READ, 'عرض الفواتير', 'View invoices'],
+    [PERMISSIONS.INVOICE_WRITE, 'إصدار الفواتير والتحصيل', 'Issue invoices & collect'],
+    [PERMISSIONS.PAYMENT_READ, 'عرض مستحقات الموردين', 'View vendor payables'],
+    [PERMISSIONS.PAYMENT_WRITE, 'سداد الموردين', 'Pay vendors'],
+    [PERMISSIONS.LEDGER_READ, 'عرض دفتر الأستاذ والتقارير', 'View ledger & reports'],
+    [PERMISSIONS.PERIOD_MANAGE, 'إدارة الفترات المالية والإقفال', 'Manage fiscal periods & closing'],
+  ]),
+  ...g('المنصة', 'Platform', [
+    [PERMISSIONS.ATTACHMENT_READ, 'عرض المرفقات', 'View attachments'],
+    [PERMISSIONS.ATTACHMENT_WRITE, 'رفع وحذف المرفقات', 'Upload & delete attachments'],
+  ]),
+  ...g('الإدارة', 'Administration', [
+    [PERMISSIONS.USER_MANAGE, 'إدارة المستخدمين والأدوار', 'Manage users & roles'],
+    [PERMISSIONS.ORG_MANAGE, 'إعدادات المنشأة', 'Organization settings'],
+  ]),
+];

@@ -15,6 +15,8 @@ export default tseslint.config(
       '**/*.js',
       '**/*.mjs',
       'packages/db/prisma/migrations/**',
+      // Claude Code worktrees are full repo copies — outside the root tsconfig.
+      '.claude/**',
     ],
   },
   ...tseslint.configs.recommended,

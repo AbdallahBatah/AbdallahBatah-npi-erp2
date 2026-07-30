@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { Icon } from '@/components/icons';
 import { NotificationsBell } from '@/components/notifications';
+import { ChangePasswordButton } from '@/components/change-password';
 
 interface NavItem {
   href: string;
@@ -62,6 +63,13 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/finance', key: 'nav.finance', icon: 'bar-chart', perm: 'finance.ledger.read' },
       { href: '/statements', key: 'nav.statements', icon: 'scale', perm: 'finance.ledger.read' },
       { href: '/ledger', key: 'nav.ledger', icon: 'book', perm: 'finance.ledger.read' },
+    ],
+  },
+  {
+    labelAr: 'الإدارة',
+    labelEn: 'Administration',
+    items: [
+      { href: '/admin', key: 'nav.admin', icon: 'shield-users', perm: 'admin.user.manage' },
     ],
   },
 ];
@@ -222,20 +230,26 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 </p>
                 <p className="truncate text-[10px] text-slate-400">
                   {(() => {
+                    // Custom roles carry their own display names from the server.
+                    const own = locale === 'ar' ? user.roleNameAr : user.roleNameEn;
+                    if (own) return own;
                     const r = ROLE_LABELS[user.roleKey?.toLowerCase() ?? ''];
                     return r ? (locale === 'ar' ? r.ar : r.en) : user.roleKey;
                   })()}
                 </p>
               </div>
             </div>
-            <button
-              onClick={logout}
-              title={t('nav.logout')}
-              aria-label={t('nav.logout')}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-rose-500/10 hover:text-rose-400 rtl:-scale-x-100"
-            >
-              <Icon name="log-out" className="h-4 w-4" />
-            </button>
+            <div className="flex shrink-0 items-center">
+              <ChangePasswordButton />
+              <button
+                onClick={logout}
+                title={t('nav.logout')}
+                aria-label={t('nav.logout')}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-rose-500/10 hover:text-rose-400 rtl:-scale-x-100"
+              >
+                <Icon name="log-out" className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </aside>

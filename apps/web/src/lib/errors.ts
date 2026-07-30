@@ -73,6 +73,18 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   { re: /stored file is missing/i, ar: 'ملف المرفق مفقود من الخادم — راجع مسؤول النظام' },
   { re: /attachment not found/i, ar: 'المرفق غير موجود' },
   { re: /unknown attachment entity/i, ar: 'نوع السجل غير مدعوم للمرفقات' },
+  // users & roles administration
+  { re: /email already in use/i, ar: 'البريد الإلكتروني مستخدم مسبقاً' },
+  { re: /cannot deactivate your own account/i, ar: 'لا يمكنك إيقاف حسابك أنت — اطلب من مسؤول آخر' },
+  { re: /last active administrator/i, ar: 'لا يمكن إزالة آخر مسؤول نشط — عيّن مسؤولاً آخر أولاً' },
+  { re: /last administrator role/i, ar: 'لا يمكن سحب إدارة المستخدمين من دور المسؤول الأخير' },
+  { re: /role still has users assigned/i, ar: 'الدور مسند إلى مستخدمين — انقلهم إلى دور آخر أولاً' },
+  { re: /role key already in use/i, ar: 'المعرّف التقني مستخدم مسبقاً — اختر معرّفاً آخر' },
+  { re: /key must be a lowercase slug/i, ar: 'المعرّف التقني: حروف إنجليزية صغيرة وأرقام و _ فقط' },
+  { re: /unknown permission key/i, ar: 'صلاحية غير معروفة — حدّث الصفحة وحاول مجدداً' },
+  { re: /current password is incorrect/i, ar: 'كلمة المرور الحالية غير صحيحة' },
+  { re: /must differ from the current/i, ar: 'كلمة المرور الجديدة مطابقة للحالية — اختر كلمة مختلفة' },
+  { re: /newPassword must be longer|password must be longer/i, ar: 'كلمة المرور قصيرة — 8 أحرف على الأقل' },
 ];
 
 export function translateError(e: unknown, locale: Locale): string {
