@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { formatMoney, formatNumber } from '@/lib/format';
 import { PageHeader } from '@/components/ui';
@@ -23,26 +24,45 @@ interface FinSummary {
 interface WoSummary { open: number; inProgress: number; overdue: number; closedThisMonth: number }
 interface TelDash { plants: number; openAlerts: number; totalActualKwh: number; portfolioPr: number | null }
 
+/** Tailwind needs literal class names — map a tile count to its grid. */
+const GRID_COLS: Record<number, string> = {
+  1: 'lg:grid-cols-1',
+  2: 'lg:grid-cols-2',
+  3: 'lg:grid-cols-3',
+  4: 'lg:grid-cols-4',
+};
+
 export default function DashboardPage() {
   const { t, locale } = useI18n();
+  const { can } = useAuth();
   const [data, setData] = useState<Summary | null>(null);
   const [fin, setFin] = useState<FinSummary | null>(null);
   const [wo, setWo] = useState<WoSummary | null>(null);
   const [tel, setTel] = useState<TelDash | null>(null);
 
-  useEffect(() => {
-    api.get<Summary>('/reference/dashboard').then(setData).catch(() => setData(null));
-    api.get<FinSummary>('/finance/summary').then(setFin).catch(() => setFin(null));
-    api.get<WoSummary>('/fsm/work-orders/summary').then(setWo).catch(() => setWo(null));
-    api.get<TelDash>('/telemetry/dashboard').then(setTel).catch(() => setTel(null));
-  }, []);
+  // One flag per data source, keyed to the permission its endpoint requires.
+  // A user without the permission must never see the tile at all: firing the
+  // call anyway and rendering the 403 as "—" makes the system look broken.
+  const canCrm = can('crm.lead.read'); // /reference/dashboard
+  const canFin = can('finance.invoice.read'); // /finance/summary
+  const canOps = can('fsm.workorder.read'); // work-order summary + telemetry
 
+  useEffect(() => {
+    if (canCrm) api.get<Summary>('/reference/dashboard').then(setData).catch(() => setData(null));
+    if (canFin) api.get<FinSummary>('/finance/summary').then(setFin).catch(() => setFin(null));
+    if (canOps) {
+      api.get<WoSummary>('/fsm/work-orders/summary').then(setWo).catch(() => setWo(null));
+      api.get<TelDash>('/telemetry/dashboard').then(setTel).catch(() => setTel(null));
+    }
+  }, [canCrm, canFin, canOps]);
+
+  // A tile needs both its data source and read access to the page it links to.
   const kpis = [
-    { key: 'dash.openLeads', value: data?.openLeads, icon: '🎯', href: '/leads' },
-    { key: 'dash.openOpps', value: data?.openOpportunities, icon: '💡', href: '/opportunities' },
-    { key: 'dash.activeContracts', value: data?.activeContracts, icon: '📝', href: '/contracts' },
-    { key: 'inv.summary.issued', value: fin?.issuedInvoices, icon: '🧾', href: '/invoices' },
-  ];
+    { key: 'dash.openLeads', value: data?.openLeads, icon: '🎯', href: '/leads', show: canCrm },
+    { key: 'dash.openOpps', value: data?.openOpportunities, icon: '💡', href: '/opportunities', show: canCrm && can('crm.opportunity.read') },
+    { key: 'dash.activeContracts', value: data?.activeContracts, icon: '📝', href: '/contracts', show: canCrm && can('commercial.contract.read') },
+    { key: 'inv.summary.issued', value: fin?.issuedInvoices, icon: '🧾', href: '/invoices', show: canFin },
+  ].filter((c) => c.show);
 
   const steps = [
     { key: 'dash.step.lead', icon: '🎯' },
@@ -59,7 +79,8 @@ export default function DashboardPage() {
       <PageHeader title={t('dash.title')} subtitle={t('app.tagline')} />
 
       {/* Row 1: sales KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {kpis.length > 0 && (
+      <div className={`grid grid-cols-2 gap-4 ${GRID_COLS[kpis.length] ?? 'lg:grid-cols-4'}`}>
         {kpis.map((c) => (
           <Link key={c.key} href={c.href} className="stat group">
             <div className="flex items-start justify-between">
@@ -70,14 +91,20 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
+      )}
 
       {/* Row 2: money + operations */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {(canCrm || canOps) && (
+      <div className={`mt-4 grid grid-cols-1 gap-4 ${GRID_COLS[(canCrm ? 1 : 0) + (canOps ? 2 : 0)] ?? 'lg:grid-cols-3'}`}>
+        {canCrm && (
         <div className="stat">
           <p className="text-xs font-semibold text-slate-400">{t('dash.pipeline')}</p>
           <p className="mt-2 text-2xl font-bold text-brand-700">
             {formatMoney(data?.pipelineValue, locale)}
           </p>
+          {/* Receivables/retention come from the finance summary — a separate
+              permission from the pipeline figure above them. */}
+          {canFin && (
           <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-xs">
             <div className="flex items-center justify-between">
               <span className="text-slate-400">{t('inv.summary.receivable')}</span>
@@ -88,8 +115,11 @@ export default function DashboardPage() {
               <span className="font-semibold text-slate-700">{formatMoney(fin?.retentionHeld, locale)}</span>
             </div>
           </div>
+          )}
         </div>
+        )}
 
+        {canOps && (
         <Link href="/workorders" className="stat group">
           <div className="flex items-start justify-between">
             <p className="text-xs font-semibold text-slate-400">{t('wo.title')}</p>
@@ -114,7 +144,9 @@ export default function DashboardPage() {
             </div>
           </div>
         </Link>
+        )}
 
+        {canOps && (
         <Link href="/telemetry" className="stat group">
           <div className="flex items-start justify-between">
             <p className="text-xs font-semibold text-slate-400">{t('tel.title')}</p>
@@ -142,7 +174,15 @@ export default function DashboardPage() {
             </div>
           </div>
         </Link>
+        )}
       </div>
+      )}
+
+      {/* A role with none of the three data sources (e.g. a pure warehouse
+          keeper) gets an explicit message rather than a blank page. */}
+      {kpis.length === 0 && !canCrm && !canOps && (
+        <div className="card p-8 text-center text-sm text-slate-500">{t('dash.noMetrics')}</div>
+      )}
 
       {/* Workflow */}
       <div className="card mt-6 p-6">
