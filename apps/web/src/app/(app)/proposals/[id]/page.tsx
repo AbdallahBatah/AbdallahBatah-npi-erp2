@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { useValidate } from '@/lib/useValidate';
+import { useDraft } from '@/lib/useDraft';
 import { translateError } from '@/lib/errors';
 import { useEnums } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
@@ -78,6 +79,25 @@ export default function ProposalDetailPage() {
 
   const winning = proposal?.revisions.find((r) => r.isWinning);
 
+  // A revision can be many lines of hand-entered pricing; losing it to a
+  // refresh is the single most expensive accident on this screen. Keyed by
+  // proposal so two tabs on different proposals do not overwrite each other.
+  const draft = useDraft(
+    `revision:${id}`,
+    { lines, schemeId, capacityKwp, annualKwh },
+    (saved) => {
+      setLines(saved.lines);
+      setSchemeId(saved.schemeId);
+      setCapacityKwp(saved.capacityKwp);
+      setAnnualKwh(saved.annualKwh);
+    },
+    {
+      // A pristine form (one blank line, nothing typed) is not a draft.
+      shouldSave: (v) =>
+        Boolean(v.capacityKwp || v.annualKwh || v.schemeId || v.lines.some((l) => l.itemId)),
+    },
+  );
+
   // The design figures are optional, but if one is given the other is expected
   // and neither may be negative — the server would reject silently otherwise.
   const validation = useValidate(
@@ -145,6 +165,7 @@ export default function ProposalDetailPage() {
       setCapacityKwp('');
       setAnnualKwh('');
       validation.reset();
+      draft.clear();
       load();
     }
   }
@@ -290,6 +311,26 @@ export default function ProposalDetailPage() {
       {proposal.status !== 'ACCEPTED' && (
         <form onSubmit={submitRevision} className="card mt-6 p-5">
           <h3 className="mb-4 font-semibold text-slate-800">{t('proposals.addRevision')}</h3>
+
+          {draft.restored && (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-lg bg-info-50 px-3 py-2 text-xs text-info-800">
+              <span>↩︎ {t('draft.restored')}</span>
+              <button
+                type="button"
+                className="font-semibold underline"
+                onClick={() => {
+                  setLines([{ itemId: '', qty: 1, unitPrice: 0 }]);
+                  setSchemeId('');
+                  setCapacityKwp('');
+                  setAnnualKwh('');
+                  validation.reset();
+                  draft.clear();
+                }}
+              >
+                {t('draft.discard')}
+              </button>
+            </div>
+          )}
 
           <div className="mb-4 grid grid-cols-3 gap-4">
             <Field label={t('proposals.pricingScheme')}>

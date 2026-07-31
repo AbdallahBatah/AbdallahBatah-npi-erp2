@@ -9,6 +9,7 @@ import {
   useCallback,
 } from 'react';
 import { api, setToken } from './api';
+import { clearAllDrafts } from './useDraft';
 
 export interface AuthUser {
   id: string;
@@ -66,6 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
+    // Unsent drafts are this user's work — never leave them for whoever signs
+    // in next on a shared machine.
+    clearAllDrafts();
     if (typeof window !== 'undefined') window.location.href = '/login';
   }, []);
 
