@@ -9,7 +9,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Part {
@@ -71,6 +71,7 @@ export default function WorkOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [wo, setWo] = useState<Wo | null>(null);
+  const [tab, setTab] = useState('parts');
   const [techs, setTechs] = useState<Tech[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [locations, setLocations] = useState<Loc[]>([]);
@@ -218,7 +219,23 @@ export default function WorkOrderDetailPage() {
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* The four identity cards above stay pinned; the working sections are
+          tabbed so a technician sees one job at a time. */}
+      <div className="mt-6">
+        <Tabs
+          tabs={[
+            { key: 'parts', label: t('wo.parts'), count: wo.parts?.length },
+            { key: 'labour', label: t('time.title'), count: wo.timesheets?.length },
+            { key: 'checklist', label: t('wo.checklist'), count: wo.checklistJson?.length },
+            { key: 'files', label: t('att.title') },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </div>
+
+      {tab === 'parts' && (
+      <div className="grid grid-cols-1 gap-6">
         {/* Parts */}
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
@@ -255,7 +272,11 @@ export default function WorkOrderDetailPage() {
             </tbody>
           </table>
         </div>
+      </div>
+      )}
 
+      {tab === 'labour' && (
+      <div className="grid grid-cols-1 gap-6">
         {/* FSM-07: labour hours */}
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
@@ -317,6 +338,11 @@ export default function WorkOrderDetailPage() {
           )}
         </div>
 
+      </div>
+      )}
+
+      {tab === 'checklist' && (
+      <div className="grid grid-cols-1 gap-6">
         {/* Checklist */}
         <div className="card overflow-hidden">
           <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
@@ -344,6 +370,9 @@ export default function WorkOrderDetailPage() {
           )}
         </div>
       </div>
+      )}
+
+      {tab === 'files' && <AttachmentsCard entityType="WORK_ORDER" entityId={id} />}
 
       {/* Add part modal */}
       <Modal open={pOpen} title={t('wo.addPart')} onClose={() => setPOpen(false)}>
@@ -439,10 +468,6 @@ export default function WorkOrderDetailPage() {
           </button>
         </div>
       </Modal>
-
-      <div className="mt-6">
-        <AttachmentsCard entityType="WORK_ORDER" entityId={id} />
-      </div>
     </div>
   );
 }
