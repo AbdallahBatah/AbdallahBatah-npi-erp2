@@ -184,16 +184,36 @@ export function StatusBadge({ status }: { status: string }) {
 export function Field({
   label,
   children,
+  error,
+  hint,
 }: {
   label: string;
   children: ReactNode;
+  /** Validation message. Shown under the control and announced to readers. */
+  error?: string;
+  /** Static help text, hidden while an error is showing. */
+  hint?: string;
 }) {
   // Wire label→control so clicking the label focuses the field and screen
   // readers announce a name. Works when the child is a single form element.
   const id = useId();
+  const msgId = `${id}-msg`;
   const child =
     isValidElement(children) && !(children.props as any).id
-      ? cloneElement(children as any, { id })
+      ? cloneElement(children as any, {
+          id,
+          // aria-invalid + aria-describedby is what actually makes the error
+          // reach a screen reader; the red ring alone reaches nobody.
+          ...(error
+            ? {
+                'aria-invalid': true,
+                'aria-describedby': msgId,
+                className: `${(children.props as any).className ?? ''} !border-danger-300 focus:!border-danger-400 focus:!ring-danger-500/10`,
+              }
+            : hint
+              ? { 'aria-describedby': msgId }
+              : null),
+        } as any)
       : children;
   return (
     <div>
@@ -201,6 +221,15 @@ export function Field({
         {label}
       </label>
       {child}
+      {error ? (
+        <p id={msgId} role="alert" className="mt-1 text-[11px] font-medium text-danger-600">
+          {error}
+        </p>
+      ) : hint ? (
+        <p id={msgId} className="mt-1 text-[11px] text-slate-400">
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }

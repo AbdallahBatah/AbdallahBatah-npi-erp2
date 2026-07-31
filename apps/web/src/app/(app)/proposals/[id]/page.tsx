@@ -6,8 +6,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
+import { useValidate } from '@/lib/useValidate';
 import { translateError } from '@/lib/errors';
-import { useToast } from '@/components/toast';
 import { useEnums } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
 import { PageHeader, StatusBadge, Modal, Field, LoadError, useConfirm } from '@/components/ui';
@@ -54,7 +54,6 @@ export default function ProposalDetailPage() {
   const [loadErr, setLoadErr] = useState('');
   const { act, busy } = useAct();
   const { confirm, confirmNode } = useConfirm();
-  const toast = useToast();
 
   const load = useCallback(() => {
     setLoadErr('');
@@ -79,6 +78,32 @@ export default function ProposalDetailPage() {
 
   const winning = proposal?.revisions.find((r) => r.isWinning);
 
+  // The design figures are optional, but if one is given the other is expected
+  // and neither may be negative — the server would reject silently otherwise.
+  const validation = useValidate(
+    { capacityKwp, annualKwh, lines },
+    {
+      capacityKwp: (v) =>
+        Number(v.capacityKwp) < 0
+          ? t('valid.negative')
+          : v.annualKwh && !v.capacityKwp
+            ? t('valid.needBoth')
+            : undefined,
+      annualKwh: (v) =>
+        Number(v.annualKwh) < 0
+          ? t('valid.negative')
+          : v.capacityKwp && !v.annualKwh
+            ? t('valid.needBoth')
+            : undefined,
+      lines: (v) =>
+        v.lines.some((l) => l.itemId && (!l.qty || l.qty <= 0))
+          ? t('valid.qtyPositive')
+          : v.lines.filter((l) => l.itemId && l.qty > 0).length === 0
+            ? t('valid.needLine')
+            : undefined,
+    },
+  );
+
   function updateLine(i: number, patch: Partial<DraftLine>) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
@@ -91,15 +116,9 @@ export default function ProposalDetailPage() {
 
   async function submitRevision(e: FormEvent) {
     e.preventDefault();
+    // Reveals every message at once rather than failing on the server.
+    if (!validation.validateAll()) return;
     const valid = lines.filter((l) => l.itemId && l.qty > 0);
-    if (valid.length === 0) {
-      toast.error(
-        locale === 'ar'
-          ? 'أضف بنداً واحداً على الأقل (اختر الصنف وحدد الكمية)'
-          : 'Add at least one line (pick an item and set a quantity)',
-      );
-      return;
-    }
     const ok = await act(
       'revision',
       () =>
@@ -125,6 +144,7 @@ export default function ProposalDetailPage() {
       setLines([{ itemId: '', qty: 1, unitPrice: 0 }]);
       setCapacityKwp('');
       setAnnualKwh('');
+      validation.reset();
       load();
     }
   }
@@ -282,27 +302,36 @@ export default function ProposalDetailPage() {
                 ))}
               </select>
             </Field>
-            <Field label={t('proposals.capacity')}>
+            <Field label={t('proposals.capacity')} error={validation.errorOf('capacityKwp')}>
               <input
                 type="number"
                 step="0.001"
+                min={0}
                 className="input"
                 value={capacityKwp}
                 onChange={(e) => setCapacityKwp(e.target.value)}
+                onBlur={() => validation.onBlur('capacityKwp')}
               />
             </Field>
-            <Field label={t('proposals.annualKwh')}>
+            <Field label={t('proposals.annualKwh')} error={validation.errorOf('annualKwh')}>
               <input
                 type="number"
                 step="0.01"
+                min={0}
                 className="input"
                 value={annualKwh}
                 onChange={(e) => setAnnualKwh(e.target.value)}
+                onBlur={() => validation.onBlur('annualKwh')}
               />
             </Field>
           </div>
 
           <label className="label">{t('proposals.bom')}</label>
+          {validation.errorOf('lines') && (
+            <p role="alert" className="mb-2 text-[11px] font-medium text-danger-600">
+              {validation.errorOf('lines')}
+            </p>
+          )}
           <div className="space-y-2">
             {lines.map((l, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -327,10 +356,12 @@ export default function ProposalDetailPage() {
                 <input
                   type="number"
                   step="0.001"
-                  className="input w-24"
+                  min={0}
+                  className={`input w-24 ${l.itemId && (!l.qty || l.qty <= 0) ? '!border-danger-300' : ''}`}
                   placeholder={t('proposals.qty')}
                   value={l.qty}
                   onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
+                  onBlur={() => validation.onBlur('lines')}
                 />
                 <input
                   type="number"
