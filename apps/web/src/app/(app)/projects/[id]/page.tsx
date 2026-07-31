@@ -11,6 +11,7 @@ import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
+import { PROJECT_STAGE_FLOW as STAGE_FLOW } from '@npi/shared';
 
 interface Wbs {
   id: string;
@@ -91,7 +92,7 @@ interface Project {
   costSummary: { budget: number; committed: number; actual: number; variance: number };
 }
 
-const STAGE_FLOW = ['PLANNING', 'PROCUREMENT', 'EXECUTION', 'COMMISSIONING', 'CLOSED'];
+// Order comes from the shared package — the API enforces the same sequence.
 
 export default function ProjectDetailPage() {
   const { t, locale, pick } = useI18n();

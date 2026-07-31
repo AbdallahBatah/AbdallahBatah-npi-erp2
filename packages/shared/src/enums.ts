@@ -110,6 +110,34 @@ export const PROJECT_STAGES: EnumOption[] = [
   { value: 'CLOSED', labelAr: 'مغلق', labelEn: 'Closed' },
 ];
 
+/**
+ * The project lifecycle, in order. Derived from PROJECT_STAGES so the sequence
+ * cannot drift from the labels.
+ *
+ * This lives in the shared package because BOTH sides need it and they must
+ * agree: the web app uses it to offer the next stage, and the API uses it to
+ * enforce the move. Previously only the web knew the order, which meant the
+ * rule was advisory — anything calling the endpoint directly could jump
+ * straight from PLANNING to CLOSED.
+ */
+export const PROJECT_STAGE_FLOW: string[] = PROJECT_STAGES.map((s) => s.value);
+
+/**
+ * Whether `to` is a legal move from `from`: forward exactly one step.
+ *
+ * Skipping ahead is refused because each stage gates real work (procurement
+ * commits cost, commissioning closes it out); jumping past one leaves the
+ * project's records claiming something that never happened. Moving backwards
+ * is refused too — reversing a stage has accounting consequences that need a
+ * deliberate correction, not a dropdown. Widen this if the business asks, but
+ * do it here, once, where both sides read it.
+ */
+export function isValidStageTransition(from: string, to: string): boolean {
+  const i = PROJECT_STAGE_FLOW.indexOf(from);
+  const j = PROJECT_STAGE_FLOW.indexOf(to);
+  return i >= 0 && j >= 0 && j === i + 1;
+}
+
 export const VENDOR_TYPES: EnumOption[] = [
   { value: 'SUPPLIER', labelAr: 'مورد', labelEn: 'Supplier' },
   { value: 'SUBCONTRACTOR', labelAr: 'مقاول باطن', labelEn: 'Subcontractor' },

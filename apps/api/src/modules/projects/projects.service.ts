@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
+import { isValidStageTransition } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 import type { CreateChangeOrderDto, CreateProjectDto, SetStageDto } from './dto';
 
@@ -311,6 +312,16 @@ export class ProjectsService {
       where: { id, organizationId: user.organizationId },
     });
     if (!project) throw new NotFoundException('Project not found');
+
+    // The web app only ever offers the next stage, but that made the rule
+    // advisory: a direct call could move a project straight from PLANNING to
+    // CLOSED, skipping the procurement and execution it claims to have done.
+    // The order is enforced here, from the shared definition both sides read.
+    if (!isValidStageTransition(project.stage, dto.stage)) {
+      throw new BadRequestException(
+        `Cannot move a project from ${project.stage} to ${dto.stage}`,
+      );
+    }
 
     const updated = await this.prisma.project.update({
       where: { id },

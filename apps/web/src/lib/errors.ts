@@ -21,6 +21,11 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   { re: /only draft/i, ar: 'هذه العملية متاحة للمسودات فقط' },
   { re: /only in-progress/i, ar: 'أمر العمل ليس قيد التنفيذ' },
   { re: /already converted/i, ar: 'تم تحويل هذا العميل المحتمل مسبقاً' },
+  // Server-enforced project lifecycle: forward one stage at a time.
+  {
+    re: /cannot move a project from/i,
+    ar: 'لا يمكن القفز بين مراحل المشروع — انتقل إلى المرحلة التالية مباشرة',
+  },
   { re: /cannot cancel: parts/i, ar: 'لا يمكن الإلغاء بعد صرف قطع غيار — أكمل أمر العمل وأغلقه' },
   { re: /mandatory checklist item not done/i, ar: 'يوجد بند إلزامي في قائمة الفحص لم يُنجز بعد' },
   // finance
