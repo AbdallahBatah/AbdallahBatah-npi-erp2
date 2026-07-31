@@ -9,7 +9,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate } from '@/lib/format';
 // NB: this page defines its own read-only `Field` below — do not import ui's.
-import { PageHeader, StatusBadge, LoadError, Modal, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, LoadError, Modal, useConfirm, Tabs } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Line { id: string; descriptionAr: string; descriptionEn: string; qty: string; unitPrice: string; lineSubtotal: string; vatAmount: string }
@@ -68,6 +68,7 @@ export default function InvoiceDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [inv, setInv] = useState<Invoice | null>(null);
+  const [tab, setTab] = useState('pay');
   const [loadErr, setLoadErr] = useState('');
   const [payAmount, setPayAmount] = useState(0);
   const [payMethod, setPayMethod] = useState('BANK_TRANSFER');
@@ -304,7 +305,21 @@ export default function InvoiceDetailPage() {
             )}
           </div>
 
+          {/* The document, its ZATCA status and its identity stay visible; the
+              working panels below are tabbed — five stacked cards in a narrow
+              column was the density problem on this screen. */}
+          <Tabs
+            tabs={[
+              { key: 'pay', label: t('pay.title'), count: inv.payments.length },
+              { key: 'credit', label: t('cn.title'), count: inv.creditNotes.length },
+              { key: 'files', label: t('att.title') },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+
           {/* W7: payments */}
+          {tab === 'pay' && (
           <div className="card overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
               <h3 className="text-sm font-bold text-slate-800">{t('pay.title')}</h3>
@@ -397,9 +412,10 @@ export default function InvoiceDetailPage() {
               ) : null}
             </div>
           </div>
+          )}
 
           {/* Credit notes: this invoice's corrections, or what it corrects. */}
-          {inv.creditNotes.length > 0 || isCreditNote ? (
+          {tab === 'credit' && (inv.creditNotes.length > 0 || isCreditNote ? (
             <div className="card overflow-hidden">
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
                 <h3 className="text-sm font-bold text-slate-800">{t('cn.title')}</h3>
@@ -456,10 +472,12 @@ export default function InvoiceDetailPage() {
                 )}
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="card p-5 text-center text-sm text-slate-400">{t('common.none')}</div>
+          ))}
 
           {/* M2: documents attached to this invoice */}
-          <AttachmentsCard entityType="INVOICE" entityId={id} />
+          {tab === 'files' && <AttachmentsCard entityType="INVOICE" entityId={id} />}
         </div>
       </div>
 
