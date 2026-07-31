@@ -9,7 +9,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Part {
@@ -137,31 +137,34 @@ export default function WorkOrderDetailPage() {
         action={
           <div className="flex items-center gap-2">
             <StatusBadge status={wo.status} />
-            {['OPEN', 'ASSIGNED'].includes(wo.status) && (
-              <button className="btn-primary text-xs" onClick={() => run('start', () => api.post(`/fsm/work-orders/${id}/start`, {}))} disabled={busy()}>
-                ▶️ {t('wo.start')}
-              </button>
-            )}
-            {wo.status === 'IN_PROGRESS' && (
-              <>
-                <button className="btn-ghost text-xs" onClick={() => setPOpen(true)} disabled={busy()}>
-                  ⚙️ {t('wo.addPart')}
+            {/* Every lifecycle transition is one permission on the server. */}
+            <Can perm="fsm.workorder.write">
+              {['OPEN', 'ASSIGNED'].includes(wo.status) && (
+                <button className="btn-primary text-xs" onClick={() => run('start', () => api.post(`/fsm/work-orders/${id}/start`, {}))} disabled={busy()}>
+                  ▶️ {t('wo.start')}
                 </button>
-                <button className="btn-solar text-xs" onClick={openComplete} disabled={busy()}>
-                  ✅ {t('wo.complete')}
+              )}
+              {wo.status === 'IN_PROGRESS' && (
+                <>
+                  <button className="btn-ghost text-xs" onClick={() => setPOpen(true)} disabled={busy()}>
+                    ⚙️ {t('wo.addPart')}
+                  </button>
+                  <button className="btn-solar text-xs" onClick={openComplete} disabled={busy()}>
+                    ✅ {t('wo.complete')}
+                  </button>
+                </>
+              )}
+              {wo.status === 'COMPLETED' && (
+                <button className="btn-primary text-xs" onClick={closeWo} disabled={busy()}>
+                  🔒 {t('wo.close')}
                 </button>
-              </>
-            )}
-            {wo.status === 'COMPLETED' && (
-              <button className="btn-primary text-xs" onClick={closeWo} disabled={busy()}>
-                🔒 {t('wo.close')}
-              </button>
-            )}
-            {!['CLOSED', 'CANCELLED'].includes(wo.status) && (
-              <button className="btn-ghost text-xs !text-rose-600" onClick={cancelWo} disabled={busy()}>
-                {t('wo.cancel')}
-              </button>
-            )}
+              )}
+              {!['CLOSED', 'CANCELLED'].includes(wo.status) && (
+                <button className="btn-ghost text-xs !text-rose-600" onClick={cancelWo} disabled={busy()}>
+                  {t('wo.cancel')}
+                </button>
+              )}
+            </Can>
             <Link href="/workorders" className="btn-ghost text-xs">{t('common.back')}</Link>
           </div>
         }

@@ -7,7 +7,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, Modal, Field, EmptyRow, LoadError } from '@/components/ui';
+import { PageHeader, Modal, Field, EmptyRow, LoadError, Can } from '@/components/ui';
 
 interface Item {
   id: string;
@@ -69,9 +69,11 @@ export default function ItemsPage() {
       <PageHeader
         title={t('items.title')}
         action={
-          <button className="btn-primary" onClick={() => setOpen(true)}>
-            + {t('items.new')}
-          </button>
+          <Can perm="commercial.item.write">
+            <button className="btn-primary" onClick={() => setOpen(true)}>
+              + {t('items.new')}
+            </button>
+          </Can>
         }
       />
       {loadErr && !loading ? <div className="mb-6"><LoadError message={loadErr} onRetry={load} /></div> : null}

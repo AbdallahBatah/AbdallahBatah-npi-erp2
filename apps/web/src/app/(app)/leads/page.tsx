@@ -8,7 +8,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatNumber } from '@/lib/format';
-import { PageHeader, StatusBadge, Modal, Field, EmptyRow, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, Modal, Field, EmptyRow, LoadError, useConfirm, Can } from '@/components/ui';
 
 interface Lead {
   id: string;
@@ -97,9 +97,11 @@ export default function LeadsPage() {
       <PageHeader
         title={t('leads.title')}
         action={
-          <button className="btn-primary" onClick={() => setOpen(true)}>
-            + {t('leads.new')}
-          </button>
+          <Can perm="crm.lead.write">
+            <button className="btn-primary" onClick={() => setOpen(true)}>
+              + {t('leads.new')}
+            </button>
+          </Can>
         }
       />
 
@@ -159,13 +161,17 @@ export default function LeadsPage() {
                   <td className="td"><StatusBadge status={l.status} /></td>
                   <td className="td">
                     {l.status !== 'CONVERTED' ? (
-                      <button
-                        className="btn-solar !px-3 !py-1 text-xs"
-                        disabled={busy()}
-                        onClick={() => convert(l.id)}
-                      >
-                        {busy(`convert:${l.id}`) ? t('common.loading') : t('leads.convert')}
-                      </button>
+                      // Conversion creates the opportunity too, so the server
+                      // demands both CRM write permissions.
+                      <Can perm={['crm.lead.write', 'crm.opportunity.write']}>
+                        <button
+                          className="btn-solar !px-3 !py-1 text-xs"
+                          disabled={busy()}
+                          onClick={() => convert(l.id)}
+                        >
+                          {busy(`convert:${l.id}`) ? t('common.loading') : t('leads.convert')}
+                        </button>
+                      </Can>
                     ) : (
                       <span className="text-xs text-emerald-600">{t('leads.converted')}</span>
                     )}

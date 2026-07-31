@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate, formatNumber } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can } from '@/components/ui';
 
 interface Term {
   id: string;
@@ -40,6 +41,7 @@ interface Contract { id: string; code: string; contractType: string; status: str
 
 export default function PpaPage() {
   const { t, locale, pick } = useI18n();
+  const { can } = useAuth();
   const [terms, setTerms] = useState<Term[] | null>(null);
   const [runs, setRuns] = useState<Run[] | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -67,14 +69,21 @@ export default function PpaPage() {
     const fail = (e: unknown) => setLoadErr(translateError(e, locale));
     api.get<Term[]>('/ppa/terms').then(setTerms).catch(fail);
     api.get<Run[]>('/ppa/runs').then(setRuns).catch(fail);
-    api.get<Project[]>('/projects').then(setProjects).catch(fail);
-    api
-      .get<Contract[]>('/contracts')
-      .then((c) =>
-        setContracts(c.filter((x) => ['PPA', 'OM'].includes(x.contractType) && x.status === 'ACTIVE')),
-      )
-      .catch(fail);
-  }, [locale]);
+    // Projects and contracts only populate the "new term" modal's pickers. An
+    // accountant can settle a term without being able to read either, so a 403
+    // here must not blank the page — it previously did.
+    if (can('projects.project.read')) {
+      api.get<Project[]>('/projects').then(setProjects).catch(() => setProjects([]));
+    }
+    if (can('commercial.contract.read')) {
+      api
+        .get<Contract[]>('/contracts')
+        .then((c) =>
+          setContracts(c.filter((x) => ['PPA', 'OM'].includes(x.contractType) && x.status === 'ACTIVE')),
+        )
+        .catch(() => setContracts([]));
+    }
+  }, [locale, can]);
   useEffect(load, [load]);
 
   function openSettle(termId: string) {
@@ -92,9 +101,11 @@ export default function PpaPage() {
       <PageHeader
         title={t('ppa.title')}
         action={
-          <button className="btn-primary text-xs" onClick={() => setTOpen(true)}>
-            ⚡ {t('ppa.new')}
-          </button>
+          <Can perm="commercial.contract.write">
+            <button className="btn-primary text-xs" onClick={() => setTOpen(true)}>
+              ⚡ {t('ppa.new')}
+            </button>
+          </Can>
         }
       />
       <p className="mb-4 -mt-4 text-xs text-slate-400">{t('ppa.hint')}</p>
@@ -140,9 +151,11 @@ export default function PpaPage() {
                   <td className="td"><StatusBadge status={tm.status} /></td>
                   <td className="td">
                     {tm.status === 'ACTIVE' && (
-                      <button className="btn-solar !px-3 !py-1 text-xs" onClick={() => openSettle(tm.id)}>
-                        💰 {t('ppa.settle')}
-                      </button>
+                      <Can perm="finance.invoice.write">
+                        <button className="btn-solar !px-3 !py-1 text-xs" onClick={() => openSettle(tm.id)}>
+                          💰 {t('ppa.settle')}
+                        </button>
+                      </Can>
                     )}
                   </td>
                 </tr>

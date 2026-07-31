@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
-import { PageHeader, Modal, Field, EmptyRow, LoadError } from '@/components/ui';
+import { PageHeader, Modal, Field, EmptyRow, LoadError, Can } from '@/components/ui';
 
 interface Customer {
   id: string;
@@ -88,9 +88,11 @@ export default function CustomersPage() {
         title={t('cust.title')}
         subtitle={t('cust.hint')}
         action={
-          <button className="btn-primary" onClick={() => setOpen(true)}>
-            + {t('cust.new')}
-          </button>
+          <Can perm="crm.customer.write">
+            <button className="btn-primary" onClick={() => setOpen(true)}>
+              + {t('cust.new')}
+            </button>
+          </Can>
         }
       />
 

@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDate, formatMoney } from '@/lib/format';
-import { PageHeader, Modal, Field, EmptyRow, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, Modal, Field, EmptyRow, LoadError, useConfirm, Can } from '@/components/ui';
 
 interface Vendor {
   id: string;
@@ -195,20 +195,22 @@ export default function PayablesPage() {
                   </td>
                   <td className="td">
                     <div className="flex gap-2">
-                      {r.outstanding > 0.009 ? (
-                        <button className="btn-ghost text-xs" onClick={() => startPay(r)}>
-                          {t('ap.action')}
-                        </button>
-                      ) : null}
-                      {r.kind === 'CLAIM' && r.retentionWithheld > 0 ? (
-                        <button
-                          className="btn-ghost text-xs"
-                          disabled={busy(`rel:${r.id}`)}
-                          onClick={() => releaseRetention(r)}
-                        >
-                          {t('ap.release')}
-                        </button>
-                      ) : null}
+                      <Can perm="finance.payment.write">
+                        {r.outstanding > 0.009 ? (
+                          <button className="btn-ghost text-xs" onClick={() => startPay(r)}>
+                            {t('ap.action')}
+                          </button>
+                        ) : null}
+                        {r.kind === 'CLAIM' && r.retentionWithheld > 0 ? (
+                          <button
+                            className="btn-ghost text-xs"
+                            disabled={busy(`rel:${r.id}`)}
+                            onClick={() => releaseRetention(r)}
+                          >
+                            {t('ap.release')}
+                          </button>
+                        ) : null}
+                      </Can>
                     </div>
                   </td>
                 </tr>

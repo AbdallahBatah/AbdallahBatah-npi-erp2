@@ -4,12 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate } from '@/lib/format';
 // NB: this page defines its own read-only `Field` below — do not import ui's.
-import { PageHeader, StatusBadge, LoadError, Modal, useConfirm, Tabs } from '@/components/ui';
+import { PageHeader, StatusBadge, LoadError, Modal, useConfirm, Tabs, Can } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Line { id: string; descriptionAr: string; descriptionEn: string; qty: string; unitPrice: string; lineSubtotal: string; vatAmount: string }
@@ -65,6 +66,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 
 export default function InvoiceDetailPage() {
   const { t, locale } = useI18n();
+  const { can } = useAuth();
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [inv, setInv] = useState<Invoice | null>(null);
@@ -129,7 +131,10 @@ export default function InvoiceDetailPage() {
   // Outstanding comes from the server: it also nets off credit notes, which
   // the payments list alone cannot see.
   const outstanding = Math.max(0, inv.outstanding);
-  const canPay = ['ISSUED', 'CLEARED'].includes(inv.status) && outstanding > 0.009;
+  // Recording a customer payment is finance.invoice.write — NOT
+  // finance.payment.write, which guards the vendor side under /payables.
+  const canPay =
+    ['ISSUED', 'CLEARED'].includes(inv.status) && outstanding > 0.009 && can('finance.invoice.write');
   const isCreditNote = inv.invoiceType === 'CREDIT_NOTE';
   // Only a reported invoice can be corrected, and only up to what is left.
   const creditable = round2(Number(inv.total) - inv.creditedTotal);
@@ -143,16 +148,18 @@ export default function InvoiceDetailPage() {
         action={
           <div className="flex items-center gap-2">
             <StatusBadge status={inv.status} />
-            {inv.status === 'DRAFT' && (
-              <button className="btn-primary text-xs" onClick={issue} disabled={busy()}>
-                {busy('issue') ? t('common.loading') : `🔏 ${t('inv.issue')}`}
-              </button>
-            )}
-            {canCredit && (
-              <button className="btn-ghost text-xs" onClick={() => setCnOpen(true)}>
-                {t('cn.new')}
-              </button>
-            )}
+            <Can perm="finance.invoice.write">
+              {inv.status === 'DRAFT' && (
+                <button className="btn-primary text-xs" onClick={issue} disabled={busy()}>
+                  {busy('issue') ? t('common.loading') : `🔏 ${t('inv.issue')}`}
+                </button>
+              )}
+              {canCredit && (
+                <button className="btn-ghost text-xs" onClick={() => setCnOpen(true)}>
+                  {t('cn.new')}
+                </button>
+              )}
+            </Can>
             <Link href={`/invoices/${id}/print`} className="btn-ghost text-xs">
               🖨️ {t('print.button')}
             </Link>
@@ -288,7 +295,7 @@ export default function InvoiceDetailPage() {
                 <span className="text-slate-500">{t('inv.retention')}</span>
                 <span className="flex items-center gap-2">
                   <span className="text-slate-700">{formatMoney(inv.retentionEntry.withheldAmount, locale)}</span>
-                  {inv.retentionEntry.status === 'WITHHELD' && inv.status !== 'CANCELLED' ? (
+                  {inv.retentionEntry.status === 'WITHHELD' && inv.status !== 'CANCELLED' && can('finance.invoice.write') ? (
                     <button
                       className="btn-solar !px-2 !py-0.5 text-[11px]"
                       disabled={busy()}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { useAuth } from '@/lib/auth';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate } from '@/lib/format';
@@ -60,6 +61,7 @@ const POSITION_STYLE: Record<PocRow['position'], string> = {
 
 export default function FinanceReportsPage() {
   const { t, locale, pick } = useI18n();
+  const { can } = useAuth();
   const [poc, setPoc] = useState<PocRow[] | null>(null);
   const [vat, setVat] = useState<VatReturn | null>(null);
   const [prof, setProf] = useState<ProfRow[] | null>(null);
@@ -202,7 +204,7 @@ export default function FinanceReportsPage() {
                   </td>
                   <td className="td text-end">{formatMoney(r.postedAdjustment, locale)}</td>
                   <td className="td">
-                    {Math.abs(r.unpostedDelta) >= 0.01 ? (
+                    {Math.abs(r.unpostedDelta) >= 0.01 && can('finance.invoice.write') ? (
                       <button
                         className="btn-primary !px-3 !py-1 text-xs"
                         disabled={busy()}

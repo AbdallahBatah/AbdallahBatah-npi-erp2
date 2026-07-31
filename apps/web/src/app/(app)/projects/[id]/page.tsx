@@ -9,7 +9,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Wbs {
@@ -231,9 +231,11 @@ export default function ProjectDetailPage() {
           <div className="flex items-center gap-2">
             <StatusBadge status={p.stage} />
             {p.stage !== 'CLOSED' && (
-              <button className="btn-primary text-xs" onClick={nextStage} disabled={busy()}>
-                ⏭️ {t('prj.nextStage')}: {optionLabel(enums?.projectStages, STAGE_FLOW[STAGE_FLOW.indexOf(p.stage) + 1] ?? '', locale)}
-              </button>
+              <Can perm="projects.project.write">
+                <button className="btn-primary text-xs" onClick={nextStage} disabled={busy()}>
+                  ⏭️ {t('prj.nextStage')}: {optionLabel(enums?.projectStages, STAGE_FLOW[STAGE_FLOW.indexOf(p.stage) + 1] ?? '', locale)}
+                </button>
+              </Can>
             )}
             <Link href="/projects" className="btn-ghost text-xs">{t('common.back')}</Link>
           </div>
@@ -441,7 +443,7 @@ export default function ProjectDetailPage() {
             <h3 className="text-sm font-semibold text-slate-800">{t('co.title')}</h3>
             <p className="mt-1 text-xs text-slate-400">{t('co.hint')}</p>
           </div>
-          <button className="btn-primary text-xs" onClick={() => setCoOpen(true)}>➕ {t('co.new')}</button>
+          <Can perm="projects.project.write"><button className="btn-primary text-xs" onClick={() => setCoOpen(true)}>➕ {t('co.new')}</button></Can>
         </div>
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50">
@@ -469,9 +471,9 @@ export default function ProjectDetailPage() {
                   <td className="td"><StatusBadge status={co.status} /></td>
                   <td className="td">
                     {co.status === 'DRAFT' && (
-                      <button className="btn-primary !px-3 !py-1 text-xs" onClick={() => approveCo(co.id)} disabled={busy()}>
+                      <Can perm="projects.project.write"><button className="btn-primary !px-3 !py-1 text-xs" onClick={() => approveCo(co.id)} disabled={busy()}>
                         ✅ {t('co.approve')}
-                      </button>
+                      </button></Can>
                     )}
                   </td>
                 </tr>
@@ -488,7 +490,7 @@ export default function ProjectDetailPage() {
             <h3 className="text-sm font-semibold text-slate-800">{t('sub.title')}</h3>
             <p className="mt-1 text-xs text-slate-400">{t('sub.hint')}</p>
           </div>
-          <button className="btn-primary text-xs" onClick={() => setSubOpen(true)}>➕ {t('sub.new')}</button>
+          <Can perm="scm.procurement.write"><button className="btn-primary text-xs" onClick={() => setSubOpen(true)}>➕ {t('sub.new')}</button></Can>
         </div>
         {p.subcontracts.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-slate-400">{t('common.none')}</p>
@@ -537,9 +539,9 @@ export default function ProjectDetailPage() {
                             <td className="py-1"><StatusBadge status={c.status} /></td>
                             <td className="py-1 text-end">
                               {c.status === 'SUBMITTED' && (
-                                <button className="btn-primary !px-2 !py-0.5 text-[11px]" onClick={() => approveClaim(c.id)} disabled={busy()}>
+                                <Can perm="scm.procurement.write"><button className="btn-primary !px-2 !py-0.5 text-[11px]" onClick={() => approveClaim(c.id)} disabled={busy()}>
                                   {t('sub.approveClaim')}
-                                </button>
+                                </button></Can>
                               )}
                             </td>
                           </tr>

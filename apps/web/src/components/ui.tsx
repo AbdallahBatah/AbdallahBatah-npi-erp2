@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode, cloneElement, isValidElement, useId, useState } from 'react';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 
 export function PageHeader({
@@ -21,6 +22,23 @@ export function PageHeader({
       {action}
     </div>
   );
+}
+
+/**
+ * Hides an action the caller has no permission for. The server is still the
+ * authority — this only stops us offering a button that would come back 403.
+ *
+ * `perm` must be the permission the BUTTON'S ENDPOINT requires, which is not
+ * always the one guarding the page it sits on: installing a serial unit needs
+ * `scm.procurement.write` on a screen read with `assets.serialunit.read`, and
+ * recording an invoice payment needs `finance.invoice.write`, not
+ * `finance.payment.write` (that one is the vendor side). Pass every key when
+ * an endpoint requires more than one — lead conversion needs both CRM writes.
+ */
+export function Can({ perm, children }: { perm: string | string[]; children: ReactNode }) {
+  const { can } = useAuth();
+  const keys = Array.isArray(perm) ? perm : [perm];
+  return keys.every(can) ? <>{children}</> : null;
 }
 
 export interface TabDef {

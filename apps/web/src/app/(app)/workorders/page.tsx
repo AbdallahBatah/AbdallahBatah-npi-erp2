@@ -9,7 +9,7 @@ import { translateError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can } from '@/components/ui';
 
 interface Summary { open: number; inProgress: number; overdue: number; closedThisMonth: number }
 interface Wo {
@@ -181,9 +181,11 @@ export default function WorkOrdersPage() {
       <PageHeader
         title={t('wo.title')}
         action={
-          <button className="btn-primary text-xs" onClick={() => setWOpen(true)}>
-            🔧 {t('wo.new')}
-          </button>
+          <Can perm="fsm.workorder.write">
+            <button className="btn-primary text-xs" onClick={() => setWOpen(true)}>
+              🔧 {t('wo.new')}
+            </button>
+          </Can>
         }
       />
       {loadErr && <div className="mb-6"><LoadError message={loadErr} onRetry={load} /></div>}
@@ -249,12 +251,14 @@ export default function WorkOrdersPage() {
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
             <h3 className="text-sm font-semibold text-slate-800">{t('mp.title')}</h3>
-            <div className="flex gap-2">
-              <button className="btn-ghost !px-3 !py-1 text-xs" onClick={() => setMOpen(true)}>➕ {t('mp.new')}</button>
-              <button className="btn-solar !px-3 !py-1 text-xs" onClick={generateDue} disabled={busy()}>
-                ⚙️ {t('mp.generate')}
-              </button>
-            </div>
+            <Can perm="fsm.workorder.write">
+              <div className="flex gap-2">
+                <button className="btn-ghost !px-3 !py-1 text-xs" onClick={() => setMOpen(true)}>➕ {t('mp.new')}</button>
+                <button className="btn-solar !px-3 !py-1 text-xs" onClick={generateDue} disabled={busy()}>
+                  ⚙️ {t('mp.generate')}
+                </button>
+              </div>
+            </Can>
           </div>
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">

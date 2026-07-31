@@ -8,7 +8,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, StatusBadge, Modal, Field, EmptyRow, LoadError } from '@/components/ui';
+import { PageHeader, StatusBadge, Modal, Field, EmptyRow, LoadError, Can } from '@/components/ui';
 
 interface Customer { id: string; code: string; nameAr: string; nameEn: string }
 interface Opportunity {
@@ -80,9 +80,11 @@ export default function OpportunitiesPage() {
       <PageHeader
         title={t('opps.title')}
         action={
-          <button className="btn-primary" onClick={() => setOpen(true)}>
-            + {t('opps.new')}
-          </button>
+          <Can perm="crm.opportunity.write">
+            <button className="btn-primary" onClick={() => setOpen(true)}>
+              + {t('opps.new')}
+            </button>
+          </Can>
         }
       />
 
@@ -115,13 +117,15 @@ export default function OpportunitiesPage() {
                   </td>
                   <td className="td">{formatMoney(o.estimatedValue, locale)}</td>
                   <td className="td">
-                    <button
-                      className="btn-solar !px-3 !py-1 text-xs"
-                      disabled={busy()}
-                      onClick={() => createProposal(o.id)}
-                    >
-                      {busy(`proposal:${o.id}`) ? t('common.loading') : t('opps.createProposal')}
-                    </button>
+                    <Can perm="commercial.proposal.write">
+                      <button
+                        className="btn-solar !px-3 !py-1 text-xs"
+                        disabled={busy()}
+                        onClick={() => createProposal(o.id)}
+                      >
+                        {busy(`proposal:${o.id}`) ? t('common.loading') : t('opps.createProposal')}
+                      </button>
+                    </Can>
                   </td>
                 </tr>
               ))

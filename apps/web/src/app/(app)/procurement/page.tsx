@@ -8,7 +8,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, Can } from '@/components/ui';
 
 interface Vendor {
   id: string;
@@ -170,12 +170,14 @@ export default function ProcurementPage() {
       <PageHeader
         title={t('po.title')}
         action={
-          <div className="flex gap-2">
-            <button className="btn-ghost text-xs" onClick={() => setVOpen(true)}>➕ {t('po.newVendor')}</button>
-            <button className="btn-primary text-xs" onClick={() => { setPOpen(true); if (pLines.length === 0) addLine(); }}>
-              🛒 {t('po.new')}
-            </button>
-          </div>
+          <Can perm="scm.procurement.write">
+            <div className="flex gap-2">
+              <button className="btn-ghost text-xs" onClick={() => setVOpen(true)}>➕ {t('po.newVendor')}</button>
+              <button className="btn-primary text-xs" onClick={() => { setPOpen(true); if (pLines.length === 0) addLine(); }}>
+                🛒 {t('po.new')}
+              </button>
+            </div>
+          </Can>
         }
       />
       {loadErr && <div className="mb-6"><LoadError message={loadErr} onRetry={load} /></div>}
@@ -262,9 +264,11 @@ export default function ProcurementPage() {
       <div className="card mt-6 overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <h3 className="text-sm font-semibold text-slate-800">{t('stk.title')}</h3>
-          <button className="btn-ghost text-xs" onClick={() => setTOpen(true)}>
-            🔄 {t('stk.transfer')}
-          </button>
+          <Can perm="scm.procurement.write">
+            <button className="btn-ghost text-xs" onClick={() => setTOpen(true)}>
+              🔄 {t('stk.transfer')}
+            </button>
+          </Can>
         </div>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">

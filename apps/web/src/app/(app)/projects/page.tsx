@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, Can } from '@/components/ui';
 
 interface Project {
   id: string;
@@ -66,9 +66,11 @@ export default function ProjectsPage() {
       <PageHeader
         title={t('prj.title')}
         action={
-          <button className="btn-primary text-xs" onClick={() => setOpen(true)}>
-            🏗️ {t('prj.new')}
-          </button>
+          <Can perm="projects.project.write">
+            <button className="btn-primary text-xs" onClick={() => setOpen(true)}>
+              🏗️ {t('prj.new')}
+            </button>
+          </Can>
         }
       />
       {loadErr && <div className="mb-6"><LoadError message={loadErr} onRetry={load} /></div>}

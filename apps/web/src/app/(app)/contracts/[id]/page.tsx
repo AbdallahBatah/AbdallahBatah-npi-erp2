@@ -4,12 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, LoadError, useConfirm, Can } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Milestone {
@@ -38,6 +39,7 @@ interface Contract {
 
 export default function ContractDetailPage() {
   const { t, locale, pick } = useI18n();
+  const { can } = useAuth();
   const enums = useEnums();
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -101,9 +103,11 @@ export default function ContractDetailPage() {
           <div className="flex items-center gap-2">
             <StatusBadge status={contract.status} />
             {contract.status === 'DRAFT' && (
-              <button className="btn-primary text-xs" onClick={activate} disabled={busy()}>
-                {t('contracts.activate')}
-              </button>
+              <Can perm="commercial.contract.write">
+                <button className="btn-primary text-xs" onClick={activate} disabled={busy()}>
+                  {t('contracts.activate')}
+                </button>
+              </Can>
             )}
             <Link href="/contracts" className="btn-ghost text-xs">
               {t('common.back')}
@@ -168,7 +172,9 @@ export default function ContractDetailPage() {
                     {m.verifiedAt ? formatDate(m.verifiedAt, locale) : '—'}
                   </td>
                   <td className="td">
-                    {m.status === 'PENDING' && contract.status === 'ACTIVE' ? (
+                    {/* Verifying is a contract right; raising the invoice from
+                        it is a finance one — two different people in practice. */}
+                    {m.status === 'PENDING' && contract.status === 'ACTIVE' && can('commercial.contract.write') ? (
                       <button
                         className="btn-solar !px-3 !py-1 text-xs"
                         disabled={busy()}
@@ -176,7 +182,7 @@ export default function ContractDetailPage() {
                       >
                         {busy(`verify:${m.id}`) ? t('common.loading') : t('contracts.verify')}
                       </button>
-                    ) : m.status === 'VERIFIED' ? (
+                    ) : m.status === 'VERIFIED' && can('finance.invoice.write') ? (
                       <button
                         className="btn-primary !px-3 !py-1 text-xs"
                         disabled={busy()}

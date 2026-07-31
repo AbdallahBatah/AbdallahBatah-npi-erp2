@@ -9,7 +9,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can } from '@/components/ui';
 
 interface PoLine {
   id: string;
@@ -137,16 +137,18 @@ export default function PoDetailPage() {
         action={
           <div className="flex items-center gap-2">
             <StatusBadge status={po.status} />
-            {po.status === 'DRAFT' && (
-              <button className="btn-primary text-xs" onClick={approve} disabled={busy()}>
-                ✅ {t('po.approve')}
-              </button>
-            )}
-            {receivable && (
-              <button className="btn-solar text-xs" onClick={openReceive} disabled={busy()}>
-                📦 {t('po.receive')}
-              </button>
-            )}
+            <Can perm="scm.procurement.write">
+              {po.status === 'DRAFT' && (
+                <button className="btn-primary text-xs" onClick={approve} disabled={busy()}>
+                  ✅ {t('po.approve')}
+                </button>
+              )}
+              {receivable && (
+                <button className="btn-solar text-xs" onClick={openReceive} disabled={busy()}>
+                  📦 {t('po.receive')}
+                </button>
+              )}
+            </Can>
             <Link href="/procurement" className="btn-ghost text-xs">{t('common.back')}</Link>
           </div>
         }
@@ -251,9 +253,11 @@ export default function PoDetailPage() {
                   </td>
                   <td className="td">
                     {g.vendorBills.length === 0 && (
-                      <button className="btn-primary !px-3 !py-1 text-xs" onClick={() => bill(g.id)} disabled={busy()}>
-                        🧾 {t('po.createBill')}
-                      </button>
+                      <Can perm="scm.procurement.write">
+                        <button className="btn-primary !px-3 !py-1 text-xs" onClick={() => bill(g.id)} disabled={busy()}>
+                          🧾 {t('po.createBill')}
+                        </button>
+                      </Can>
                     )}
                   </td>
                 </tr>

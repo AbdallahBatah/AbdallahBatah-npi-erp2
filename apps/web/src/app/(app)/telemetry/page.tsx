@@ -8,7 +8,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatNumber } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, LoadError, useConfirm, Can } from '@/components/ui';
 
 interface Dash {
   plants: number;
@@ -77,9 +77,11 @@ export default function TelemetryPage() {
       <PageHeader
         title={t('tel.title')}
         action={
-          <button className="btn-primary text-xs" onClick={simulate} disabled={busy() || projects.length === 0}>
-            📡 {busy('simulate') ? t('common.loading') : t('tel.simulate')}
-          </button>
+          <Can perm="fsm.workorder.write">
+            <button className="btn-primary text-xs" onClick={simulate} disabled={busy() || projects.length === 0}>
+              📡 {busy('simulate') ? t('common.loading') : t('tel.simulate')}
+            </button>
+          </Can>
         }
       />
       <p className="mb-4 -mt-4 text-xs text-slate-400">⚠️ {t('tel.simulateHint')}</p>
@@ -199,24 +201,26 @@ export default function TelemetryPage() {
                   </td>
                   <td className="td">
                     <span className="flex gap-1">
-                      {a.status === 'OPEN' && (
-                        <button
-                          className="btn-ghost !px-2 !py-1 text-xs"
-                          disabled={busy()}
-                          onClick={() => run(`ack:${a.id}`, () => api.post(`/telemetry/alerts/${a.id}/acknowledge`, {}))}
-                        >
-                          👁️ {t('tel.ack')}
-                        </button>
-                      )}
-                      {!a.workOrder && a.status !== 'RESOLVED' && (
-                        <button
-                          className="btn-primary !px-2 !py-1 text-xs"
-                          disabled={busy()}
-                          onClick={() => run(`wo:${a.id}`, () => api.post(`/telemetry/alerts/${a.id}/work-order`, {}))}
-                        >
-                          🔧 {t('tel.raiseWo')}
-                        </button>
-                      )}
+                      <Can perm="fsm.workorder.write">
+                        {a.status === 'OPEN' && (
+                          <button
+                            className="btn-ghost !px-2 !py-1 text-xs"
+                            disabled={busy()}
+                            onClick={() => run(`ack:${a.id}`, () => api.post(`/telemetry/alerts/${a.id}/acknowledge`, {}))}
+                          >
+                            👁️ {t('tel.ack')}
+                          </button>
+                        )}
+                        {!a.workOrder && a.status !== 'RESOLVED' && (
+                          <button
+                            className="btn-primary !px-2 !py-1 text-xs"
+                            disabled={busy()}
+                            onClick={() => run(`wo:${a.id}`, () => api.post(`/telemetry/alerts/${a.id}/work-order`, {}))}
+                          >
+                            🔧 {t('tel.raiseWo')}
+                          </button>
+                        )}
+                      </Can>
                     </span>
                   </td>
                 </tr>

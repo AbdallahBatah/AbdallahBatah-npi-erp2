@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can } from '@/components/ui';
 
 interface Serial {
   id: string;
@@ -191,15 +191,18 @@ export default function AssetsPage() {
                   </td>
                   <td className="td">
                     {s.currentState === 'INSTALLED' && (
-                      <button
-                        className="btn-danger !px-3 !py-1 text-xs"
-                        onClick={() => { setCSerial(s); setCDefAr(''); setCDefEn(''); setCOpen(true); }}
-                      >
-                        ⚠️ {t('rma.fault')}
-                      </button>
+                      <Can perm="fsm.workorder.write">
+                        <button
+                          className="btn-danger !px-3 !py-1 text-xs"
+                          onClick={() => { setCSerial(s); setCDefAr(''); setCDefEn(''); setCOpen(true); }}
+                        >
+                          ⚠️ {t('rma.fault')}
+                        </button>
+                      </Can>
                     )}
                     {s.currentState === 'IN_STOCK' && (
-                      moveId === s.id ? (
+                      <Can perm="scm.procurement.write">
+                      {moveId === s.id ? (
                         <span className="flex items-center gap-1">
                           <select className="input !w-36 !py-1 text-xs" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
                             <option value="">{t('ast.transferTo')}…</option>
@@ -223,7 +226,8 @@ export default function AssetsPage() {
                             🔄 {t('ast.transfer')}
                           </button>
                         </span>
-                      )
+                      )}
+                      </Can>
                     )}
                   </td>
                 </tr>
