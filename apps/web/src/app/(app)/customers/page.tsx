@@ -104,7 +104,7 @@ export default function CustomersPage() {
       </div>
 
       {loadErr && !loading ? <LoadError message={loadErr} onRetry={() => load(search.trim() || undefined)} /> : null}
-      <div className="card overflow-hidden">
+      <div className="card table-sticky">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>

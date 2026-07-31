@@ -76,7 +76,7 @@ export default function ItemsPage() {
       />
       {loadErr && !loading ? <div className="mb-6"><LoadError message={loadErr} onRetry={load} /></div> : null}
 
-      <div className="card overflow-hidden">
+      <div className="card table-sticky">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>

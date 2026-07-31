@@ -149,7 +149,7 @@ export default function AssetsPage() {
           ))}
         </select>
       </div>
-      <div className="card overflow-hidden">
+      <div className="card table-sticky">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>

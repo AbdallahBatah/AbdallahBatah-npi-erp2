@@ -247,7 +247,7 @@ export default function LedgerPage() {
       ) : null}
 
       {/* Trial balance */}
-      <div className="card overflow-hidden">
+      <div className="card table-sticky">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
           <div>
             <div className="flex items-center gap-2">

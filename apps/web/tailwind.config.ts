@@ -1,10 +1,35 @@
 import type { Config } from 'tailwindcss';
+import colors from 'tailwindcss/colors';
 
+/**
+ * Typography scale — deliberately capped at four sizes for the whole app:
+ *   text-xs  (11–12px) labels, table headers, hints
+ *   text-sm  (14px)    body, table cells, buttons, inputs   ← the default
+ *   text-lg  (18px)    card/section headings
+ *   text-3xl (30px)    KPI figures only
+ * Anything else is a bug: pick the nearest of these four.
+ *
+ * Font: IBM Plex Sans Arabic (self-hosted via next/font in app/layout.tsx).
+ * Numbers render with Western digits everywhere, including the Arabic UI —
+ * see the `ar-SA-u-nu-latn` pin in lib/format.ts. Both are settled decisions.
+ */
 const config: Config = {
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
+        // ── Semantic roles ──────────────────────────────────────────────
+        // One meaning per colour, applied system-wide. Use these — not raw
+        // emerald/rose/amber/sky — so a status never reads differently on
+        // two screens.
+        //   success → approve, post, save, healthy
+        //   danger  → cancel, delete, reject, loss, overdue
+        //   warning → pending, awaiting action, degraded
+        //   info    → neutral in-progress / informational
+        success: colors.emerald,
+        danger: colors.rose,
+        warning: colors.amber,
+        info: colors.sky,
         // Deep professional teal — energy + trust, distinct from generic blue.
         brand: {
           50: '#f0fdfa',

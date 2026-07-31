@@ -43,7 +43,10 @@ body {
     @apply btn bg-gradient-to-b from-solar-400 to-solar-500 text-white shadow-sm shadow-solar-500/30 hover:from-solar-500 hover:to-solar-600 focus-visible:ring-solar-300;
   }
   .btn-danger {
-    @apply btn border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 focus-visible:ring-rose-300;
+    @apply btn border border-danger-200 bg-danger-50 text-danger-700 hover:bg-danger-100 focus-visible:ring-danger-300;
+  }
+  .btn-success {
+    @apply btn bg-gradient-to-b from-success-600 to-success-700 text-white shadow-sm shadow-success-700/25 hover:from-success-500 hover:to-success-600 focus-visible:ring-success-400;
   }
   .input {
     @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10;
@@ -65,6 +68,30 @@ body {
   }
   .td {
     @apply px-4 py-3 text-sm text-slate-700;
+    /* Fixed-width digits so figures line up column-wise down the table —
+       this is what actually makes vertical comparison possible. */
+    font-variant-numeric: tabular-nums;
+  }
+  /* Numeric cell: in RTL `text-end` puts the figure on the left, which is
+     where the eye expects amounts. Pair with `.th text-end` on the header. */
+  .td-num {
+    @apply px-4 py-3 text-end text-sm text-slate-700;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Zebra striping. Deliberately in @layer components so that any row
+     carrying its own semantic tint (loss rows, inactive users) overrides it —
+     Tailwind utilities outrank component classes. */
+  .card table tbody tr:nth-child(even) {
+    @apply bg-slate-50/50;
+  }
+  /* Long tables: bound the card's height and pin the header while the body
+     scrolls. Opt-in, because a 5-row table should not get an inner scrollbar.
+     The header needs an opaque background or rows show through it. */
+  .table-sticky {
+    @apply max-h-[70vh] overflow-y-auto;
+  }
+  .table-sticky thead th {
+    @apply sticky top-0 z-10 bg-slate-50;
   }
   /* Section heading inside cards. */
   .card-title {
