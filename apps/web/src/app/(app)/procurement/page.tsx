@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
+import { useValidate } from '@/lib/useValidate';
+import { useDraft } from '@/lib/useDraft';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
@@ -152,8 +154,37 @@ export default function ProcurementPage() {
   }
   const poSubtotal = pLines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
 
+  const poValidation = useValidate(
+    { pVendorId, pLines },
+    {
+      pVendorId: (v) => (!v.pVendorId ? t('valid.required') : undefined),
+      pLines: (v) =>
+        v.pLines.length === 0
+          ? t('valid.needLine')
+          : v.pLines.some((l) => !l.qty || l.qty <= 0)
+            ? t('valid.qtyPositive')
+            : v.pLines.some((l) => l.unitPrice < 0)
+              ? t('valid.negative')
+              : undefined,
+    },
+  );
+
+  // A purchase order is typed line by line against a catalogue; a refresh
+  // mid-entry used to lose all of it.
+  const poDraft = useDraft(
+    'po:new',
+    { pVendorId, pProjectId, pLines },
+    (saved) => {
+      setPVendorId(saved.pVendorId);
+      setPProjectId(saved.pProjectId);
+      setPLines(saved.pLines);
+    },
+    { shouldSave: (v) => Boolean(v.pVendorId || v.pProjectId || v.pLines.length > 0) },
+  );
+
   async function createPo() {
-    if (!pVendorId || pLines.length === 0) return;
+    // Was a silent `return` — the button simply did nothing and said nothing.
+    if (!poValidation.validateAll()) return;
     const ok = await act(
       'po',
       () =>
@@ -167,6 +198,8 @@ export default function ProcurementPage() {
     if (ok) {
       setPOpen(false);
       setPVendorId(''); setPProjectId(''); setPLines([]);
+      poValidation.reset();
+      poDraft.clear();
       load();
     }
   }
@@ -383,8 +416,13 @@ export default function ProcurementPage() {
       <Modal open={pOpen} title={t('po.new')} onClose={() => setPOpen(false)}>
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label={t('po.vendor')}>
-              <select className="input" value={pVendorId} onChange={(e) => setPVendorId(e.target.value)}>
+            <Field label={t('po.vendor')} error={poValidation.errorOf('pVendorId')}>
+              <select
+                className="input"
+                value={pVendorId}
+                onChange={(e) => setPVendorId(e.target.value)}
+                onBlur={() => poValidation.onBlur('pVendorId')}
+              >
                 <option value="">—</option>
                 {(vendors ?? []).map((v) => (
                   <option key={v.id} value={v.id}>{v.code} · {pick(v, 'name')}</option>
@@ -406,6 +444,11 @@ export default function ProcurementPage() {
               <span className="label !mb-0">{t('po.lines')}</span>
               <button className="btn-ghost !px-2 !py-1 text-xs" onClick={addLine}>➕ {t('po.addLine')}</button>
             </div>
+            {poValidation.errorOf('pLines') && (
+              <p role="alert" className="mb-2 text-[11px] font-medium text-danger-600">
+                {poValidation.errorOf('pLines')}
+              </p>
+            )}
             <div className="space-y-2">
               {pLines.map((l, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -443,7 +486,9 @@ export default function ProcurementPage() {
 
           <div className="flex justify-end gap-2">
             <button className="btn-ghost text-xs" onClick={() => setPOpen(false)}>{t('common.cancel')}</button>
-            <button className="btn-primary text-xs" onClick={createPo} disabled={busy() || !pVendorId || pLines.length === 0}>
+            {/* Only disabled while in flight: a greyed-out button explains
+                nothing, so let the click land and name what is missing. */}
+            <button className="btn-primary text-xs" onClick={createPo} disabled={busy()}>
               {busy('po') ? t('common.loading') : t('common.create')}
             </button>
           </div>

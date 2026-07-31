@@ -52,6 +52,7 @@ export default function ProposalDetailPage() {
   const [capacityKwp, setCapacityKwp] = useState('');
   const [annualKwh, setAnnualKwh] = useState('');
   const [contractOpen, setContractOpen] = useState(false);
+  const [contractErr, setContractErr] = useState('');
   const [loadErr, setLoadErr] = useState('');
   const { act, busy } = useAct();
   const { confirm, confirmNode } = useConfirm();
@@ -196,6 +197,25 @@ export default function ProposalDetailPage() {
         };
       })
       .filter((m) => m.amount > 0 && m.descriptionEn);
+
+    // A row with a description but no amount (or the reverse) was silently
+    // discarded by the filter above — the contract came out short and nothing
+    // said why. Name it instead of dropping it.
+    const partial = [1, 2, 3].filter((n) => {
+      const desc = String(f.get(`m${n}_ar`) || '').trim() || String(f.get(`m${n}_en`) || '').trim();
+      const amt = Number(f.get(`m${n}_amt`) || 0);
+      return (desc && amt <= 0) || (!desc && amt > 0);
+    });
+    if (partial.length > 0) {
+      setContractErr(t('valid.milestonePartial').replace('{n}', partial.join('، ')));
+      return;
+    }
+    if (milestones.length === 0) {
+      setContractErr(t('valid.needMilestone'));
+      return;
+    }
+    setContractErr('');
+
     let cid: string | null = null;
     const ok = await act('contract', async () => {
       const c = await api.post<{ id: string }>('/contracts', {
@@ -466,6 +486,11 @@ export default function ProposalDetailPage() {
           </div>
 
           <p className="text-xs font-medium text-slate-500">{t('contracts.milestones')}</p>
+          {contractErr && (
+            <p role="alert" className="rounded-lg bg-danger-50 px-3 py-2 text-[11px] font-medium text-danger-700">
+              {contractErr}
+            </p>
+          )}
           {[1, 2, 3].map((n) => (
             <div key={n} className="grid grid-cols-4 gap-2">
               <input name={`m${n}_ar`} className="input" placeholder={`مرحلة ${n} (ع)`} />
