@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { KernelModule } from './common/kernel.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -20,6 +21,7 @@ import { PpaModule } from './modules/ppa/ppa.module';
 import { ReferenceModule } from './modules/reference/reference.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { SearchModule } from './modules/search/search.module';
 
 @Module({
   imports: [
@@ -28,6 +30,7 @@ import { AdminModule } from './modules/admin/admin.module';
     // Global rate limit: 300 requests/min per IP. /auth/login is tightened
     // further with its own @Throttle() in AuthController.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
+    ScheduleModule.forRoot(),
     PrismaModule,
     KernelModule,
     AuthModule,
@@ -42,6 +45,7 @@ import { AdminModule } from './modules/admin/admin.module';
     ReferenceModule,
     PlatformModule,
     AdminModule,
+    SearchModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -161,6 +161,12 @@ model Organization {
   legalNameEn          String
   vatNumber            String?
   crNumber             String?
+  addressAr            String?
+  addressEn            String?
+  phone                String?
+  email                String?
+  website              String?
+  logoDataUrl          String?  @db.Text
   baseCurrency         String   @default("SAR")
   isTenantRoot         Boolean  @default(true)
   parentOrganizationId String?

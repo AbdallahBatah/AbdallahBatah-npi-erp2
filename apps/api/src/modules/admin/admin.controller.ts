@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { CreateRoleDto, CreateUserDto, ResetPasswordDto, UpdateRoleDto, UpdateUserDto } from './dto';
+import { CreateRoleDto, CreateUserDto, ResetPasswordDto, UpdateOrgDto, UpdateRoleDto, UpdateUserDto } from './dto';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
 import { PERMISSIONS, PERMISSION_CATALOG } from '@npi/shared';
@@ -68,5 +68,17 @@ export class AdminController {
   @RequirePermissions(PERMISSIONS.USER_MANAGE)
   deleteRole(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.deleteRole(user, id);
+  }
+
+  @Get('org')
+  @RequirePermissions(PERMISSIONS.ORG_MANAGE)
+  getOrg(@CurrentUser() user: AuthUser) {
+    return this.admin.getOrg(user);
+  }
+
+  @Patch('org')
+  @RequirePermissions(PERMISSIONS.ORG_MANAGE)
+  updateOrg(@CurrentUser() user: AuthUser, @Body() dto: UpdateOrgDto) {
+    return this.admin.updateOrg(user, dto);
   }
 }

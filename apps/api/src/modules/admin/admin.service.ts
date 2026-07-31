@@ -8,7 +8,22 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { ALL_PERMISSIONS, PERMISSIONS } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
-import { CreateRoleDto, CreateUserDto, ResetPasswordDto, UpdateRoleDto, UpdateUserDto } from './dto';
+import { CreateRoleDto, CreateUserDto, ResetPasswordDto, UpdateOrgDto, UpdateRoleDto, UpdateUserDto } from './dto';
+
+const ORG_SELECT = {
+  id: true,
+  legalNameAr: true,
+  legalNameEn: true,
+  vatNumber: true,
+  crNumber: true,
+  addressAr: true,
+  addressEn: true,
+  phone: true,
+  email: true,
+  website: true,
+  logoDataUrl: true,
+  baseCurrency: true,
+} as const;
 
 const USER_SELECT = {
   id: true,
@@ -279,5 +294,47 @@ export class AdminService {
       before: { key: role.key, nameAr: role.nameAr },
     });
     return { ok: true };
+  }
+
+  // ── organization settings ────────────────────────────────────────────────
+
+  getOrg(user: AuthUser) {
+    return this.prisma.organization.findUniqueOrThrow({
+      where: { id: user.organizationId },
+      select: ORG_SELECT,
+    });
+  }
+
+  async updateOrg(user: AuthUser, dto: UpdateOrgDto) {
+    const before = await this.prisma.organization.findUniqueOrThrow({
+      where: { id: user.organizationId },
+      select: ORG_SELECT,
+    });
+    const updated = await this.prisma.organization.update({
+      where: { id: user.organizationId },
+      data: {
+        legalNameAr: dto.legalNameAr?.trim() || undefined,
+        legalNameEn: dto.legalNameEn?.trim() || undefined,
+        vatNumber: dto.vatNumber?.trim(),
+        crNumber: dto.crNumber?.trim(),
+        addressAr: dto.addressAr?.trim(),
+        addressEn: dto.addressEn?.trim(),
+        phone: dto.phone?.trim(),
+        email: dto.email?.trim(),
+        website: dto.website?.trim(),
+        logoDataUrl: dto.logoDataUrl,
+      },
+      select: ORG_SELECT,
+    });
+    await this.audit.record({
+      organizationId: user.organizationId,
+      actorId: user.userId,
+      entityType: 'Organization',
+      entityId: user.organizationId,
+      action: 'UPDATE',
+      before: { ...before, logoDataUrl: before.logoDataUrl ? '[omitted]' : null },
+      after: { ...updated, logoDataUrl: updated.logoDataUrl ? '[omitted]' : null },
+    });
+    return updated;
   }
 }

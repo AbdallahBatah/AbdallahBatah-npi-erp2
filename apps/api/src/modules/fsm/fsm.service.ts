@@ -6,6 +6,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
+import { NotificationService } from '../../common/notification.service';
+import { PERMISSIONS } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 import type {
   AddPartDto,
@@ -26,6 +28,7 @@ export class FsmService {
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationService,
   ) {}
 
   // ── Asset register (AST-01) ───────────────────────────────────────────────
@@ -737,17 +740,28 @@ export class FsmService {
    * plan's nextDueAt forward by its interval. Idempotent per due window —
    * a plan generates at most one WO per call and its due date advances.
    */
-  async generateDue(user: AuthUser) {
+  generateDue(user: AuthUser) {
+    return this.generateDueForOrg(user.organizationId, user.userId);
+  }
+
+  /**
+   * Same generation logic as generateDue, but callable without an
+   * authenticated user — the nightly cron iterates every organization and
+   * calls this per org (actorId null: nothing to exclude from the
+   * "preventive WOs were generated" notification, and the audit trail shows
+   * a system-triggered row rather than impersonating a user).
+   */
+  private async generateDueForOrg(organizationId: string, actorId: string | null) {
     const now = new Date();
     const due = await this.prisma.maintenancePlan.findMany({
-      where: { organizationId: user.organizationId, isActive: true, nextDueAt: { lte: now } },
+      where: { organizationId, isActive: true, nextDueAt: { lte: now } },
       include: { asset: { select: { id: true, projectId: true, nameAr: true, nameEn: true } } },
     });
 
     const generated: string[] = [];
     for (const plan of due) {
       await this.prisma.$transaction(async (tx) => {
-        const code = await this.numbering.next(user.organizationId, 'WORK_ORDER', tx);
+        const code = await this.numbering.next(organizationId, 'WORK_ORDER', tx);
         // Copy the plan's checklist template onto the WO so the technician
         // actually sees the items (mandatory ones enforced at complete()).
         const template =
@@ -760,9 +774,9 @@ export class FsmService {
           mandatory: !!i.mandatory,
           done: false,
         }));
-        await tx.workOrder.create({
+        const wo = await tx.workOrder.create({
           data: {
-            organizationId: user.organizationId,
+            organizationId,
             code,
             titleAr: `صيانة وقائية: ${plan.nameAr}`,
             titleEn: `Preventive maintenance: ${plan.nameEn}`,
@@ -785,8 +799,8 @@ export class FsmService {
         });
         await this.audit.record(
           {
-            organizationId: user.organizationId,
-            actorId: user.userId,
+            organizationId,
+            actorId,
             entityType: 'MaintenancePlan',
             entityId: plan.id,
             action: 'GENERATE_WO',
@@ -794,9 +808,35 @@ export class FsmService {
           },
           tx,
         );
+        // Inside the tx: a generation that rolls back must not ping anyone.
+        await this.notifications.notify(
+          {
+            organizationId,
+            permission: PERMISSIONS.WORKORDER_READ,
+            excludeUserId: actorId,
+            type: 'PLAN_GENERATED_WO',
+            titleAr: `صيانة وقائية مستحقة — أُنشئ أمر العمل ${code} تلقائياً`,
+            titleEn: `Preventive maintenance due — work order ${code} auto-created`,
+            bodyAr: plan.nameAr,
+            bodyEn: plan.nameEn,
+            linkPath: `/workorders/${wo.id}`,
+          },
+          tx,
+        );
         generated.push(code);
       });
     }
     return { generated, count: generated.length };
+  }
+
+  /** Nightly cron entry point (fsm.scheduler.ts): every org, one pass each. */
+  async generateDueForAllOrgs() {
+    const orgs = await this.prisma.organization.findMany({ select: { id: true } });
+    const results: Array<{ organizationId: string; count: number }> = [];
+    for (const org of orgs) {
+      const { count } = await this.generateDueForOrg(org.id, null);
+      if (count > 0) results.push({ organizationId: org.id, count });
+    }
+    return results;
   }
 }

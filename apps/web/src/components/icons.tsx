@@ -175,4 +175,8 @@ const ICON_PATHS: Record<string, string[]> = {
     'M19.07 4.93l-1.41 1.41',
   ],
   'chevron-start': ['M15 18l-6-6 6-6'],
+  search: [
+    'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
+    'M21 21l-4.35-4.35',
+  ],
 };

@@ -48,7 +48,20 @@ export class InvoicesService {
       include: {
         customer: true,
         // Seller identity for the printable fiscal document.
-        organization: { select: { legalNameAr: true, legalNameEn: true, vatNumber: true, crNumber: true } },
+        organization: {
+          select: {
+            legalNameAr: true,
+            legalNameEn: true,
+            vatNumber: true,
+            crNumber: true,
+            addressAr: true,
+            addressEn: true,
+            phone: true,
+            email: true,
+            website: true,
+            logoDataUrl: true,
+          },
+        },
         contract: { select: { id: true, code: true, retentionPct: true } },
         lines: { include: { taxCode: true } },
         eInvoice: true,

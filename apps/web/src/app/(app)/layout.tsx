@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { Icon } from '@/components/icons';
 import { NotificationsBell } from '@/components/notifications';
+import { GlobalSearch } from '@/components/global-search';
 import { ChangePasswordButton } from '@/components/change-password';
 
 interface NavItem {
@@ -254,6 +255,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
+      <GlobalSearch />
       <NotificationsBell />
 
       {/* lg:pt-16 keeps page headers clear of the floating bell. */}

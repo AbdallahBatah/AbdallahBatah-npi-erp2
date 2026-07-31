@@ -106,3 +106,58 @@ export class UpdateRoleDto {
   @IsString({ each: true })
   permissions?: string[];
 }
+
+export class UpdateOrgDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  legalNameAr?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  legalNameEn?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  vatNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  crNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(400)
+  addressAr?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(400)
+  addressEn?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  website?: string;
+
+  /** Data URL (data:image/...;base64,...) capped well under the 1mb JSON body limit. Empty string clears the logo. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(700_000)
+  @Matches(/^(data:image\/(png|jpeg|jpg|webp|svg\+xml);base64,.+)?$/, {
+    message: 'logoDataUrl must be a base64 image data URL',
+  })
+  logoDataUrl?: string;
+}

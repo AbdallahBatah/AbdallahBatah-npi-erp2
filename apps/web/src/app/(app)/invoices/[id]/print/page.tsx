@@ -38,7 +38,18 @@ interface Invoice {
   total: string;
   netPayable: string;
   creditReason?: string | null;
-  organization?: { legalNameAr: string; legalNameEn: string; vatNumber?: string | null; crNumber?: string | null };
+  organization?: {
+    legalNameAr: string;
+    legalNameEn: string;
+    vatNumber?: string | null;
+    crNumber?: string | null;
+    addressAr?: string | null;
+    addressEn?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    website?: string | null;
+    logoDataUrl?: string | null;
+  };
   customer?: { nameAr: string; nameEn: string; vatNumber?: string | null; crNumber?: string | null };
   contract?: { code: string } | null;
   creditedInvoice?: { id: string; code: string } | null;
@@ -99,20 +110,33 @@ export default function InvoicePrintPage() {
       <div className="print-sheet mx-auto max-w-[820px] rounded-xl border border-slate-200 bg-white p-8 shadow-card lg:p-10" dir="rtl">
         {/* Header */}
         <div className="flex items-start justify-between gap-6 border-b-2 border-slate-800 pb-5">
-          <div>
-            <h1 className="text-lg font-extrabold text-slate-900">{org?.legalNameAr}</h1>
-            <p className="text-sm text-slate-500">{org?.legalNameEn}</p>
-            <div className="mt-2 space-y-0.5 text-xs text-slate-600">
-              {org?.vatNumber && (
-                <p>
-                  <L ar={t('print.vatNo')} en="VAT No." />: <span dir="ltr" className="font-mono">{org.vatNumber}</span>
-                </p>
-              )}
-              {org?.crNumber && (
-                <p>
-                  <L ar={t('print.crNo')} en="CR No." />: <span dir="ltr" className="font-mono">{org.crNumber}</span>
-                </p>
-              )}
+          <div className="flex items-start gap-3">
+            {org?.logoDataUrl && (
+              <img src={org.logoDataUrl} alt="" className="h-14 w-14 shrink-0 rounded object-contain" />
+            )}
+            <div>
+              <h1 className="text-lg font-extrabold text-slate-900">{org?.legalNameAr}</h1>
+              <p className="text-sm text-slate-500">{org?.legalNameEn}</p>
+              <div className="mt-2 space-y-0.5 text-xs text-slate-600">
+                {org?.vatNumber && (
+                  <p>
+                    <L ar={t('print.vatNo')} en="VAT No." />: <span dir="ltr" className="font-mono">{org.vatNumber}</span>
+                  </p>
+                )}
+                {org?.crNumber && (
+                  <p>
+                    <L ar={t('print.crNo')} en="CR No." />: <span dir="ltr" className="font-mono">{org.crNumber}</span>
+                  </p>
+                )}
+                {(org?.addressAr || org?.addressEn) && (
+                  <p>{locale === 'ar' ? org?.addressAr || org?.addressEn : org?.addressEn || org?.addressAr}</p>
+                )}
+                {(org?.phone || org?.email) && (
+                  <p dir="ltr" className="font-mono">
+                    {[org?.phone, org?.email].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
           <div className="text-center">

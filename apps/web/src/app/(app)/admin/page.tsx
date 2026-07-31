@@ -7,7 +7,7 @@
  * The API enforces the lockout guards; the UI just avoids offering footguns
  * (no deactivate button on yourself).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
@@ -40,19 +40,37 @@ interface PermMeta {
   labelAr: string;
   labelEn: string;
 }
+interface OrgSettings {
+  legalNameAr: string;
+  legalNameEn: string;
+  vatNumber: string | null;
+  crNumber: string | null;
+  addressAr: string | null;
+  addressEn: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  logoDataUrl: string | null;
+}
 
 export default function AdminPage() {
   const { t, locale } = useI18n();
-  const { user: me } = useAuth();
+  const { user: me, can } = useAuth();
   const { act, busy } = useAct();
   const { confirm, confirmNode } = useConfirm();
   const ar = locale === 'ar';
+  const orgManage = can('admin.org.manage');
 
-  const [tab, setTab] = useState<'users' | 'roles'>('users');
+  const [tab, setTab] = useState<'users' | 'roles' | 'org'>('users');
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [roles, setRoles] = useState<RoleRow[] | null>(null);
   const [catalog, setCatalog] = useState<PermMeta[]>([]);
   const [loadErr, setLoadErr] = useState('');
+
+  // organization settings tab
+  const [org, setOrg] = useState<OrgSettings | null>(null);
+  const [orgErr, setOrgErr] = useState('');
+  const [orgLogoErr, setOrgLogoErr] = useState('');
 
   // user modal state (create + edit share it)
   const [uOpen, setUOpen] = useState(false);
@@ -90,6 +108,55 @@ export default function AdminPage() {
       .catch((e) => setLoadErr(translateError(e, locale)));
   }, [locale]);
   useEffect(load, [load]);
+
+  const loadOrg = useCallback(() => {
+    if (!orgManage) return;
+    setOrgErr('');
+    api
+      .get<OrgSettings>('/admin/org')
+      .then(setOrg)
+      .catch((e) => setOrgErr(translateError(e, locale)));
+  }, [locale, orgManage]);
+  useEffect(loadOrg, [loadOrg]);
+
+  async function submitOrg(ev: FormEvent) {
+    ev.preventDefault();
+    if (!org) return;
+    const ok = await act('org', () =>
+      api.patch<OrgSettings>('/admin/org', {
+        legalNameAr: org.legalNameAr,
+        legalNameEn: org.legalNameEn,
+        vatNumber: org.vatNumber ?? '',
+        crNumber: org.crNumber ?? '',
+        addressAr: org.addressAr ?? '',
+        addressEn: org.addressEn ?? '',
+        phone: org.phone ?? '',
+        email: org.email ?? '',
+        website: org.website ?? '',
+      }),
+    );
+    if (ok) loadOrg();
+  }
+
+  function onLogoFile(file: File | null) {
+    setOrgLogoErr('');
+    if (!file) return;
+    if (file.size > 500 * 1024) {
+      setOrgLogoErr(t('org.logoTooLarge'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result);
+      const ok = await act('orgLogo', () => api.patch<OrgSettings>('/admin/org', { logoDataUrl: dataUrl }));
+      if (ok) loadOrg();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function removeLogo() {
+    if (await act('orgLogo', () => api.patch<OrgSettings>('/admin/org', { logoDataUrl: '' }))) loadOrg();
+  }
 
   const groups = useMemo(() => {
     const map = new Map<string, PermMeta[]>();
@@ -207,18 +274,18 @@ export default function AdminPage() {
             <button className="btn-primary text-xs" onClick={openCreateUser}>
               + {t('adm.user.new')}
             </button>
-          ) : (
+          ) : tab === 'roles' ? (
             <button className="btn-primary text-xs" onClick={openCreateRole}>
               + {t('adm.role.new')}
             </button>
-          )
+          ) : undefined
         }
       />
       <p className="-mt-3 mb-5 text-xs text-slate-500">{t('adm.hint')}</p>
 
       {/* Tabs */}
       <div className="mb-5 flex gap-1 rounded-xl bg-slate-100 p-1 text-sm font-semibold w-fit">
-        {(['users', 'roles'] as const).map((k) => (
+        {(orgManage ? (['users', 'roles', 'org'] as const) : (['users', 'roles'] as const)).map((k) => (
           <button
             key={k}
             onClick={() => setTab(k)}
@@ -231,7 +298,143 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === 'users' ? (
+      {tab === 'org' ? (
+        <div className="card max-w-2xl p-6">
+          {orgErr ? (
+            <LoadError message={orgErr} onRetry={loadOrg} />
+          ) : !org ? (
+            <div className="text-slate-400">{t('common.loading')}</div>
+          ) : (
+            <form className="grid gap-4" onSubmit={submitOrg}>
+              <div className="flex items-center gap-4">
+                {org.logoDataUrl ? (
+                  <img src={org.logoDataUrl} alt="" className="h-16 w-16 rounded-lg border border-slate-200 object-contain" />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-400">
+                    {t('org.logo')}
+                  </div>
+                )}
+                <div>
+                  <div className="flex gap-2">
+                    <label className="btn-ghost cursor-pointer text-xs">
+                      {t('org.logoUpload')}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        className="hidden"
+                        onChange={(e) => onLogoFile(e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    {org.logoDataUrl && (
+                      <button type="button" className="btn-ghost !text-rose-600 text-xs" onClick={removeLogo}>
+                        {t('org.logoRemove')}
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">{t('org.logoHint')}</p>
+                  {orgLogoErr && <p className="mt-1 text-[11px] text-rose-600">{orgLogoErr}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-600">{t('org.legalNameAr')}</span>
+                  <input
+                    className="input"
+                    required
+                    value={org.legalNameAr}
+                    onChange={(e) => setOrg({ ...org, legalNameAr: e.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-600">{t('org.legalNameEn')}</span>
+                  <input
+                    className="input"
+                    dir="ltr"
+                    value={org.legalNameEn}
+                    onChange={(e) => setOrg({ ...org, legalNameEn: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-600">{t('org.vatNumber')}</span>
+                  <input
+                    className="input font-mono"
+                    dir="ltr"
+                    value={org.vatNumber ?? ''}
+                    onChange={(e) => setOrg({ ...org, vatNumber: e.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-600">{t('org.crNumber')}</span>
+                  <input
+                    className="input font-mono"
+                    dir="ltr"
+                    value={org.crNumber ?? ''}
+                    onChange={(e) => setOrg({ ...org, crNumber: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-600">{t('org.addressAr')}</span>
+                  <input
+                    className="input"
+                    value={org.addressAr ?? ''}
+                    onChange={(e) => setOrg({ ...org, addressAr: e.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-600">{t('org.addressEn')}</span>
+                  <input
+                    className="input"
+                    dir="ltr"
+                    value={org.addressEn ?? ''}
+                    onChange={(e) => setOrg({ ...org, addressEn: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-600">{t('org.phone')}</span>
+                  <input
+                    className="input"
+                    dir="ltr"
+                    value={org.phone ?? ''}
+                    onChange={(e) => setOrg({ ...org, phone: e.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-600">{t('org.email')}</span>
+                  <input
+                    type="email"
+                    className="input"
+                    dir="ltr"
+                    value={org.email ?? ''}
+                    onChange={(e) => setOrg({ ...org, email: e.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-600">{t('org.website')}</span>
+                  <input
+                    className="input"
+                    dir="ltr"
+                    value={org.website ?? ''}
+                    onChange={(e) => setOrg({ ...org, website: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              <div className="flex justify-end">
+                <button type="submit" className="btn-primary" disabled={busy()}>
+                  {busy('org') ? t('common.loading') : t('common.save')}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      ) : tab === 'users' ? (
         <div className="card overflow-hidden">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">

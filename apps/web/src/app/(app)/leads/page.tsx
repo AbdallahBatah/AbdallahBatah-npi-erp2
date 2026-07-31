@@ -57,6 +57,12 @@ export default function LeadsPage() {
     return () => clearTimeout(h);
   }, [load, search]);
 
+  // Deep link from global search (?q=...).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (q) setSearch(q);
+  }, []);
+
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);

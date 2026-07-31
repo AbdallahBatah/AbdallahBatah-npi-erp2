@@ -44,6 +44,12 @@ export default function CustomersPage() {
   );
   useEffect(() => load(), [load]);
 
+  // Deep link from global search (?q=...).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (q) setSearch(q);
+  }, []);
+
   // Debounced server-side search.
   useEffect(() => {
     const h = setTimeout(() => load(search.trim() || undefined), 350);
