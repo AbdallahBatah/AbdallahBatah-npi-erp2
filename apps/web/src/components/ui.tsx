@@ -23,6 +23,61 @@ export function PageHeader({
   );
 }
 
+export interface TabDef {
+  /** Stable key — also what `value`/`onChange` carry. */
+  key: string;
+  label: string;
+  /** Optional count shown as a pill (hidden when 0/undefined). */
+  count?: number;
+}
+
+/**
+ * Section tabs for detail screens that would otherwise stack a dozen cards
+ * on one page. Generalises the pill row `/admin` has used since M2 — same
+ * look, so the two screens stay consistent.
+ *
+ * Controlled on purpose: the parent owns the active key, which lets a page
+ * jump to a tab (e.g. after an action) without reaching inside this component.
+ */
+export function Tabs({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: TabDef[];
+  value: string;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <div className="mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 text-sm font-semibold [scrollbar-width:none]">
+      {tabs.map((tb) => (
+        <button
+          key={tb.key}
+          type="button"
+          onClick={() => onChange(tb.key)}
+          aria-current={value === tb.key ? 'page' : undefined}
+          className={`flex shrink-0 items-center gap-2 rounded-lg px-4 py-1.5 transition ${
+            value === tb.key
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          {tb.label}
+          {!!tb.count && (
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                value === tb.key ? 'bg-brand-50 text-brand-700' : 'bg-slate-200 text-slate-500'
+              }`}
+            >
+              {tb.count}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Bilingual status labels + tinted dot-badges for every enum status in the
  * system, so raw keys like CLOSED never leak into the UI.

@@ -9,7 +9,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Wbs {
@@ -100,6 +100,7 @@ export default function ProjectDetailPage() {
   const id = params.id;
   const [p, setP] = useState<Project | null>(null);
   const [loadErr, setLoadErr] = useState('');
+  const [tab, setTab] = useState('wbs');
   const { act, busy } = useAct();
   const { confirm, confirmNode } = useConfirm();
   // Change order modal
@@ -277,7 +278,24 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* The cost figures above stay pinned — they are the project's vital
+          signs. Everything below is tabbed: this page used to stack twelve
+          cards on one scroll. */}
+      <div className="mt-6">
+        <Tabs
+          tabs={[
+            { key: 'wbs', label: t('prj.wbs'), count: p.wbsElements.length },
+            { key: 'cost', label: t('prj.tab.cost'), count: p.purchaseOrders.length + p.costEntries.length },
+            { key: 'subs', label: t('prj.tab.subs'), count: p.changeOrders.length + p.subcontracts.length },
+            { key: 'files', label: t('att.title') },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </div>
+
+      {tab === 'wbs' && (
+      <div className="grid grid-cols-1 gap-6">
         {/* WBS */}
         <div className="card overflow-hidden">
           <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
@@ -310,7 +328,11 @@ export default function ProjectDetailPage() {
             </tbody>
           </table>
         </div>
+      </div>
+      )}
 
+      {tab === 'cost' && (
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* POs */}
         <div className="card overflow-hidden">
           <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
@@ -347,9 +369,7 @@ export default function ProjectDetailPage() {
             </tbody>
           </table>
         </div>
-      </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Cost ledger */}
         <div className="card overflow-hidden">
           <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
@@ -410,9 +430,12 @@ export default function ProjectDetailPage() {
           </table>
         </div>
       </div>
+      )}
 
+      {tab === 'subs' && (
+      <>
       {/* PRJ-06: change orders */}
-      <div className="card mt-6 overflow-hidden">
+      <div className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <div>
             <h3 className="text-sm font-semibold text-slate-800">{t('co.title')}</h3>
@@ -545,6 +568,10 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {tab === 'files' && <AttachmentsCard entityType="PROJECT" entityId={id} />}
 
       {/* Change order modal */}
       <Modal open={coOpen} title={t('co.new')} onClose={() => setCoOpen(false)}>
@@ -617,10 +644,6 @@ export default function ProjectDetailPage() {
           </button>
         </div>
       </Modal>
-
-      <div className="mt-6">
-        <AttachmentsCard entityType="PROJECT" entityId={id} />
-      </div>
     </div>
   );
 }
