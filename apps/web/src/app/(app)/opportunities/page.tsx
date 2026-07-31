@@ -46,6 +46,11 @@ export default function OpportunitiesPage() {
 
   useEffect(load, [load]);
 
+  // Opened from a dashboard quick action.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === '1') setOpen(true);
+  }, []);
+
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);

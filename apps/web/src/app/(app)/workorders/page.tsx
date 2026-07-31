@@ -99,6 +99,11 @@ export default function WorkOrdersPage() {
   }, [locale]);
   useEffect(load, [load]);
 
+  // Opened from a dashboard quick action.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === '1') setWOpen(true);
+  }, []);
+
   async function createWo() {
     const ok = await act(
       'wo',

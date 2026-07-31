@@ -62,6 +62,10 @@ export default function LeadsPage() {
     const q = new URLSearchParams(window.location.search).get('q');
     if (q) setSearch(q);
   }, []);
+  // Opened from a dashboard quick action.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === '1') setOpen(true);
+  }, []);
 
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

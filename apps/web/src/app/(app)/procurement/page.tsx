@@ -91,6 +91,12 @@ export default function ProcurementPage() {
   }, [locale]);
   useEffect(load, [load]);
 
+  // Opened from a dashboard quick action.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === '1') { setPOpen(true); if (pLines.length === 0) addLine(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function transfer() {
     const ok = await act('transfer', () =>
       api.post('/procurement/transfers', {

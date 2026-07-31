@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { formatMoney, formatNumber } from '@/lib/format';
 import { PageHeader } from '@/components/ui';
+import { QuickActions } from '@/components/quick-actions';
 
 interface Summary {
   openLeads: number;
@@ -77,6 +78,8 @@ export default function DashboardPage() {
   return (
     <div>
       <PageHeader title={t('dash.title')} subtitle={t('app.tagline')} />
+
+      <QuickActions />
 
       {/* Row 1: sales KPIs */}
       {kpis.length > 0 && (
