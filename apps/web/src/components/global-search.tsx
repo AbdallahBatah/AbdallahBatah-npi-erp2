@@ -6,10 +6,14 @@
  * and each group's label reuses the sidebar's nav.* strings — one source of
  * truth for what a "customer"/"contract"/etc. is called in each locale.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+// Aliased: an unqualified `KeyboardEvent` import would shadow the DOM type
+// that the document-level Ctrl+K listener below relies on.
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
+import { NAV_ITEMS } from '@/lib/nav';
 import { Icon } from './icons';
 
 interface Hit {
@@ -22,8 +26,10 @@ interface Hit {
 }
 type Results = Record<string, Hit[]>;
 
-const GROUP_ORDER = ['customers', 'leads', 'contracts', 'invoices', 'projects', 'workOrders', 'serialUnits'];
+/** `commands` is client-side (screens), the rest come from the API. */
+const GROUP_ORDER = ['commands', 'customers', 'leads', 'contracts', 'invoices', 'projects', 'workOrders', 'serialUnits'];
 const GROUP_NAV_KEY: Record<string, string> = {
+  commands: 'search.commands',
   customers: 'nav.customers',
   leads: 'nav.leads',
   contracts: 'nav.contracts',
@@ -33,6 +39,7 @@ const GROUP_NAV_KEY: Record<string, string> = {
   serialUnits: 'nav.assets',
 };
 const GROUP_ICON: Record<string, string> = {
+  commands: 'search',
   customers: 'users',
   leads: 'target',
   contracts: 'file-signature',
@@ -44,19 +51,43 @@ const GROUP_ICON: Record<string, string> = {
 
 export function GlobalSearch() {
   const { t, locale } = useI18n();
+  const { can } = useAuth();
   const router = useRouter();
   const ar = locale === 'ar';
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Results>({});
   const [loading, setLoading] = useState(false);
+  const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const close = useCallback(() => {
     setOpen(false);
     setQ('');
     setResults({});
+    setActive(0);
   }, []);
+
+  /**
+   * Screens the caller can open, matched by their translated label — this is
+   * the "type a function name and go there" half of the search. Purely
+   * client-side: the nav map is already in the bundle, so it costs no request
+   * and answers before the debounced API call returns.
+   */
+  const commandHits = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (needle.length < 2) return [];
+    return NAV_ITEMS.filter((i) => !i.perm || can(i.perm))
+      .filter((i) => t(i.key).toLowerCase().includes(needle))
+      .map<Hit>((i) => ({
+        type: 'commands',
+        id: `cmd:${i.href}`,
+        labelAr: t(i.key),
+        labelEn: t(i.key),
+        sublabel: i.href,
+        href: i.href,
+      }));
+  }, [q, can, t]);
 
   // Ctrl+K / Cmd+K opens from anywhere; Esc closes.
   useEffect(() => {
@@ -98,8 +129,28 @@ export function GlobalSearch() {
     router.push(hit.href);
   }
 
-  const groups = GROUP_ORDER.map((g) => [g, results[g] ?? []] as const).filter(([, rows]) => rows.length > 0);
-  const totalHits = groups.reduce((s, [, rows]) => s + rows.length, 0);
+  /** ↑/↓ walk the flat result list, Enter opens the highlighted row. */
+  function onInputKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (totalHits === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActive((i) => (i + 1) % totalHits);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActive((i) => (i - 1 + totalHits) % totalHits);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const hit = flat[active];
+      if (hit) onPick(hit);
+    }
+  }
+
+  const groups = GROUP_ORDER.map(
+    (g) => [g, g === 'commands' ? commandHits : results[g] ?? []] as const,
+  ).filter(([, rows]) => rows.length > 0);
+  // Flat, in display order — what the arrow keys walk over.
+  const flat = groups.flatMap(([, rows]) => rows);
+  const totalHits = flat.length;
 
   return (
     <>
@@ -129,7 +180,11 @@ export function GlobalSearch() {
               <input
                 ref={inputRef}
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setActive(0);
+                }}
+                onKeyDown={onInputKeyDown}
                 placeholder={t('search.placeholder')}
                 className="flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-slate-400"
               />
@@ -149,11 +204,17 @@ export function GlobalSearch() {
                 groups.map(([type, rows]) => (
                   <div key={type} className="py-2">
                     <p className="px-4 pb-1 text-[11px] font-bold text-slate-400">{t(GROUP_NAV_KEY[type])}</p>
-                    {rows.map((hit) => (
+                    {rows.map((hit) => {
+                      const idx = flat.indexOf(hit);
+                      return (
                       <button
                         key={hit.id}
+                        data-active={idx === active || undefined}
+                        onMouseEnter={() => setActive(idx)}
                         onClick={() => onPick(hit)}
-                        className="flex w-full items-center gap-3 px-4 py-2 text-start transition hover:bg-slate-50"
+                        className={`flex w-full items-center gap-3 px-4 py-2 text-start transition ${
+                          idx === active ? 'bg-brand-50' : 'hover:bg-slate-50'
+                        }`}
                       >
                         <Icon name={GROUP_ICON[type]} className="h-4 w-4 shrink-0 text-slate-400" />
                         <span className="min-w-0 flex-1">
@@ -165,7 +226,8 @@ export function GlobalSearch() {
                           )}
                         </span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 ))
               )}
