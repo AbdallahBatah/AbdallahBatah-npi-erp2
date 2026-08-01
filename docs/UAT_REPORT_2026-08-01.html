@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تقرير اختبار نظام NPI ERP — 2026-08-01</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --card:#fff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --brand:#0f766e; --ok:#059669; --fail:#e11d48; --warn:#d97706; --info:#0284c7; --skip:#94a3b8;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Segoe UI Arabic",Roboto,"Helvetica Neue",Arial,sans-serif;
+    line-height:1.75; font-size:15px;
+  }
+  .wrap{max-width:1100px;margin:0 auto;padding:32px 20px 64px}
+  header.top{background:linear-gradient(135deg,#0b111d,#134e4a);color:#fff;border-radius:16px;padding:28px 30px;margin-bottom:26px}
+  header.top h1{margin:0 0 6px;font-size:24px;font-weight:800}
+  header.top p{margin:0;color:#94a3b8;font-size:13px}
+  h2{font-size:19px;margin:34px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:15px;margin:22px 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));margin-bottom:20px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;text-align:center}
+  .kpi .n{font-size:30px;font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums}
+  .kpi .l{font-size:12px;color:var(--muted);margin-top:4px}
+  .verdict{border-radius:14px;padding:18px 20px;margin-bottom:22px;font-weight:700;border:1px solid}
+  .v-cond{background:#fffbeb;border-color:#fde68a;color:#92400e}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f8fafc;font-weight:700;color:#475569;font-size:12.5px;white-space:nowrap}
+  td.num,th.num{font-variant-numeric:tabular-nums}
+  tbody tr:nth-child(even){background:#fafbfc}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+  .tag{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:700;white-space:nowrap}
+  .t-ok{background:#ecfdf5;color:var(--ok)} .t-fail{background:#fff1f2;color:var(--fail)}
+  .t-skip{background:#f1f5f9;color:var(--skip)} .t-block{background:#eff6ff;color:var(--info)}
+  .s1{background:#fff1f2;color:#be123c} .s2{background:#fff7ed;color:#c2410c}
+  .s3{background:#fefce8;color:#a16207} .s4{background:#f8fafc;color:#64748b}
+  code{background:#f1f5f9;border-radius:5px;padding:1px 6px;font-size:12.5px;direction:ltr;display:inline-block}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .filters button{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:7px 14px;
+    font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:.15s}
+  .filters button:hover{border-color:#cbd5e1;color:var(--ink)}
+  .filters button[aria-pressed="true"]{background:var(--brand);border-color:var(--brand);color:#fff}
+  .defect{border-inline-start:4px solid var(--fail);background:var(--card);border-radius:12px;
+    border:1px solid var(--line);padding:16px 18px;margin-bottom:14px}
+  .defect.s2{border-inline-start-color:#c2410c} .defect.s3{border-inline-start-color:#a16207}
+  .defect h3{margin-top:0}
+  ol,ul{margin:6px 0;padding-inline-start:22px}
+  li{margin:3px 0}
+  .muted{color:var(--muted);font-size:13px}
+  .note{background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;padding:12px 15px;font-size:13.5px;margin:12px 0}
+  footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+  @media print{body{background:#fff}.filters{display:none}.card,.kpi,.scroll{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>تقرير اختبار نظام NPI ERP</h1>
+  <p>اختبار دخاني للتدفقات الحرجة (Smoke Test) — بيئة التطوير المحلية — 1 أغسطس 2026 — الإصدار <code>c02bed1</code></p>
+</header>
+
+<h2>1. الملخص التنفيذي</h2>
+
+<div class="grid">
+  <div class="kpi"><div class="n" style="color:var(--ok)">17</div><div class="l">نجحت</div></div>
+  <div class="kpi"><div class="n" style="color:var(--fail)">2</div><div class="l">فشلت</div></div>
+  <div class="kpi"><div class="n" style="color:var(--skip)">1</div><div class="l">لم تُنفَّذ</div></div>
+  <div class="kpi"><div class="n" style="color:var(--brand)">89.5%</div><div class="l">نسبة النجاح<br><span class="muted">(من 19 حالة نُفِّذت)</span></div></div>
+</div>
+
+<div class="grid">
+  <div class="kpi"><div class="n" style="color:#be123c">0</div><div class="l">🔴 حرج (S1)</div></div>
+  <div class="kpi"><div class="n" style="color:#c2410c">1</div><div class="l">🟠 مرتفع (S2)</div></div>
+  <div class="kpi"><div class="n" style="color:#a16207">1</div><div class="l">🟡 متوسط (S3)</div></div>
+  <div class="kpi"><div class="n" style="color:#64748b">0</div><div class="l">⚪ منخفض (S4)</div></div>
+</div>
+
+<div class="verdict v-cond">
+  توصية الإطلاق: <span style="font-size:18px">جاهز بتحفظ</span>
+  <div style="font-weight:400;margin-top:8px;font-size:14px;line-height:1.8">
+    لا يوجد أي عيب حرج (S1) مفتوح: الدفتر المحاسبي متوازن على مستوى كل قيد وعلى مستوى الميزان،
+    واحتساب الضريبة صحيح حسابياً، وسلسلة الفوترة الإلكترونية سليمة، وحدود الصلاحيات تُنفَّذ على الخادم لا على الواجهة فقط.
+    التحفّظ الوحيد هو عيب مرتفع (S2) في ضبط دورة التعاقد: النظام يقبل إنشاء عقد من مراجعة عرض سعر
+    <strong>غير مقبولة</strong>، ما يسمح بالتعاقد على سعر لم يُعتمد. يُنصح بإغلاقه قبل تسليم النظام لمستخدمين حقيقيين،
+    وهو إصلاح محدود النطاق (شرط واحد في <code>contracts.service.ts</code>).
+  </div>
+</div>
+
+<h2>2. نطاق الاختبار والبيئة</h2>
+
+<div class="card">
+  <table>
+    <tbody>
+      <tr><th style="width:190px">نوع الاختبار</th><td>اختبار دخاني (Smoke) للتدفقات الحرجة، بثلاث طبقات لكل تدفق: المسار السعيد، الحالات الحدية، وحالات الخطأ</td></tr>
+      <tr><th>البيئة</th><td>بيئة تطوير محلية — الخادم <code>localhost:4000/api</code>، الواجهة <code>localhost:3001</code>، PostgreSQL 16.6 محلي. لم يُمَس خادم العرض الحي.</td></tr>
+      <tr><th>الإصدار</th><td>الفرع <code>main</code> عند <code>c02bed1</code></td></tr>
+      <tr><th>الوحدات المشمولة</th><td>المشتريات (PUR)، المخزون (INV)، المبيعات ودورة التعاقد (SAL)، المحاسبة (ACC)، الصلاحيات (SEC)، التقارير (REP)</td></tr>
+      <tr><th>وحدات خارج النطاق</th><td>الموارد البشرية والرواتب — <strong>غير موجودة في المنتج</strong> (لا نموذج <code>Employee</code> أو <code>Payroll</code> في المخطط)</td></tr>
+      <tr><th>أسلوب التنفيذ</th><td>تنفيذ فعلي عبر HTTP على النظام الحي — كل نتيجة في هذا التقرير مأخوذة من استجابة حقيقية، ولا توجد نتيجة مُفترضة</td></tr>
+      <tr><th>نقطة استرجاع</th><td>أُخذت نسخة احتياطية كاملة قبل التنفيذ (<code>pre-uat.dump</code>، 252 كيلوبايت)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="note">
+  <strong>بيانات الاختبار المُنشأة (سياق سعودي):</strong> مورد «شركة الأفق للتوريدات» برقم ضريبي 15 خانة
+  <code>311234567890003</code>، عميل محتمل «مصنع الرياض للبلاستيك» بقدرة 250 kWp، عقد EPC بمستخلصين ونسبة
+  احتجاز 5%. جميع السجلات أُنشئت في قاعدة بيانات التطوير فقط، وهي مذكورة بالتفصيل في القسم 5.
+</div>
+
+<h2>3. مصفوفة نتائج حالات الاختبار</h2>
+
+<div class="filters">
+  <button data-f="all" aria-pressed="true">الكل (20)</button>
+  <button data-f="ok" aria-pressed="false">✅ نجحت (17)</button>
+  <button data-f="fail" aria-pressed="false">❌ فشلت (2)</button>
+  <button data-f="skip" aria-pressed="false">⬜ لم تُنفَّذ (1)</button>
+</div>
+
+<div class="scroll">
+<table id="matrix">
+  <thead>
+    <tr>
+      <th style="width:105px">المعرف</th>
+      <th style="width:230px">العنوان</th>
+      <th style="width:70px">الحكم</th>
+      <th>النتيجة الفعلية (من استجابة النظام)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr data-v="ok"><td><code>TC-PUR-001</code></td><td>إنشاء أمر شراء كامل (مورد + 3 أصناف + ضريبة)</td><td><span class="tag t-ok">✅ نجح</span></td><td><code>PO-00005</code>: أساس <b>2,202.18</b> + ضريبة 15% <b>330.33</b> = إجمالي <b>2,532.51</b> — مطابق للحساب اليدوي إلى خانتين عشريتين</td></tr>
+    <tr data-v="ok"><td><code>TC-PUR-002</code></td><td>استلام جزئي (5 من 10)</td><td><span class="tag t-ok">✅ نجح</span></td><td>حالة الأمر أصبحت <code>PARTIALLY_RECEIVED</code>، ورصيد <code>WH-MAIN</code> زاد من 0 إلى 5 — لا زيادة عن المستلم فعلياً</td></tr>
+    <tr data-v="ok"><td><code>TC-PUR-003</code></td><td>استلام يتجاوز الكمية المطلوبة</td><td><span class="tag t-ok">✅ نجح</span></td><td>رُفض بـ 400: <code>Line BOS-KIT: receiving 999 exceeds remaining 5</code> — لم يمر صامتاً</td></tr>
+    <tr data-v="ok"><td><code>TC-PUR-004</code></td><td>فاتورة مورد ← القيد المحاسبي</td><td><span class="tag t-ok">✅ نجح</span></td><td><code>BILL-00003</code> ولّد قيداً متوازناً: <b>1300</b> (تحت التنفيذ) مدين 500، <b>1400</b> (ضريبة مدخلات) مدين 75، <b>2000</b> (ذمم موردين) دائن 575</td></tr>
+    <tr data-v="fail"><td><code>TC-PUR-007</code></td><td>مورد برقم ضريبي غير صحيح (14 خانة)</td><td><span class="tag t-fail">❌ فشل</span> <span class="tag s3">S3</span></td><td>قُبل المورد (<code>VEN-00002</code>) برقم ضريبي من 14 خانة. لا يوجد تحقق من الصيغة — راجع العيب <b>D-02</b></td></tr>
+    <tr data-v="ok"><td><code>TC-INV-001</code></td><td>تحويل كمية بين مستودعين</td><td><span class="tag t-ok">✅ نجح</span></td><td><code>BOS-KIT</code>: <code>WH-MAIN</code> 5←3 و<code>YARD-1</code> 0←2؛ المجموع بقي <b>5</b> — لا ازدواج ولا فقد</td></tr>
+    <tr data-v="ok"><td><code>TC-INV-005</code></td><td>تحويل كمية أكبر من الرصيد</td><td><span class="tag t-ok">✅ نجح</span></td><td>رُفض بـ 400: <code>Insufficient stock at source: have 3, moving 999999</code> — لا رصيد سالب صامت</td></tr>
+    <tr data-v="ok"><td><code>TC-SAL-001</code></td><td>دورة البيع الكاملة: عميل محتمل ← عقد ← فاتورة</td><td><span class="tag t-ok">✅ نجح</span></td><td><code>LEAD-00009</code> ← فرصة ← <code>PRP-00008</code> (أساس 120,000 + هامش 18%) ← <code>CTR-00007</code> نوع EPC بقيمة <b>141,600</b> ← مستخلص «مفوتر» ← <code>INV-00007</code> بإجمالي <b>57,500</b>. الأرقام تتوارث بلا إعادة إدخال</td></tr>
+    <tr data-v="fail"><td><code>TC-SAL-002</code></td><td>إنشاء عقد من مراجعة عرض غير مقبولة</td><td><span class="tag t-fail">❌ فشل</span> <span class="tag s2">S2</span></td><td>أُنشئ <code>CTR-00008</code> بحالة 201 من مراجعة حالتها <code>DRAFT</code> و<code>isWinning=false</code> — راجع العيب <b>D-01</b></td></tr>
+    <tr data-v="ok"><td><code>TC-SAL-004</code></td><td>الفاتورة الإلكترونية (ZATCA) ومحتوى رمز QR</td><td><span class="tag t-ok">✅ نجح</span></td><td>الفاتورة أصبحت <code>CLEARED</code>. فُكّ ترميز QR بصيغة TLV فظهرت الوسوم الخمسة كاملة: البائع «شركة NPI للطاقة الشمسية»، الرقم الضريبي <code>300000000000003</code>، الطابع الزمني، الإجمالي <b>57500.00</b>، الضريبة <b>7500.00</b> — والقيمتان تطابقان الفاتورة</td></tr>
+    <tr data-v="ok"><td><code>TC-SAL-005</code></td><td>إشعار دائن (مرتجع كامل) يعكس القيد والضريبة</td><td><span class="tag t-ok">✅ نجح</span></td><td><code>CN-00003</code> بإجمالي 57,500 مرتبط بالأصل. القيد <strong>معاكس تماماً</strong>: 4000 مدين 50,000 · 2100 مدين 7,500 · 1100 دائن 55,000 · 1200 دائن 2,500 — أي أن الإيراد وضريبة المخرجات <em>والاحتجاز</em> عُكست جميعاً. الفاتورة الأصل أصبحت <code>CANCELLED</code>، وللإشعار بصمته وموضعه في سلسلة PIH</td></tr>
+    <tr data-v="ok"><td><code>TC-ACC-001</code></td><td>كل قيد آلي متوازن (مدين = دائن)</td><td><span class="tag t-ok">✅ نجح</span></td><td>فُحص <b>31</b> قيداً بعد تنفيذ كل العمليات — لا يوجد قيد أعرج واحد</td></tr>
+    <tr data-v="ok"><td><code>TC-ACC-002</code></td><td>ميزان المراجعة بعد يوم عمليات كامل</td><td><span class="tag t-ok">✅ نجح</span></td><td>مدين <b>7,156,832.97</b> = دائن <b>7,156,832.97</b>، و<code>isBalanced=true</code>، ومجموع تفاصيل الحسابات يساوي المجاميع</td></tr>
+    <tr data-v="ok"><td><code>TC-ACC-003</code></td><td>إقرار ضريبة القيمة المضافة للفترة</td><td><span class="tag t-ok">✅ نجح</span></td><td>مبيعات خاضعة 1,959,059.39 ← مخرجات <b>293,858.91</b>؛ مشتريات خاضعة 233,580 ← مدخلات <b>35,037</b>؛ الصافي 258,821.91 والنظام يعرض <b>258,821.91</b>. كما تحقّقنا أن كل ضريبة = 15% من وعائها</td></tr>
+    <tr data-v="ok"><td><code>TC-ACC-004</code></td><td>إقفال الفترة ثم محاولة الترحيل فيها</td><td><span class="tag t-ok">✅ نجح</span></td><td>أُقفلت الفترة <code>2026-08</code> (التي تغطي تاريخ اليوم فعلياً) ← رُفض ترحيل قيد الاعتراف بـ 400 <code>Accounting period 2026-08 is closed</code> ← أُعيد فتح الفترة بنجاح</td></tr>
+    <tr data-v="skip"><td><code>TC-HR-001</code></td><td>مسير رواتب موظف سعودي واحتساب GOSI</td><td><span class="tag t-skip">⬜ لم يُنفَّذ</span></td><td><strong>الوحدة غير موجودة في المنتج.</strong> لا يوجد نموذج <code>Employee</code> أو <code>Payroll</code> أو <code>Salary</code> في <code>schema.prisma</code>، ولا مسار API للرواتب. النظام ERP رأسي للطاقة الشمسية (تنفيذ EPC + تشغيل وصيانة + اتفاقيات شراء الطاقة). لم تُكتب لهذه الحالة نتيجة نجاح أو فشل</td></tr>
+    <tr data-v="ok"><td><code>TC-SEC-001</code></td><td>مستخدم بلا صلاحية مالية يفتح الوحدة المالية</td><td><span class="tag t-ok">✅ نجح</span></td><td>حساب مهندس الموقع: ميزان المراجعة <b>403</b>، إدارة المستخدمين <b>403</b> — المنع على الخادم لا على الواجهة فقط</td></tr>
+    <tr data-v="ok"><td><code>TC-SEC-002</code></td><td>إجراء مالي على مستند من مستخدم غير مخوّل</td><td><span class="tag t-ok">✅ نجح</span></td><td>محاولة تسجيل دفعة على الفاتورة بحساب المهندس رُفضت بـ <b>403</b> <code>Insufficient permissions</code></td></tr>
+    <tr data-v="ok"><td><code>TC-REP-001</code></td><td>مجموع التقرير = المجموع الفعلي</td><td><span class="tag t-ok">✅ نجح</span></td><td>ملخص لوحة المالية يعرض 6 فواتير صادرة، والعدّ المباشر من قائمة الفواتير 6</td></tr>
+    <tr data-v="ok"><td><code>TC-REP-003</code></td><td>تقرير بتاريخ نهاية قبل تاريخ البداية</td><td><span class="tag t-ok">✅ نجح</span></td><td>رُفض بـ 400 برسالة لائقة <code>Period end is before its start</code> — لا انهيار 500</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>4. سجل العيوب المفصل</h2>
+
+<div class="defect s2">
+  <h3>D-01 <span class="tag s2">🟠 مرتفع (S2)</span> — يمكن إنشاء عقد من مراجعة عرض سعر غير مقبولة</h3>
+  <p><strong>الوصف:</strong> دورة العمل التجارية هي: عرض سعر ← مراجعة ← <em>قبول</em> ← عقد. لكن الخادم لا يشترط
+  أن تكون المراجعة مقبولة عند إنشاء العقد؛ يكتفي بالتحقق من وجودها ومن عدم ارتباطها بعقد سابق. النتيجة أن
+  النظام يسمح بالتعاقد على سعر لم يُعتمد، أو على مراجعة مسحوبة/قديمة بعد استبدالها بأخرى.</p>
+  <p><strong>خطوات التكرار:</strong></p>
+  <ol>
+    <li>سجّل الدخول بحساب له صلاحية <code>commercial.contract.write</code>.</li>
+    <li>أنشئ عميلاً محتملاً وحوّله إلى فرصة، ثم أنشئ عرض سعر عليها.</li>
+    <li>أنشئ مراجعة للعرض عبر <code>POST /proposals/:id/revisions</code> — تُنشأ بحالة <code>DRAFT</code> و<code>isWinning=false</code>.</li>
+    <li><strong>لا تقبل المراجعة.</strong></li>
+    <li>نفّذ <code>POST /contracts</code> بجسم <code>{ proposalRevisionId, contractType: "EPC" }</code>.</li>
+  </ol>
+  <p><strong>النتيجة المتوقعة:</strong> رفض بـ 400 برسالة تفيد أن المراجعة غير مقبولة.<br>
+  <strong>النتيجة الفعلية:</strong> استجابة <b>201</b> وإنشاء العقد <code>CTR-00008</code> بقيمة 5,500 موروثة من مراجعة حالتها <code>DRAFT</code>.</p>
+  <p><strong>الموضع في الكود:</strong> <code>apps/api/src/modules/commercial/contracts.service.ts</code> — كتلة
+  <code>if (dto.proposalRevisionId)</code> تتحقق من الوجود ومن <code>revision.contract</code> فقط، ولا تفحص
+  <code>revision.status</code> أو <code>isWinning</code>.</p>
+  <p><strong>الأثر:</strong> لا يفسد الدفتر المحاسبي (القيمة تُقرأ من المراجعة المشار إليها فعلاً)، لكنه يفتح باباً
+  لالتزام تعاقدي بسعر غير معتمد. وهو من نفس صنف الثغرة التي عولجت سابقاً في انتقالات مراحل المشروع:
+  قاعدة عمل كانت مطبّقة في الواجهة فقط دون الخادم.</p>
+</div>
+
+<div class="defect s3">
+  <h3>D-02 <span class="tag s3">🟡 متوسط (S3)</span> — لا يوجد تحقق من صيغة الرقم الضريبي للمورد</h3>
+  <p><strong>الوصف:</strong> الرقم الضريبي السعودي 15 خانة يبدأ وينتهي بالرقم 3. النظام يقبل أي نص.</p>
+  <p><strong>خطوات التكرار:</strong></p>
+  <ol>
+    <li><code>POST /procurement/vendors</code> بجسم يحوي <code>vatNumber: "31234567890123"</code> (14 خانة).</li>
+  </ol>
+  <p><strong>النتيجة المتوقعة:</strong> رفض بـ 400.<br>
+  <strong>النتيجة الفعلية:</strong> استجابة <b>201</b> وإنشاء المورد <code>VEN-00002</code>.</p>
+  <p><strong>الموضع في الكود:</strong> <code>apps/api/src/modules/procurement/dto.ts</code> —
+  <code>@IsOptional() @IsString() vatNumber?: string;</code> بلا أي قيد على الطول أو النمط.</p>
+  <p><strong>الأثر:</strong> رقم ضريبي فاسد ينتقل لاحقاً إلى مستندات الفوترة الإلكترونية ومطابقة المدخلات
+  الضريبية. الاكتشاف عند التقديم للهيئة أغلى بكثير من الاكتشاف عند الإدخال. الإصلاح سطر واحد:
+  <code>@Matches(/^3\d{13}3$/)</code>.</p>
+</div>
+
+<h2>5. المخاطر المتبقية وما لم يُختبر</h2>
+
+<h3>وحدات غير موجودة في المنتج (لا تُعد نقص تغطية)</h3>
+<div class="card">
+  <p class="muted" style="margin-top:0">فُحص المخطط <code>schema.prisma</code> للتأكد قبل التصنيف:</p>
+  <ul>
+    <li><strong>الموارد البشرية والرواتب</strong> — لا <code>Employee</code> ولا <code>Payroll</code>. حالات GOSI ومكافأة نهاية الخدمة والإجازات غير منطبقة.</li>
+    <li><strong>حد ائتمان العميل</strong> (<code>creditLimit</code>) — غير موجود.</li>
+    <li><strong>الخصومات</strong> على البند أو الفاتورة — غير موجودة.</li>
+    <li><strong>حد إعادة الطلب</strong> والتنبيه عليه — غير موجود.</li>
+    <li><strong>طرق تكلفة المخزون</strong> (FIFO / المتوسط المرجح) — لا يوجد حقل طريقة تكلفة؛ النظام يستخدم <code>item.unitCost</code>.</li>
+    <li><strong>تعدد العملات وأسعار الصرف</strong> — غير موجود.</li>
+    <li><strong>تحويل وحدات القياس</strong> (كرتون ↔ حبة) — غير موجود.</li>
+    <li><strong>الجرد الفعلي</strong> وقيد تسوية فروقاته — غير موجود.</li>
+  </ul>
+</div>
+
+<h3>موجود لكنه لم يُختبر في هذه الجولة</h3>
+<div class="card">
+  <ul>
+    <li><strong>سجل التدقيق (Audit trail)</strong> — الجدول موجود ويُكتب فيه، لكن <strong>لا يوجد مسار API لقراءته</strong>، فتعذّر التحقق من محتواه (من/متى/القيمة قبل وبعد) عبر النظام. يحتاج فحصاً مباشراً على قاعدة البيانات أو إضافة مسار قراءة.</li>
+    <li><strong>التزامن (Concurrency)</strong> — جلستان تعدّلان السجل نفسه، أو تصرفان آخر وحدة في المخزون معاً. لم يُختبر؛ يحتاج أدوات ضغط لا مجرد نداءات متتابعة.</li>
+    <li><strong>أعمار الذمم المدينة</strong> (30/60/90) والتصدير إلى Excel/PDF بالعربية.</li>
+    <li><strong>دورة التشغيل والصيانة</strong>: أوامر العمل، القياس عن بُعد، اتفاقيات شراء الطاقة والتسوية — خارج نطاق الجولة الدخانية.</li>
+    <li><strong>الواجهة</strong>: هذه الجولة اختبرت الخادم عبر HTTP. فُحصت الواجهة في جولة سابقة اليوم (19 شاشة لدور المسؤول و7 لمهندس الموقع) دون ملاحظات.</li>
+  </ul>
+</div>
+
+<h3>ملاحظة على نزاهة النتائج</h3>
+<div class="note">
+  في التنفيذ الأول ظهرت خمس حالات بنتيجة «فشل» وحالة واحدة بنتيجة «نجاح» — تبيّن بالفحص أنها جميعاً
+  <strong>أخطاء في أداة الاختبار نفسها</strong> لا في النظام: أسماء حقول خاطئة في جسم الطلب
+  (<code>lines</code> بدل <code>bomLines</code>، ونقص <code>contractType</code>)، ومسار خاطئ لقبول المراجعة،
+  وقراءة حقول الإقرار الضريبي من المستوى الأعلى بدل <code>boxes</code>، وإقفال فترة محاسبية <em>لا تغطي</em>
+  تاريخ الترحيل. أخطرها كانت حالة <code>TC-INV-005</code> التي ظهرت «ناجحة» لأنها رُفضت — لكن بسبب خطأ في
+  الطلب لا بسبب فحص الرصيد. صُحّحت الأداة وأُعيد تنفيذ الحالات، والنتائج أعلاه هي نتائج التنفيذ الصحيح فقط.
+</div>
+
+<h3>بيانات أُنشئت في قاعدة بيانات التطوير</h3>
+<div class="card">
+  <p class="muted" style="margin-top:0">الاختبار تنفيذ فعلي، فأنشأ سجلات حقيقية. قاعدة بيانات التطوير المحلية فقط — لم يُمَس خادم العرض:</p>
+  <ul>
+    <li>موردون: <code>VEN-00002</code> (رقم ضريبي فاسد — دليل العيب D-02)، ومورد «شركة الأفق للتوريدات».</li>
+    <li>أمر شراء <code>PO-00005</code> (معتمد، مستلم جزئياً) وإشعار استلام وفاتورة مورد <code>BILL-00003</code>.</li>
+    <li>تحويل مخزني: وحدتان من <code>BOS-KIT</code> من <code>WH-MAIN</code> إلى <code>YARD-1</code>.</li>
+    <li>عميلان محتملان وفرصتان وعرضا سعر، والعقدان <code>CTR-00007</code> و<code>CTR-00008</code>.</li>
+    <li>الفاتورة <code>INV-00007</code> (أصبحت ملغاة) والإشعار الدائن <code>CN-00003</code>.</li>
+    <li>الفترة المحاسبية <code>2026-08</code> أُقفلت ثم أُعيد فتحها — عادت إلى حالتها الأصلية.</li>
+  </ul>
+  <p>نقطة الاسترجاع <code>pre-uat.dump</code> متاحة لإعادة القاعدة إلى ما قبل الجولة عند الرغبة.</p>
+</div>
+
+<h2>6. التوصيات مرتبة بالأولوية</h2>
+
+<div class="card">
+  <ol>
+    <li><strong>إغلاق D-01 قبل تسليم النظام لمستخدمين حقيقيين.</strong> أضف في <code>contracts.service.ts</code>
+      شرطاً يرفض المراجعة التي ليست <code>ACCEPTED</code> (أو <code>isWinning</code>)، على غرار ما فُعل في
+      <code>isValidStageTransition</code>. أضف اختبار وحدة يثبّت القاعدة حتى لا تعود.</li>
+    <li><strong>إغلاق D-02.</strong> قيد نمطي على الرقم الضريبي في الـDTO، مع الرسالة العربية المقابلة في
+      <code>errors.ts</code>. طبّقه على المورد والمنشأة والعميل معاً لا على المورد وحده.</li>
+    <li><strong>إضافة مسار قراءة لسجل التدقيق.</strong> السجل يُكتب ولا يُقرأ، فلا يمكن إثبات «من غيّر ماذا ومتى»
+      لا للمدقق ولا للاختبار — وهو مطلب رقابي أساسي في أي نظام محاسبي.</li>
+    <li><strong>توسيع التغطية إلى دورة التشغيل</strong> (أوامر العمل، القياس عن بُعد، تسوية اتفاقيات شراء الطاقة)،
+      فهي الجزء الذي يميّز هذا النظام ولم تشمله الجولة الدخانية.</li>
+    <li><strong>اختبار التزامن</strong> على المخزون تحديداً: عمليتان متزامنتان على آخر وحدة. الحارس الحالي
+      يقرأ الرصيد ثم يكتب، وسلامته تحت التزامن لم تُثبَت.</li>
+    <li><strong>تثبيت الاختبار الآلي في CI.</strong> مهارة الاختبار التقنية المرافقة تشغّل 23 فحصاً غير مُتلِف
+      (توازن الدفتر، سلسلة PIH، إنفاذ الصلاحيات) في أقل من دقيقتين — تشغيلها قبل كل نشر يمنع انحداراً صامتاً.</li>
+  </ol>
+</div>
+
+<footer>
+  أُنتج هذا التقرير من تنفيذ فعلي على النظام في 1 أغسطس 2026. كل رقم فيه مأخوذ من استجابة حقيقية،
+  وكل حالة لم تُنفَّذ مُعلَّمة كذلك صراحةً ولم تُحتسب ضمن نسبة النجاح.
+</footer>
+
+</div>
+<script>
+  const btns = document.querySelectorAll('.filters button');
+  const rows = document.querySelectorAll('#matrix tbody tr');
+  btns.forEach(b => b.addEventListener('click', () => {
+    btns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    const f = b.dataset.f;
+    rows.forEach(r => { r.style.display = (f === 'all' || r.dataset.v === f) ? '' : 'none'; });
+  }));
+</script>
+</body>
+</html>
