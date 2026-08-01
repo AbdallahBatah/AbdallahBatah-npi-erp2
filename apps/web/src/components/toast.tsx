@@ -8,6 +8,7 @@ import {
   useState,
   ReactNode,
 } from 'react';
+import { Icon } from '@/components/icons';
 
 interface Toast {
   id: number;
@@ -75,7 +76,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               aria-label="إغلاق"
               className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
             >
-              ✕
+              <Icon name="x" className="h-3.5 w-3.5" />
             </button>
           </div>
         ))}

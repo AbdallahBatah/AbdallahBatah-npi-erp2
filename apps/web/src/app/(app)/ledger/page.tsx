@@ -7,7 +7,7 @@ import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate, formatDay } from '@/lib/format';
 import { downloadCsv, fileStamp } from '@/lib/csv';
 import { translateMemo } from '@/lib/memo';
-import { PageHeader, EmptyRow, LoadError } from '@/components/ui';
+import { PageHeader, EmptyRow, LoadError, Btn, TableSkeleton } from '@/components/ui';
 
 type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
 
@@ -233,9 +233,9 @@ export default function LedgerPage() {
               {t('gl.to')}
               <input type="date" className="input mt-1" value={to} onChange={(e) => setTo(e.target.value)} />
             </label>
-            <button className="btn-ghost text-xs" onClick={apply}>
+            <Btn sm icon="refresh" onClick={apply}>
               {t('gl.apply')}
-            </button>
+            </Btn>
           </div>
         }
       />
@@ -270,9 +270,9 @@ export default function LedgerPage() {
               <input type="checkbox" checked={showZero} onChange={(e) => setShowZero(e.target.checked)} />
               {t('gl.tb.showZero')}
             </label>
-            <button className="btn-ghost text-xs" disabled={!tb} onClick={exportTb}>
+            <Btn sm icon="download" disabled={!tb} onClick={exportTb}>
               {t('gl.export')}
-            </button>
+            </Btn>
           </div>
         </div>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -289,7 +289,7 @@ export default function LedgerPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!tb ? (
-              <EmptyRow colSpan={7} text={t('common.loading')} />
+              <TableSkeleton cols={7} />
             ) : visibleRows.length === 0 ? (
               <EmptyRow colSpan={7} text={t('common.none')} />
             ) : (
@@ -361,12 +361,12 @@ export default function LedgerPage() {
           </div>
           {gl && (
             <div className="flex items-center gap-2">
-              <button className="btn-ghost text-xs" onClick={exportGl}>
+              <Btn sm icon="download" onClick={exportGl}>
                 {t('gl.export')}
-              </button>
-              <button className="btn-ghost text-xs" onClick={() => setAccountId(null)}>
+              </Btn>
+              <Btn sm icon="x" onClick={() => setAccountId(null)}>
                 {t('gl.detail.close')}
-              </button>
+              </Btn>
             </div>
           )}
         </div>
@@ -388,7 +388,7 @@ export default function LedgerPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {!gl ? (
-                  <EmptyRow colSpan={6} text={t('common.loading')} />
+                  <TableSkeleton cols={6} />
                 ) : (
                   <>
                     <tr className="bg-slate-50/60">
@@ -436,20 +436,12 @@ export default function LedgerPage() {
                   {page * PAGE + 1}–{Math.min((page + 1) * PAGE, gl.total)} {t('common.of')} {gl.total}
                 </span>
                 <span className="flex gap-1">
-                  <button
-                    className="btn-ghost !px-2.5 !py-1"
-                    disabled={page === 0}
-                    onClick={() => setPage(page - 1)}
-                  >
+                  <Btn sm disabled={page === 0} onClick={() => setPage(page - 1)}>
                     {t('common.prev')}
-                  </button>
-                  <button
-                    className="btn-ghost !px-2.5 !py-1"
-                    disabled={(page + 1) * PAGE >= gl.total}
-                    onClick={() => setPage(page + 1)}
-                  >
+                  </Btn>
+                  <Btn sm disabled={(page + 1) * PAGE >= gl.total} onClick={() => setPage(page + 1)}>
                     {t('common.next')}
-                  </button>
+                  </Btn>
                 </span>
               </div>
             )}

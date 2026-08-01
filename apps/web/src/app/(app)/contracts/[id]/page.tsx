@@ -10,7 +10,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, LoadError, useConfirm, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, LoadError, useConfirm, Can, Btn, PageSkeleton } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Milestone {
@@ -93,25 +93,24 @@ export default function ContractDetailPage() {
   }
 
   if (loadErr) return <LoadError message={loadErr} onRetry={load} />;
-  if (!contract) return <div className="text-slate-400">{t('common.loading')}</div>;
+  if (!contract) return <PageSkeleton />;
 
   return (
     <div>
       <PageHeader
         title={contract.code}
+        backHref="/contracts"
+        backLabel={t('contracts.title')}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={contract.status} />
             {contract.status === 'DRAFT' && (
               <Can perm="commercial.contract.write">
-                <button className="btn-primary text-xs" onClick={activate} disabled={busy()}>
+                <Btn variant="primary" sm icon="check-circle" busy={busy('activate')} disabled={busy()} onClick={activate}>
                   {t('contracts.activate')}
-                </button>
+                </Btn>
               </Can>
             )}
-            <Link href="/contracts" className="btn-ghost text-xs">
-              {t('common.back')}
-            </Link>
           </div>
         }
       />
@@ -175,23 +174,29 @@ export default function ContractDetailPage() {
                     {/* Verifying is a contract right; raising the invoice from
                         it is a finance one — two different people in practice. */}
                     {m.status === 'PENDING' && contract.status === 'ACTIVE' && can('commercial.contract.write') ? (
-                      <button
-                        className="btn-solar !px-3 !py-1 text-xs"
+                      <Btn
+                        variant="solar"
+                        sm
+                        icon="check"
+                        busy={busy(`verify:${m.id}`)}
                         disabled={busy()}
                         onClick={() => verify(m.id)}
                       >
-                        {busy(`verify:${m.id}`) ? t('common.loading') : t('contracts.verify')}
-                      </button>
+                        {t('contracts.verify')}
+                      </Btn>
                     ) : m.status === 'VERIFIED' && can('finance.invoice.write') ? (
-                      <button
-                        className="btn-primary !px-3 !py-1 text-xs"
+                      <Btn
+                        variant="primary"
+                        sm
+                        icon="receipt"
+                        busy={busy(`invoice:${m.id}`)}
                         disabled={busy()}
                         onClick={() => generateInvoice(m.id)}
                       >
-                        {busy(`invoice:${m.id}`) ? t('common.loading') : `🧾 ${t('contracts.generateInvoice')}`}
-                      </button>
+                        {t('contracts.generateInvoice')}
+                      </Btn>
                     ) : m.status === 'INVOICED' && m.invoiceId ? (
-                      <Link href={`/invoices/${m.invoiceId}`} className="btn-ghost !px-3 !py-1 text-xs">
+                      <Link href={`/invoices/${m.invoiceId}`} className="btn-ghost btn-sm">
                         {t('contracts.viewInvoice')}
                       </Link>
                     ) : (

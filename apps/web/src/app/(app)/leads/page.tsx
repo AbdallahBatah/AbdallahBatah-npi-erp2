@@ -8,7 +8,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatNumber } from '@/lib/format';
-import { PageHeader, StatusBadge, Modal, Field, EmptyRow, LoadError, useConfirm, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, Modal, Field, EmptyRow, LoadError, useConfirm, Can, Btn, TableSkeleton } from '@/components/ui';
 
 interface Lead {
   id: string;
@@ -102,9 +102,9 @@ export default function LeadsPage() {
         title={t('leads.title')}
         action={
           <Can perm="crm.lead.write">
-            <button className="btn-primary" onClick={() => setOpen(true)}>
-              + {t('leads.new')}
-            </button>
+            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+              {t('leads.new')}
+            </Btn>
           </Can>
         }
       />
@@ -151,7 +151,7 @@ export default function LeadsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <EmptyRow colSpan={7} text={t('common.loading')} />
+              <TableSkeleton cols={7} />
             ) : leads.length === 0 ? (
               <EmptyRow colSpan={7} text={t('leads.emptyHint')} />
             ) : (
@@ -168,13 +168,16 @@ export default function LeadsPage() {
                       // Conversion creates the opportunity too, so the server
                       // demands both CRM write permissions.
                       <Can perm={['crm.lead.write', 'crm.opportunity.write']}>
-                        <button
-                          className="btn-solar !px-3 !py-1 text-xs"
+                        <Btn
+                          variant="solar"
+                          sm
+                          icon="check"
+                          busy={busy(`convert:${l.id}`)}
                           disabled={busy()}
                           onClick={() => convert(l.id)}
                         >
-                          {busy(`convert:${l.id}`) ? t('common.loading') : t('leads.convert')}
-                        </button>
+                          {t('leads.convert')}
+                        </Btn>
                       </Can>
                     ) : (
                       <span className="text-xs text-emerald-600">{t('leads.converted')}</span>
@@ -191,16 +194,12 @@ export default function LeadsPage() {
               {page * PAGE + 1}–{Math.min((page + 1) * PAGE, total)} {t('common.of')} {total}
             </span>
             <span className="flex gap-1">
-              <button className="btn-ghost !px-2.5 !py-1" disabled={page === 0} onClick={() => setPage(page - 1)}>
+              <Btn sm disabled={page === 0} onClick={() => setPage(page - 1)}>
                 {t('common.prev')}
-              </button>
-              <button
-                className="btn-ghost !px-2.5 !py-1"
-                disabled={(page + 1) * PAGE >= total}
-                onClick={() => setPage(page + 1)}
-              >
+              </Btn>
+              <Btn sm disabled={(page + 1) * PAGE >= total} onClick={() => setPage(page + 1)}>
                 {t('common.next')}
-              </button>
+              </Btn>
             </span>
           </div>
         )}
@@ -233,12 +232,10 @@ export default function LeadsPage() {
             <input name="email" type="email" className="input" />
           </Field>
           <div className="col-span-2 flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('create') ? t('common.loading') : t('common.create')}
-            </button>
+            <Btn onClick={() => setOpen(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('create')} disabled={busy()}>
+              {t('common.create')}
+            </Btn>
           </div>
         </form>
       </Modal>

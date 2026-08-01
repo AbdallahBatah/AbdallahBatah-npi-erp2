@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can, Btn, TableSkeleton } from '@/components/ui';
 
 interface Serial {
   id: string;
@@ -166,7 +166,7 @@ export default function AssetsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!rows ? (
-              <EmptyRow colSpan={9} text={t('common.loading')} />
+              <TableSkeleton cols={9} />
             ) : rows.length === 0 ? (
               <EmptyRow colSpan={9} text={t('common.none')} />
             ) : (
@@ -192,12 +192,14 @@ export default function AssetsPage() {
                   <td className="td">
                     {s.currentState === 'INSTALLED' && (
                       <Can perm="fsm.workorder.write">
-                        <button
-                          className="btn-danger !px-3 !py-1 text-xs"
+                        <Btn
+                          variant="danger"
+                          sm
+                          icon="alert-triangle"
                           onClick={() => { setCSerial(s); setCDefAr(''); setCDefEn(''); setCOpen(true); }}
                         >
-                          ⚠️ {t('rma.fault')}
-                        </button>
+                          {t('rma.fault')}
+                        </Btn>
                       </Can>
                     )}
                     {s.currentState === 'IN_STOCK' && (
@@ -210,21 +212,24 @@ export default function AssetsPage() {
                               <option key={l.id} value={l.id}>{l.code}</option>
                             ))}
                           </select>
-                          <button className="btn-primary !px-2 !py-1 text-xs" disabled={busy() || !moveTo} onClick={() => transfer(s.id)}>✓</button>
-                          <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => { setMoveId(null); setMoveTo(''); }}>✕</button>
+                          <Btn variant="primary" sm icon="check" aria-label={t('ast.transfer')} className="!px-2" busy={busy(`move:${s.id}`)} disabled={busy() || !moveTo} onClick={() => transfer(s.id)} />
+                          <Btn sm icon="x" aria-label={t('common.cancel')} className="!px-2" onClick={() => { setMoveId(null); setMoveTo(''); }} />
                         </span>
                       ) : (
                         <span className="flex items-center gap-1">
-                          <button
-                            className="btn-solar !px-3 !py-1 text-xs"
+                          <Btn
+                            variant="solar"
+                            sm
+                            icon="wrench"
+                            busy={busy(`install:${s.id}`)}
                             disabled={busy()}
                             onClick={() => install(s.id)}
                           >
-                            🔧 {t('ast.install')}
-                          </button>
-                          <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setMoveId(s.id)}>
-                            🔄 {t('ast.transfer')}
-                          </button>
+                            {t('ast.install')}
+                          </Btn>
+                          <Btn sm icon="refresh" onClick={() => setMoveId(s.id)}>
+                            {t('ast.transfer')}
+                          </Btn>
                         </span>
                       )}
                       </Can>
@@ -241,16 +246,12 @@ export default function AssetsPage() {
               {page * PAGE + 1}–{Math.min((page + 1) * PAGE, total)} {t('common.of')} {total}
             </span>
             <span className="flex gap-1">
-              <button className="btn-ghost !px-2.5 !py-1" disabled={page === 0} onClick={() => setPage(page - 1)}>
+              <Btn sm disabled={page === 0} onClick={() => setPage(page - 1)}>
                 {t('common.prev')}
-              </button>
-              <button
-                className="btn-ghost !px-2.5 !py-1"
-                disabled={(page + 1) * PAGE >= total}
-                onClick={() => setPage(page + 1)}
-              >
+              </Btn>
+              <Btn sm disabled={(page + 1) * PAGE >= total} onClick={() => setPage(page + 1)}>
                 {t('common.next')}
-              </button>
+              </Btn>
             </span>
           </div>
         )}
@@ -276,7 +277,7 @@ export default function AssetsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!claims ? (
-              <EmptyRow colSpan={7} text={t('common.loading')} />
+              <TableSkeleton cols={7} />
             ) : claims.length === 0 ? (
               <EmptyRow colSpan={7} text={t('common.none')} />
             ) : (
@@ -299,18 +300,18 @@ export default function AssetsPage() {
                   <td className="td"><StatusBadge status={c.status} /></td>
                   <td className="td">
                     {c.status === 'DRAFT' && (
-                      <button className="btn-primary !px-3 !py-1 text-xs" disabled={busy()} onClick={() => act(`submit:${c.id}`, () => api.post(`/fsm/warranty-claims/${c.id}/submit`, {}))}>
-                        📤 {t('rma.submit')}
-                      </button>
+                      <Btn variant="primary" sm icon="upload" busy={busy(`submit:${c.id}`)} disabled={busy()} onClick={() => act(`submit:${c.id}`, () => api.post(`/fsm/warranty-claims/${c.id}/submit`, {}))}>
+                        {t('rma.submit')}
+                      </Btn>
                     )}
                     {c.status === 'SUBMITTED' && (
                       <span className="flex gap-1">
-                        <button className="btn-primary !px-2.5 !py-1 text-xs" disabled={busy()} onClick={() => act(`approve:${c.id}`, () => api.post(`/fsm/warranty-claims/${c.id}/approve`, {}))}>
-                          ✓ {t('rma.approve')}
-                        </button>
-                        <button className="btn-danger !px-2.5 !py-1 text-xs" disabled={busy()} onClick={() => act(`reject:${c.id}`, () => api.post(`/fsm/warranty-claims/${c.id}/reject`, {}))}>
-                          ✕ {t('rma.reject')}
-                        </button>
+                        <Btn variant="primary" sm icon="check" busy={busy(`approve:${c.id}`)} disabled={busy()} onClick={() => act(`approve:${c.id}`, () => api.post(`/fsm/warranty-claims/${c.id}/approve`, {}))}>
+                          {t('rma.approve')}
+                        </Btn>
+                        <Btn variant="danger" sm icon="x" busy={busy(`reject:${c.id}`)} disabled={busy()} onClick={() => act(`reject:${c.id}`, () => api.post(`/fsm/warranty-claims/${c.id}/reject`, {}))}>
+                          {t('rma.reject')}
+                        </Btn>
                       </span>
                     )}
                     {c.status === 'APPROVED' && (
@@ -325,13 +326,16 @@ export default function AssetsPage() {
                             <option key={s.id} value={s.id}>{s.serialNo}</option>
                           ))}
                         </select>
-                        <button
-                          className="btn-solar !px-2.5 !py-1 text-xs"
+                        <Btn
+                          variant="solar"
+                          sm
+                          icon="refresh"
+                          busy={busy(`replace:${c.id}`)}
                           disabled={busy() || !replPick[c.id]}
                           onClick={() => replaceSerial(c.id)}
                         >
-                          🔁 {t('rma.replace')}
-                        </button>
+                          {t('rma.replace')}
+                        </Btn>
                       </span>
                     )}
                   </td>
@@ -354,8 +358,10 @@ export default function AssetsPage() {
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <button className="btn-ghost text-xs" onClick={() => setCOpen(false)}>{t('common.cancel')}</button>
-          <button
-            className="btn-danger text-xs"
+          <Btn
+            variant="danger"
+            sm
+            busy={busy('claim')}
             disabled={busy() || !(cDefAr.trim() || cDefEn.trim()) || !cSerial}
             onClick={async () => {
               const ok = await act('claim', () =>
@@ -368,8 +374,8 @@ export default function AssetsPage() {
               if (ok) setCOpen(false);
             }}
           >
-            {busy('claim') ? t('common.loading') : t('common.create')}
-          </button>
+            {t('common.create')}
+          </Btn>
         </div>
       </Modal>
       {confirmNode}

@@ -9,7 +9,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can, Btn, PageSkeleton } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
 import { PROJECT_STAGE_FLOW as STAGE_FLOW } from '@npi/shared';
 
@@ -220,7 +220,7 @@ export default function ProjectDetailPage() {
   }
 
   if (loadErr && !p) return <LoadError message={loadErr} onRetry={load} />;
-  if (!p) return <div className="text-slate-400">{t('common.loading')}</div>;
+  if (!p) return <PageSkeleton />;
   const cs = p.costSummary;
   const maxBar = Math.max(cs.budget, cs.committed + cs.actual, 1);
 
@@ -228,17 +228,18 @@ export default function ProjectDetailPage() {
     <div>
       <PageHeader
         title={`${p.code} — ${pick(p, 'name')}`}
+        backHref="/projects"
+        backLabel={t('prj.title')}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={p.stage} />
             {p.stage !== 'CLOSED' && (
               <Can perm="projects.project.write">
-                <button className="btn-primary text-xs" onClick={nextStage} disabled={busy()}>
-                  ⏭️ {t('prj.nextStage')}: {optionLabel(enums?.projectStages, STAGE_FLOW[STAGE_FLOW.indexOf(p.stage) + 1] ?? '', locale)}
-                </button>
+                <Btn variant="primary" sm icon="skip-forward" iconClassName="rtl:-scale-x-100" busy={busy('stage')} disabled={busy()} onClick={nextStage}>
+                  {t('prj.nextStage')}: {optionLabel(enums?.projectStages, STAGE_FLOW[STAGE_FLOW.indexOf(p.stage) + 1] ?? '', locale)}
+                </Btn>
               </Can>
             )}
-            <Link href="/projects" className="btn-ghost text-xs">{t('common.back')}</Link>
           </div>
         }
       />
@@ -362,7 +363,7 @@ export default function ProjectDetailPage() {
                     <td className="td text-end">{formatMoney(po.total, locale)}</td>
                     <td className="td"><StatusBadge status={po.status} /></td>
                     <td className="td">
-                      <Link href={`/procurement/${po.id}`} className="btn-ghost !px-3 !py-1 text-xs">
+                      <Link href={`/procurement/${po.id}`} className="btn-ghost btn-sm">
                         {t('common.details')}
                       </Link>
                     </td>
@@ -444,7 +445,7 @@ export default function ProjectDetailPage() {
             <h3 className="text-sm font-semibold text-slate-800">{t('co.title')}</h3>
             <p className="mt-1 text-xs text-slate-400">{t('co.hint')}</p>
           </div>
-          <Can perm="projects.project.write"><button className="btn-primary text-xs" onClick={() => setCoOpen(true)}>➕ {t('co.new')}</button></Can>
+          <Can perm="projects.project.write"><Btn variant="primary" sm icon="plus" onClick={() => setCoOpen(true)}>{t('co.new')}</Btn></Can>
         </div>
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50">
@@ -472,9 +473,9 @@ export default function ProjectDetailPage() {
                   <td className="td"><StatusBadge status={co.status} /></td>
                   <td className="td">
                     {co.status === 'DRAFT' && (
-                      <Can perm="projects.project.write"><button className="btn-primary !px-3 !py-1 text-xs" onClick={() => approveCo(co.id)} disabled={busy()}>
-                        ✅ {t('co.approve')}
-                      </button></Can>
+                      <Can perm="projects.project.write"><Btn variant="primary" sm icon="check-circle" busy={busy(`approveCo:${co.id}`)} disabled={busy()} onClick={() => approveCo(co.id)}>
+                        {t('co.approve')}
+                      </Btn></Can>
                     )}
                   </td>
                 </tr>
@@ -491,7 +492,7 @@ export default function ProjectDetailPage() {
             <h3 className="text-sm font-semibold text-slate-800">{t('sub.title')}</h3>
             <p className="mt-1 text-xs text-slate-400">{t('sub.hint')}</p>
           </div>
-          <Can perm="scm.procurement.write"><button className="btn-primary text-xs" onClick={() => setSubOpen(true)}>➕ {t('sub.new')}</button></Can>
+          <Can perm="scm.procurement.write"><Btn variant="primary" sm icon="plus" onClick={() => setSubOpen(true)}>{t('sub.new')}</Btn></Can>
         </div>
         {p.subcontracts.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-slate-400">{t('common.none')}</p>
@@ -540,9 +541,9 @@ export default function ProjectDetailPage() {
                             <td className="py-1"><StatusBadge status={c.status} /></td>
                             <td className="py-1 text-end">
                               {c.status === 'SUBMITTED' && (
-                                <Can perm="scm.procurement.write"><button className="btn-primary !px-2 !py-0.5 text-[11px]" onClick={() => approveClaim(c.id)} disabled={busy()}>
+                                <Can perm="scm.procurement.write"><Btn variant="primary" sm className="!px-2 !py-0.5 !text-[11px]" busy={busy(`approveClaim:${c.id}`)} disabled={busy()} onClick={() => approveClaim(c.id)}>
                                   {t('sub.approveClaim')}
-                                </button></Can>
+                                </Btn></Can>
                               )}
                             </td>
                           </tr>
@@ -560,9 +561,9 @@ export default function ProjectDetailPage() {
                         value={claimAmounts[sub.id] || ''}
                         onChange={(e) => setClaimAmounts({ ...claimAmounts, [sub.id]: Number(e.target.value) })}
                       />
-                      <button className="btn-ghost !px-3 !py-1.5 text-xs" onClick={() => addClaim(sub.id)} disabled={busy()}>
-                        📄 {t('sub.newClaim')}
-                      </button>
+                      <Btn sm icon="file-text" busy={busy(`claim:${sub.id}`)} disabled={busy()} onClick={() => addClaim(sub.id)}>
+                        {t('sub.newClaim')}
+                      </Btn>
                     </div>
                   )}
                 </div>
@@ -601,10 +602,10 @@ export default function ProjectDetailPage() {
           </Field>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn-ghost text-xs" onClick={() => setCoOpen(false)}>{t('common.cancel')}</button>
-          <button className="btn-primary text-xs" onClick={createCo} disabled={busy() || !(coDescAr.trim() || coDescEn.trim()) || !coDelta}>
-            {busy('co') ? t('common.loading') : t('common.create')}
-          </button>
+          <Btn sm onClick={() => setCoOpen(false)}>{t('common.cancel')}</Btn>
+          <Btn variant="primary" sm busy={busy('co')} disabled={busy() || !(coDescAr.trim() || coDescEn.trim()) || !coDelta} onClick={createCo}>
+            {t('common.create')}
+          </Btn>
         </div>
       </Modal>
 
@@ -641,10 +642,10 @@ export default function ProjectDetailPage() {
           </Field>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn-ghost text-xs" onClick={() => setSubOpen(false)}>{t('common.cancel')}</button>
-          <button className="btn-primary text-xs" onClick={createSub} disabled={busy() || !subVendorId || !(subScopeAr.trim() || subScopeEn.trim()) || !subAmount}>
-            {busy('sub') ? t('common.loading') : t('common.create')}
-          </button>
+          <Btn sm onClick={() => setSubOpen(false)}>{t('common.cancel')}</Btn>
+          <Btn variant="primary" sm busy={busy('sub')} disabled={busy() || !subVendorId || !(subScopeAr.trim() || subScopeEn.trim()) || !subAmount} onClick={createSub}>
+            {t('common.create')}
+          </Btn>
         </div>
       </Modal>
     </div>

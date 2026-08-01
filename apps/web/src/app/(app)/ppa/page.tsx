@@ -8,7 +8,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate, formatNumber } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can, Btn, TableSkeleton } from '@/components/ui';
 
 interface Term {
   id: string;
@@ -102,9 +102,9 @@ export default function PpaPage() {
         title={t('ppa.title')}
         action={
           <Can perm="commercial.contract.write">
-            <button className="btn-primary text-xs" onClick={() => setTOpen(true)}>
-              ⚡ {t('ppa.new')}
-            </button>
+            <Btn variant="primary" icon="zap" onClick={() => setTOpen(true)}>
+              {t('ppa.new')}
+            </Btn>
           </Can>
         }
       />
@@ -131,7 +131,7 @@ export default function PpaPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!terms ? (
-              <EmptyRow colSpan={8} text={t('common.loading')} />
+              <TableSkeleton cols={8} />
             ) : terms.length === 0 ? (
               <EmptyRow colSpan={8} text={t('common.none')} />
             ) : (
@@ -152,9 +152,9 @@ export default function PpaPage() {
                   <td className="td">
                     {tm.status === 'ACTIVE' && (
                       <Can perm="finance.invoice.write">
-                        <button className="btn-solar !px-3 !py-1 text-xs" onClick={() => openSettle(tm.id)}>
-                          💰 {t('ppa.settle')}
-                        </button>
+                        <Btn variant="solar" sm icon="coins" onClick={() => openSettle(tm.id)}>
+                          {t('ppa.settle')}
+                        </Btn>
                       </Can>
                     )}
                   </td>
@@ -185,7 +185,7 @@ export default function PpaPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!runs ? (
-              <EmptyRow colSpan={8} text={t('common.loading')} />
+              <TableSkeleton cols={8} />
             ) : runs.length === 0 ? (
               <EmptyRow colSpan={8} text={t('common.none')} />
             ) : (
@@ -244,9 +244,11 @@ export default function PpaPage() {
           </Field>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn-ghost text-xs" onClick={() => setTOpen(false)}>{t('common.cancel')}</button>
-          <button
-            className="btn-primary text-xs"
+          <Btn sm onClick={() => setTOpen(false)}>{t('common.cancel')}</Btn>
+          <Btn
+            variant="primary"
+            sm
+            busy={busy('term')}
             disabled={busy() || !fProjectId || !fRate}
             onClick={async () => {
               const ok = await act(
@@ -267,8 +269,8 @@ export default function PpaPage() {
               }
             }}
           >
-            {busy('term') ? t('common.loading') : t('common.create')}
-          </button>
+            {t('common.create')}
+          </Btn>
         </div>
       </Modal>
 
@@ -290,9 +292,12 @@ export default function PpaPage() {
           </Field>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn-ghost text-xs" onClick={() => setSOpen(false)}>{t('common.cancel')}</button>
-          <button
-            className="btn-solar text-xs"
+          <Btn sm onClick={() => setSOpen(false)}>{t('common.cancel')}</Btn>
+          <Btn
+            variant="solar"
+            sm
+            icon="coins"
+            busy={busy('settle')}
             disabled={busy() || !sFrom || !sTo}
             onClick={async () => {
               if (
@@ -312,8 +317,8 @@ export default function PpaPage() {
               }
             }}
           >
-            {busy('settle') ? t('common.loading') : t('ppa.settle')}
-          </button>
+            {t('ppa.settle')}
+          </Btn>
         </div>
       </Modal>
       {confirmNode}

@@ -10,7 +10,8 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate } from '@/lib/format';
 // NB: this page defines its own read-only `Field` below — do not import ui's.
-import { PageHeader, StatusBadge, LoadError, Modal, useConfirm, Tabs, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, LoadError, Modal, useConfirm, Tabs, Can, Btn, PageSkeleton } from '@/components/ui';
+import { Icon } from '@/components/icons';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Line { id: string; descriptionAr: string; descriptionEn: string; qty: string; unitPrice: string; lineSubtotal: string; vatAmount: string }
@@ -126,7 +127,7 @@ export default function InvoiceDetailPage() {
   }
 
   if (loadErr) return <LoadError message={loadErr} onRetry={load} />;
-  if (!inv) return <div className="text-slate-400">{t('common.loading')}</div>;
+  if (!inv) return <PageSkeleton stats={3} />;
   const e = inv.eInvoice;
   // Outstanding comes from the server: it also nets off credit notes, which
   // the payments list alone cannot see.
@@ -145,25 +146,27 @@ export default function InvoiceDetailPage() {
     <div>
       <PageHeader
         title={`${t('inv.invoice')} ${inv.code}`}
+        backHref="/invoices"
+        backLabel={t('inv.title')}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={inv.status} />
             <Can perm="finance.invoice.write">
               {inv.status === 'DRAFT' && (
-                <button className="btn-primary text-xs" onClick={issue} disabled={busy()}>
-                  {busy('issue') ? t('common.loading') : `🔏 ${t('inv.issue')}`}
-                </button>
+                <Btn variant="primary" sm icon="stamp" busy={busy('issue')} disabled={busy()} onClick={issue}>
+                  {t('inv.issue')}
+                </Btn>
               )}
               {canCredit && (
-                <button className="btn-ghost text-xs" onClick={() => setCnOpen(true)}>
+                <Btn sm icon="undo" onClick={() => setCnOpen(true)}>
                   {t('cn.new')}
-                </button>
+                </Btn>
               )}
             </Can>
-            <Link href={`/invoices/${id}/print`} className="btn-ghost text-xs">
-              🖨️ {t('print.button')}
+            <Link href={`/invoices/${id}/print`} className="btn-ghost btn-sm">
+              <Icon name="printer" className="h-3.5 w-3.5" />
+              {t('print.button')}
             </Link>
-            <Link href="/invoices" className="btn-ghost text-xs">{t('common.back')}</Link>
           </div>
         }
       />
@@ -272,8 +275,9 @@ export default function InvoiceDetailPage() {
                   </div>
                 </details>
                 {e.isSimulated && (
-                  <p className="mt-4 rounded-lg bg-amber-50 p-2 text-[11px] leading-relaxed text-amber-700">
-                    ⚠️ {t('inv.simulated')}
+                  <p className="mt-4 flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-[11px] leading-relaxed text-amber-700">
+                    <Icon name="alert-triangle" className="mt-px h-3.5 w-3.5 shrink-0" />
+                    {t('inv.simulated')}
                   </p>
                 )}
               </div>
@@ -296,14 +300,18 @@ export default function InvoiceDetailPage() {
                 <span className="flex items-center gap-2">
                   <span className="text-slate-700">{formatMoney(inv.retentionEntry.withheldAmount, locale)}</span>
                   {inv.retentionEntry.status === 'WITHHELD' && inv.status !== 'CANCELLED' && can('finance.invoice.write') ? (
-                    <button
-                      className="btn-solar !px-2 !py-0.5 text-[11px]"
+                    <Btn
+                      variant="solar"
+                      sm
+                      icon="unlock"
+                      className="!px-2 !py-0.5 !text-[11px]"
+                      busy={busy('release')}
                       disabled={busy()}
                       title={t('pay.releaseHint')}
                       onClick={() => releaseRetention(inv.retentionEntry!.id)}
                     >
-                      🔓 {t('pay.releaseRetention')}
-                    </button>
+                      {t('pay.releaseRetention')}
+                    </Btn>
                   ) : (
                     <StatusBadge status={inv.retentionEntry.status} />
                   )}
@@ -393,8 +401,12 @@ export default function InvoiceDetailPage() {
                     value={payRef}
                     onChange={(ev) => setPayRef(ev.target.value)}
                   />
-                  <button
-                    className="btn-primary w-full text-xs"
+                  <Btn
+                    variant="primary"
+                    sm
+                    icon="credit-card"
+                    className="w-full"
+                    busy={busy('pay')}
                     disabled={busy() || !payAmount}
                     onClick={async () => {
                       const ok = await act('pay', () =>
@@ -411,11 +423,14 @@ export default function InvoiceDetailPage() {
                       }
                     }}
                   >
-                    💳 {t('pay.add')}
-                  </button>
+                    {t('pay.add')}
+                  </Btn>
                 </div>
               ) : inv.status === 'PAID' ? (
-                <p className="text-center text-xs font-semibold text-emerald-600">✓ {locale === 'ar' ? 'مدفوعة بالكامل' : 'Fully paid'}</p>
+                <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-success-600">
+                  <Icon name="check-circle" className="h-4 w-4" />
+                  {locale === 'ar' ? 'مدفوعة بالكامل' : 'Fully paid'}
+                </p>
               ) : null}
             </div>
           </div>
@@ -535,12 +550,10 @@ export default function InvoiceDetailPage() {
             </label>
           )}
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setCnOpen(false)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-danger" disabled={busy()}>
-              {busy('creditNote') ? t('common.loading') : t('cn.issue')}
-            </button>
+            <Btn onClick={() => setCnOpen(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="danger" busy={busy('creditNote')} disabled={busy()}>
+              {t('cn.issue')}
+            </Btn>
           </div>
         </form>
       </Modal>

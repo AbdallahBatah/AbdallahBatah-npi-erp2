@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, EmptyRow, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, EmptyRow, LoadError, useConfirm, Btn, TableSkeleton } from '@/components/ui';
 
 interface PocRow {
   contractId: string;
@@ -175,7 +175,7 @@ export default function FinanceReportsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!poc ? (
-              <EmptyRow colSpan={8} text={t('common.loading')} />
+              <TableSkeleton cols={8} />
             ) : poc.length === 0 ? (
               <EmptyRow colSpan={8} text={t('common.none')} />
             ) : (
@@ -205,13 +205,16 @@ export default function FinanceReportsPage() {
                   <td className="td text-end">{formatMoney(r.postedAdjustment, locale)}</td>
                   <td className="td">
                     {Math.abs(r.unpostedDelta) >= 0.01 && can('finance.invoice.write') ? (
-                      <button
-                        className="btn-primary !px-3 !py-1 text-xs"
+                      <Btn
+                        variant="primary"
+                        sm
+                        icon="book"
+                        busy={busy(`rec:${r.contractId}`)}
                         disabled={busy()}
                         onClick={() => recognize(r)}
                       >
-                        {busy(`rec:${r.contractId}`) ? t('common.loading') : `📗 ${t('fin.poc.recognize')}`}
-                      </button>
+                        {t('fin.poc.recognize')}
+                      </Btn>
                     ) : (
                       <span className="text-xs text-slate-400">{t('fin.poc.nothing')}</span>
                     )}
@@ -251,9 +254,9 @@ export default function FinanceReportsPage() {
                 {t('fin.vat.to')}
                 <input type="date" className="input mt-1" value={to} onChange={(e) => setTo(e.target.value)} />
               </label>
-              <button className="btn-ghost text-xs" onClick={() => loadVat(from || undefined, to || undefined)}>
+              <Btn sm icon="refresh" onClick={() => loadVat(from || undefined, to || undefined)}>
                 {t('fin.vat.apply')}
-              </button>
+              </Btn>
             </div>
             {vat ? (
               <div>
@@ -310,7 +313,11 @@ export default function FinanceReportsPage() {
                 </div>
               </div>
             ) : (
-              <p className="text-slate-400">{t('common.loading')}</p>
+              <div className="space-y-3" aria-hidden>
+                <div className="skeleton h-3 w-24" />
+                <div className="skeleton h-3 w-40" />
+                <div className="skeleton h-3 w-32" />
+              </div>
             )}
           </div>
         </div>
@@ -336,7 +343,7 @@ export default function FinanceReportsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {!prof ? (
-                <EmptyRow colSpan={8} text={t('common.loading')} />
+                <TableSkeleton cols={8} />
               ) : prof.length === 0 ? (
                 <EmptyRow colSpan={8} text={t('common.none')} />
               ) : (

@@ -9,7 +9,7 @@ import { translateError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can, Btn, TableSkeleton } from '@/components/ui';
 
 interface Summary { open: number; inProgress: number; overdue: number; closedThisMonth: number }
 interface Wo {
@@ -187,9 +187,9 @@ export default function WorkOrdersPage() {
         title={t('wo.title')}
         action={
           <Can perm="fsm.workorder.write">
-            <button className="btn-primary text-xs" onClick={() => setWOpen(true)}>
-              🔧 {t('wo.new')}
-            </button>
+            <Btn variant="primary" icon="plus" onClick={() => setWOpen(true)}>
+              {t('wo.new')}
+            </Btn>
           </Can>
         }
       />
@@ -222,7 +222,7 @@ export default function WorkOrdersPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!rows ? (
-              <EmptyRow colSpan={8} text={t('common.loading')} />
+              <TableSkeleton cols={8} />
             ) : rows.length === 0 ? (
               <EmptyRow colSpan={8} text={t('common.none')} />
             ) : (
@@ -240,7 +240,7 @@ export default function WorkOrdersPage() {
                   <td className="td text-xs">{w.assignedTo ? pick(w.assignedTo, 'name') : '—'}</td>
                   <td className="td"><StatusBadge status={w.status} /></td>
                   <td className="td">
-                    <Link href={`/workorders/${w.id}`} className="btn-ghost !px-3 !py-1 text-xs">
+                    <Link href={`/workorders/${w.id}`} className="btn-ghost btn-sm">
                       {t('common.details')}
                     </Link>
                   </td>
@@ -258,10 +258,10 @@ export default function WorkOrdersPage() {
             <h3 className="text-sm font-semibold text-slate-800">{t('mp.title')}</h3>
             <Can perm="fsm.workorder.write">
               <div className="flex gap-2">
-                <button className="btn-ghost !px-3 !py-1 text-xs" onClick={() => setMOpen(true)}>➕ {t('mp.new')}</button>
-                <button className="btn-solar !px-3 !py-1 text-xs" onClick={generateDue} disabled={busy()}>
-                  ⚙️ {t('mp.generate')}
-                </button>
+                <Btn sm icon="plus" onClick={() => setMOpen(true)}>{t('mp.new')}</Btn>
+                <Btn variant="solar" sm icon="settings" busy={busy('generate')} disabled={busy()} onClick={generateDue}>
+                  {t('mp.generate')}
+                </Btn>
               </div>
             </Can>
           </div>
@@ -278,7 +278,7 @@ export default function WorkOrdersPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {!plans ? (
-                <EmptyRow colSpan={6} text={t('common.loading')} />
+                <TableSkeleton cols={6} />
               ) : plans.length === 0 ? (
                 <EmptyRow colSpan={6} text={t('common.none')} />
               ) : (
@@ -374,10 +374,10 @@ export default function WorkOrdersPage() {
           </Field>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn-ghost text-xs" onClick={() => setWOpen(false)}>{t('common.cancel')}</button>
-          <button className="btn-primary text-xs" onClick={createWo} disabled={busy() || !(wTitleAr.trim() || wTitleEn.trim())}>
-            {busy('wo') ? t('common.loading') : t('common.create')}
-          </button>
+          <Btn sm onClick={() => setWOpen(false)}>{t('common.cancel')}</Btn>
+          <Btn variant="primary" sm busy={busy('wo')} disabled={busy() || !(wTitleAr.trim() || wTitleEn.trim())} onClick={createWo}>
+            {t('common.create')}
+          </Btn>
         </div>
       </Modal>
 
@@ -413,10 +413,10 @@ export default function WorkOrdersPage() {
           </Field>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn-ghost text-xs" onClick={() => setMOpen(false)}>{t('common.cancel')}</button>
-          <button className="btn-primary text-xs" onClick={createPlan} disabled={busy() || !(mNameAr.trim() || mNameEn.trim()) || !mInterval}>
-            {busy('plan') ? t('common.loading') : t('common.create')}
-          </button>
+          <Btn sm onClick={() => setMOpen(false)}>{t('common.cancel')}</Btn>
+          <Btn variant="primary" sm busy={busy('plan')} disabled={busy() || !(mNameAr.trim() || mNameEn.trim()) || !mInterval} onClick={createPlan}>
+            {t('common.create')}
+          </Btn>
         </div>
       </Modal>
     </div>

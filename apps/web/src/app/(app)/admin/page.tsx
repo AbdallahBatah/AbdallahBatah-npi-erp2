@@ -14,7 +14,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
-import { PageHeader, LoadError, Modal, useConfirm } from '@/components/ui';
+import { PageHeader, LoadError, Modal, useConfirm, Btn, Tabs, PageSkeleton } from '@/components/ui';
 
 interface RoleRow {
   id: string;
@@ -261,7 +261,7 @@ export default function AdminPage() {
   }
 
   if (loadErr) return <LoadError message={loadErr} onRetry={load} />;
-  if (!users || !roles) return <div className="text-slate-400">{t('common.loading')}</div>;
+  if (!users || !roles) return <PageSkeleton stats={2} />;
 
   const roleName = (r: { nameAr: string; nameEn: string }) => (ar ? r.nameAr : r.nameEn);
 
@@ -271,39 +271,41 @@ export default function AdminPage() {
         title={t('adm.title')}
         action={
           tab === 'users' ? (
-            <button className="btn-primary text-xs" onClick={openCreateUser}>
-              + {t('adm.user.new')}
-            </button>
+            <Btn variant="primary" icon="plus" onClick={openCreateUser}>
+              {t('adm.user.new')}
+            </Btn>
           ) : tab === 'roles' ? (
-            <button className="btn-primary text-xs" onClick={openCreateRole}>
-              + {t('adm.role.new')}
-            </button>
+            <Btn variant="primary" icon="plus" onClick={openCreateRole}>
+              {t('adm.role.new')}
+            </Btn>
           ) : undefined
         }
       />
       <p className="-mt-3 mb-5 text-xs text-slate-500">{t('adm.hint')}</p>
 
-      {/* Tabs */}
-      <div className="mb-5 flex gap-1 rounded-xl bg-slate-100 p-1 text-sm font-semibold w-fit">
-        {(orgManage ? (['users', 'roles', 'org'] as const) : (['users', 'roles'] as const)).map((k) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={`rounded-lg px-4 py-1.5 transition ${
-              tab === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t(`adm.tab.${k}`)}
-          </button>
-        ))}
-      </div>
+      {/* The shared pill row — same component every other tabbed screen uses. */}
+      <Tabs
+        tabs={(orgManage ? (['users', 'roles', 'org'] as const) : (['users', 'roles'] as const)).map(
+          (k) => ({
+            key: k,
+            label: t(`adm.tab.${k}`),
+            count: k === 'users' ? users.length : k === 'roles' ? roles.length : undefined,
+          }),
+        )}
+        value={tab}
+        onChange={(k) => setTab(k as 'users' | 'roles' | 'org')}
+      />
 
       {tab === 'org' ? (
         <div className="card max-w-2xl p-6">
           {orgErr ? (
             <LoadError message={orgErr} onRetry={loadOrg} />
           ) : !org ? (
-            <div className="text-slate-400">{t('common.loading')}</div>
+            <div className="space-y-3" aria-hidden>
+              <div className="skeleton h-3 w-32" />
+              <div className="skeleton h-9 w-full" />
+              <div className="skeleton h-9 w-full" />
+            </div>
           ) : (
             <form className="grid gap-4" onSubmit={submitOrg}>
               <div className="flex items-center gap-4">
@@ -326,9 +328,9 @@ export default function AdminPage() {
                       />
                     </label>
                     {org.logoDataUrl && (
-                      <button type="button" className="btn-ghost !text-rose-600 text-xs" onClick={removeLogo}>
+                      <Btn sm icon="trash" className="!text-rose-600" onClick={removeLogo}>
                         {t('org.logoRemove')}
-                      </button>
+                      </Btn>
                     )}
                   </div>
                   <p className="mt-1 text-[11px] text-slate-400">{t('org.logoHint')}</p>
@@ -427,9 +429,9 @@ export default function AdminPage() {
               </div>
 
               <div className="flex justify-end">
-                <button type="submit" className="btn-primary" disabled={busy()}>
-                  {busy('org') ? t('common.loading') : t('common.save')}
-                </button>
+                <Btn type="submit" variant="primary" busy={busy('org')} disabled={busy()}>
+                  {t('common.save')}
+                </Btn>
               </div>
             </form>
           )}
@@ -469,20 +471,20 @@ export default function AdminPage() {
                   <td className="td text-xs">{formatDate(u.createdAt, locale)}</td>
                   <td className="td">
                     <div className="flex justify-end gap-1.5 text-[11px]">
-                      <button className="btn-ghost !px-2 !py-1" onClick={() => openEditUser(u)}>
-                        {t('common.edit')}
-                      </button>
-                      <button className="btn-ghost !px-2 !py-1" onClick={() => { setPOpen(u); setPValue(''); }}>
-                        🔑 {t('adm.user.resetPass')}
-                      </button>
+                      <Btn sm onClick={() => openEditUser(u)}>{t('common.edit')}</Btn>
+                      <Btn sm icon="key" onClick={() => { setPOpen(u); setPValue(''); }}>
+                        {t('adm.user.resetPass')}
+                      </Btn>
                       {u.id !== me?.id && (
-                        <button
-                          className={`btn-ghost !px-2 !py-1 ${u.isActive ? '!text-rose-600' : '!text-emerald-600'}`}
+                        <Btn
+                          sm
+                          className={u.isActive ? '!text-rose-600' : '!text-emerald-600'}
+                          busy={busy(`active:${u.id}`)}
                           disabled={busy()}
                           onClick={() => toggleActive(u)}
                         >
                           {u.isActive ? t('adm.user.deactivate') : t('adm.user.activate')}
-                        </button>
+                        </Btn>
                       )}
                     </div>
                   </td>
@@ -514,17 +516,18 @@ export default function AdminPage() {
                   </td>
                   <td className="td">
                     <div className="flex justify-end gap-1.5 text-[11px]">
-                      <button className="btn-ghost !px-2 !py-1" onClick={() => openEditRole(r)}>
-                        {t('common.edit')}
-                      </button>
+                      <Btn sm onClick={() => openEditRole(r)}>{t('common.edit')}</Btn>
                       {r._count.users === 0 && (
-                        <button
-                          className="btn-ghost !px-2 !py-1 !text-rose-600"
+                        <Btn
+                          sm
+                          icon="trash"
+                          className="!text-rose-600"
+                          busy={busy(`delRole:${r.id}`)}
                           disabled={busy()}
                           onClick={() => deleteRole(r)}
                         >
                           {t('adm.role.delete')}
-                        </button>
+                        </Btn>
                       )}
                     </div>
                   </td>
@@ -596,12 +599,10 @@ export default function AdminPage() {
             </select>
           </label>
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setUOpen(false)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('user') ? t('common.loading') : uEdit ? t('common.save') : t('common.create')}
-            </button>
+            <Btn onClick={() => setUOpen(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('user')} disabled={busy()}>
+              {uEdit ? t('common.save') : t('common.create')}
+            </Btn>
           </div>
         </form>
       </Modal>
@@ -633,12 +634,10 @@ export default function AdminPage() {
             <span className="mt-1 block text-[11px] text-slate-400">{t('adm.user.passwordHint')}</span>
           </label>
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setPOpen(null)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('setPw') ? t('common.loading') : t('adm.user.resetPass')}
-            </button>
+            <Btn onClick={() => setPOpen(null)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('setPw')} disabled={busy()}>
+              {t('adm.user.resetPass')}
+            </Btn>
           </div>
         </form>
       </Modal>
@@ -731,12 +730,10 @@ export default function AdminPage() {
           </div>
 
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setROpen(false)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy() || rPerms.size === 0}>
-              {busy('role') ? t('common.loading') : rEdit ? t('common.save') : t('common.create')}
-            </button>
+            <Btn onClick={() => setROpen(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('role')} disabled={busy() || rPerms.size === 0}>
+              {rEdit ? t('common.save') : t('common.create')}
+            </Btn>
           </div>
         </form>
       </Modal>

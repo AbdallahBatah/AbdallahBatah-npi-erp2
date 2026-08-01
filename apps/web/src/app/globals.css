@@ -48,6 +48,17 @@ body {
   .btn-success {
     @apply btn bg-gradient-to-b from-success-600 to-success-700 text-white shadow-sm shadow-success-700/25 hover:from-success-500 hover:to-success-600 focus-visible:ring-success-400;
   }
+  /* Size modifier. Declared AFTER every variant on purpose: all of these are
+     single-class selectors, so source order decides — `btn-primary btn-sm`
+     lands on the small padding. Replaces the `!px-3 !py-1 text-xs` overrides
+     that used to be sprinkled over the row-level action buttons. */
+  .btn-sm {
+    @apply gap-1.5 rounded-md px-3 py-1.5 text-xs;
+  }
+  /* Placeholder block used by the loading skeletons. */
+  .skeleton {
+    @apply animate-pulse rounded bg-slate-200/80;
+  }
   .input {
     @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10;
   }

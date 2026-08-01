@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
@@ -11,7 +10,8 @@ import { useDraft } from '@/lib/useDraft';
 import { translateError } from '@/lib/errors';
 import { useEnums } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, StatusBadge, Modal, Field, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, StatusBadge, Modal, Field, LoadError, useConfirm, Btn, PageSkeleton } from '@/components/ui';
+import { Icon } from '@/components/icons';
 
 interface Item { id: string; sku: string; nameAr: string; nameEn: string; unitCost: string }
 interface Scheme { id: string; code: string; nameAr: string; nameEn: string; marginPct: string }
@@ -231,22 +231,15 @@ export default function ProposalDetailPage() {
   }
 
   if (loadErr) return <LoadError message={loadErr} onRetry={load} />;
-  if (!proposal) {
-    return <div className="text-slate-400">{t('common.loading')}</div>;
-  }
+  if (!proposal) return <PageSkeleton stats={2} />;
 
   return (
     <div>
       <PageHeader
         title={`${proposal.code} · ${proposal.opportunity.name}`}
-        action={
-          <div className="flex items-center gap-2">
-            <StatusBadge status={proposal.status} />
-            <Link href="/proposals" className="btn-ghost text-xs">
-              {t('common.back')}
-            </Link>
-          </div>
-        }
+        backHref="/proposals"
+        backLabel={t('proposals.title')}
+        action={<StatusBadge status={proposal.status} />}
       />
 
       {/* Existing revisions */}
@@ -260,18 +253,24 @@ export default function ProposalDetailPage() {
                 </span>
                 <StatusBadge status={rev.status} />
                 {rev.isWinning && (
-                  <span className="badge bg-emerald-100 text-emerald-700">★ {t('proposals.accepted')}</span>
+                  <span className="badge bg-success-100 text-success-700">
+                    <Icon name="star" className="h-3 w-3" />
+                    {t('proposals.accepted')}
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 {!rev.isWinning && proposal.status !== 'ACCEPTED' && (
-                  <button
-                    className="btn-solar !px-3 !py-1 text-xs"
+                  <Btn
+                    variant="solar"
+                    sm
+                    icon="check"
+                    busy={busy(`accept:${rev.id}`)}
                     disabled={busy()}
                     onClick={() => accept(rev.id)}
                   >
-                    {busy(`accept:${rev.id}`) ? t('common.loading') : t('proposals.accept')}
-                  </button>
+                    {t('proposals.accept')}
+                  </Btn>
                 )}
               </div>
             </div>
@@ -318,9 +317,9 @@ export default function ProposalDetailPage() {
 
             {rev.isWinning && (
               <div className="mt-4 border-t border-slate-100 pt-4">
-                <button className="btn-primary" onClick={() => setContractOpen(true)}>
-                  {t('proposals.createContract')} →
-                </button>
+                <Btn variant="primary" icon="file-signature" onClick={() => setContractOpen(true)}>
+                  {t('proposals.createContract')}
+                </Btn>
               </div>
             )}
           </div>
@@ -334,7 +333,10 @@ export default function ProposalDetailPage() {
 
           {draft.restored && (
             <div className="mb-4 flex items-center justify-between gap-3 rounded-lg bg-info-50 px-3 py-2 text-xs text-info-800">
-              <span>↩︎ {t('draft.restored')}</span>
+              <span className="flex items-center gap-1.5">
+                <Icon name="undo" className="h-3.5 w-3.5" />
+                {t('draft.restored')}
+              </span>
               <button
                 type="button"
                 className="font-semibold underline"
@@ -437,10 +439,11 @@ export default function ProposalDetailPage() {
                 </span>
                 <button
                   type="button"
-                  className="text-slate-300 hover:text-rose-500"
+                  aria-label={t('common.close')}
+                  className="rounded-md p-1.5 text-slate-400 transition hover:bg-danger-50 hover:text-danger-600"
                   onClick={() => removeLine(i)}
                 >
-                  ✕
+                  <Icon name="x" className="h-4 w-4" />
                 </button>
               </div>
             ))}
@@ -457,9 +460,9 @@ export default function ProposalDetailPage() {
                 {t('common.total')}: {formatMoney(draftTotal, locale)}
               </span>
             </div>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('revision') ? t('common.loading') : t('proposals.addRevision')}
-            </button>
+            <Btn type="submit" variant="primary" icon="plus" busy={busy('revision')} disabled={busy()}>
+              {t('proposals.addRevision')}
+            </Btn>
           </div>
         </form>
       )}
@@ -510,12 +513,10 @@ export default function ProposalDetailPage() {
           </p>
 
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setContractOpen(false)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('contract') ? t('common.loading') : t('proposals.createContract')}
-            </button>
+            <Btn onClick={() => setContractOpen(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('contract')} disabled={busy()}>
+              {t('proposals.createContract')}
+            </Btn>
           </div>
         </form>
       </Modal>

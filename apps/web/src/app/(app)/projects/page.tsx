@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, Can, Btn, TableSkeleton } from '@/components/ui';
 
 interface Project {
   id: string;
@@ -67,9 +67,9 @@ export default function ProjectsPage() {
         title={t('prj.title')}
         action={
           <Can perm="projects.project.write">
-            <button className="btn-primary text-xs" onClick={() => setOpen(true)}>
-              🏗️ {t('prj.new')}
-            </button>
+            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+              {t('prj.new')}
+            </Btn>
           </Can>
         }
       />
@@ -91,7 +91,7 @@ export default function ProjectsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!rows ? (
-              <EmptyRow colSpan={8} text={t('common.loading')} />
+              <TableSkeleton cols={8} />
             ) : rows.length === 0 ? (
               <EmptyRow colSpan={8} text={t('prj.emptyHint')} actionHref="/contracts" actionText={t('nav.contracts')} />
             ) : (
@@ -110,7 +110,7 @@ export default function ProjectsPage() {
                   <td className="td text-center">{p._count?.purchaseOrders ?? 0}</td>
                   <td className="td text-center">{p._count?.serialUnits ?? 0}</td>
                   <td className="td">
-                    <Link href={`/projects/${p.id}`} className="btn-ghost !px-3 !py-1 text-xs">
+                    <Link href={`/projects/${p.id}`} className="btn-ghost btn-sm">
                       {t('common.details')}
                     </Link>
                   </td>
@@ -137,10 +137,10 @@ export default function ProjectsPage() {
               </select>
             </Field>
             <div className="flex justify-end gap-2">
-              <button className="btn-ghost text-xs" onClick={() => setOpen(false)}>{t('common.cancel')}</button>
-              <button className="btn-primary text-xs" onClick={create} disabled={busy() || !contractId}>
-                {busy('create') ? t('common.loading') : t('prj.createFromContract')}
-              </button>
+              <Btn sm onClick={() => setOpen(false)}>{t('common.cancel')}</Btn>
+              <Btn variant="primary" sm busy={busy('create')} disabled={busy() || !contractId} onClick={create}>
+                {t('prj.createFromContract')}
+              </Btn>
             </div>
           </div>
         )}

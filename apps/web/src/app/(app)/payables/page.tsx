@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDate, formatMoney } from '@/lib/format';
-import { PageHeader, Modal, Field, EmptyRow, LoadError, useConfirm, Can } from '@/components/ui';
+import { PageHeader, Modal, Field, EmptyRow, LoadError, useConfirm, Can, Btn, TableSkeleton } from '@/components/ui';
 
 interface Vendor {
   id: string;
@@ -163,7 +163,7 @@ export default function PayablesPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <EmptyRow colSpan={8} text={t('common.loading')} />
+              <TableSkeleton cols={8} />
             ) : open.length === 0 ? (
               <EmptyRow colSpan={8} text={t('ap.open.empty')} />
             ) : (
@@ -197,18 +197,19 @@ export default function PayablesPage() {
                     <div className="flex gap-2">
                       <Can perm="finance.payment.write">
                         {r.outstanding > 0.009 ? (
-                          <button className="btn-ghost text-xs" onClick={() => startPay(r)}>
+                          <Btn sm icon="credit-card" onClick={() => startPay(r)}>
                             {t('ap.action')}
-                          </button>
+                          </Btn>
                         ) : null}
                         {r.kind === 'CLAIM' && r.retentionWithheld > 0 ? (
-                          <button
-                            className="btn-ghost text-xs"
-                            disabled={busy(`rel:${r.id}`)}
+                          <Btn
+                            sm
+                            icon="unlock"
+                            busy={busy(`rel:${r.id}`)}
                             onClick={() => releaseRetention(r)}
                           >
                             {t('ap.release')}
-                          </button>
+                          </Btn>
                         ) : null}
                       </Can>
                     </div>
@@ -236,7 +237,7 @@ export default function PayablesPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <EmptyRow colSpan={7} text={t('common.loading')} />
+              <TableSkeleton cols={7} />
             ) : payments.length === 0 ? (
               <EmptyRow colSpan={7} text={t('ap.history.empty')} />
             ) : (
@@ -279,13 +280,9 @@ export default function PayablesPage() {
                 required
                 dir="ltr"
               />
-              <button
-                type="button"
-                className="btn-ghost whitespace-nowrap text-xs"
-                onClick={() => setAmount(String(target?.outstanding ?? ''))}
-              >
+              <Btn sm className="whitespace-nowrap" onClick={() => setAmount(String(target?.outstanding ?? ''))}>
                 {t('ap.full')}
-              </button>
+              </Btn>
             </div>
           </Field>
           <Field label={t('ap.method')}>
@@ -304,12 +301,10 @@ export default function PayablesPage() {
             <input name="memo" className="input" />
           </Field>
           <div className="col-span-2 flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setTarget(null)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('pay') ? t('common.loading') : t('ap.action')}
-            </button>
+            <Btn onClick={() => setTarget(null)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('pay')} disabled={busy()}>
+              {t('ap.action')}
+            </Btn>
           </div>
         </form>
       </Modal>

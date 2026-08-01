@@ -7,7 +7,8 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, Modal, Field, EmptyRow, LoadError, Can } from '@/components/ui';
+import { PageHeader, Modal, Field, EmptyRow, LoadError, Can, Btn, TableSkeleton } from '@/components/ui';
+import { Icon } from '@/components/icons';
 
 interface Item {
   id: string;
@@ -70,9 +71,9 @@ export default function ItemsPage() {
         title={t('items.title')}
         action={
           <Can perm="commercial.item.write">
-            <button className="btn-primary" onClick={() => setOpen(true)}>
-              + {t('items.new')}
-            </button>
+            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+              {t('items.new')}
+            </Btn>
           </Can>
         }
       />
@@ -92,7 +93,7 @@ export default function ItemsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <EmptyRow colSpan={6} text={t('common.loading')} />
+              <TableSkeleton cols={6} />
             ) : items.length === 0 ? (
               <EmptyRow colSpan={6} text={t('common.none')} />
             ) : (
@@ -103,7 +104,13 @@ export default function ItemsPage() {
                   <td className="td">{optionLabel(enums?.itemCategories, it.itemCategory, locale)}</td>
                   <td className="td">{it.uom}</td>
                   <td className="td">{formatMoney(it.unitCost, locale)}</td>
-                  <td className="td">{it.isSerialised ? '✓' : '—'}</td>
+                  <td className="td">
+                    {it.isSerialised ? (
+                      <Icon name="check" className="h-4 w-4 text-success-600" />
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
                 </tr>
               ))
             )}
@@ -142,12 +149,10 @@ export default function ItemsPage() {
             {t('items.serialised')}
           </label>
           <div className="col-span-2 flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('create') ? t('common.loading') : t('common.create')}
-            </button>
+            <Btn onClick={() => setOpen(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('create')} disabled={busy()}>
+              {t('common.create')}
+            </Btn>
           </div>
         </form>
       </Modal>

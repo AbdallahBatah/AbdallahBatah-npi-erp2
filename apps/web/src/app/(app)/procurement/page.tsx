@@ -10,7 +10,8 @@ import { useDraft } from '@/lib/useDraft';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, Can, Btn, TableSkeleton } from '@/components/ui';
+import { Icon } from '@/components/icons';
 
 interface Vendor {
   id: string;
@@ -211,10 +212,10 @@ export default function ProcurementPage() {
         action={
           <Can perm="scm.procurement.write">
             <div className="flex gap-2">
-              <button className="btn-ghost text-xs" onClick={() => setVOpen(true)}>➕ {t('po.newVendor')}</button>
-              <button className="btn-primary text-xs" onClick={() => { setPOpen(true); if (pLines.length === 0) addLine(); }}>
-                🛒 {t('po.new')}
-              </button>
+              <Btn icon="plus" onClick={() => setVOpen(true)}>{t('po.newVendor')}</Btn>
+              <Btn variant="primary" icon="cart" onClick={() => { setPOpen(true); if (pLines.length === 0) addLine(); }}>
+                {t('po.new')}
+              </Btn>
             </div>
           </Can>
         }
@@ -240,7 +241,7 @@ export default function ProcurementPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!pos ? (
-              <EmptyRow colSpan={7} text={t('common.loading')} />
+              <TableSkeleton cols={7} />
             ) : pos.length === 0 ? (
               <EmptyRow colSpan={7} text={t('common.none')} />
             ) : (
@@ -253,7 +254,7 @@ export default function ProcurementPage() {
                   <td className="td text-end">{formatMoney(po.total, locale)}</td>
                   <td className="td"><StatusBadge status={po.status} /></td>
                   <td className="td">
-                    <Link href={`/procurement/${po.id}`} className="btn-ghost !px-3 !py-1 text-xs">
+                    <Link href={`/procurement/${po.id}`} className="btn-ghost btn-sm">
                       {t('common.details')}
                     </Link>
                   </td>
@@ -281,7 +282,7 @@ export default function ProcurementPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!vendors ? (
-              <EmptyRow colSpan={5} text={t('common.loading')} />
+              <TableSkeleton cols={5} />
             ) : vendors.length === 0 ? (
               <EmptyRow colSpan={5} text={t('common.none')} />
             ) : (
@@ -290,7 +291,13 @@ export default function ProcurementPage() {
                   <td className="td font-mono text-xs">{v.code}</td>
                   <td className="td">{pick(v, 'name')}</td>
                   <td className="td">{optionLabel(enums?.vendorTypes, v.vendorType, locale)}</td>
-                  <td className="td text-center">{v.isManufacturer ? '✓' : '—'}</td>
+                  <td className="td text-center">
+                    {v.isManufacturer ? (
+                      <Icon name="check" className="mx-auto h-4 w-4 text-success-600" />
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
                   <td className="td text-center">{v._count?.purchaseOrders ?? 0}</td>
                 </tr>
               ))
@@ -304,9 +311,9 @@ export default function ProcurementPage() {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <h3 className="text-sm font-semibold text-slate-800">{t('stk.title')}</h3>
           <Can perm="scm.procurement.write">
-            <button className="btn-ghost text-xs" onClick={() => setTOpen(true)}>
-              🔄 {t('stk.transfer')}
-            </button>
+            <Btn sm icon="refresh" onClick={() => setTOpen(true)}>
+              {t('stk.transfer')}
+            </Btn>
           </Can>
         </div>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -319,7 +326,7 @@ export default function ProcurementPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!stock ? (
-              <EmptyRow colSpan={3} text={t('common.loading')} />
+              <TableSkeleton cols={3} />
             ) : stock.length === 0 ? (
               <EmptyRow colSpan={3} text={t('common.none')} />
             ) : (
@@ -373,10 +380,10 @@ export default function ProcurementPage() {
           </Field>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn-ghost text-xs" onClick={() => setTOpen(false)}>{t('common.cancel')}</button>
-          <button className="btn-primary text-xs" onClick={transfer} disabled={busy() || !tItemId || !tFrom || !tTo || !tQty}>
-            {busy('transfer') ? t('common.loading') : t('stk.transfer')}
-          </button>
+          <Btn sm onClick={() => setTOpen(false)}>{t('common.cancel')}</Btn>
+          <Btn variant="primary" sm busy={busy('transfer')} disabled={busy() || !tItemId || !tFrom || !tTo || !tQty} onClick={transfer}>
+            {t('stk.transfer')}
+          </Btn>
         </div>
       </Modal>
 
@@ -405,10 +412,10 @@ export default function ProcurementPage() {
           </label>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn-ghost text-xs" onClick={() => setVOpen(false)}>{t('common.cancel')}</button>
-          <button className="btn-primary text-xs" onClick={createVendor} disabled={busy() || !(vNameAr.trim() || vNameEn.trim())}>
-            {busy('vendor') ? t('common.loading') : t('common.create')}
-          </button>
+          <Btn sm onClick={() => setVOpen(false)}>{t('common.cancel')}</Btn>
+          <Btn variant="primary" sm busy={busy('vendor')} disabled={busy() || !(vNameAr.trim() || vNameEn.trim())} onClick={createVendor}>
+            {t('common.create')}
+          </Btn>
         </div>
       </Modal>
 
@@ -442,7 +449,7 @@ export default function ProcurementPage() {
           <div>
             <div className="mb-2 flex items-center justify-between">
               <span className="label !mb-0">{t('po.lines')}</span>
-              <button className="btn-ghost !px-2 !py-1 text-xs" onClick={addLine}>➕ {t('po.addLine')}</button>
+              <Btn sm icon="plus" onClick={addLine}>{t('po.addLine')}</Btn>
             </div>
             {poValidation.errorOf('pLines') && (
               <p role="alert" className="mb-2 text-[11px] font-medium text-danger-600">
@@ -455,7 +462,7 @@ export default function ProcurementPage() {
                   <select className="input flex-1" value={l.itemId} onChange={(e) => setLine(i, { itemId: e.target.value })}>
                     {items.map((it) => (
                       <option key={it.id} value={it.id}>
-                        {it.sku} · {pick(it, 'name')}{it.isSerialised ? ' 🔢' : ''}
+                        {it.sku} · {pick(it, 'name')}{it.isSerialised ? ' · S/N' : ''}
                       </option>
                     ))}
                   </select>
@@ -463,7 +470,14 @@ export default function ProcurementPage() {
                     onChange={(e) => setLine(i, { qty: Number(e.target.value) })} placeholder={t('po.qty')} />
                   <input type="number" min={0} step="0.01" className="input w-32" value={l.unitPrice}
                     onChange={(e) => setLine(i, { unitPrice: Number(e.target.value) })} placeholder={t('po.unitPrice')} />
-                  <button className="text-slate-400 hover:text-rose-600" onClick={() => setPLines(pLines.filter((_, idx) => idx !== i))}>✕</button>
+                  <button
+                    type="button"
+                    aria-label={t('common.close')}
+                    className="rounded-md p-1.5 text-slate-400 transition hover:bg-danger-50 hover:text-danger-600"
+                    onClick={() => setPLines(pLines.filter((_, idx) => idx !== i))}
+                  >
+                    <Icon name="x" className="h-4 w-4" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -485,12 +499,12 @@ export default function ProcurementPage() {
           </div>
 
           <div className="flex justify-end gap-2">
-            <button className="btn-ghost text-xs" onClick={() => setPOpen(false)}>{t('common.cancel')}</button>
+            <Btn sm onClick={() => setPOpen(false)}>{t('common.cancel')}</Btn>
             {/* Only disabled while in flight: a greyed-out button explains
                 nothing, so let the click land and name what is missing. */}
-            <button className="btn-primary text-xs" onClick={createPo} disabled={busy()}>
-              {busy('po') ? t('common.loading') : t('common.create')}
-            </button>
+            <Btn variant="primary" sm busy={busy('po')} disabled={busy()} onClick={createPo}>
+              {t('common.create')}
+            </Btn>
           </div>
         </div>
       </Modal>

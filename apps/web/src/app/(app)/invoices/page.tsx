@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { translateError } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, LoadError } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, LoadError, TableSkeleton } from '@/components/ui';
 
 interface Summary {
   issuedInvoices: number;
@@ -84,7 +84,7 @@ export default function InvoicesPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <EmptyRow colSpan={7} text={t('common.loading')} />
+              <TableSkeleton cols={7} />
             ) : rows.length === 0 ? (
               <EmptyRow colSpan={7} text={t('inv.emptyHint')} actionHref="/contracts" actionText={t('nav.contracts')} />
             ) : (
@@ -103,7 +103,7 @@ export default function InvoicesPage() {
                     )}
                   </td>
                   <td className="td">
-                    <Link href={`/invoices/${inv.id}`} className="btn-ghost !px-3 !py-1 text-xs">
+                    <Link href={`/invoices/${inv.id}`} className="btn-ghost btn-sm">
                       {t('common.details')}
                     </Link>
                   </td>

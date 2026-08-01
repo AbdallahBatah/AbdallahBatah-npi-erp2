@@ -1,25 +1,189 @@
 'use client';
 
-import { ReactNode, cloneElement, isValidElement, useId, useState } from 'react';
+import {
+  ButtonHTMLAttributes,
+  ReactNode,
+  cloneElement,
+  isValidElement,
+  useId,
+  useState,
+} from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
+import { Icon } from '@/components/icons';
 
 export function PageHeader({
   title,
   subtitle,
   action,
+  backHref,
+  backLabel,
 }: {
   title: string;
   subtitle?: string;
   action?: ReactNode;
+  /**
+   * Detail screens are reached from a list, from global search, or from a
+   * notification link — the last two leave no browser history worth going
+   * back to. An explicit link to the parent list is the only reliable way out.
+   */
+  backHref?: string;
+  backLabel?: string;
 }) {
+  const { t } = useI18n();
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
       <div>
+        {backHref && (
+          <Link
+            href={backHref}
+            className="mb-1.5 inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-brand-700"
+          >
+            {/* Points left in LTR, right in RTL — "back" follows reading order. */}
+            <Icon name="chevron-start" className="h-3.5 w-3.5 rtl:-scale-x-100" />
+            {backLabel ?? t('common.back')}
+          </Link>
+        )}
         <h1 className="text-xl font-bold tracking-tight text-slate-900">{title}</h1>
         {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
       </div>
       {action}
+    </div>
+  );
+}
+
+/** Inline spinner sized to the text it sits in. */
+export function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={`${className} animate-spin`} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const BTN_VARIANT = {
+  primary: 'btn-primary',
+  ghost: 'btn-ghost',
+  solar: 'btn-solar',
+  danger: 'btn-danger',
+  success: 'btn-success',
+} as const;
+
+/**
+ * The one action button.
+ *
+ * Two things it fixes that the raw `<button className="btn-primary">` could
+ * not: the icon slot is an SVG that inherits `currentColor` (button labels
+ * used to carry emoji, which render differently per OS and never mirror in
+ * RTL), and the in-flight state swaps that icon for a spinner **while keeping
+ * the label**. Replacing the label with "Loading…" resized the button
+ * mid-click and threw away the one word telling you what you had just
+ * started.
+ *
+ * `busy` also disables — a request in flight must not be fired twice.
+ */
+export function Btn({
+  variant = 'ghost',
+  icon,
+  iconClassName = '',
+  busy = false,
+  sm = false,
+  className = '',
+  disabled,
+  children,
+  ...rest
+}: {
+  variant?: keyof typeof BTN_VARIANT;
+  /** Icon name from `components/icons`. */
+  icon?: string;
+  /** Extra classes on the icon — `rtl:-scale-x-100` for directional ones. */
+  iconClassName?: string;
+  busy?: boolean;
+  /** Compact size for buttons inside table rows and card headers. */
+  sm?: boolean;
+} & ButtonHTMLAttributes<HTMLButtonElement>) {
+  const size = sm ? 'h-3.5 w-3.5' : 'h-4 w-4';
+  return (
+    <button
+      type="button"
+      {...rest}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      className={`${BTN_VARIANT[variant]}${sm ? ' btn-sm' : ''}${className ? ` ${className}` : ''}`}
+    >
+      {busy ? (
+        <Spinner className={size} />
+      ) : icon ? (
+        <Icon name={icon} className={iconClassName ? `${size} ${iconClassName}` : size} />
+      ) : null}
+      {children}
+    </button>
+  );
+}
+
+/** Deterministic widths — Math.random() here would break hydration. */
+const SKELETON_WIDTHS = ['62%', '84%', '45%', '73%', '55%', '90%'];
+
+/**
+ * Placeholder rows shaped like the table that is loading. A row of grey bars
+ * says "content is coming and it will look like this"; the single centred
+ * "Loading…" it replaces collapsed the table to one line and then jumped.
+ */
+export function TableSkeleton({ cols, rows = 5 }: { cols: number; rows?: number }) {
+  const { t } = useI18n();
+  return (
+    <>
+      <tr>
+        <td colSpan={cols} className="sr-only" role="status">
+          {t('common.loading')}
+        </td>
+      </tr>
+      {Array.from({ length: rows }, (_, r) => (
+        <tr key={r} aria-hidden>
+          {Array.from({ length: cols }, (_, c) => (
+            <td key={c} className="td">
+              <div
+                className="skeleton h-3"
+                style={{ width: SKELETON_WIDTHS[(r * cols + c) % SKELETON_WIDTHS.length] }}
+              />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Whole-screen placeholder for detail pages, which used to render a bare
+ * "Loading…" line and then snap to a full layout.
+ */
+export function PageSkeleton({ stats = 4 }: { stats?: number }) {
+  const { t } = useI18n();
+  return (
+    <div>
+      <span className="sr-only" role="status">
+        {t('common.loading')}
+      </span>
+      <div className="mb-6 space-y-2" aria-hidden>
+        <div className="skeleton h-3 w-16" />
+        <div className="skeleton h-6 w-56" />
+      </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" aria-hidden>
+        {Array.from({ length: stats }, (_, i) => (
+          <div key={i} className="card space-y-3 p-5">
+            <div className="skeleton h-3 w-20" />
+            <div className="skeleton h-7 w-24" />
+          </div>
+        ))}
+      </div>
+      <div className="card mt-6 space-y-3.5 p-6" aria-hidden>
+        {SKELETON_WIDTHS.map((w, i) => (
+          <div key={i} className="skeleton h-3.5" style={{ width: w }} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -275,7 +439,7 @@ export function Modal({
             aria-label={t('common.close')}
             className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
           >
-            ✕
+            <Icon name="x" className="h-4 w-4" />
           </button>
         </div>
         {children}

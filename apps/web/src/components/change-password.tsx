@@ -8,6 +8,7 @@ import { useAct } from '@/lib/useAct';
 import { useToast } from '@/components/toast';
 import { Modal } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { Btn } from '@/components/ui';
 
 export function ChangePasswordButton() {
   const { t } = useI18n();
@@ -95,12 +96,10 @@ export function ChangePasswordButton() {
             />
           </label>
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => { reset(); setOpen(false); }}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('changePw') ? t('common.loading') : t('pw.change')}
-            </button>
+            <Btn onClick={() => { reset(); setOpen(false); }}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('changePw')} disabled={busy()}>
+              {t('pw.change')}
+            </Btn>
           </div>
         </form>
       </Modal>

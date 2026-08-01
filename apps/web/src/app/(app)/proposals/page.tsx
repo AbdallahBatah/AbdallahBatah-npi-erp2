@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { translateError } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, LoadError } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, LoadError, TableSkeleton } from '@/components/ui';
 
 interface Proposal {
   id: string;
@@ -52,7 +52,7 @@ export default function ProposalsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <EmptyRow colSpan={6} text={t('common.loading')} />
+              <TableSkeleton cols={6} />
             ) : rows.length === 0 ? (
               <EmptyRow colSpan={6} text={t('proposals.emptyHint')} actionHref="/opportunities" actionText={t('nav.opportunities')} />
             ) : (
@@ -66,7 +66,7 @@ export default function ProposalsPage() {
                     <td className="td">{latest ? formatMoney(latest.totalAmount, locale) : '—'}</td>
                     <td className="td"><StatusBadge status={p.status} /></td>
                     <td className="td">
-                      <Link href={`/proposals/${p.id}`} className="btn-ghost !px-3 !py-1 text-xs">
+                      <Link href={`/proposals/${p.id}`} className="btn-ghost btn-sm">
                         {t('common.details')}
                       </Link>
                     </td>

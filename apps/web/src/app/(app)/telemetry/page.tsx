@@ -8,7 +8,8 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatNumber } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, LoadError, useConfirm, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, LoadError, useConfirm, Can, Btn, TableSkeleton } from '@/components/ui';
+import { Icon } from '@/components/icons';
 
 interface Dash {
   plants: number;
@@ -78,13 +79,16 @@ export default function TelemetryPage() {
         title={t('tel.title')}
         action={
           <Can perm="fsm.workorder.write">
-            <button className="btn-primary text-xs" onClick={simulate} disabled={busy() || projects.length === 0}>
-              📡 {busy('simulate') ? t('common.loading') : t('tel.simulate')}
-            </button>
+            <Btn variant="primary" icon="activity" busy={busy('simulate')} disabled={busy() || projects.length === 0} onClick={simulate}>
+              {t('tel.simulate')}
+            </Btn>
           </Can>
         }
       />
-      <p className="mb-4 -mt-4 text-xs text-slate-400">⚠️ {t('tel.simulateHint')}</p>
+      <p className="mb-4 -mt-4 flex items-center gap-1.5 text-xs text-slate-400">
+        <Icon name="alert-triangle" className="h-3.5 w-3.5 shrink-0 text-warning-500" />
+        {t('tel.simulateHint')}
+      </p>
       {loadErr && <div className="mb-4"><LoadError message={loadErr} onRetry={load} /></div>}
       {confirmNode}
 
@@ -171,7 +175,7 @@ export default function TelemetryPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {!alerts ? (
-              <EmptyRow colSpan={8} text={t('common.loading')} />
+              <TableSkeleton cols={8} />
             ) : alerts.length === 0 ? (
               <EmptyRow colSpan={8} text={t('common.none')} />
             ) : (
@@ -203,22 +207,27 @@ export default function TelemetryPage() {
                     <span className="flex gap-1">
                       <Can perm="fsm.workorder.write">
                         {a.status === 'OPEN' && (
-                          <button
-                            className="btn-ghost !px-2 !py-1 text-xs"
+                          <Btn
+                            sm
+                            icon="eye"
+                            busy={busy(`ack:${a.id}`)}
                             disabled={busy()}
                             onClick={() => run(`ack:${a.id}`, () => api.post(`/telemetry/alerts/${a.id}/acknowledge`, {}))}
                           >
-                            👁️ {t('tel.ack')}
-                          </button>
+                            {t('tel.ack')}
+                          </Btn>
                         )}
                         {!a.workOrder && a.status !== 'RESOLVED' && (
-                          <button
-                            className="btn-primary !px-2 !py-1 text-xs"
+                          <Btn
+                            variant="primary"
+                            sm
+                            icon="wrench"
+                            busy={busy(`wo:${a.id}`)}
                             disabled={busy()}
                             onClick={() => run(`wo:${a.id}`, () => api.post(`/telemetry/alerts/${a.id}/work-order`, {}))}
                           >
-                            🔧 {t('tel.raiseWo')}
-                          </button>
+                            {t('tel.raiseWo')}
+                          </Btn>
                         )}
                       </Can>
                     </span>

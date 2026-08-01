@@ -8,7 +8,7 @@ import { useI18n } from '@/lib/i18n';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, LoadError } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, LoadError, TableSkeleton } from '@/components/ui';
 
 interface Contract {
   id: string;
@@ -57,7 +57,7 @@ export default function ContractsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <EmptyRow colSpan={7} text={t('common.loading')} />
+              <TableSkeleton cols={7} />
             ) : rows.length === 0 ? (
               <EmptyRow colSpan={7} text={t('contracts.emptyHint')} actionHref="/proposals" actionText={t('nav.proposals')} />
             ) : (
@@ -70,7 +70,7 @@ export default function ContractsPage() {
                   <td className="td">{c._count?.milestones ?? 0}</td>
                   <td className="td"><StatusBadge status={c.status} /></td>
                   <td className="td">
-                    <Link href={`/contracts/${c.id}`} className="btn-ghost !px-3 !py-1 text-xs">
+                    <Link href={`/contracts/${c.id}`} className="btn-ghost btn-sm">
                       {t('common.details')}
                     </Link>
                   </td>

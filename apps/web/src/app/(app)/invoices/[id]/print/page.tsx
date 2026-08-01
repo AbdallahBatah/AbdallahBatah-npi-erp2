@@ -13,7 +13,7 @@ import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate } from '@/lib/format';
-import { LoadError } from '@/components/ui';
+import { LoadError, PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
 interface Line {
@@ -84,7 +84,7 @@ export default function InvoicePrintPage() {
   useEffect(load, [load]);
 
   if (loadErr) return <LoadError message={loadErr} onRetry={load} />;
-  if (!inv) return <div className="text-slate-400">{t('common.loading')}</div>;
+  if (!inv) return <PageSkeleton stats={2} />;
 
   const isCreditNote = inv.invoiceType === 'CREDIT_NOTE';
   const org = inv.organization;

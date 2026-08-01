@@ -10,6 +10,7 @@ import { api, apiDownload, apiUpload } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
+import { Btn } from '@/components/ui';
 import { formatDate } from '@/lib/format';
 import { useConfirm } from './ui';
 import { Icon } from './icons';
@@ -90,14 +91,17 @@ export function AttachmentsCard({
               accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.docx,.csv,.txt,.zip,.dwg"
               onChange={(e) => onPick(e.target.files?.[0])}
             />
-            <button
-              className="btn-ghost !px-2.5 !py-1 text-[11px]"
+            <Btn
+              sm
+              icon="paperclip"
+              className="!px-2.5 !py-1 !text-[11px]"
+              busy={busy('upload')}
               disabled={busy()}
-              onClick={() => fileRef.current?.click()}
               title={t('att.hint')}
+              onClick={() => fileRef.current?.click()}
             >
-              {busy('upload') ? t('att.uploading') : `📎 ${t('att.upload')}`}
-            </button>
+              {busy('upload') ? t('att.uploading') : t('att.upload')}
+            </Btn>
           </>
         )}
       </div>

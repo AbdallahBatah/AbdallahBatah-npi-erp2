@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { formatMoney, formatNumber } from '@/lib/format';
 import { PageHeader } from '@/components/ui';
+import { Icon } from '@/components/icons';
 import { QuickActions } from '@/components/quick-actions';
 
 interface Summary {
@@ -59,17 +60,17 @@ export default function DashboardPage() {
 
   // A tile needs both its data source and read access to the page it links to.
   const kpis = [
-    { key: 'dash.openLeads', value: data?.openLeads, icon: '🎯', href: '/leads', show: canCrm },
-    { key: 'dash.openOpps', value: data?.openOpportunities, icon: '💡', href: '/opportunities', show: canCrm && can('crm.opportunity.read') },
-    { key: 'dash.activeContracts', value: data?.activeContracts, icon: '📝', href: '/contracts', show: canCrm && can('commercial.contract.read') },
-    { key: 'inv.summary.issued', value: fin?.issuedInvoices, icon: '🧾', href: '/invoices', show: canFin },
+    { key: 'dash.openLeads', value: data?.openLeads, icon: 'target', href: '/leads', show: canCrm },
+    { key: 'dash.openOpps', value: data?.openOpportunities, icon: 'lightbulb', href: '/opportunities', show: canCrm && can('crm.opportunity.read') },
+    { key: 'dash.activeContracts', value: data?.activeContracts, icon: 'file-signature', href: '/contracts', show: canCrm && can('commercial.contract.read') },
+    { key: 'inv.summary.issued', value: fin?.issuedInvoices, icon: 'receipt', href: '/invoices', show: canFin },
   ].filter((c) => c.show);
 
   const steps = [
-    { key: 'dash.step.lead', icon: '🎯' },
-    { key: 'dash.step.opp', icon: '💡' },
-    { key: 'dash.step.proposal', icon: '📄' },
-    { key: 'dash.step.contract', icon: '📝' },
+    { key: 'dash.step.lead', icon: 'target' },
+    { key: 'dash.step.opp', icon: 'lightbulb' },
+    { key: 'dash.step.proposal', icon: 'file-text' },
+    { key: 'dash.step.contract', icon: 'file-signature' },
   ];
 
   const num = (v: number | undefined | null) =>
@@ -88,7 +89,10 @@ export default function DashboardPage() {
           <Link key={c.key} href={c.href} className="stat group">
             <div className="flex items-start justify-between">
               <p className="text-xs font-semibold text-slate-400">{t(c.key)}</p>
-              <span className="text-lg opacity-40 transition group-hover:opacity-80">{c.icon}</span>
+              <Icon
+                name={c.icon}
+                className="h-5 w-5 text-slate-300 transition group-hover:text-brand-500"
+              />
             </div>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">{num(c.value)}</p>
           </Link>
@@ -126,7 +130,7 @@ export default function DashboardPage() {
         <Link href="/workorders" className="stat group">
           <div className="flex items-start justify-between">
             <p className="text-xs font-semibold text-slate-400">{t('wo.title')}</p>
-            <span className="text-lg opacity-40 transition group-hover:opacity-80">🔧</span>
+            <Icon name="wrench" className="h-5 w-5 text-slate-300 transition group-hover:text-brand-500" />
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg bg-sky-50 py-2">
@@ -153,7 +157,7 @@ export default function DashboardPage() {
         <Link href="/telemetry" className="stat group">
           <div className="flex items-start justify-between">
             <p className="text-xs font-semibold text-slate-400">{t('tel.title')}</p>
-            <span className="text-lg opacity-40 transition group-hover:opacity-80">📡</span>
+            <Icon name="activity" className="h-5 w-5 text-slate-300 transition group-hover:text-brand-500" />
           </div>
           <div className="mt-2 flex items-end justify-between">
             <div>
@@ -194,17 +198,17 @@ export default function DashboardPage() {
           {steps.map((s, i) => (
             <div key={s.key} className="flex items-center gap-2">
               <div className="flex items-center gap-2.5 rounded-xl border border-brand-100 bg-gradient-to-b from-brand-50/80 to-white px-4 py-3">
-                <span className="text-base">{s.icon}</span>
+                <Icon name={s.icon} className="h-4 w-4 text-brand-500" />
                 <span className="text-sm font-semibold text-brand-800">{t(s.key)}</span>
               </div>
               {i < steps.length - 1 && (
-                <span className="text-slate-300 rtl:rotate-180">→</span>
+                <Icon name="chevron-end" className="h-4 w-4 text-slate-300 rtl:-scale-x-100" />
               )}
             </div>
           ))}
-          <span className="text-slate-300 rtl:rotate-180">→</span>
+          <Icon name="chevron-end" className="h-4 w-4 text-slate-300 rtl:-scale-x-100" />
           <div className="flex items-center gap-2.5 rounded-xl border border-solar-200 bg-gradient-to-b from-solar-50 to-white px-4 py-3">
-            <span className="text-base">⚡</span>
+            <Icon name="zap" className="h-4 w-4 text-solar-500" />
             <span className="text-sm font-semibold text-solar-700">
               {locale === 'ar' ? 'تشغيل + تسوية' : 'Operate + settle'}
             </span>

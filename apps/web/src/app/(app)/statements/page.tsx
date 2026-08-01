@@ -8,7 +8,8 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDay, formatMoney } from '@/lib/format';
 import { downloadCsv, fileStamp } from '@/lib/csv';
-import { PageHeader, Modal, Field, LoadError, useConfirm } from '@/components/ui';
+import { PageHeader, Modal, Field, LoadError, useConfirm, Btn } from '@/components/ui';
+import { Icon } from '@/components/icons';
 
 interface StatementLine {
   accountId: string;
@@ -231,9 +232,9 @@ export default function StatementsPage() {
             dir="ltr"
           />
         </Field>
-        <button className="btn-primary" onClick={() => load(from, to)} disabled={loading}>
+        <Btn variant="primary" icon="refresh" busy={loading} onClick={() => load(from, to)}>
           {t('st.apply')}
-        </button>
+        </Btn>
       </div>
 
       {loadErr && !loading ? <LoadError message={loadErr} onRetry={() => load(from, to)} /> : null}
@@ -250,16 +251,20 @@ export default function StatementsPage() {
                 </p>
               ) : null}
             </div>
-            <button className="btn-ghost text-xs" onClick={exportIncome} disabled={!is}>
+            <Btn sm icon="download" disabled={!is} onClick={exportIncome}>
               {t('st.export')}
-            </button>
+            </Btn>
           </div>
           <table className="min-w-full">
             <tbody className="divide-y divide-slate-100">
               {loading || !is ? (
-                <tr>
-                  <td className="td text-slate-500" colSpan={2}>
-                    {t('common.loading')}
+                <tr aria-hidden>
+                  <td className="td" colSpan={2}>
+                    <div className="space-y-3">
+                      <div className="skeleton h-3 w-2/3" />
+                      <div className="skeleton h-3 w-1/2" />
+                      <div className="skeleton h-3 w-3/5" />
+                    </div>
                   </td>
                 </tr>
               ) : is.revenue.length + is.costOfRevenue.length + is.otherExpenses.length === 0 ? (
@@ -304,16 +309,20 @@ export default function StatementsPage() {
                 </p>
               ) : null}
             </div>
-            <button className="btn-ghost text-xs" onClick={exportBalance} disabled={!bs}>
+            <Btn sm icon="download" disabled={!bs} onClick={exportBalance}>
               {t('st.export')}
-            </button>
+            </Btn>
           </div>
           <table className="min-w-full">
             <tbody className="divide-y divide-slate-100">
               {loading || !bs ? (
-                <tr>
-                  <td className="td text-slate-500" colSpan={2}>
-                    {t('common.loading')}
+                <tr aria-hidden>
+                  <td className="td" colSpan={2}>
+                    <div className="space-y-3">
+                      <div className="skeleton h-3 w-2/3" />
+                      <div className="skeleton h-3 w-1/2" />
+                      <div className="skeleton h-3 w-3/5" />
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -336,7 +345,14 @@ export default function StatementsPage() {
                       className={`td text-xs ${bs.isBalanced ? 'text-emerald-600' : 'text-rose-600'}`}
                       colSpan={2}
                     >
-                      {bs.isBalanced ? `✓ ${t('st.bs.balanced')}` : t('st.bs.unbalanced')}
+                      {bs.isBalanced ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Icon name="check" className="h-3.5 w-3.5" />
+                          {t('st.bs.balanced')}
+                        </span>
+                      ) : (
+                        t('st.bs.unbalanced')
+                      )}
                     </td>
                   </tr>
                 </>
@@ -354,9 +370,9 @@ export default function StatementsPage() {
             <p className="text-xs text-slate-500">{t('st.fy.hint')}</p>
           </div>
           {canManage ? (
-            <button className="btn-primary" onClick={() => setOpenYear(true)}>
-              + {t('st.fy.open')}
-            </button>
+            <Btn variant="primary" icon="plus" onClick={() => setOpenYear(true)}>
+              {t('st.fy.open')}
+            </Btn>
           ) : null}
         </div>
 
@@ -380,13 +396,15 @@ export default function StatementsPage() {
                     </span>
                   </div>
                   {canManage ? (
-                    <button
-                      className={y.status === 'OPEN' ? 'btn-danger' : 'btn-ghost'}
-                      disabled={busy(`y:${y.id}`)}
+                    <Btn
+                      variant={y.status === 'OPEN' ? 'danger' : 'ghost'}
+                      sm
+                      icon={y.status === 'OPEN' ? 'lock' : 'unlock'}
+                      busy={busy(`y:${y.id}`)}
                       onClick={() => toggleYear(y)}
                     >
                       {y.status === 'OPEN' ? t('st.fy.close') : t('st.fy.reopen')}
-                    </button>
+                    </Btn>
                   ) : null}
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -435,12 +453,10 @@ export default function StatementsPage() {
             />
           </Field>
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setOpenYear(false)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('openYear') ? t('common.loading') : t('common.create')}
-            </button>
+            <Btn onClick={() => setOpenYear(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('openYear')} disabled={busy()}>
+              {t('common.create')}
+            </Btn>
           </div>
         </form>
       </Modal>

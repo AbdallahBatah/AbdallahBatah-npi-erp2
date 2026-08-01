@@ -8,7 +8,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, StatusBadge, Modal, Field, EmptyRow, LoadError, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, Modal, Field, EmptyRow, LoadError, Can, Btn, TableSkeleton } from '@/components/ui';
 
 interface Customer { id: string; code: string; nameAr: string; nameEn: string }
 interface Opportunity {
@@ -86,9 +86,9 @@ export default function OpportunitiesPage() {
         title={t('opps.title')}
         action={
           <Can perm="crm.opportunity.write">
-            <button className="btn-primary" onClick={() => setOpen(true)}>
-              + {t('opps.new')}
-            </button>
+            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+              {t('opps.new')}
+            </Btn>
           </Can>
         }
       />
@@ -108,7 +108,7 @@ export default function OpportunitiesPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <EmptyRow colSpan={6} text={t('common.loading')} />
+              <TableSkeleton cols={6} />
             ) : opps.length === 0 ? (
               <EmptyRow colSpan={6} text={t('common.none')} />
             ) : (
@@ -123,13 +123,16 @@ export default function OpportunitiesPage() {
                   <td className="td">{formatMoney(o.estimatedValue, locale)}</td>
                   <td className="td">
                     <Can perm="commercial.proposal.write">
-                      <button
-                        className="btn-solar !px-3 !py-1 text-xs"
+                      <Btn
+                        variant="solar"
+                        sm
+                        icon="file-text"
+                        busy={busy(`proposal:${o.id}`)}
                         disabled={busy()}
                         onClick={() => createProposal(o.id)}
                       >
-                        {busy(`proposal:${o.id}`) ? t('common.loading') : t('opps.createProposal')}
-                      </button>
+                        {t('opps.createProposal')}
+                      </Btn>
                     </Can>
                   </td>
                 </tr>
@@ -171,12 +174,10 @@ export default function OpportunitiesPage() {
             <input name="estimatedValue" type="number" step="0.01" className="input" />
           </Field>
           <div className="col-span-2 flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('create') ? t('common.loading') : t('common.create')}
-            </button>
+            <Btn onClick={() => setOpen(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('create')} disabled={busy()}>
+              {t('common.create')}
+            </Btn>
           </div>
         </form>
       </Modal>

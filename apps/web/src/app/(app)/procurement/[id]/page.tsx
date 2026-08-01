@@ -9,7 +9,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can, Btn, PageSkeleton } from '@/components/ui';
 
 interface PoLine {
   id: string;
@@ -127,29 +127,30 @@ export default function PoDetailPage() {
   }
 
   if (loadErr && !po) return <LoadError message={loadErr} onRetry={load} />;
-  if (!po) return <div className="text-slate-400">{t('common.loading')}</div>;
+  if (!po) return <PageSkeleton stats={3} />;
   const receivable = ['APPROVED', 'PARTIALLY_RECEIVED'].includes(po.status);
 
   return (
     <div>
       <PageHeader
         title={`${po.code} — ${pick(po.vendor, 'name')}`}
+        backHref="/procurement"
+        backLabel={t('po.title')}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={po.status} />
             <Can perm="scm.procurement.write">
               {po.status === 'DRAFT' && (
-                <button className="btn-primary text-xs" onClick={approve} disabled={busy()}>
-                  ✅ {t('po.approve')}
-                </button>
+                <Btn variant="primary" sm icon="check-circle" busy={busy('approve')} disabled={busy()} onClick={approve}>
+                  {t('po.approve')}
+                </Btn>
               )}
               {receivable && (
-                <button className="btn-solar text-xs" onClick={openReceive} disabled={busy()}>
-                  📦 {t('po.receive')}
-                </button>
+                <Btn variant="solar" sm icon="package" disabled={busy()} onClick={openReceive}>
+                  {t('po.receive')}
+                </Btn>
               )}
             </Can>
-            <Link href="/procurement" className="btn-ghost text-xs">{t('common.back')}</Link>
           </div>
         }
       />
@@ -201,7 +202,7 @@ export default function PoDetailPage() {
               <tr key={l.id}>
                 <td className="td">
                   <span className="font-mono text-xs text-slate-400">{l.item.sku}</span>{' '}
-                  {pick(l.item, 'name')}{l.item.isSerialised ? ' 🔢' : ''}
+                  {pick(l.item, 'name')}{l.item.isSerialised ? ' · S/N' : ''}
                 </td>
                 <td className="td text-xs">{l.wbsElement ? `${l.wbsElement.code}` : '—'}</td>
                 <td className="td text-end">{Number(l.qty)}</td>
@@ -254,9 +255,9 @@ export default function PoDetailPage() {
                   <td className="td">
                     {g.vendorBills.length === 0 && (
                       <Can perm="scm.procurement.write">
-                        <button className="btn-primary !px-3 !py-1 text-xs" onClick={() => bill(g.id)} disabled={busy()}>
-                          🧾 {t('po.createBill')}
-                        </button>
+                        <Btn variant="primary" sm icon="receipt" busy={busy(`bill:${g.id}`)} disabled={busy()} onClick={() => bill(g.id)}>
+                          {t('po.createBill')}
+                        </Btn>
                       </Can>
                     )}
                   </td>
@@ -289,7 +290,7 @@ export default function PoDetailPage() {
               <div key={l.id} className="rounded-lg border border-slate-200 p-3">
                 <p className="mb-2 text-sm font-medium">
                   <span className="font-mono text-xs text-slate-400">{l.item.sku}</span>{' '}
-                  {pick(l.item, 'name')}{l.item.isSerialised ? ' 🔢' : ''}
+                  {pick(l.item, 'name')}{l.item.isSerialised ? ' · S/N' : ''}
                   <span className="ms-2 text-xs text-slate-400">
                     {t('po.received')}: {Number(l.receivedQty)} / {Number(l.qty)}
                   </span>
@@ -345,14 +346,16 @@ export default function PoDetailPage() {
               </div>
             ))}
           <div className="flex justify-end gap-2">
-            <button className="btn-ghost text-xs" onClick={() => setROpen(false)}>{t('common.cancel')}</button>
-            <button
-              className="btn-primary text-xs"
-              onClick={receive}
+            <Btn sm onClick={() => setROpen(false)}>{t('common.cancel')}</Btn>
+            <Btn
+              variant="primary"
+              sm
+              busy={busy('receive')}
               disabled={busy() || !Object.values(draft).some((d) => d.qty > 0)}
+              onClick={receive}
             >
-              {busy('receive') ? t('common.loading') : t('po.receive')}
-            </button>
+              {t('po.receive')}
+            </Btn>
           </div>
         </div>
       </Modal>

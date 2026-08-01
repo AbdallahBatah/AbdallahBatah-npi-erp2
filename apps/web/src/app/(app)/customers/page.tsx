@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
-import { PageHeader, Modal, Field, EmptyRow, LoadError, Can } from '@/components/ui';
+import { PageHeader, Modal, Field, EmptyRow, LoadError, Can, Btn, TableSkeleton } from '@/components/ui';
 
 interface Customer {
   id: string;
@@ -93,9 +93,9 @@ export default function CustomersPage() {
         subtitle={t('cust.hint')}
         action={
           <Can perm="crm.customer.write">
-            <button className="btn-primary" onClick={() => setOpen(true)}>
-              + {t('cust.new')}
-            </button>
+            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+              {t('cust.new')}
+            </Btn>
           </Can>
         }
       />
@@ -124,7 +124,7 @@ export default function CustomersPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <EmptyRow colSpan={6} text={t('common.loading')} />
+              <TableSkeleton cols={6} />
             ) : rows.length === 0 ? (
               <EmptyRow colSpan={6} text={t('cust.empty')} />
             ) : (
@@ -173,12 +173,10 @@ export default function CustomersPage() {
             <input name="email" type="email" className="input" dir="ltr" />
           </Field>
           <div className="col-span-2 flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn-primary" disabled={busy()}>
-              {busy('create') ? t('common.loading') : t('common.create')}
-            </button>
+            <Btn onClick={() => setOpen(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('create')} disabled={busy()}>
+              {t('common.create')}
+            </Btn>
           </div>
         </form>
       </Modal>

@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
@@ -9,7 +8,8 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can, Btn, PageSkeleton } from '@/components/ui';
+import { Icon } from '@/components/icons';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Part {
@@ -128,44 +128,45 @@ export default function WorkOrderDetailPage() {
   }
 
   if (loadErr && !wo) return <LoadError message={loadErr} onRetry={load} />;
-  if (!wo) return <div className="text-slate-400">{t('common.loading')}</div>;
+  if (!wo) return <PageSkeleton />;
 
   return (
     <div>
       <PageHeader
         title={`${wo.code} — ${locale === 'ar' ? wo.titleAr : wo.titleEn}`}
+        backHref="/workorders"
+        backLabel={t('wo.title')}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={wo.status} />
             {/* Every lifecycle transition is one permission on the server. */}
             <Can perm="fsm.workorder.write">
               {['OPEN', 'ASSIGNED'].includes(wo.status) && (
-                <button className="btn-primary text-xs" onClick={() => run('start', () => api.post(`/fsm/work-orders/${id}/start`, {}))} disabled={busy()}>
-                  ▶️ {t('wo.start')}
-                </button>
+                <Btn variant="primary" sm icon="play" busy={busy('start')} disabled={busy()} onClick={() => run('start', () => api.post(`/fsm/work-orders/${id}/start`, {}))}>
+                  {t('wo.start')}
+                </Btn>
               )}
               {wo.status === 'IN_PROGRESS' && (
                 <>
-                  <button className="btn-ghost text-xs" onClick={() => setPOpen(true)} disabled={busy()}>
-                    ⚙️ {t('wo.addPart')}
-                  </button>
-                  <button className="btn-solar text-xs" onClick={openComplete} disabled={busy()}>
-                    ✅ {t('wo.complete')}
-                  </button>
+                  <Btn sm icon="package" disabled={busy()} onClick={() => setPOpen(true)}>
+                    {t('wo.addPart')}
+                  </Btn>
+                  <Btn variant="solar" sm icon="check-circle" disabled={busy()} onClick={openComplete}>
+                    {t('wo.complete')}
+                  </Btn>
                 </>
               )}
               {wo.status === 'COMPLETED' && (
-                <button className="btn-primary text-xs" onClick={closeWo} disabled={busy()}>
-                  🔒 {t('wo.close')}
-                </button>
+                <Btn variant="primary" sm icon="lock" busy={busy('close')} disabled={busy()} onClick={closeWo}>
+                  {t('wo.close')}
+                </Btn>
               )}
               {!['CLOSED', 'CANCELLED'].includes(wo.status) && (
-                <button className="btn-ghost text-xs !text-rose-600" onClick={cancelWo} disabled={busy()}>
+                <Btn sm icon="x" className="!text-rose-600" busy={busy('cancel')} disabled={busy()} onClick={cancelWo}>
                   {t('wo.cancel')}
-                </button>
+                </Btn>
               )}
             </Can>
-            <Link href="/workorders" className="btn-ghost text-xs">{t('common.back')}</Link>
           </div>
         }
       />
@@ -199,13 +200,15 @@ export default function WorkOrderDetailPage() {
                   <option key={x.id} value={x.id}>{pick(x, 'name')}</option>
                 ))}
               </select>
-              <button
-                className="btn-primary !px-2 !py-1 text-xs"
+              <Btn
+                variant="primary"
+                sm
+                busy={busy('assign')}
                 disabled={busy() || !assignee}
                 onClick={() => run('assign', () => api.post(`/fsm/work-orders/${id}/assign`, { assignedToId: assignee }))}
               >
                 {t('wo.assign')}
-              </button>
+              </Btn>
             </div>
           ) : (
             <p className="mt-1 text-sm text-slate-400">—</p>
@@ -216,8 +219,19 @@ export default function WorkOrderDetailPage() {
           <p className={`mt-1 text-sm font-medium ${wo.slaDueAt && new Date(wo.slaDueAt) < new Date() && !['CLOSED', 'COMPLETED', 'CANCELLED'].includes(wo.status) ? 'text-rose-600' : ''}`}>
             {wo.slaDueAt ? formatDate(wo.slaDueAt, locale) : '—'}
           </p>
-          <p className="mt-1 text-xs text-slate-400">
-            {wo.startedAt ? `▶ ${formatDate(wo.startedAt, locale)}` : ''}{wo.closedAt ? ` · 🔒 ${formatDate(wo.closedAt, locale)}` : ''}
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+            {wo.startedAt && (
+              <span className="inline-flex items-center gap-1">
+                <Icon name="play" className="h-3 w-3" />
+                {formatDate(wo.startedAt, locale)}
+              </span>
+            )}
+            {wo.closedAt && (
+              <span className="inline-flex items-center gap-1">
+                <Icon name="lock" className="h-3 w-3" />
+                {formatDate(wo.closedAt, locale)}
+              </span>
+            )}
           </p>
         </div>
       </div>
@@ -330,13 +344,15 @@ export default function WorkOrderDetailPage() {
                 onChange={(e) => setTRate(Number(e.target.value))}
                 placeholder={t('time.rate')}
               />
-              <button
-                className="btn-ghost !px-3 !py-1.5 text-xs"
+              <Btn
+                sm
+                icon="clock"
+                busy={busy('time')}
                 disabled={busy() || !tHours}
                 onClick={() => run('time', () => api.post(`/fsm/work-orders/${id}/time`, { hours: tHours, hourlyRate: tRate }))}
               >
-                ⏱️ {t('time.add')}
-              </button>
+                {t('time.add')}
+              </Btn>
             </div>
           )}
         </div>
@@ -355,8 +371,11 @@ export default function WorkOrderDetailPage() {
             <ul className="divide-y divide-slate-100">
               {wo.checklistJson.map((c, i) => (
                 <li key={i} className="flex items-center justify-between px-5 py-2 text-sm">
-                  <span className={c.done ? 'text-slate-500 line-through' : 'text-slate-700'}>
-                    {c.done ? '✅' : '⬜'}{' '}
+                  <span className={`flex items-center gap-2 ${c.done ? 'text-slate-500 line-through' : 'text-slate-700'}`}>
+                    <Icon
+                      name={c.done ? 'square-check' : 'square'}
+                      className={`h-4 w-4 shrink-0 ${c.done ? 'text-success-500' : 'text-slate-300'}`}
+                    />
                     {locale === 'ar' ? c.labelAr ?? c.label : c.labelEn ?? c.label}
                     {c.mandatory && (
                       <span className="ms-2 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600">
@@ -401,9 +420,11 @@ export default function WorkOrderDetailPage() {
           </Field>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn-ghost text-xs" onClick={() => setPOpen(false)}>{t('common.cancel')}</button>
-          <button
-            className="btn-primary text-xs"
+          <Btn sm onClick={() => setPOpen(false)}>{t('common.cancel')}</Btn>
+          <Btn
+            variant="primary"
+            sm
+            busy={busy('part')}
             disabled={busy() || !pItemId || !pLoc || !pQty}
             onClick={async () => {
               const ok = await run('part', () =>
@@ -415,8 +436,8 @@ export default function WorkOrderDetailPage() {
               }
             }}
           >
-            {busy('part') ? t('common.loading') : t('wo.addPart')}
-          </button>
+            {t('wo.addPart')}
+          </Btn>
         </div>
       </Modal>
 
@@ -456,9 +477,12 @@ export default function WorkOrderDetailPage() {
           </div>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn-ghost text-xs" onClick={() => setCOpen(false)}>{t('common.cancel')}</button>
-          <button
-            className="btn-solar text-xs"
+          <Btn sm onClick={() => setCOpen(false)}>{t('common.cancel')}</Btn>
+          <Btn
+            variant="solar"
+            sm
+            icon="check-circle"
+            busy={busy('complete')}
             disabled={busy()}
             onClick={async () => {
               const ok = await run('complete', () =>
@@ -467,8 +491,8 @@ export default function WorkOrderDetailPage() {
               if (ok) setCOpen(false);
             }}
           >
-            {busy('complete') ? t('common.loading') : t('wo.complete')}
-          </button>
+            {t('wo.complete')}
+          </Btn>
         </div>
       </Modal>
     </div>

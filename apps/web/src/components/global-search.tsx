@@ -197,7 +197,11 @@ export function GlobalSearch() {
               {q.trim().length < 2 ? (
                 <p className="px-4 py-8 text-center text-xs text-slate-400">{t('search.hint')}</p>
               ) : loading && totalHits === 0 ? (
-                <p className="px-4 py-8 text-center text-xs text-slate-400">{t('common.loading')}</p>
+                <div className="space-y-3 px-4 py-5" aria-hidden>
+                  <div className="skeleton h-3 w-2/3" />
+                  <div className="skeleton h-3 w-1/2" />
+                  <div className="skeleton h-3 w-3/5" />
+                </div>
               ) : totalHits === 0 ? (
                 <p className="px-4 py-8 text-center text-xs text-slate-400">{t('search.noResults')}</p>
               ) : (

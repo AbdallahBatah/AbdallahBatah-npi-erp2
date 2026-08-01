@@ -6,6 +6,8 @@ import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { ApiError } from '@/lib/api';
 import { translateError } from '@/lib/errors';
+import { Spinner } from '@/components/ui';
+import { Icon } from '@/components/icons';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -62,16 +64,16 @@ export default function LoginPage() {
           }}
         />
         <div className="relative z-10 max-w-md px-10">
-          <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-2xl shadow-glow">
-            ☀️
+          <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-glow">
+            <Icon name="sun" className="h-7 w-7" />
           </div>
           <h1 className="text-3xl font-bold leading-tight text-white">{t('app.name')}</h1>
           <p className="mt-3 text-sm leading-relaxed text-slate-400">{t('app.tagline')}</p>
           <ul className="mt-10 space-y-4">
             {highlights.map((h) => (
               <li key={h} className="flex items-center gap-3 text-sm text-slate-300">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-500/15 text-xs text-brand-300">
-                  ✓
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300">
+                  <Icon name="check" className="h-3.5 w-3.5" />
                 </span>
                 {h}
               </li>
@@ -85,8 +87,8 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center justify-between lg:hidden">
             <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-base">
-                ☀️
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white">
+                <Icon name="sun" className="h-5 w-5" />
               </span>
               <span className="font-bold text-slate-900">{t('app.name')}</span>
             </div>
@@ -126,8 +128,9 @@ export default function LoginPage() {
             {error && (
               <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>
             )}
-            <button type="submit" className="btn-primary w-full !py-2.5" disabled={busy}>
-              {busy ? t('common.loading') : t('login.submit')}
+            <button type="submit" className="btn-primary w-full !py-2.5" disabled={busy} aria-busy={busy || undefined}>
+              {busy && <Spinner />}
+              {t('login.submit')}
             </button>
           </form>
 

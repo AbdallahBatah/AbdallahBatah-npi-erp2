@@ -517,7 +517,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'fin.prof.estMargin': 'الهامش التقديري',
     'fin.prof.marginPct': 'الهامش %',
     'fin.prof.earned': 'الهامش المكتسب',
-    'fin.prof.hint': 'التكلفة التقديرية من قائمة مواد العرض المقبول؛ علامة ✓ تعني أن الأرقام من التكاليف الفعلية المسجلة على المشروع.',
+    'fin.prof.hint': 'التكلفة التقديرية من قائمة مواد العرض المقبول؛ وسم «فعلي» يعني أن الأرقام من التكاليف الفعلية المسجلة على المشروع.',
     'fin.prof.actualCost': 'التكلفة الفعلية',
     'fin.prof.marginToDate': 'هامش حتى تاريخه',
 
@@ -1242,7 +1242,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'fin.prof.estMargin': 'Estimated margin',
     'fin.prof.marginPct': 'Margin %',
     'fin.prof.earned': 'Earned margin',
-    'fin.prof.hint': 'Estimate from the accepted proposal BOM; ✓ = actual cost from the append-only project cost ledger.',
+    'fin.prof.hint': 'Estimate from the accepted proposal BOM; an “Actual” tag means the figures come from the project cost ledger.',
     'fin.prof.actualCost': 'Actual cost',
     'fin.prof.marginToDate': 'Margin to date',
 
