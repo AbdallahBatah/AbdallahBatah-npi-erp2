@@ -28,6 +28,11 @@ packages/db/prisma/migrations/dev.db*
 *.log
 npm-debug.log*
 
+# Claude Code: skills are shared, but per-machine settings and the scratch
+# worktrees background tasks create (full repo copies) are not.
+.claude/settings.local.json
+.claude/worktrees/
+
 # OS / editor
 .DS_Store
 Thumbs.db
