@@ -199,7 +199,7 @@ export class ContractsService {
       where: { id: contractId },
       select: { code: true },
     });
-    await this.notifications.notify({
+    await this.notifications.notifyBestEffort({
       organizationId: user.organizationId,
       permission: 'finance.invoice.write',
       excludeUserId: user.userId,

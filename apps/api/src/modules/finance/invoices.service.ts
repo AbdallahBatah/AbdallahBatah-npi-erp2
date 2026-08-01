@@ -331,7 +331,7 @@ export class InvoicesService {
     }, { isolationLevel: 'Serializable' });
 
     // Post-commit: a rolled-back issue must never announce itself.
-    await this.notifications.notify({
+    await this.notifications.notifyBestEffort({
       organizationId: user.organizationId,
       permission: 'finance.invoice.read',
       excludeUserId: user.userId,
@@ -565,7 +565,7 @@ export class InvoicesService {
       { isolationLevel: 'Serializable' },
     );
 
-    await this.notifications.notify({
+    await this.notifications.notifyBestEffort({
       organizationId: user.organizationId,
       permission: 'finance.invoice.read',
       excludeUserId: user.userId,
@@ -652,7 +652,7 @@ export class InvoicesService {
       return receipt;
     });
 
-    await this.notifications.notify({
+    await this.notifications.notifyBestEffort({
       organizationId: user.organizationId,
       permission: 'finance.invoice.read',
       excludeUserId: user.userId,

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -24,6 +25,8 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 @Injectable()
 export class FsmService {
+  private readonly logger = new Logger(FsmService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
@@ -834,8 +837,17 @@ export class FsmService {
     const orgs = await this.prisma.organization.findMany({ select: { id: true } });
     const results: Array<{ organizationId: string; count: number }> = [];
     for (const org of orgs) {
-      const { count } = await this.generateDueForOrg(org.id, null);
-      if (count > 0) results.push({ organizationId: org.id, count });
+      // Per-org isolation: one organization's bad data must not stop the
+      // nightly pass for everyone else.
+      try {
+        const { count } = await this.generateDueForOrg(org.id, null);
+        if (count > 0) results.push({ organizationId: org.id, count });
+      } catch (err) {
+        this.logger.error(
+          `Preventive-maintenance generation failed for org ${org.id}`,
+          err instanceof Error ? err.stack : String(err),
+        );
+      }
     }
     return results;
   }

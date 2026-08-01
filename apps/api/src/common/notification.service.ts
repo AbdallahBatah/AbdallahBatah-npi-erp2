@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Prisma } from '@npi/db';
 
@@ -26,7 +26,28 @@ interface NotifyInput {
  */
 @Injectable()
 export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Best-effort variant for AFTER a transaction has committed: the business
+   * operation already succeeded, so a notification hiccup must never turn a
+   * posted invoice into a 500 (and bait the caller into retrying it).
+   * Inside a transaction, use notify(input, tx) — there, failing together is
+   * the point.
+   */
+  async notifyBestEffort(input: NotifyInput): Promise<number> {
+    try {
+      return await this.notify(input);
+    } catch (err) {
+      this.logger.error(
+        `Notification fan-out failed (type=${input.type}, org=${input.organizationId})`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      return 0;
+    }
+  }
 
   async notify(input: NotifyInput, tx?: Prisma.TransactionClient): Promise<number> {
     const client = tx ?? this.prisma;

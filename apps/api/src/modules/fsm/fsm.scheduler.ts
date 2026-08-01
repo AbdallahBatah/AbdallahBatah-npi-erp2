@@ -16,10 +16,20 @@ export class FsmScheduler {
 
   @Cron('0 1 * * *', { name: 'generate-due-maintenance', timeZone: 'Asia/Riyadh' })
   async generateDueMaintenance() {
-    const results = await this.fsm.generateDueForAllOrgs();
-    const total = results.reduce((s, r) => s + r.count, 0);
-    if (total > 0) {
-      this.logger.log(`Generated ${total} preventive work order(s) across ${results.length} organization(s)`);
+    // A cron handler that rejects becomes an unhandledRejection — nothing up
+    // the stack catches it. Log and survive; tonight's failure must not take
+    // the API down, and tomorrow's run picks the same due plans up again.
+    try {
+      const results = await this.fsm.generateDueForAllOrgs();
+      const total = results.reduce((s, r) => s + r.count, 0);
+      if (total > 0) {
+        this.logger.log(`Generated ${total} preventive work order(s) across ${results.length} organization(s)`);
+      }
+    } catch (err) {
+      this.logger.error(
+        'Nightly preventive-maintenance generation failed',
+        err instanceof Error ? err.stack : String(err),
+      );
     }
   }
 }
