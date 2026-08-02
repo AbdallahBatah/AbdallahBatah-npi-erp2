@@ -15,6 +15,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
 import { PageHeader, LoadError, Modal, useConfirm, Btn, Tabs, PageSkeleton } from '@/components/ui';
+import { AuditLogCard } from '@/components/audit-log';
 
 interface RoleRow {
   id: string;
@@ -60,8 +61,9 @@ export default function AdminPage() {
   const { confirm, confirmNode } = useConfirm();
   const ar = locale === 'ar';
   const orgManage = can('admin.org.manage');
+  const auditRead = can('admin.audit.read');
 
-  const [tab, setTab] = useState<'users' | 'roles' | 'org'>('users');
+  const [tab, setTab] = useState<'users' | 'roles' | 'org' | 'audit'>('users');
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [roles, setRoles] = useState<RoleRow[] | null>(null);
   const [catalog, setCatalog] = useState<PermMeta[]>([]);
@@ -285,18 +287,23 @@ export default function AdminPage() {
 
       {/* The shared pill row — same component every other tabbed screen uses. */}
       <Tabs
-        tabs={(orgManage ? (['users', 'roles', 'org'] as const) : (['users', 'roles'] as const)).map(
-          (k) => ({
-            key: k,
-            label: t(`adm.tab.${k}`),
-            count: k === 'users' ? users.length : k === 'roles' ? roles.length : undefined,
-          }),
-        )}
+        tabs={[
+          'users' as const,
+          'roles' as const,
+          ...(orgManage ? ['org' as const] : []),
+          ...(auditRead ? ['audit' as const] : []),
+        ].map((k) => ({
+          key: k,
+          label: t(`adm.tab.${k}`),
+          count: k === 'users' ? users.length : k === 'roles' ? roles.length : undefined,
+        }))}
         value={tab}
-        onChange={(k) => setTab(k as 'users' | 'roles' | 'org')}
+        onChange={(k) => setTab(k as 'users' | 'roles' | 'org' | 'audit')}
       />
 
-      {tab === 'org' ? (
+      {tab === 'audit' ? (
+        <AuditLogCard />
+      ) : tab === 'org' ? (
         <div className="card max-w-2xl p-6">
           {orgErr ? (
             <LoadError message={orgErr} onRetry={loadOrg} />

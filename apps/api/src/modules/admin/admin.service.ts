@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
+import type { Prisma } from '@npi/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { ALL_PERMISSIONS, PERMISSIONS } from '@npi/shared';
@@ -337,4 +338,103 @@ export class AdminService {
     });
     return updated;
   }
+
+  // ── audit trail (read side) ───────────────────────────────────────────────
+
+  /**
+   * The trail was write-only until now, which made "who changed what, when"
+   * unanswerable through the system — flagged as a control gap in the
+   * 2026-08-01 UAT. Read-only by construction: this class never exposes an
+   * update or delete on AuditLog.
+   */
+  async listAudit(user: AuthUser, filter: AuditFilter) {
+    const where: Prisma.AuditLogWhereInput = {
+      organizationId: user.organizationId,
+      entityType: filter.entityType || undefined,
+      entityId: filter.entityId || undefined,
+      action: filter.action || undefined,
+      actorId: filter.actorId || undefined,
+    };
+    if (filter.from || filter.to) {
+      const from = filter.from ? new Date(filter.from) : undefined;
+      // A bare YYYY-MM-DD "to" means "through that day", so push it to the
+      // last millisecond — same convention as the finance reports.
+      const to = filter.to ? new Date(`${filter.to.slice(0, 10)}T23:59:59.999Z`) : undefined;
+      if ((from && isNaN(+from)) || (to && isNaN(+to))) {
+        throw new BadRequestException('Invalid from/to date');
+      }
+      if (from && to && from > to) {
+        throw new BadRequestException('Invalid from/to date: from is after to');
+      }
+      where.occurredAt = { gte: from, lte: to };
+    }
+
+    const [total, logs] = await Promise.all([
+      this.prisma.auditLog.count({ where }),
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: { occurredAt: 'desc' },
+        take: filter.take,
+        skip: filter.skip,
+      }),
+    ]);
+
+    // AuditLog deliberately has no User relation (the trail outlives users),
+    // so resolve actor display names in one batch here.
+    const actorIds = [...new Set(logs.map((l) => l.actorId).filter((a): a is string => !!a))];
+    const actors = actorIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: actorIds } },
+          select: { id: true, nameAr: true, nameEn: true, email: true },
+        })
+      : [];
+    const byId = new Map(actors.map((a) => [a.id, a]));
+
+    return {
+      total,
+      rows: logs.map((l) => ({
+        id: l.id,
+        occurredAt: l.occurredAt,
+        actorId: l.actorId,
+        actor: l.actorId ? (byId.get(l.actorId) ?? null) : null,
+        entityType: l.entityType,
+        entityId: l.entityId,
+        action: l.action,
+        beforeJson: l.beforeJson,
+        afterJson: l.afterJson,
+        ip: l.ip,
+      })),
+    };
+  }
+
+  /** Distinct values actually present in this org's trail — feeds the filter dropdowns. */
+  async auditFacets(user: AuthUser) {
+    const [types, actions] = await Promise.all([
+      this.prisma.auditLog.groupBy({
+        by: ['entityType'],
+        where: { organizationId: user.organizationId },
+        orderBy: { entityType: 'asc' },
+      }),
+      this.prisma.auditLog.groupBy({
+        by: ['action'],
+        where: { organizationId: user.organizationId },
+        orderBy: { action: 'asc' },
+      }),
+    ]);
+    return {
+      entityTypes: types.map((t) => t.entityType),
+      actions: actions.map((a) => a.action),
+    };
+  }
+}
+
+interface AuditFilter {
+  entityType?: string;
+  entityId?: string;
+  action?: string;
+  actorId?: string;
+  from?: string;
+  to?: string;
+  take: number;
+  skip: number;
 }

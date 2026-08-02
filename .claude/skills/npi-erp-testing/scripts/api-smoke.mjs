@@ -63,6 +63,7 @@ const GUARDED_ROUTES = [
   ['/telemetry/dashboard', 'fsm.workorder.read'],
   ['/admin/users', 'admin.user.manage'],
   ['/admin/roles', 'admin.user.manage'],
+  ['/admin/audit', 'admin.audit.read'],
 ];
 
 // ── tiny harness ───────────────────────────────────────────────────────────

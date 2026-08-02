@@ -54,3 +54,19 @@ export function formatDate(
     day: 'numeric',
   }).format(d);
 }
+
+/** Date + wall-clock time — audit rows need the minute, not just the day. */
+export function formatDateTime(
+  value: string | Date | null | undefined,
+  locale: Locale,
+): string {
+  if (!value) return '—';
+  const d = typeof value === 'string' ? new Date(value) : value;
+  return new Intl.DateTimeFormat(locale === 'ar' ? AR_NUM : 'en-GB', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}

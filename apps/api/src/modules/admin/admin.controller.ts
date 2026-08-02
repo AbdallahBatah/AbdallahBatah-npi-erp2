@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { CreateRoleDto, CreateUserDto, ResetPasswordDto, UpdateOrgDto, UpdateRoleDto, UpdateUserDto } from './dto';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
@@ -68,6 +68,42 @@ export class AdminController {
   @RequirePermissions(PERMISSIONS.USER_MANAGE)
   deleteRole(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.deleteRole(user, id);
+  }
+
+  /**
+   * Read side of the append-only audit trail (UAT 2026-08-01 control-gap
+   * recommendation). `audit/facets` MUST stay declared before any dynamic
+   * segment ever added under `audit/` — Nest matches in declaration order.
+   */
+  @Get('audit')
+  @RequirePermissions(PERMISSIONS.AUDIT_READ)
+  listAudit(
+    @CurrentUser() user: AuthUser,
+    @Query('entityType') entityType?: string,
+    @Query('entityId') entityId?: string,
+    @Query('action') action?: string,
+    @Query('actorId') actorId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('take') take?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.admin.listAudit(user, {
+      entityType,
+      entityId,
+      action,
+      actorId,
+      from,
+      to,
+      take: Math.min(Number(take) || 50, 200),
+      skip: Number(skip) || 0,
+    });
+  }
+
+  @Get('audit/facets')
+  @RequirePermissions(PERMISSIONS.AUDIT_READ)
+  auditFacets(@CurrentUser() user: AuthUser) {
+    return this.admin.auditFacets(user);
   }
 
   @Get('org')

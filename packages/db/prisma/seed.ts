@@ -28,7 +28,7 @@ const ALL_PERMISSIONS = [
   'scm.procurement.read', 'scm.procurement.write',
   'assets.serialunit.read',
   'fsm.workorder.read', 'fsm.workorder.write',
-  'admin.org.manage', 'admin.user.manage',
+  'admin.org.manage', 'admin.user.manage', 'admin.audit.read',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 

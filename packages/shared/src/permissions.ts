@@ -31,6 +31,9 @@ export const PERMISSIONS = {
   WORKORDER_WRITE: 'fsm.workorder.write',
   ORG_MANAGE: 'admin.org.manage',
   USER_MANAGE: 'admin.user.manage',
+  // The audit trail is written on every mutation but proving "who changed
+  // what, when" needs a reader — a control permission, admin-only by default.
+  AUDIT_READ: 'admin.audit.read',
   // Attachments are cross-module: holding these alone is not enough — the
   // service also requires the read permission of the parent entity type.
   ATTACHMENT_READ: 'platform.attachment.read',
@@ -101,5 +104,6 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
   ...g('الإدارة', 'Administration', [
     [PERMISSIONS.USER_MANAGE, 'إدارة المستخدمين والأدوار', 'Manage users & roles'],
     [PERMISSIONS.ORG_MANAGE, 'إعدادات المنشأة', 'Organization settings'],
+    [PERMISSIONS.AUDIT_READ, 'عرض سجل التدقيق', 'View audit log'],
   ]),
 ];
