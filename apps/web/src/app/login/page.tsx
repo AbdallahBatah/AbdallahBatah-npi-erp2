@@ -51,9 +51,14 @@ export default function LoginPage() {
     <div className="flex min-h-screen bg-ink-950">
       {/* Brand panel */}
       <div className="relative hidden flex-1 items-center justify-center overflow-hidden lg:flex">
-        {/* glow orbs */}
-        <div className="absolute -top-32 start-1/4 h-96 w-96 rounded-full bg-brand-500/20 blur-3xl" />
-        <div className="absolute -bottom-24 end-1/4 h-80 w-80 rounded-full bg-solar-500/10 blur-3xl" />
+        {/* Brand artwork (Canva, NPI palette) under a darkening veil so the
+            white wordmark and highlights always stay readable on top. */}
+        <img
+          src="/brand/login-bg.webp"
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-ink-950/45" />
         {/* faint grid */}
         <div
           className="absolute inset-0 opacity-[0.04]"
@@ -64,9 +69,8 @@ export default function LoginPage() {
           }}
         />
         <div className="relative z-10 max-w-md px-10">
-          <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-glow">
-            <Icon name="sun" className="h-7 w-7" />
-          </div>
+          <img src="/brand/npi-logo-on-dark.svg" alt="NPI" className="mb-8 h-20 w-auto" />
+
           <h1 className="text-3xl font-bold leading-tight text-white">{t('app.name')}</h1>
           <p className="mt-3 text-sm leading-relaxed text-slate-400">{t('app.tagline')}</p>
           <ul className="mt-10 space-y-4">
@@ -87,9 +91,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center justify-between lg:hidden">
             <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white">
-                <Icon name="sun" className="h-5 w-5" />
-              </span>
+              <img src="/brand/npi-icon.svg" alt="" className="h-9 w-9" />
               <span className="font-bold text-slate-900">{t('app.name')}</span>
             </div>
           </div>

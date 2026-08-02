@@ -39,9 +39,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   if (loading || !user) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-slate-400">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-brand-700 text-white shadow-glow">
-          <Icon name="sun" className="h-6 w-6" />
-        </div>
+        <img src="/brand/npi-icon.svg" alt="" className="h-11 w-11" />
         <span className="flex items-center gap-2 text-xs" role="status">
           <Spinner className="h-3.5 w-3.5" />
           {t('common.loading')}
@@ -82,9 +80,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           {/* soft teal aura behind the mark */}
           <div className="pointer-events-none absolute -top-10 start-2 h-32 w-32 rounded-full bg-brand-500/10 blur-2xl" />
           <div className="relative flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-brand-700 text-white shadow-glow ring-1 ring-white/20">
-              <Icon name="sun" className="h-5 w-5" />
-            </div>
+            <img src="/brand/npi-icon.svg" alt="" className="h-10 w-10 shrink-0" />
             <div className="min-w-0">
               <p className="truncate text-[13.5px] font-bold leading-tight text-white">
                 {t('app.name')}
