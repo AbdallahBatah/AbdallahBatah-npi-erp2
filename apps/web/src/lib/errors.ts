@@ -18,6 +18,14 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   { re: /serialised items are replaced via the RMA/i, ar: 'الأصناف المتسلسلة تُستبدل عبر مطالبة ضمان من صفحة الأصول، لا كقطع غيار' },
   { re: /no PLANT asset yet/i, ar: 'لا توجد محطة مسجلة للمشروع بعد — ركّب وحدة تسلسلية أولاً' },
   // documents / lifecycle
+  {
+    re: /requires an accepted proposal revision/i,
+    ar: 'لا يمكن إنشاء عقد إلا من مراجعة عرض مقبولة — اقبل المراجعة أولاً',
+  },
+  {
+    re: /must be a Saudi VAT number/i,
+    ar: 'الرقم الضريبي غير صحيح — 15 رقماً يبدأ وينتهي بالرقم 3',
+  },
   { re: /only draft/i, ar: 'هذه العملية متاحة للمسودات فقط' },
   { re: /only in-progress/i, ar: 'أمر العمل ليس قيد التنفيذ' },
   { re: /already converted/i, ar: 'تم تحويل هذا العميل المحتمل مسبقاً' },

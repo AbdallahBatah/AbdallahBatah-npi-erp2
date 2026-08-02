@@ -10,6 +10,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { SAUDI_VAT_OR_EMPTY_RE } from '@npi/shared';
 
 export class CreateUserDto {
   @IsEmail()
@@ -120,7 +121,9 @@ export class UpdateOrgDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(50)
+  @Matches(SAUDI_VAT_OR_EMPTY_RE, {
+    message: 'vatNumber must be a Saudi VAT number (15 digits starting and ending with 3)',
+  })
   vatNumber?: string;
 
   @IsOptional()

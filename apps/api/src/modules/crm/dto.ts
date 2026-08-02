@@ -5,9 +5,15 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   Min,
   MinLength,
 } from 'class-validator';
+import { SAUDI_VAT_OR_EMPTY_RE } from '@npi/shared';
+
+const VAT_MESSAGE = {
+  message: 'vatNumber must be a Saudi VAT number (15 digits starting and ending with 3)',
+};
 
 // Enum value unions kept local to avoid importing Prisma enums into DTO
 // metadata (they validate fine as plain string unions with class-validator).
@@ -20,7 +26,7 @@ export class CreateCustomerDto {
   @IsString() @MinLength(1) nameAr!: string;
   @IsString() @MinLength(1) nameEn!: string;
   @IsOptional() @IsEnum(CUSTOMER_TYPES) customerType?: (typeof CUSTOMER_TYPES)[number];
-  @IsOptional() @IsString() vatNumber?: string;
+  @IsOptional() @Matches(SAUDI_VAT_OR_EMPTY_RE, VAT_MESSAGE) vatNumber?: string;
   @IsOptional() @IsString() crNumber?: string;
   @IsOptional() @IsInt() @Min(0) creditTermsDays?: number;
   @IsOptional() @IsString() phone?: string;
@@ -31,7 +37,7 @@ export class UpdateCustomerDto {
   @IsOptional() @IsString() nameAr?: string;
   @IsOptional() @IsString() nameEn?: string;
   @IsOptional() @IsEnum(CUSTOMER_TYPES) customerType?: (typeof CUSTOMER_TYPES)[number];
-  @IsOptional() @IsString() vatNumber?: string;
+  @IsOptional() @Matches(SAUDI_VAT_OR_EMPTY_RE, VAT_MESSAGE) vatNumber?: string;
   @IsOptional() @IsString() crNumber?: string;
   @IsOptional() @IsInt() @Min(0) creditTermsDays?: number;
   @IsOptional() @IsString() phone?: string;

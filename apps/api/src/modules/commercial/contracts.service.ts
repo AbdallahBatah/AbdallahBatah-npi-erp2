@@ -64,6 +64,14 @@ export class ContractsService {
         include: { proposal: { include: { opportunity: true } }, contract: true },
       });
       if (!revision) throw new NotFoundException('Proposal revision not found');
+      // D-01: a contract fixes the price the customer agreed to. Any revision
+      // that is not ACCEPTED carries a price nobody approved — refuse it here,
+      // not just in the UI, because this endpoint is reachable directly.
+      if (revision.status !== 'ACCEPTED') {
+        throw new BadRequestException(
+          `Contract requires an accepted proposal revision (status is ${revision.status})`,
+        );
+      }
       if (revision.contract) {
         throw new BadRequestException('This proposal revision already has a contract');
       }

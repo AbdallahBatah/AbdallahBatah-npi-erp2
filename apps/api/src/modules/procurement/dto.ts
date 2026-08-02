@@ -6,10 +6,12 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { SAUDI_VAT_OR_EMPTY_RE } from '@npi/shared';
 
 const VENDOR_TYPES = ['SUPPLIER', 'SUBCONTRACTOR', 'OEM', 'SERVICE'] as const;
 
@@ -18,7 +20,11 @@ export class CreateVendorDto {
   @IsString() @MinLength(1) nameAr!: string;
   @IsString() @MinLength(1) nameEn!: string;
   @IsOptional() @IsEnum(VENDOR_TYPES) vendorType?: (typeof VENDOR_TYPES)[number];
-  @IsOptional() @IsString() vatNumber?: string;
+  @IsOptional()
+  @Matches(SAUDI_VAT_OR_EMPTY_RE, {
+    message: 'vatNumber must be a Saudi VAT number (15 digits starting and ending with 3)',
+  })
+  vatNumber?: string;
   @IsOptional() @IsString() crNumber?: string;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsString() email?: string;
