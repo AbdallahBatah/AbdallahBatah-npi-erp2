@@ -98,10 +98,11 @@
     <div class="arrow">←</div>
     <div class="node n-brand"><div class="t">قبول العميل</div><div class="d">مسودة → مرسل → مقبول</div><div class="who"><span class="w-sales">مبيعات</span></div></div>
     <div class="arrow">←</div>
-    <div class="node n-dark"><div class="t">عقد ✍️</div><div class="d">يتولد تلقائياً من العرض المقبول + جدول دفعات</div><div class="who"><span class="w-sys">تلقائي</span></div></div>
+    <div class="node n-dark"><div class="t">عقد ✍️</div><div class="d">ينشأ بضغطة من العرض المقبول ويرث قيمته وبنوده + جدول دفعات</div><div class="who"><span class="w-sales">مبيعات</span></div></div>
   </div>
   <div class="branch">
-    <span class="lbl">تفرعات:</span>
+    <span class="lbl">تفرعات وضوابط:</span>
+    <div class="gate">🔒 لا عقد من عرض غير مقبول<small>الخادم يرفض إنشاء عقد من مراجعة لم يقبلها العميل — السعر المتعاقد عليه سعر معتمد دائماً.</small></div>
     <div class="note"><b>خسارة الفرصة</b> — تُغلق بسبب موثق وتبقى في السجل للتحليل.</div>
     <div class="note"><b>عقد طاقة (PPA)</b> — بدلاً من البيع المباشر: تعرفة كيلوواط/ساعة بزيادة سنوية → يتابع في المرحلة ٤.</div>
   </div>
@@ -137,7 +138,7 @@
   <div class="flow">
     <div class="node n-violet"><div class="t">خطة صيانة دورية</div><div class="d">كل نظام مركّب له جدول (شهري/ربع سنوي…)</div><div class="who"><span class="w-pm">مدير مشاريع</span></div></div>
     <div class="arrow">←</div>
-    <div class="node n-violet"><div class="t">توليد الأوامر المستحقة</div><div class="d">زر واحد يولّد كل أوامر الصيانة التي حان وقتها</div><div class="who"><span class="w-eng">مهندس موقع</span></div></div>
+    <div class="node n-violet"><div class="t">توليد الأوامر المستحقة</div><div class="d">تلقائياً كل ليلة (١ صباحاً بتوقيت الرياض)، وزر يدوي عند الحاجة</div><div class="who"><span class="w-sys">تلقائي</span><span class="w-eng">مهندس موقع</span></div></div>
     <div class="arrow">←</div>
     <div class="node n-violet"><div class="t">تنفيذ بقائمة فحص</div><div class="d">بنود إلزامية لا يُغلق الأمر قبل إنجازها</div><div class="who"><span class="w-eng">مهندس موقع</span></div></div>
     <div class="arrow">←</div>
@@ -171,6 +172,37 @@
   </div>
 </div>
 
+<p class="sub">الوجه الآخر للدورة المالية: التزامات الموردين والمقاولين، ثم الإقفال الدوري الذي يختم الدفاتر.</p>
+<div class="stage">
+  <div class="flow">
+    <div class="node n-blue"><div class="t">مستحقات الموردين</div><div class="d">فواتير الموردين ومستخلصات مقاولي الباطن المعتمدة في كشف واحد</div><div class="who"><span class="w-acc">محاسب</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-blue"><div class="t">سداد الموردين</div><div class="d">دفعة واحدة توزَّع على عدة مستندات، ولا تتجاوز المتبقي على أيٍّ منها</div><div class="who"><span class="w-acc">محاسب</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-blue"><div class="t">إفراج المحتجزات</div><div class="d">محتجزات المقاول تعود مستحقة السداد عند انقضاء الضمان</div><div class="who"><span class="w-acc">محاسب</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-dark"><div class="t">الإقفال المالي 🔐</div><div class="d">فترات وسنوات مالية + القوائم: دخل، مركز مالي، ميزان مراجعة</div><div class="who"><span class="w-acc">محاسب</span></div></div>
+  </div>
+  <div class="branch">
+    <span class="lbl">ضوابط:</span>
+    <div class="gate">🔒 لا ترحيل في فترة مقفلة<small>أي قيد بتاريخ يقع داخل فترة مقفلة يرفضه الخادم حتى تُعاد فتح الفترة.</small></div>
+    <div class="note"><b>إقفال السنة</b> — يرحّل نتيجة السنة إلى الأرباح المبقاة بقيد واحد، وإعادة الفتح تعكس القيد ولا تحذفه — الأثر يبقى موثقاً.</div>
+  </div>
+</div>
+
+<!-- ═══════════ + ═══════════ -->
+<h2 class="sec"><span class="num" style="background:#475569">+</span>طبقة عرضية — تخدم المراحل الأربع كلها</h2>
+<p class="sub">أدوات حاضرة في كل شاشة، ويحكمها نظام صلاحيات دقيق: كل زر وكل شاشة تظهر لمن يملك صلاحيتها فقط.</p>
+<div class="stage">
+  <div class="flow">
+    <div class="node"><div class="t">📎 المرفقات</div><div class="d">مستندات على العقد والفاتورة والمشروع وأمر العمل — بأسماء عربية سليمة</div></div>
+    <div class="node"><div class="t">🔔 الإشعارات</div><div class="d">فاتورة صدرت، دفعة سُجلت، مرحلة صارت جاهزة للفوترة — تصل لمن يملك التصرف</div></div>
+    <div class="node"><div class="t">⌘ البحث الشامل</div><div class="d">Ctrl+K من أي شاشة: عملاء، عقود، فواتير، مشاريع، أوامر عمل، أرقام تسلسلية</div></div>
+    <div class="node"><div class="t">👥 المستخدمون والأدوار</div><div class="d">أدوار مخصصة بصلاحيات منتقاة من كتالوج ثنائي اللغة — دون الرجوع للمطور</div></div>
+    <div class="node"><div class="t">🕵️ سجل التدقيق</div><div class="d">كل عملية مسجلة: من فعلها ومتى، والقيمة قبل التغيير وبعده — سجل لا يُعدل ولا يُحذف</div></div>
+  </div>
+</div>
+
 <div class="legend">
   <b>من ينفذ:</b>
   <span class="who" style="display:inline-flex;gap:4px">
@@ -179,7 +211,7 @@
   <span style="margin-inline-start:auto">◼ الخانات الداكنة = مخرجات المرحلة</span>
 </div>
 
-<footer>نظام NPI للطاقة الشمسية · المخطط يعكس الدورات الفعلية المبنية في النظام · 2026/07/27</footer>
+<footer>نظام NPI للطاقة الشمسية · المخطط يعكس الدورات الفعلية المبنية في النظام · حُدِّث 2026/08/02</footer>
 </div>
 </body>
 </html>
