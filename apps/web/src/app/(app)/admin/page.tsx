@@ -16,6 +16,7 @@ import { translateError } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
 import { PageHeader, LoadError, Modal, useConfirm, Btn, Tabs, PageSkeleton } from '@/components/ui';
 import { AuditLogCard } from '@/components/audit-log';
+import { ApprovalMatrixCard } from '@/components/approval-matrix';
 
 interface RoleRow {
   id: string;
@@ -62,8 +63,10 @@ export default function AdminPage() {
   const ar = locale === 'ar';
   const orgManage = can('admin.org.manage');
   const auditRead = can('admin.audit.read');
+  const approvalManage = can('admin.approval.manage');
 
-  const [tab, setTab] = useState<'users' | 'roles' | 'org' | 'audit'>('users');
+  type AdminTab = 'users' | 'roles' | 'matrix' | 'org' | 'audit';
+  const [tab, setTab] = useState<AdminTab>('users');
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [roles, setRoles] = useState<RoleRow[] | null>(null);
   const [catalog, setCatalog] = useState<PermMeta[]>([]);
@@ -290,6 +293,7 @@ export default function AdminPage() {
         tabs={[
           'users' as const,
           'roles' as const,
+          ...(approvalManage ? ['matrix' as const] : []),
           ...(orgManage ? ['org' as const] : []),
           ...(auditRead ? ['audit' as const] : []),
         ].map((k) => ({
@@ -298,11 +302,15 @@ export default function AdminPage() {
           count: k === 'users' ? users.length : k === 'roles' ? roles.length : undefined,
         }))}
         value={tab}
-        onChange={(k) => setTab(k as 'users' | 'roles' | 'org' | 'audit')}
+        onChange={(k) => setTab(k as AdminTab)}
       />
 
       {tab === 'audit' ? (
         <AuditLogCard />
+      ) : tab === 'matrix' ? (
+        // The role list is already loaded here — passing it down keeps the
+        // matrix editor from re-fetching what this screen owns.
+        <ApprovalMatrixCard roles={roles} />
       ) : tab === 'org' ? (
         <div className="card max-w-2xl p-6">
           {orgErr ? (

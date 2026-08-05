@@ -6,6 +6,13 @@ interface NotifyInput {
   organizationId: string;
   /** Recipients = active users whose role holds this permission. */
   permission: string;
+  /**
+   * Narrows the fan-out to a single role. The approval matrix needs it: "the
+   * finance role must sign next" is not the same audience as "everyone who can
+   * read invoices", and telling the wrong half of the company to go approve
+   * something they cannot approve trains people to ignore the bell.
+   */
+  roleId?: string | null;
   /** The actor is never notified about their own action. */
   excludeUserId?: string | null;
   type: string;
@@ -56,6 +63,7 @@ export class NotificationService {
         organizationId: input.organizationId,
         isActive: true,
         ...(input.excludeUserId ? { id: { not: input.excludeUserId } } : {}),
+        ...(input.roleId ? { roleId: input.roleId } : {}),
         role: { permissions: { has: input.permission } },
       },
       select: { id: true },

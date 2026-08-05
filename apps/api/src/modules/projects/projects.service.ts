@@ -2,10 +2,12 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
+import { ApprovalService } from '../../common/approval.service';
 import { isValidStageTransition } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 import type { CreateChangeOrderDto, CreateProjectDto, SetStageDto } from './dto';
@@ -24,12 +26,19 @@ const WBS_BUCKETS: Record<string, { code: string; nameAr: string; nameEn: string
 };
 
 @Injectable()
-export class ProjectsService {
+export class ProjectsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
+    private readonly approvals: ApprovalService,
   ) {}
+
+  onModuleInit(): void {
+    this.approvals.register('CHANGE_ORDER', (user, id) =>
+      this.applyChangeOrderApproval(user, id),
+    );
+  }
 
   list(user: AuthUser) {
     return this.prisma.project.findMany({
@@ -210,7 +219,32 @@ export class ProjectsService {
       actual: round2([...actualByWbs.values()].reduce((s, v) => s + v, 0)),
     };
 
-    return { ...project, wbsElements: wbs, costSummary: { ...totals, variance: round2(totals.budget - totals.actual - totals.committed) } };
+    // Two batch lookups, not one per row: mark the change orders and claims
+    // that are sitting in the approval matrix so the screen can say why their
+    // approve button did nothing.
+    const claims = project.subcontracts.flatMap((s) => s.claims);
+    const [coPending, claimPending] = await Promise.all([
+      this.approvals.pendingFor(
+        user.organizationId,
+        'CHANGE_ORDER',
+        project.changeOrders.map((c) => c.id),
+      ),
+      this.approvals.pendingFor(user.organizationId, 'PROGRESS_CLAIM', claims.map((c) => c.id)),
+    ]);
+
+    return {
+      ...project,
+      changeOrders: project.changeOrders.map((c) => ({
+        ...c,
+        pendingApproval: coPending.get(c.id) ?? null,
+      })),
+      subcontracts: project.subcontracts.map((s) => ({
+        ...s,
+        claims: s.claims.map((c) => ({ ...c, pendingApproval: claimPending.get(c.id) ?? null })),
+      })),
+      wbsElements: wbs,
+      costSummary: { ...totals, variance: round2(totals.budget - totals.actual - totals.committed) },
+    };
   }
 
   // ── PRJ-06: change orders ─────────────────────────────────────────────────
@@ -260,11 +294,34 @@ export class ProjectsService {
   }
 
   /**
+   * A change order moves the contract value, so the matrix bands on the
+   * *absolute* delta: a −900,000 variation is every bit as consequential as a
+   * +900,000 one and must not slip through as "a small number".
+   */
+  async approveChangeOrder(user: AuthUser, changeOrderId: string) {
+    const co = await this.prisma.changeOrder.findFirst({
+      where: { id: changeOrderId, organizationId: user.organizationId },
+    });
+    if (!co) throw new NotFoundException('Change order not found');
+    if (co.status !== 'DRAFT') throw new BadRequestException('Only draft change orders can be approved');
+
+    const verdict = await this.approvals.gate(user, {
+      documentType: 'CHANGE_ORDER',
+      documentId: co.id,
+      documentCode: co.code,
+      amount: Number(co.amountDelta),
+    });
+    if (!verdict.cleared) return { ...co, pendingApproval: verdict.request };
+
+    return this.applyChangeOrderApproval(user, changeOrderId);
+  }
+
+  /**
    * Approval applies the variation: contract value moves by the delta (POC and
    * profitability re-derive automatically), and the targeted WBS budget — if
    * any — absorbs the same delta so job costing keeps a matching baseline.
    */
-  async approveChangeOrder(user: AuthUser, changeOrderId: string) {
+  private async applyChangeOrderApproval(user: AuthUser, changeOrderId: string) {
     const co = await this.prisma.changeOrder.findFirst({
       where: { id: changeOrderId, organizationId: user.organizationId },
       include: { contract: { select: { id: true, totalValue: true } } },

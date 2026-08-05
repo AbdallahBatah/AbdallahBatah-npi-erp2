@@ -34,6 +34,10 @@ export const PERMISSIONS = {
   // The audit trail is written on every mutation but proving "who changed
   // what, when" needs a reader — a control permission, admin-only by default.
   AUDIT_READ: 'admin.audit.read',
+  // Configuring the approval matrix decides who may authorise spending and
+  // above what amount — a delegation-of-authority control, not a preference.
+  // Acting on a request needs the document's own write permission, not this.
+  APPROVAL_MANAGE: 'admin.approval.manage',
   // Attachments are cross-module: holding these alone is not enough — the
   // service also requires the read permission of the parent entity type.
   ATTACHMENT_READ: 'platform.attachment.read',
@@ -105,5 +109,6 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     [PERMISSIONS.USER_MANAGE, 'إدارة المستخدمين والأدوار', 'Manage users & roles'],
     [PERMISSIONS.ORG_MANAGE, 'إعدادات المنشأة', 'Organization settings'],
     [PERMISSIONS.AUDIT_READ, 'عرض سجل التدقيق', 'View audit log'],
+    [PERMISSIONS.APPROVAL_MANAGE, 'ضبط مصفوفة الاعتماد', 'Configure approval matrix'],
   ]),
 ];

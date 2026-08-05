@@ -285,6 +285,22 @@ export class AdminService {
     if (assigned > 0) {
       throw new BadRequestException('Role still has users assigned — reassign them first');
     }
+    // The approval matrix references roles by id. Both checks turn what would
+    // otherwise surface as a raw foreign-key error into something the admin
+    // can act on — and the second one is permanent by design: a role that ever
+    // signed something cannot be deleted without erasing who signed it.
+    const inMatrix = await this.prisma.approvalRuleStep.count({ where: { roleId: id } });
+    if (inMatrix > 0) {
+      throw new BadRequestException(
+        'Role is used in the approval matrix — remove it from those rules first',
+      );
+    }
+    const hasSigned = await this.prisma.approvalStep.count({ where: { roleId: id } });
+    if (hasSigned > 0) {
+      throw new BadRequestException(
+        'Role appears in the approval history and cannot be deleted — deactivate its users instead',
+      );
+    }
     await this.prisma.role.delete({ where: { id } });
     await this.audit.record({
       organizationId: user.organizationId,

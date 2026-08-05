@@ -11,6 +11,8 @@ import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can, Btn, PageSkeleton } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
+import { ApprovalChain, type ApprovalRequestView } from '@/components/approvals';
+import { useToast } from '@/components/toast';
 import { PROJECT_STAGE_FLOW as STAGE_FLOW } from '@npi/shared';
 
 interface Wbs {
@@ -53,6 +55,8 @@ interface ChangeOrder {
   amountDelta: string;
   scheduleImpactDays: number;
   status: string;
+  /** Set while the change order is sitting in the approval matrix (package و). */
+  pendingApproval: ApprovalRequestView | null;
 }
 interface Claim {
   id: string;
@@ -63,6 +67,7 @@ interface Claim {
   retentionWithheld: string;
   netPayable: string;
   status: string;
+  pendingApproval: ApprovalRequestView | null;
 }
 interface Subcontract {
   id: string;
@@ -104,6 +109,7 @@ export default function ProjectDetailPage() {
   const [tab, setTab] = useState('wbs');
   const { act, busy } = useAct();
   const { confirm, confirmNode } = useConfirm();
+  const toast = useToast();
   // Change order modal
   const [coOpen, setCoOpen] = useState(false);
   const [coDescAr, setCoDescAr] = useState('');
@@ -153,13 +159,32 @@ export default function ProjectDetailPage() {
     }
   }
 
+  /**
+   * Both approve actions below may be routed into the approval matrix instead
+   * of applying — the response says which happened, so the toast reads it
+   * rather than claiming success the document has not had yet.
+   */
+  async function approveThenReload(key: string, path: string): Promise<void> {
+    let res: { pendingApproval?: ApprovalRequestView | null } | undefined;
+    const ok = await act(
+      key,
+      async () => {
+        res = await api.post(path, {});
+      },
+      { success: false },
+    );
+    if (ok) {
+      toast.success(res?.pendingApproval ? t('apr.sentForApproval') : t('common.done'));
+      load();
+    }
+  }
+
   async function approveCo(coId: string) {
     if (
       !(await confirm({ title: t('confirm.approveCoTitle'), message: t('confirm.approveCoMsg'), danger: true }))
     )
       return;
-    if (await act(`approveCo:${coId}`, () => api.post(`/projects/change-orders/${coId}/approve`, {})))
-      load();
+    await approveThenReload(`approveCo:${coId}`, `/projects/change-orders/${coId}/approve`);
   }
 
   async function createSub() {
@@ -205,8 +230,7 @@ export default function ProjectDetailPage() {
       }))
     )
       return;
-    if (await act(`approveClaim:${claimId}`, () => api.post(`/procurement/claims/${claimId}/approve`, {})))
-      load();
+    await approveThenReload(`approveClaim:${claimId}`, `/procurement/claims/${claimId}/approve`);
   }
 
   async function nextStage() {
@@ -472,10 +496,14 @@ export default function ProjectDetailPage() {
                   <td className="td text-center">{co.scheduleImpactDays}</td>
                   <td className="td"><StatusBadge status={co.status} /></td>
                   <td className="td">
-                    {co.status === 'DRAFT' && (
-                      <Can perm="projects.project.write"><Btn variant="primary" sm icon="check-circle" busy={busy(`approveCo:${co.id}`)} disabled={busy()} onClick={() => approveCo(co.id)}>
-                        {t('co.approve')}
-                      </Btn></Can>
+                    {co.pendingApproval ? (
+                      <ApprovalChain request={co.pendingApproval} />
+                    ) : (
+                      co.status === 'DRAFT' && (
+                        <Can perm="projects.project.write"><Btn variant="primary" sm icon="check-circle" busy={busy(`approveCo:${co.id}`)} disabled={busy()} onClick={() => approveCo(co.id)}>
+                          {t('co.approve')}
+                        </Btn></Can>
+                      )
                     )}
                   </td>
                 </tr>
@@ -540,10 +568,14 @@ export default function ProjectDetailPage() {
                             <td className="py-1 text-end font-medium">{formatMoney(c.netPayable, locale)}</td>
                             <td className="py-1"><StatusBadge status={c.status} /></td>
                             <td className="py-1 text-end">
-                              {c.status === 'SUBMITTED' && (
-                                <Can perm="scm.procurement.write"><Btn variant="primary" sm className="!px-2 !py-0.5 !text-[11px]" busy={busy(`approveClaim:${c.id}`)} disabled={busy()} onClick={() => approveClaim(c.id)}>
-                                  {t('sub.approveClaim')}
-                                </Btn></Can>
+                              {c.pendingApproval ? (
+                                <div className="flex justify-end"><ApprovalChain request={c.pendingApproval} /></div>
+                              ) : (
+                                c.status === 'SUBMITTED' && (
+                                  <Can perm="scm.procurement.write"><Btn variant="primary" sm className="!px-2 !py-0.5 !text-[11px]" busy={busy(`approveClaim:${c.id}`)} disabled={busy()} onClick={() => approveClaim(c.id)}>
+                                    {t('sub.approveClaim')}
+                                  </Btn></Can>
+                                )
                               )}
                             </td>
                           </tr>

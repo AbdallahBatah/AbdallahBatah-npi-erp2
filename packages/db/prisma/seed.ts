@@ -28,7 +28,7 @@ const ALL_PERMISSIONS = [
   'scm.procurement.read', 'scm.procurement.write',
   'assets.serialunit.read',
   'fsm.workorder.read', 'fsm.workorder.write',
-  'admin.org.manage', 'admin.user.manage', 'admin.audit.read',
+  'admin.org.manage', 'admin.user.manage', 'admin.audit.read', 'admin.approval.manage',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
@@ -400,6 +400,46 @@ async function main() {
       customerId: customer.id,
     },
   });
+
+  // ── Package و: a starting approval matrix ─────────────────────────────────
+  // Seeded so a fresh tenant has a working delegation of authority rather than
+  // the pre-matrix state where one permission approved any amount. Deliberately
+  // one band per document type with an open ceiling: everything below the
+  // threshold keeps the old single-permission behaviour, which is what a small
+  // customer wants on day one. Only created when absent — an organization that
+  // has tuned its own bands must never have them overwritten by a re-seed.
+  const matrixDefaults: Array<{
+    documentType: 'PURCHASE_ORDER' | 'PROGRESS_CLAIM' | 'CHANGE_ORDER';
+    minAmount: number;
+    chain: string[];
+  }> = [
+    { documentType: 'PURCHASE_ORDER', minAmount: 100_000, chain: ['pm', 'accountant'] },
+    { documentType: 'PROGRESS_CLAIM', minAmount: 250_000, chain: ['pm', 'accountant'] },
+    { documentType: 'CHANGE_ORDER', minAmount: 100_000, chain: ['pm', 'admin'] },
+  ];
+  const roleIdByKey: Record<string, string> = {
+    admin: adminRole.id,
+    sales: salesRole.id,
+    ...extraRoles,
+  };
+
+  for (const d of matrixDefaults) {
+    const exists = await prisma.approvalRule.findFirst({
+      where: { organizationId: org.id, documentType: d.documentType },
+    });
+    if (exists) continue;
+    await prisma.approvalRule.create({
+      data: {
+        organizationId: org.id,
+        documentType: d.documentType,
+        minAmount: d.minAmount,
+        maxAmount: null,
+        steps: {
+          create: d.chain.map((key, i) => ({ sequence: i + 1, roleId: roleIdByKey[key] })),
+        },
+      },
+    });
+  }
 
   console.log('✅ Seed complete.');
   console.log('   Organization : NPI Solar Energy Co. (org_npi_root)');

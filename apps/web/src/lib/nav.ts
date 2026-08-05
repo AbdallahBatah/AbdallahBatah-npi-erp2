@@ -64,7 +64,12 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     labelAr: 'الإدارة',
     labelEn: 'Administration',
-    items: [{ href: '/admin', key: 'nav.admin', icon: 'shield-users', perm: 'admin.user.manage' }],
+    items: [
+      // No `perm`: the inbox is self-scoped to the caller's own role, so every
+      // user needs to reach it — including ones who administer nothing.
+      { href: '/approvals', key: 'nav.approvals', icon: 'stamp' },
+      { href: '/admin', key: 'nav.admin', icon: 'shield-users', perm: 'admin.user.manage' },
+    ],
   },
 ];
 

@@ -2,12 +2,14 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
 import { PostingService } from '../../common/posting.service';
 import { TaxService } from '../../common/tax.service';
+import { ApprovalService } from '../../common/approval.service';
 import type { AuthUser } from '../../common/auth-user';
 import type {
   CreateBillDto,
@@ -22,14 +24,25 @@ import type {
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 @Injectable()
-export class ProcurementService {
+export class ProcurementService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
     private readonly posting: PostingService,
     private readonly tax: TaxService,
+    private readonly approvals: ApprovalService,
   ) {}
+
+  /**
+   * Hand the matrix the two state changes it may complete on our behalf. The
+   * registration direction matters: the kernel never imports this module, so
+   * approvals stay a dependency of procurement and not the other way round.
+   */
+  onModuleInit(): void {
+    this.approvals.register('PURCHASE_ORDER', (user, id) => this.applyPoApproval(user, id));
+    this.approvals.register('PROGRESS_CLAIM', (user, id) => this.applyClaimApproval(user, id));
+  }
 
   // ── Vendors (SCM master data) ─────────────────────────────────────────────
 
@@ -107,7 +120,10 @@ export class ProcurementService {
       },
     });
     if (!po) throw new NotFoundException('Purchase order not found');
-    return po;
+    // A PO stuck in DRAFT because it is mid-chain must say so on its own page —
+    // otherwise "I clicked approve and nothing happened" is the whole story.
+    const pendingApproval = await this.approvals.forDocument(user, 'PURCHASE_ORDER', po.id);
+    return { ...po, pendingApproval: pendingApproval?.status === 'PENDING' ? pendingApproval : null };
   }
 
   /** Create a draft PO. Committed cost appears once it is approved. */
@@ -176,7 +192,38 @@ export class ProcurementService {
     });
   }
 
+  /**
+   * The single entry point users hit. If the approval matrix has a band for
+   * this amount the PO does not move — a signature chain opens instead and the
+   * verdict comes back pending; the state change happens in applyPoApproval
+   * when the last signature lands. With no band configured this is exactly the
+   * old behaviour: holding scm.procurement.write approves the PO outright.
+   */
   async approvePo(user: AuthUser, id: string) {
+    const po = await this.prisma.purchaseOrder.findFirst({
+      where: { id, organizationId: user.organizationId },
+    });
+    if (!po) throw new NotFoundException('Purchase order not found');
+    if (po.status !== 'DRAFT') throw new BadRequestException('Only draft POs can be approved');
+
+    const verdict = await this.approvals.gate(user, {
+      documentType: 'PURCHASE_ORDER',
+      documentId: po.id,
+      documentCode: po.code,
+      amount: Number(po.total),
+    });
+    if (!verdict.cleared) return { ...po, pendingApproval: verdict.request };
+
+    return this.applyPoApproval(user, id);
+  }
+
+  /**
+   * The state change itself. Also the applier the matrix calls on final
+   * sign-off, which is why it re-reads and re-checks rather than trusting the
+   * caller: between submission and the last signature, anything could have
+   * happened to the PO.
+   */
+  private async applyPoApproval(user: AuthUser, id: string) {
     const po = await this.prisma.purchaseOrder.findFirst({
       where: { id, organizationId: user.organizationId },
     });
@@ -602,11 +649,36 @@ export class ProcurementService {
   }
 
   /**
+   * Claims run through the approval matrix on the claimed amount before any
+   * accounting happens — the point of the gate is that a large claim does not
+   * hit the ledger on one person's say-so.
+   */
+  async approveClaim(user: AuthUser, claimId: string) {
+    const claim = await this.prisma.progressClaim.findFirst({
+      where: { id: claimId, organizationId: user.organizationId },
+    });
+    if (!claim) throw new NotFoundException('Claim not found');
+    if (claim.status !== 'SUBMITTED') {
+      throw new BadRequestException('Only submitted claims can be approved');
+    }
+
+    const verdict = await this.approvals.gate(user, {
+      documentType: 'PROGRESS_CLAIM',
+      documentId: claim.id,
+      documentCode: claim.code,
+      amount: Number(claim.claimedAmount),
+    });
+    if (!verdict.cleared) return { ...claim, pendingApproval: verdict.request };
+
+    return this.applyClaimApproval(user, claimId);
+  }
+
+  /**
    * Approval posts the back-to-back accounting: SUBCONTRACT actual cost on the
    * project, and the AP journal — Dr WIP + Dr VAT input / Cr AP (net) + Cr
    * subcontractor retention payable (2050).
    */
-  async approveClaim(user: AuthUser, claimId: string) {
+  private async applyClaimApproval(user: AuthUser, claimId: string) {
     const claim = await this.prisma.progressClaim.findFirst({
       where: { id: claimId, organizationId: user.organizationId },
       include: { agreement: { include: { vendor: true } } },
