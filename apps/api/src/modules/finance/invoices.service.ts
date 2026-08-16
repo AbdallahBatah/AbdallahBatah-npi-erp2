@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { OPEN_INVOICE_STATUSES, REPORTED_INVOICE_STATUSES, signedTotal } from '@npi/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
@@ -758,16 +759,58 @@ export class InvoicesService {
     });
   }
 
+  /**
+   * Headline finance figures.
+   *
+   * Two rules this deliberately does *not* delegate to a plain `aggregate`:
+   * credit notes carry positive amounts and must be subtracted, and receivables
+   * are what is still collectible — so cash already received and the AR share of
+   * any credit note come off. That is the same arithmetic `get()` does for a
+   * single invoice, applied to the open set instead of duplicated by hand.
+   *
+   * Note the two figures net credit notes by different routes, because they
+   * answer different questions. Output VAT is a sum over *documents*, so the
+   * note is a row with a negative sign. Receivables are a sum over *debts*, so
+   * the note is already inside the balance of the invoice it corrects and must
+   * not also appear as a row of its own.
+   */
   async summary(user: AuthUser) {
     const org = user.organizationId;
-    const [issued, arDue, vatOutput, retentionHeld] = await Promise.all([
-      this.prisma.invoice.count({ where: { organizationId: org, status: { in: ['ISSUED', 'CLEARED', 'PAID'] } } }),
-      this.prisma.invoice.aggregate({
-        where: { organizationId: org, status: { in: ['ISSUED', 'CLEARED'] } },
-        _sum: { netPayable: true },
+    const [issued, openInvoices, reported, retentionHeld] = await Promise.all([
+      // Documents that represent a sale. A credit note is a correction to one.
+      this.prisma.invoice.count({
+        where: {
+          organizationId: org,
+          status: { in: [...REPORTED_INVOICE_STATUSES] },
+          invoiceType: { not: 'CREDIT_NOTE' },
+        },
       }),
-      this.prisma.invoice.aggregate({
-        where: { organizationId: org, status: { in: ['ISSUED', 'CLEARED', 'PAID'] } },
+      // Still-collectible invoices, with what has been received and credited.
+      //
+      // Credit notes are excluded as *rows* on purpose: a note already reduces
+      // AR through the `creditNotes` relation of the invoice it corrects, which
+      // is where its retention/AR split is known. Counting the note row as a
+      // negative as well would subtract the same credit twice.
+      this.prisma.invoice.findMany({
+        where: {
+          organizationId: org,
+          status: { in: [...OPEN_INVOICE_STATUSES] },
+          invoiceType: { not: 'CREDIT_NOTE' },
+        },
+        select: {
+          total: true,
+          netPayable: true,
+          payments: { select: { amount: true } },
+          creditNotes: { select: { total: true } },
+        },
+      }),
+      // Grouped rather than fetched: this set is every invoice the org has ever
+      // reported and only one column is wanted from it. Grouping by the one
+      // field the sign depends on keeps the sum in the database and still lets
+      // `signedTotal` apply the sign — four rows instead of the whole history.
+      this.prisma.invoice.groupBy({
+        by: ['invoiceType'],
+        where: { organizationId: org, status: { in: [...REPORTED_INVOICE_STATUSES] } },
         _sum: { vatAmount: true },
       }),
       this.prisma.retentionEntry.aggregate({
@@ -775,10 +818,22 @@ export class InvoicesService {
         _sum: { withheldAmount: true },
       }),
     ]);
+
+    const accountsReceivable = round2(
+      openInvoices.reduce((sum, inv) => {
+        const paid = round2(inv.payments.reduce((s, p) => s + Number(p.amount), 0));
+        const credited = this.creditedAr(
+          inv,
+          round2(inv.creditNotes.reduce((s, c) => s + Number(c.total), 0)),
+        );
+        return sum + Number(inv.netPayable) - paid - credited;
+      }, 0),
+    );
+
     return {
       issuedInvoices: issued,
-      accountsReceivable: arDue._sum.netPayable ?? 0,
-      vatOutput: vatOutput._sum.vatAmount ?? 0,
+      accountsReceivable,
+      vatOutput: signedTotal(reported, (g) => g._sum.vatAmount),
       retentionHeld: retentionHeld._sum.withheldAmount ?? 0,
     };
   }

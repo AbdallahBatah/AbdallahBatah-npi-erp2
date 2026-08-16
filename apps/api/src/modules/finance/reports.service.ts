@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { REPORTED_INVOICE_STATUSES, signedTotal } from '@npi/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { PostingService } from '../../common/posting.service';
@@ -80,8 +81,8 @@ export class ReportsService {
         customer: { select: { nameAr: true, nameEn: true } },
         milestones: { select: { amount: true, status: true } },
         invoices: {
-          where: { status: { in: ['ISSUED', 'CLEARED', 'PAID'] } },
-          select: { subtotal: true },
+          where: { status: { in: [...REPORTED_INVOICE_STATUSES] } },
+          select: { subtotal: true, invoiceType: true },
         },
         project: { select: { id: true } },
       },
@@ -168,7 +169,7 @@ export class ReportsService {
       // milestone schedule that under-covers the contract cannot inflate it.
       const recognizedRevenue = round2(Math.min(certified, contractValue || certified));
       const progress = contractValue > 0 ? recognizedRevenue / contractValue : 0;
-      const billedRevenue = round2(c.invoices.reduce((s, i) => s + Number(i.subtotal), 0));
+      const billedRevenue = signedTotal(c.invoices, (i) => i.subtotal);
       const postedAdjustment = round2(postedByContract.get(c.id) ?? 0);
       const targetAdjustment = round2(recognizedRevenue - billedRevenue);
       const unpostedDelta = round2(targetAdjustment - postedAdjustment);
@@ -361,10 +362,12 @@ export class ReportsService {
       this.prisma.invoice.findMany({
         where: {
           organizationId: user.organizationId,
-          status: { in: ['ISSUED', 'CLEARED', 'PAID'] },
+          // CANCELLED included on purpose: a fully-credited invoice was still
+          // reported in its own period, and its credit note offsets it.
+          status: { in: [...REPORTED_INVOICE_STATUSES] },
           issueDate: { gte: from, lte: to },
         },
-        select: { subtotal: true, vatAmount: true },
+        select: { subtotal: true, vatAmount: true, invoiceType: true },
       }),
       this.prisma.vendorBill.findMany({
         where: {
@@ -385,8 +388,9 @@ export class ReportsService {
       }),
     ]);
 
-    const standardRatedSales = round2(invoices.reduce((s, i) => s + Number(i.subtotal), 0));
-    const outputVat = round2(invoices.reduce((s, i) => s + Number(i.vatAmount), 0));
+    // Credit notes carry positive amounts but reduce the declared sale.
+    const standardRatedSales = signedTotal(invoices, (i) => i.subtotal);
+    const outputVat = signedTotal(invoices, (i) => i.vatAmount);
     const standardRatedPurchases = round2(
       bills.reduce((s, b) => s + Number(b.subtotal), 0) +
         claims.reduce((s, c) => s + Number(c.claimedAmount), 0),
@@ -428,8 +432,8 @@ export class ReportsService {
           include: { bomLines: { include: { item: { select: { unitCost: true } } } } },
         },
         invoices: {
-          where: { status: { in: ['ISSUED', 'CLEARED', 'PAID'] } },
-          select: { subtotal: true },
+          where: { status: { in: [...REPORTED_INVOICE_STATUSES] } },
+          select: { subtotal: true, invoiceType: true },
         },
         milestones: { select: { amount: true, status: true } },
         project: { select: { id: true, code: true } },
@@ -458,7 +462,7 @@ export class ReportsService {
       );
       const estMargin = round2(contractValue - estCost);
       const estMarginPct = contractValue > 0 ? round2((estMargin / contractValue) * 100) : 0;
-      const billed = round2(c.invoices.reduce((s, i) => s + Number(i.subtotal), 0));
+      const billed = signedTotal(c.invoices, (i) => i.subtotal);
       const certified = c.milestones
         .filter((m) => m.status === 'VERIFIED' || m.status === 'INVOICED')
         .reduce((s, m) => s + Number(m.amount), 0);
