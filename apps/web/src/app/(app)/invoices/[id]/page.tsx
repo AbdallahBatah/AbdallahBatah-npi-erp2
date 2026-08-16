@@ -38,7 +38,13 @@ interface Invoice {
   } | null;
   qrDataUrl?: string | null;
   journalEntries: { id: string; memo?: string; lines: JLine[] }[];
-  retentionEntry?: { id: string; withheldAmount: string; status: string } | null;
+  retentionEntry?: {
+    id: string;
+    withheldAmount: string;
+    /** Returned to the customer by credit notes — not part of what is held. */
+    creditedAmount?: string;
+    status: string;
+  } | null;
   payments: Payment[];
   invoiceType: string;
   creditReason?: string | null;
@@ -298,7 +304,14 @@ export default function InvoiceDetailPage() {
               <div className="flex items-center justify-between py-1.5 text-sm">
                 <span className="text-slate-500">{t('inv.retention')}</span>
                 <span className="flex items-center gap-2">
-                  <span className="text-slate-700">{formatMoney(inv.retentionEntry.withheldAmount, locale)}</span>
+                  {/* What is still held: the credited part has gone back to the customer. */}
+                  <span className="text-slate-700">
+                    {formatMoney(
+                      Number(inv.retentionEntry.withheldAmount) -
+                        Number(inv.retentionEntry.creditedAmount ?? 0),
+                      locale,
+                    )}
+                  </span>
                   {inv.retentionEntry.status === 'WITHHELD' && inv.status !== 'CANCELLED' && can('finance.invoice.write') ? (
                     <Btn
                       variant="solar"

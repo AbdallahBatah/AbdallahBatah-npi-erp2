@@ -547,6 +547,18 @@ export class InvoicesService {
           ],
         });
 
+        // The retention half of the credit was just booked to the ledger, so
+        // the retention entry has to record it too. Without this the entry goes
+        // on claiming money the ledger has already given back: the balance
+        // sheet overstates retention held, and releasing it re-bills the
+        // customer for an amount already credited to them.
+        if (creditRetention > 0) {
+          await tx.retentionEntry.updateMany({
+            where: { invoiceId: source.id, organizationId: user.organizationId },
+            data: { creditedAmount: { increment: creditRetention } },
+          });
+        }
+
         // Fully credited: the original no longer represents a receivable.
         if (alreadyCredited + noteTotal >= sourceTotal - 0.009) {
           await tx.invoice.update({ where: { id: source.id }, data: { status: 'CANCELLED' } });
@@ -686,7 +698,18 @@ export class InvoicesService {
       throw new BadRequestException('Cannot release retention on a cancelled invoice');
     }
 
-    const amount = Number(entry.withheldAmount);
+    // Release what is still withheld, not what was originally withheld. A
+    // credit note against the invoice has already returned part of the
+    // retention to the customer and taken it off the ledger; releasing the
+    // gross figure would re-bill them for it and leave the retention account
+    // holding a permanent credit balance.
+    const amount = round2(Number(entry.withheldAmount) - Number(entry.creditedAmount));
+    if (amount <= 0.009) {
+      throw new BadRequestException(
+        'Retention has been fully credited back to the customer — nothing to release',
+      );
+    }
+
     const acc = await this.posting.accounts(user.organizationId, [
       'AR',
       'RETENTION_RECEIVABLE',
@@ -814,9 +837,11 @@ export class InvoicesService {
         where: { organizationId: org, status: { in: [...REPORTED_INVOICE_STATUSES] } },
         _sum: { vatAmount: true },
       }),
+      // Net of what credit notes have already returned — the gross figure
+      // would overstate the balance sheet by every partial credit ever raised.
       this.prisma.retentionEntry.aggregate({
         where: { organizationId: org, status: 'WITHHELD' },
-        _sum: { withheldAmount: true },
+        _sum: { withheldAmount: true, creditedAmount: true },
       }),
     ]);
 
@@ -835,7 +860,10 @@ export class InvoicesService {
       issuedInvoices: issued,
       accountsReceivable,
       vatOutput: signedTotal(reported, (g) => g._sum.vatAmount),
-      retentionHeld: retentionHeld._sum.withheldAmount ?? 0,
+      retentionHeld: round2(
+        Number(retentionHeld._sum.withheldAmount ?? 0) -
+          Number(retentionHeld._sum.creditedAmount ?? 0),
+      ),
     };
   }
 }

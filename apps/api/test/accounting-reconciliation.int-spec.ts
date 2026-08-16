@@ -223,9 +223,13 @@ describe('a full cycle, then the five reconciliations', () => {
     const acc = await posting.accounts(organizationId, ['RETENTION_RECEIVABLE'] as const);
     const entries = await prisma.retentionEntry.aggregate({
       where: { organizationId, status: 'WITHHELD' },
-      _sum: { withheldAmount: true },
+      _sum: { withheldAmount: true, creditedAmount: true },
     });
-    const held = round2(Number(entries._sum.withheldAmount ?? 0));
+    // Net of credit notes: what is still withheld, which is what the ledger
+    // holds. Comparing the gross figure was what exposed the defect.
+    const held = round2(
+      Number(entries._sum.withheldAmount ?? 0) - Number(entries._sum.creditedAmount ?? 0),
+    );
     expect(await ledgerBalance(acc.RETENTION_RECEIVABLE)).toBe(held);
   });
 });

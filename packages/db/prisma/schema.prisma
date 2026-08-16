@@ -726,6 +726,11 @@ model RetentionEntry {
   invoiceId      String   @unique
   invoice        Invoice  @relation(fields: [invoiceId], references: [id])
   withheldAmount Decimal  @db.Decimal(18, 2)
+  // Retention reversed by credit notes raised against this invoice. A credit
+  // note splits between AR and retention in the invoice's own proportion, and
+  // the retention half is booked to the ledger — so it has to be recorded here
+  // too, or the entry keeps claiming money the ledger has already given back.
+  creditedAmount Decimal  @default(0) @db.Decimal(18, 2)
   releaseDueDate DateTime?
   status         RetentionStatus @default(WITHHELD)
   releasedInvoiceId String?
