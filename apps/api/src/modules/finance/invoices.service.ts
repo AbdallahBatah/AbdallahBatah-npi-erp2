@@ -241,10 +241,11 @@ export class InvoicesService {
     journalLines.push({ accountId: acc.REVENUE, debit: 0, credit: subtotal });
     journalLines.push({ accountId: acc.VAT_OUTPUT, debit: 0, credit: vatTotal });
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.serializable(async (tx) => {
       // Chain to the previous e-invoice hash (PIH) *inside* the transaction so
       // two concurrent issues cannot both chain onto the same predecessor.
-      // The serializable isolation level makes the read-then-append atomic.
+      // The serializable isolation level makes the read-then-append atomic,
+      // and the loser of the race is retried rather than surfaced as an error.
       const prev = await tx.eInvoiceDocument.findFirst({
         where: { invoice: { organizationId: user.organizationId } },
         orderBy: { submittedAt: 'desc' },
@@ -329,7 +330,7 @@ export class InvoicesService {
         },
         tx,
       );
-    }, { isolationLevel: 'Serializable' });
+    }, { label: `issue ${invoice.code}` });
 
     // Post-commit: a rolled-back issue must never announce itself.
     await this.notifications.notifyBestEffort({
@@ -444,7 +445,7 @@ export class InvoicesService {
         : 0;
     const creditAr = round2(noteTotal - creditRetention);
 
-    await this.prisma.$transaction(
+    await this.prisma.serializable(
       async (tx) => {
         const code = await this.numbering.next(user.organizationId, 'CREDIT_NOTE', tx);
         const note = await tx.invoice.create({
@@ -563,7 +564,7 @@ export class InvoicesService {
           tx,
         );
       },
-      { isolationLevel: 'Serializable' },
+      { label: `credit note against ${source.code}` },
     );
 
     await this.notifications.notifyBestEffort({
