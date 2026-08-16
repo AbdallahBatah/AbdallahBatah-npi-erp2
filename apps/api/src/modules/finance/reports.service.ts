@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { REPORTED_INVOICE_STATUSES, signedTotal } from '@npi/shared';
+import { REPORTED_INVOICE_STATUSES, isCreditNote, signedTotal } from '@npi/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { PostingService } from '../../common/posting.service';
@@ -402,7 +402,10 @@ export class ReportsService {
 
     return {
       period: { from: from.toISOString(), to: to.toISOString() },
-      invoiceCount: invoices.length,
+      // Documents sold, matching `issuedInvoices` in the finance summary. A
+      // credit note is a correction to a sale, not a sale — counting it here
+      // made the same label mean two different things in two screens.
+      invoiceCount: invoices.filter((i) => !isCreditNote(i.invoiceType)).length,
       billCount: bills.length,
       boxes: {
         standardRatedSales, // box 1: standard-rated sales (15%)
