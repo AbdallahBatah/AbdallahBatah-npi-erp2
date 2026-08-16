@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# A superseded run tells you nothing about the commit that replaced it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -19,23 +24,45 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma client
-        run: npm run db:generate
+      # Build, not just generate. `@npi/db` resolves to dist/, so `prisma
+      # generate` alone leaves the package without type declarations and every
+      # workspace that imports it fails to compile on a clean checkout.
+      - name: Build database package (Prisma client + declarations)
+        run: npm run build -w @npi/db
 
       - name: Build shared packages
         run: npm run build -w @npi/shared
 
+      # The three gates. Each keeps going when an earlier one fails, so a red
+      # build reports every problem at once instead of one per push — but each
+      # still fails the job, so none of them can be merged past.
       - name: Typecheck (all workspaces)
         run: npm run typecheck
 
       - name: Lint
+        if: ${{ !cancelled() }}
         run: npm run lint
 
       - name: Unit tests
+        if: ${{ !cancelled() }}
         run: npm test
 
       - name: Build API
+        if: ${{ !cancelled() }}
         run: npm run build -w @npi/api
 
       - name: Build web
+        if: ${{ !cancelled() }}
         run: npm run build -w @npi/web
+
+  # One check with a stable name for branch protection to require. Without it,
+  # protection has to name each job, and a renamed job silently stops gating.
+  ci-gate:
+    if: ${{ always() }}
+    needs: [verify]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify the checks passed
+        run: |
+          echo "verify: ${{ needs.verify.result }}"
+          test "${{ needs.verify.result }}" = "success"

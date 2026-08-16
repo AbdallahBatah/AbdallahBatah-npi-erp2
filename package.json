@@ -14,13 +14,15 @@
     "db:studio": "npm run studio -w @npi/db",
     "dev:api": "npm run dev -w @npi/api",
     "dev:web": "npm run dev -w @npi/web",
-    "build": "npm run build -w @npi/shared && npm run generate -w @npi/db && npm run build -w @npi/api && npm run build -w @npi/web",
+    "build": "npm run build -w @npi/shared && npm run build -w @npi/db && npm run build -w @npi/api && npm run build -w @npi/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "db:start": "C:/Users/eyadq/.npi-erp/pgsql/bin/pg_ctl.exe -D C:/Users/eyadq/.npi-erp/data -l C:/Users/eyadq/.npi-erp/server.log start",
     "db:stop": "C:/Users/eyadq/.npi-erp/pgsql/bin/pg_ctl.exe -D C:/Users/eyadq/.npi-erp/data stop",
     "test": "npm run test -w @npi/api",
+    "test:int": "npm run test:int -w @npi/api",
+    "db:deploy": "npm run migrate:deploy -w @npi/db",
     "lint": "eslint ."
   },
   "engines": {

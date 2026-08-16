@@ -221,6 +221,8 @@ model Organization {
   fiscalPeriods       FiscalPeriod[]
   attachments         Attachment[]
   notifications       Notification[]
+  approvalRules       ApprovalRule[]
+  approvalRequests    ApprovalRequest[]
 
   @@index([parentOrganizationId])
 }
@@ -237,6 +239,9 @@ model Role {
   users          User[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  approvalRuleSteps ApprovalRuleStep[]
+  approvalSteps     ApprovalStep[]
 
   @@unique([organizationId, key])
   @@index([organizationId])
@@ -264,6 +269,8 @@ model User {
   timesheets         Timesheet[]
   attachments        Attachment[]
   notifications      Notification[]
+  raisedApprovals    ApprovalRequest[] @relation("ApprovalRaiser")
+  decidedApprovals   ApprovalStep[]    @relation("ApprovalDecider")
 
   @@index([organizationId])
 }
@@ -719,6 +726,11 @@ model RetentionEntry {
   invoiceId      String   @unique
   invoice        Invoice  @relation(fields: [invoiceId], references: [id])
   withheldAmount Decimal  @db.Decimal(18, 2)
+  // Retention reversed by credit notes raised against this invoice. A credit
+  // note splits between AR and retention in the invoice's own proportion, and
+  // the retention half is booked to the ledger — so it has to be recorded here
+  // too, or the entry keeps claiming money the ledger has already given back.
+  creditedAmount Decimal  @default(0) @db.Decimal(18, 2)
   releaseDueDate DateTime?
   status         RetentionStatus @default(WITHHELD)
   releasedInvoiceId String?
@@ -1761,4 +1773,115 @@ model Notification {
 
   @@index([userId, readAt])
   @@index([userId, createdAt])
+}
+
+// ── Package و: the approval matrix ──────────────────────────────────────────
+// Until now the system had no amount threshold anywhere: a 500 SAR purchase
+// order and a 5,000,000 SAR one both needed one permission, and whoever held
+// it approved either alone. These four tables make "who signs, and above what
+// amount" configurable per organization without making the *states themselves*
+// configurable — the lifecycle stays in code, tested.
+//
+// A document type with no matching rule keeps the old behaviour exactly: the
+// single write permission decides. The matrix only ever adds signatures.
+
+enum ApprovalDocument {
+  PURCHASE_ORDER
+  PROGRESS_CLAIM
+  CHANGE_ORDER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ApprovalStepStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// One amount band for one document type. Bands are half-open — minAmount is
+/// inclusive, maxAmount exclusive, null maxAmount means "and above" — and the
+/// service refuses to save two active bands of the same type that overlap.
+model ApprovalRule {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documentType   ApprovalDocument
+  minAmount      Decimal  @default(0) @db.Decimal(18, 2)
+  maxAmount      Decimal? @db.Decimal(18, 2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  steps    ApprovalRuleStep[]
+  requests ApprovalRequest[]
+
+  @@index([organizationId, documentType, isActive])
+}
+
+/// The signature chain of a rule, in order. Roles — not users: a chain built
+/// from named people breaks the first time somebody leaves.
+model ApprovalRuleStep {
+  id       String @id @default(cuid())
+  ruleId   String
+  rule     ApprovalRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  sequence Int
+  roleId   String
+  role     Role   @relation(fields: [roleId], references: [id])
+
+  @@unique([ruleId, sequence])
+  @@index([roleId])
+}
+
+/// One document's trip through the matrix. `documentCode` is denormalised so
+/// the inbox reads without touching three other tables; `amount` is frozen at
+/// submission so a later edit cannot silently move the document into a cheaper
+/// band that has already been signed.
+model ApprovalRequest {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documentType   ApprovalDocument
+  documentId     String
+  documentCode   String
+  amount         Decimal  @db.Decimal(18, 2)
+  // The rule is kept for provenance. SetNull, not Cascade: rewriting the matrix
+  // must never erase the record of what was already approved under the old one.
+  ruleId         String?
+  rule           ApprovalRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  status         ApprovalStatus @default(PENDING)
+  currentStep    Int      @default(1)
+  raisedById     String?
+  raisedBy       User?    @relation("ApprovalRaiser", fields: [raisedById], references: [id])
+  createdAt      DateTime @default(now())
+  closedAt       DateTime?
+
+  steps ApprovalStep[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, documentType, documentId])
+}
+
+/// A materialised copy of the rule's steps, taken at submission. Copied rather
+/// than referenced so editing the matrix tomorrow cannot rewrite who was
+/// supposed to sign something yesterday.
+model ApprovalStep {
+  id          String @id @default(cuid())
+  requestId   String
+  request     ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  sequence    Int
+  roleId      String
+  role        Role   @relation(fields: [roleId], references: [id])
+  status      ApprovalStepStatus @default(PENDING)
+  decidedById String?
+  decidedBy   User?  @relation("ApprovalDecider", fields: [decidedById], references: [id])
+  decidedAt   DateTime?
+  note        String?
+
+  @@unique([requestId, sequence])
+  @@index([roleId, status])
 }

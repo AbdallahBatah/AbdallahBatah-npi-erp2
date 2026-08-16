@@ -1,0 +1,341 @@
+import { InvoicesService } from './invoices.service';
+import { ReportsService } from './reports.service';
+import type { AuthUser } from '../../common/auth-user';
+
+/**
+ * D-01 / D-02 from the 2026-08-16 test round.
+ *
+ * A credit note (ZATCA InvoiceTypeCode 381) is stored as an `Invoice` row with
+ * `invoiceType: 'CREDIT_NOTE'`, status `CLEARED`, and **positive** amounts. That
+ * storage choice is fine — but every aggregation filters on `status` alone, so a
+ * credit note is summed as an extra *sale* instead of being subtracted.
+ *
+ * The blast radius is the VAT return filed with ZATCA, the AR figure, POC
+ * progress, and contract profitability. These tests assert the corrected
+ * behaviour, so they go green the moment the aggregations learn about
+ * `invoiceType`.
+ *
+ * The Prisma double below genuinely evaluates `where` (and `include.where`)
+ * rather than returning a canned list — a filter the service never writes is a
+ * filter that never runs, so the defect reproduces instead of being assumed.
+ */
+
+type Row = Record<string, unknown>;
+
+function matches(row: Row, where?: Row): boolean {
+  if (!where) return true;
+  for (const [key, cond] of Object.entries(where)) {
+    const actual = row[key];
+    if (cond !== null && typeof cond === 'object' && !(cond instanceof Date)) {
+      const c = cond as Record<string, unknown>;
+      if ('in' in c) {
+        if (!(c.in as unknown[]).includes(actual)) return false;
+        continue;
+      }
+      if ('notIn' in c && (c.notIn as unknown[]).includes(actual)) return false;
+      if ('not' in c && actual === c.not) return false;
+      if ('gte' in c && !((actual as number) >= (c.gte as number))) return false;
+      if ('lte' in c && !((actual as number) <= (c.lte as number))) return false;
+      continue;
+    }
+    if (actual !== cond) return false;
+  }
+  return true;
+}
+
+function applyInclude(row: Row, include?: Row): Row {
+  if (!include) return row;
+  const out = { ...row };
+  for (const [rel, spec] of Object.entries(include)) {
+    const s = spec as Record<string, unknown> | undefined;
+    if (s && typeof s === 'object' && s.where && Array.isArray(out[rel])) {
+      out[rel] = (out[rel] as Row[]).filter((r) => matches(r, s.where as Row));
+    }
+  }
+  return out;
+}
+
+function table(rows: Row[]) {
+  const hits = (where?: Row) => rows.filter((r) => matches(r, where));
+  return {
+    findMany: async ({ where, include }: { where?: Row; include?: Row } = {}) =>
+      hits(where).map((r) => applyInclude(r, include)),
+    findFirst: async ({ where, include }: { where?: Row; include?: Row } = {}) =>
+      hits(where).map((r) => applyInclude(r, include))[0] ?? null,
+    count: async ({ where }: { where?: Row } = {}) => hits(where).length,
+    aggregate: async ({ where, _sum }: { where?: Row; _sum?: Row } = {}) => {
+      const rs = hits(where);
+      const sum: Record<string, number> = {};
+      for (const f of Object.keys(_sum ?? {})) {
+        sum[f] = rs.reduce((s, r) => s + Number(r[f] ?? 0), 0);
+      }
+      return { _sum: sum };
+    },
+    // Real enough to be worth asserting on: a stub returning [] would make any
+    // sum over a grouped query silently zero.
+    groupBy: async ({ by, where, _sum }: { by: string[]; where?: Row; _sum?: Row }) => {
+      const groups = new Map<string, Row[]>();
+      for (const r of hits(where)) {
+        const key = by.map((f) => String(r[f])).join('\u0000');
+        groups.set(key, [...(groups.get(key) ?? []), r]);
+      }
+      return [...groups.values()].map((rows) => {
+        const sum: Record<string, number> = {};
+        for (const f of Object.keys(_sum ?? {})) {
+          sum[f] = rows.reduce((s, r) => s + Number(r[f] ?? 0), 0);
+        }
+        return { ...Object.fromEntries(by.map((f) => [f, rows[0][f]])), _sum: sum };
+      });
+    },
+  };
+}
+
+const USER = { userId: 'u1', organizationId: 'org1' } as unknown as AuthUser;
+const D = (s: string) => new Date(s);
+
+// A 100,000 SAR milestone invoice plus 15% VAT. `payments` and `creditNotes`
+// are present because the summary query selects them, and Prisma always
+// returns a selected to-many relation as an array.
+const INVOICE = {
+  id: 'i1',
+  organizationId: 'org1',
+  invoiceType: 'MILESTONE',
+  status: 'CLEARED',
+  issueDate: D('2026-08-05'),
+  subtotal: 100000,
+  vatAmount: 15000,
+  total: 115000,
+  netPayable: 115000,
+  payments: [] as Array<{ amount: number }>,
+  creditNotes: [] as Array<{ total: number }>,
+};
+
+describe('D-01: credit notes must reduce reported sales, not add to them', () => {
+  it('a full credit note zeroes the VAT return for the period', async () => {
+    // Issuing a full credit note also flips the original to CANCELLED, so the
+    // original drops out and only the credit note is left — counted as a sale.
+    const invoice = table([
+      { ...INVOICE, status: 'CANCELLED' },
+      {
+        id: 'i2',
+        organizationId: 'org1',
+        invoiceType: 'CREDIT_NOTE',
+        status: 'CLEARED',
+        issueDate: D('2026-08-10'),
+        subtotal: 100000,
+        vatAmount: 15000,
+      },
+    ]);
+    const svc = new ReportsService(
+      { invoice, vendorBill: table([]), progressClaim: table([]) } as never,
+      {} as never,
+      {} as never,
+    );
+
+    const r = await svc.vatReturn(USER, '2026-08-01', '2026-08-31');
+    expect(r.boxes.standardRatedSales).toBe(0);
+    expect(r.boxes.outputVat).toBe(0);
+    expect(r.netVatDue).toBe(0);
+  });
+
+  it('a partial credit note is subtracted, not added (the error would otherwise double)', async () => {
+    const invoice = table([
+      INVOICE,
+      {
+        id: 'i2',
+        organizationId: 'org1',
+        invoiceType: 'CREDIT_NOTE',
+        status: 'CLEARED',
+        issueDate: D('2026-08-10'),
+        subtotal: 20000,
+        vatAmount: 3000,
+      },
+    ]);
+    const svc = new ReportsService(
+      { invoice, vendorBill: table([]), progressClaim: table([]) } as never,
+      {} as never,
+      {} as never,
+    );
+
+    const r = await svc.vatReturn(USER, '2026-08-01', '2026-08-31');
+    expect(r.boxes.standardRatedSales).toBe(80000);
+    expect(r.boxes.outputVat).toBe(12000);
+  });
+
+  it('the invoice count is sales documents, not corrections', async () => {
+    // The money boxes were signed and the count was not, so a period with one
+    // sale and one correction reported two invoices here while the finance
+    // summary reported one — the same label meaning two different things.
+    const invoice = table([
+      INVOICE,
+      {
+        id: 'i2',
+        organizationId: 'org1',
+        invoiceType: 'CREDIT_NOTE',
+        status: 'CLEARED',
+        issueDate: D('2026-08-10'),
+        subtotal: 20000,
+        vatAmount: 3000,
+      },
+    ]);
+    const svc = new ReportsService(
+      { invoice, vendorBill: table([]), progressClaim: table([]) } as never,
+      {} as never,
+      {} as never,
+    );
+
+    const r = await svc.vatReturn(USER, '2026-08-01', '2026-08-31');
+    expect(r.invoiceCount).toBe(1);
+  });
+
+  it('the finance summary nets credit notes out of AR and output VAT', async () => {
+    // A full credit flips the original to CANCELLED, and the note carries the
+    // back-reference — `creditNotes` on the original is populated, never empty.
+    // A fixture that leaves it empty hides a double subtraction.
+    const invoice = table([
+      { ...INVOICE, status: 'CANCELLED', creditNotes: [{ total: 115000 }] },
+      {
+        id: 'i2',
+        organizationId: 'org1',
+        invoiceType: 'CREDIT_NOTE',
+        status: 'CLEARED',
+        subtotal: 100000,
+        vatAmount: 15000,
+        total: 115000,
+        netPayable: 115000,
+        payments: [],
+        creditNotes: [],
+      },
+    ]);
+    const svc = new InvoicesService(
+      { invoice, retentionEntry: table([]) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const s = await svc.summary(USER);
+    expect(Number(s.accountsReceivable)).toBe(0);
+    expect(Number(s.vatOutput)).toBe(0);
+    // A credit note is a correction, not an eleventh invoice.
+    expect(s.issuedInvoices).toBe(1);
+  });
+
+  it('a partly credited invoice is reduced by the credit exactly once', async () => {
+    // The credit reaches AR through the original's `creditNotes` relation. The
+    // note row must not subtract a second time — that would report 69,000.
+    const invoice = table([
+      { ...INVOICE, status: 'ISSUED', creditNotes: [{ total: 23000 }] },
+      {
+        id: 'i2',
+        organizationId: 'org1',
+        invoiceType: 'CREDIT_NOTE',
+        status: 'CLEARED',
+        subtotal: 20000,
+        vatAmount: 3000,
+        total: 23000,
+        netPayable: 23000,
+        payments: [],
+        creditNotes: [],
+      },
+    ]);
+    const svc = new InvoicesService(
+      { invoice, retentionEntry: table([]) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const s = await svc.summary(USER);
+    expect(Number(s.accountsReceivable)).toBe(92000);
+    expect(Number(s.vatOutput)).toBe(12000);
+  });
+
+  it('AR never goes negative just because an invoice was credited away', async () => {
+    // The regression this guards: counting the note as a negative row while the
+    // original had already left the open set produced AR = −115,000.
+    const invoice = table([
+      { ...INVOICE, status: 'CANCELLED', creditNotes: [{ total: 115000 }] },
+      {
+        id: 'i2',
+        organizationId: 'org1',
+        invoiceType: 'CREDIT_NOTE',
+        status: 'CLEARED',
+        subtotal: 100000,
+        vatAmount: 15000,
+        total: 115000,
+        netPayable: 115000,
+        payments: [],
+        creditNotes: [],
+      },
+    ]);
+    const svc = new InvoicesService(
+      { invoice, retentionEntry: table([]) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const s = await svc.summary(USER);
+    expect(Number(s.accountsReceivable)).toBe(0);
+    expect(Number(s.accountsReceivable)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('contract profitability does not count a credit note as extra billing', async () => {
+    const contract = table([
+      {
+        id: 'c1',
+        organizationId: 'org1',
+        code: 'CTR-0001',
+        status: 'ACTIVE',
+        totalValue: 1000000,
+        createdAt: D('2026-01-01'),
+        customer: { nameAr: 'أرامكو', nameEn: 'Aramco' },
+        proposalRevision: { bomLines: [{ qty: 1, item: { unitCost: 600000 } }] },
+        milestones: [{ amount: 100000, status: 'INVOICED' }],
+        project: null,
+        invoices: [
+          { status: 'CLEARED', invoiceType: 'MILESTONE', subtotal: 100000 },
+          { status: 'CLEARED', invoiceType: 'CREDIT_NOTE', subtotal: 100000 },
+        ],
+      },
+    ]);
+    const svc = new ReportsService(
+      { contract, projectCostEntry: table([]) } as never,
+      {} as never,
+      {} as never,
+    );
+
+    const rows = await svc.profitability(USER);
+    expect(rows[0].billed).toBe(0);
+  });
+});
+
+describe('D-02: accounts receivable must be net of cash already received', () => {
+  it('subtracts payments from the AR total', async () => {
+    // An invoice only becomes PAID when settled in full, so every partially
+    // paid invoice is otherwise counted at its full value.
+    const invoice = table([{ ...INVOICE, payments: [{ amount: 100000 }] }]);
+    const svc = new InvoicesService(
+      { invoice, retentionEntry: table([]) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const s = await svc.summary(USER);
+    expect(Number(s.accountsReceivable)).toBe(15000);
+  });
+});

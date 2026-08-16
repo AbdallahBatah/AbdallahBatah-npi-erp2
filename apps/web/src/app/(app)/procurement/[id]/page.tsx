@@ -10,6 +10,7 @@ import { translateError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { formatMoney, formatDate } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can, Btn, PageSkeleton } from '@/components/ui';
+import { ApprovalBanner, type ApprovalRequestView } from '@/components/approvals';
 
 interface PoLine {
   id: string;
@@ -38,6 +39,8 @@ interface Po {
   project?: { id: string; code: string; nameAr: string; nameEn: string } | null;
   lines: PoLine[];
   goodsReceipts: Receipt[];
+  /** Set while the PO is sitting in the approval matrix (package و). */
+  pendingApproval: ApprovalRequestView | null;
 }
 
 interface ReceiveDraft { qty: number; serials: string }
@@ -71,8 +74,20 @@ export default function PoDetailPage() {
       !(await confirm({ title: t('confirm.approvePoTitle'), message: t('confirm.approvePoMsg') }))
     )
       return;
-    if (await act('approve', () => api.post(`/procurement/purchase-orders/${id}/approve`, {})))
+    // The same click means two different things depending on the matrix, so
+    // the toast has to read the answer rather than assume "approved".
+    let res: { pendingApproval?: ApprovalRequestView | null } | undefined;
+    const ok = await act(
+      'approve',
+      async () => {
+        res = await api.post(`/procurement/purchase-orders/${id}/approve`, {});
+      },
+      { success: false },
+    );
+    if (ok) {
+      toast.success(res?.pendingApproval ? t('apr.sentForApproval') : t('common.done'));
       load();
+    }
   }
 
   function openReceive() {
@@ -140,7 +155,7 @@ export default function PoDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={po.status} />
             <Can perm="scm.procurement.write">
-              {po.status === 'DRAFT' && (
+              {po.status === 'DRAFT' && !po.pendingApproval && (
                 <Btn variant="primary" sm icon="check-circle" busy={busy('approve')} disabled={busy()} onClick={approve}>
                   {t('po.approve')}
                 </Btn>
@@ -155,6 +170,8 @@ export default function PoDetailPage() {
         }
       />
       {confirmNode}
+
+      {po.pendingApproval && <ApprovalBanner request={po.pendingApproval} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <div className="card p-4">

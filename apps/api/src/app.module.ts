@@ -21,6 +21,7 @@ import { PpaModule } from './modules/ppa/ppa.module';
 import { ReferenceModule } from './modules/reference/reference.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { SearchModule } from './modules/search/search.module';
 
 @Module({
@@ -45,6 +46,7 @@ import { SearchModule } from './modules/search/search.module';
     ReferenceModule,
     PlatformModule,
     AdminModule,
+    ApprovalsModule,
     SearchModule,
   ],
   controllers: [HealthController],
