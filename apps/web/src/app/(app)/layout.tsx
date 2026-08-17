@@ -38,7 +38,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   if (loading || !user) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-slate-400">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-slate-600">
         <img src="/brand/npi-icon.svg" alt="" className="h-11 w-11" />
         <span className="flex items-center gap-2 text-xs" role="status">
           <Spinner className="h-3.5 w-3.5" />

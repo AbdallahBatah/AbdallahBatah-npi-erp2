@@ -100,7 +100,7 @@ export default function ProjectsPage() {
                   <td className="td font-mono text-xs">{p.code}</td>
                   <td className="td">
                     {pick(p, 'name')}
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-600">
                       {p.contract?.customer ? pick(p.contract.customer, 'name') : ''}
                     </p>
                   </td>
@@ -123,7 +123,7 @@ export default function ProjectsPage() {
 
       <Modal open={open} title={t('prj.new')} onClose={() => setOpen(false)}>
         {contracts.length === 0 ? (
-          <p className="text-sm text-slate-400">{t('prj.noActiveContracts')}</p>
+          <p className="text-sm text-slate-600">{t('prj.noActiveContracts')}</p>
         ) : (
           <div className="space-y-4">
             <Field label={t('prj.selectContract')}>

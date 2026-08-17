@@ -235,7 +235,7 @@ export default function InvoiceDetailPage() {
                   {inv.journalEntries[0].lines.map((jl) => (
                     <tr key={jl.id}>
                       <td className="td">
-                        <span className="font-mono text-xs text-slate-400">{jl.account.code}</span>{' '}
+                        <span className="font-mono text-xs text-slate-600">{jl.account.code}</span>{' '}
                         {locale === 'ar' ? jl.account.nameAr : jl.account.nameEn}
                       </td>
                       <td className="td text-end">{Number(jl.debit) ? formatMoney(jl.debit, locale) : '—'}</td>
@@ -260,7 +260,7 @@ export default function InvoiceDetailPage() {
                 {inv.qrDataUrl && (
                   <div className="mb-4 flex flex-col items-center">
                     <img src={inv.qrDataUrl} alt="ZATCA QR" width={180} height={180} className="rounded border border-slate-200" />
-                    <span className="mt-1 text-[11px] text-slate-400">{t('inv.qr')}</span>
+                    <span className="mt-1 text-[11px] text-slate-600">{t('inv.qr')}</span>
                   </div>
                 )}
                 <div className="space-y-2 text-xs">
@@ -270,7 +270,7 @@ export default function InvoiceDetailPage() {
                   />
                 </div>
                 <details className="mt-3 text-xs">
-                  <summary className="cursor-pointer select-none text-slate-400 hover:text-slate-600">
+                  <summary className="cursor-pointer select-none text-slate-600 hover:text-slate-800">
                     {t('inv.techDetails')}
                   </summary>
                   <div className="mt-2 space-y-2">
@@ -289,7 +289,7 @@ export default function InvoiceDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="card p-5 text-center text-sm text-slate-400">
+            <div className="card p-5 text-center text-sm text-slate-600">
               {t('inv.einvoice')}
               <p className="mt-2 text-xs">{inv.status === 'DRAFT' ? '—' : ''}</p>
             </div>
@@ -351,7 +351,7 @@ export default function InvoiceDetailPage() {
           <div className="card overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
               <h3 className="text-sm font-bold text-slate-800">{t('pay.title')}</h3>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-slate-600">
                 {inv.outstanding < -0.009 ? (
                   <>
                     {t('cn.refundDue')}:{' '}
@@ -373,9 +373,9 @@ export default function InvoiceDetailPage() {
                   {inv.payments.map((p) => (
                     <li key={p.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs">
                       <span>
-                        <span className="font-mono text-slate-400">{p.code}</span>
+                        <span className="font-mono text-slate-600">{p.code}</span>
                         <span className="ms-2 text-slate-500">{formatDate(p.receivedAt, locale)}</span>
-                        {p.reference && <span className="ms-2 text-slate-400">{p.reference}</span>}
+                        {p.reference && <span className="ms-2 text-slate-600">{p.reference}</span>}
                       </span>
                       <span className="font-bold text-emerald-700">{formatMoney(p.amount, locale)}</span>
                     </li>
@@ -455,7 +455,7 @@ export default function InvoiceDetailPage() {
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
                 <h3 className="text-sm font-bold text-slate-800">{t('cn.title')}</h3>
                 {inv.creditedTotal > 0 ? (
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-slate-600">
                     {t('cn.credited')}:{' '}
                     <b className="text-rose-600">{formatMoney(inv.creditedTotal, locale)}</b>
                   </span>
@@ -495,7 +495,7 @@ export default function InvoiceDetailPage() {
                             {formatDate(c.issueDate, locale)}
                           </span>
                           {c.creditReason ? (
-                            <span className="ms-2 text-slate-400">{c.creditReason}</span>
+                            <span className="ms-2 text-slate-600">{c.creditReason}</span>
                           ) : null}
                         </span>
                         <span className="font-bold text-rose-700">
@@ -508,7 +508,7 @@ export default function InvoiceDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="card p-5 text-center text-sm text-slate-400">{t('common.none')}</div>
+            <div className="card p-5 text-center text-sm text-slate-600">{t('common.none')}</div>
           ))}
 
           {/* M2: documents attached to this invoice */}
@@ -579,7 +579,7 @@ export default function InvoiceDetailPage() {
 function Field({ label, value, mono, truncate }: { label: string; value: string; mono?: boolean; truncate?: boolean }) {
   return (
     <div>
-      <span className="block text-slate-400">{label}</span>
+      <span className="block text-slate-600">{label}</span>
       <span
         className={`block ${mono ? 'font-mono' : ''} ${truncate ? 'truncate' : 'break-all'} text-slate-700`}
         title={value}

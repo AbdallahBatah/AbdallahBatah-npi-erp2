@@ -1,7 +1,24 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { messages, type Locale } from './messages';
+
+/**
+ * Native constraint-validation bubbles ("Please fill out this field.") speak
+ * the browser's language, not the app's. Localize them by kind; clearing on
+ * input lets the browser re-validate the corrected value.
+ */
+function validationMessage(el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, l: Locale): string {
+  const v = el.validity;
+  const ar = l === 'ar';
+  if (v.valueMissing) return ar ? 'هذا الحقل مطلوب' : 'This field is required';
+  if (v.typeMismatch) return ar ? 'أدخل قيمة صحيحة بهذه الصيغة' : 'Enter a valid value for this format';
+  if (v.rangeUnderflow || v.rangeOverflow || v.stepMismatch)
+    return ar ? 'القيمة خارج النطاق المسموح' : 'Value is out of the allowed range';
+  if (v.tooShort || v.tooLong) return ar ? 'طول القيمة غير مقبول' : 'Value length is not acceptable';
+  if (v.patternMismatch) return ar ? 'القيمة لا تطابق الصيغة المطلوبة' : 'Value does not match the required format';
+  return ar ? 'قيمة غير صالحة' : 'Invalid value';
+}
 
 interface I18nValue {
   locale: Locale;
@@ -27,6 +44,28 @@ export function I18nProvider({
   children: ReactNode;
 }) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
+
+  useEffect(() => {
+    const isFormControl = (
+      t: EventTarget | null,
+    ): t is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement =>
+      t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement;
+    // 'invalid' does not bubble — capture is the only way to delegate it.
+    const onInvalid = (e: Event) => {
+      if (isFormControl(e.target)) e.target.setCustomValidity(validationMessage(e.target, locale));
+    };
+    // A custom message marks the field invalid until cleared; wipe it on any
+    // edit so the browser re-runs the real constraints on the new value.
+    const onInput = (e: Event) => {
+      if (isFormControl(e.target)) e.target.setCustomValidity('');
+    };
+    document.addEventListener('invalid', onInvalid, true);
+    document.addEventListener('input', onInput, true);
+    return () => {
+      document.removeEventListener('invalid', onInvalid, true);
+      document.removeEventListener('input', onInput, true);
+    };
+  }, [locale]);
 
   const value = useMemo<I18nValue>(() => {
     const setLocale = (l: Locale) => {

@@ -88,7 +88,7 @@ export default function DashboardPage() {
         {kpis.map((c) => (
           <Link key={c.key} href={c.href} className="stat group">
             <div className="flex items-start justify-between">
-              <p className="text-xs font-semibold text-slate-400">{t(c.key)}</p>
+              <p className="text-xs font-semibold text-slate-600">{t(c.key)}</p>
               <Icon
                 name={c.icon}
                 className="h-5 w-5 text-slate-300 transition group-hover:text-brand-500"
@@ -105,7 +105,7 @@ export default function DashboardPage() {
       <div className={`mt-4 grid grid-cols-1 gap-4 ${GRID_COLS[(canCrm ? 1 : 0) + (canOps ? 2 : 0)] ?? 'lg:grid-cols-3'}`}>
         {canCrm && (
         <div className="stat">
-          <p className="text-xs font-semibold text-slate-400">{t('dash.pipeline')}</p>
+          <p className="text-xs font-semibold text-slate-600">{t('dash.pipeline')}</p>
           <p className="mt-2 text-2xl font-bold text-brand-700">
             {formatMoney(data?.pipelineValue, locale)}
           </p>
@@ -114,11 +114,11 @@ export default function DashboardPage() {
           {canFin && (
           <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">{t('inv.summary.receivable')}</span>
+              <span className="text-slate-600">{t('inv.summary.receivable')}</span>
               <span className="font-semibold text-slate-700">{formatMoney(fin?.accountsReceivable, locale)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">{t('inv.summary.retention')}</span>
+              <span className="text-slate-600">{t('inv.summary.retention')}</span>
               <span className="font-semibold text-slate-700">{formatMoney(fin?.retentionHeld, locale)}</span>
             </div>
           </div>
@@ -129,23 +129,23 @@ export default function DashboardPage() {
         {canOps && (
         <Link href="/workorders" className="stat group">
           <div className="flex items-start justify-between">
-            <p className="text-xs font-semibold text-slate-400">{t('wo.title')}</p>
+            <p className="text-xs font-semibold text-slate-600">{t('wo.title')}</p>
             <Icon name="wrench" className="h-5 w-5 text-slate-300 transition group-hover:text-brand-500" />
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg bg-sky-50 py-2">
               <p className="text-xl font-bold text-sky-700">{num(wo?.open)}</p>
-              <p className="text-[10px] font-medium text-sky-600">{t('wo.summary.open')}</p>
+              <p className="text-[10px] font-medium text-sky-700">{t('wo.summary.open')}</p>
             </div>
             <div className="rounded-lg bg-amber-50 py-2">
               <p className="text-xl font-bold text-amber-700">{num(wo?.inProgress)}</p>
-              <p className="text-[10px] font-medium text-amber-600">{t('wo.summary.inProgress')}</p>
+              <p className="text-[10px] font-medium text-amber-700">{t('wo.summary.inProgress')}</p>
             </div>
             <div className={`rounded-lg py-2 ${(wo?.overdue ?? 0) > 0 ? 'bg-rose-50' : 'bg-emerald-50'}`}>
               <p className={`text-xl font-bold ${(wo?.overdue ?? 0) > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
                 {num(wo?.overdue)}
               </p>
-              <p className={`text-[10px] font-medium ${(wo?.overdue ?? 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              <p className={`text-[10px] font-medium ${(wo?.overdue ?? 0) > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
                 {t('wo.summary.overdue')}
               </p>
             </div>
@@ -156,28 +156,28 @@ export default function DashboardPage() {
         {canOps && (
         <Link href="/telemetry" className="stat group">
           <div className="flex items-start justify-between">
-            <p className="text-xs font-semibold text-slate-400">{t('tel.title')}</p>
+            <p className="text-xs font-semibold text-slate-600">{t('tel.title')}</p>
             <Icon name="activity" className="h-5 w-5 text-slate-300 transition group-hover:text-brand-500" />
           </div>
           <div className="mt-2 flex items-end justify-between">
             <div>
               <p className="text-2xl font-bold text-slate-900">
                 {tel ? `${num(Math.round(tel.totalActualKwh))}` : '—'}
-                <span className="ms-1 text-xs font-medium text-slate-400">kWh</span>
+                <span className="ms-1 text-xs font-medium text-slate-600">kWh</span>
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">{t('tel.actual14')}</p>
+              <p className="mt-0.5 text-[11px] text-slate-600">{t('tel.actual14')}</p>
             </div>
             <div className="text-end">
               <p className={`text-2xl font-bold ${tel?.portfolioPr && tel.portfolioPr < 0.8 ? 'text-amber-600' : 'text-emerald-600'}`}>
                 {tel?.portfolioPr != null ? `${Math.round(tel.portfolioPr * 100)}%` : '—'}
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">PR</p>
+              <p className="mt-0.5 text-[11px] text-slate-600">PR</p>
             </div>
             <div className="text-end">
               <p className={`text-2xl font-bold ${(tel?.openAlerts ?? 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                 {num(tel?.openAlerts)}
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">{t('tel.openAlerts')}</p>
+              <p className="mt-0.5 text-[11px] text-slate-600">{t('tel.openAlerts')}</p>
             </div>
           </div>
         </Link>

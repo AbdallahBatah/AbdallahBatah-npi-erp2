@@ -108,7 +108,7 @@ export default function PpaPage() {
           </Can>
         }
       />
-      <p className="mb-4 -mt-4 text-xs text-slate-400">{t('ppa.hint')}</p>
+      <p className="mb-4 -mt-4 text-xs text-slate-600">{t('ppa.hint')}</p>
       {loadErr ? <div className="mb-4"><LoadError message={loadErr} onRetry={load} /></div> : null}
 
       {/* Terms */}
@@ -140,7 +140,7 @@ export default function PpaPage() {
                   <td className="td font-mono text-xs">{tm.code}</td>
                   <td className="td">
                     <span className="font-mono text-xs">{tm.contract?.code}</span>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-600">
                       {tm.contract?.customer ? pick(tm.contract.customer, 'name') : ''}
                     </p>
                   </td>

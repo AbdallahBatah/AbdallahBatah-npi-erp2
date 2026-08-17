@@ -218,7 +218,7 @@ export default function PoDetailPage() {
             {po.lines.map((l) => (
               <tr key={l.id}>
                 <td className="td">
-                  <span className="font-mono text-xs text-slate-400">{l.item.sku}</span>{' '}
+                  <span className="font-mono text-xs text-slate-600">{l.item.sku}</span>{' '}
                   {pick(l.item, 'name')}{l.item.isSerialised ? ' · S/N' : ''}
                 </td>
                 <td className="td text-xs">{l.wbsElement ? `${l.wbsElement.code}` : '—'}</td>
@@ -266,7 +266,7 @@ export default function PoDetailPage() {
                         {g.vendorBills[0].code}
                       </span>
                     ) : (
-                      <span className="text-xs text-slate-400">—</span>
+                      <span className="text-xs text-slate-600">—</span>
                     )}
                   </td>
                   <td className="td">
@@ -306,9 +306,9 @@ export default function PoDetailPage() {
             .map((l) => (
               <div key={l.id} className="rounded-lg border border-slate-200 p-3">
                 <p className="mb-2 text-sm font-medium">
-                  <span className="font-mono text-xs text-slate-400">{l.item.sku}</span>{' '}
+                  <span className="font-mono text-xs text-slate-600">{l.item.sku}</span>{' '}
                   {pick(l.item, 'name')}{l.item.isSerialised ? ' · S/N' : ''}
-                  <span className="ms-2 text-xs text-slate-400">
+                  <span className="ms-2 text-xs text-slate-600">
                     {t('po.received')}: {Number(l.receivedQty)} / {Number(l.qty)}
                   </span>
                 </p>

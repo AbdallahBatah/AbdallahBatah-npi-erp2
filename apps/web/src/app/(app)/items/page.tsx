@@ -108,7 +108,7 @@ export default function ItemsPage() {
                     {it.isSerialised ? (
                       <Icon name="check" className="h-4 w-4 text-success-600" />
                     ) : (
-                      <span className="text-slate-300">—</span>
+                      <span className="text-slate-500">—</span>
                     )}
                   </td>
                 </tr>

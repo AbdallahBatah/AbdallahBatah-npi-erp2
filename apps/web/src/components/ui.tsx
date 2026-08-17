@@ -2,10 +2,13 @@
 
 import {
   ButtonHTMLAttributes,
+  KeyboardEvent as ReactKeyboardEvent,
   ReactNode,
   cloneElement,
   isValidElement,
+  useEffect,
   useId,
+  useRef,
   useState,
 } from 'react';
 import Link from 'next/link';
@@ -46,7 +49,7 @@ export function PageHeader({
           </Link>
         )}
         <h1 className="text-xl font-bold tracking-tight text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
+        {subtitle && <p className="mt-1 text-xs text-slate-600">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -310,10 +313,10 @@ const STATUS_META: Record<string, { ar: string; en: string; cls: string; dot: st
   INSTALLED: { ar: 'مركَّب', en: 'Installed', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
   FAULTY: { ar: 'معطّل', en: 'Faulty', cls: 'bg-rose-50 text-rose-600', dot: 'bg-rose-500' },
   RETURNED: { ar: 'مرتجع', en: 'Returned', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
-  SCRAPPED: { ar: 'مُتلَف', en: 'Scrapped', cls: 'bg-slate-100 text-slate-400', dot: 'bg-slate-300' },
+  SCRAPPED: { ar: 'مُتلَف', en: 'Scrapped', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
   OPERATING: { ar: 'عامل', en: 'Operating', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
   UNDER_MAINTENANCE: { ar: 'تحت الصيانة', en: 'Under maintenance', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
-  RETIRED: { ar: 'خارج الخدمة', en: 'Retired', cls: 'bg-slate-100 text-slate-400', dot: 'bg-slate-300' },
+  RETIRED: { ar: 'خارج الخدمة', en: 'Retired', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
   // work orders
   OPEN: { ar: 'مفتوح', en: 'Open', cls: 'bg-sky-50 text-sky-700', dot: 'bg-sky-500' },
   ASSIGNED: { ar: 'مُسنَد', en: 'Assigned', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
@@ -323,7 +326,7 @@ const STATUS_META: Record<string, { ar: string; en: string; cls: string; dot: st
   WORK_ORDERED: { ar: 'صدر أمر عمل', en: 'Work ordered', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
   RESOLVED: { ar: 'محلول', en: 'Resolved', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
   // ppa
-  ENDED: { ar: 'منتهية', en: 'Ended', cls: 'bg-slate-100 text-slate-400', dot: 'bg-slate-300' },
+  ENDED: { ar: 'منتهية', en: 'Ended', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
   // warranty / RMA
   REPLACED: { ar: 'تم الاستبدال', en: 'Replaced', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
   // retention
@@ -390,12 +393,34 @@ export function Field({
           {error}
         </p>
       ) : hint ? (
-        <p id={msgId} className="mt-1 text-[11px] text-slate-400">
+        <p id={msgId} className="mt-1 text-[11px] text-slate-600">
           {hint}
         </p>
       ) : null}
     </div>
   );
+}
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Keep Tab/Shift+Tab cycling inside `container` while a dialog is open. */
+function trapTab(e: ReactKeyboardEvent, container: HTMLElement | null) {
+  if (e.key !== 'Tab' || !container) return;
+  const items = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (el) => el.offsetParent !== null,
+  );
+  if (items.length === 0) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  if (e.shiftKey && (active === first || active === container)) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault();
+    first.focus();
+  }
 }
 
 export function Modal({
@@ -414,6 +439,20 @@ export function Modal({
 }) {
   const { t } = useI18n();
   const [confirmClose, setConfirmClose] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Move focus into the dialog on open and hand it back on close — without
+  // this, Escape/Tab keep acting on whatever was focused behind the overlay.
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const container = containerRef.current;
+    const target =
+      container?.querySelector<HTMLElement>('input, select, textarea') ??
+      container?.querySelector<HTMLElement>(FOCUSABLE) ??
+      container;
+    target?.focus();
+    return () => previous?.focus();
+  }, [open]);
   if (!open) return null;
   const requestClose = () => {
     if (dirty) setConfirmClose(true);
@@ -421,14 +460,17 @@ export function Modal({
   };
   return (
     <div
+      ref={containerRef}
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-950/50 p-4 pt-16 backdrop-blur-[2px]"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-950/50 p-4 pt-16 backdrop-blur-[2px] outline-none"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) requestClose();
       }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') requestClose();
+        trapTab(e, containerRef.current);
       }}
     >
       <div className="card w-full max-w-2xl border-slate-200 p-6 shadow-2xl">
@@ -437,7 +479,7 @@ export function Modal({
           <button
             onClick={requestClose}
             aria-label={t('common.close')}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
           >
             <Icon name="x" className="h-4 w-4" />
           </button>
@@ -490,22 +532,32 @@ export function useConfirm() {
     opts: ConfirmOpts;
     resolve: (v: boolean) => void;
   } | null>(null);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  // The confirm button autofocuses on open; hand focus back to the trigger
+  // when the dialog resolves so keyboard users are not dropped at <body>.
+  // Captured inside confirm() — by effect time autoFocus has already moved it.
+  const openerRef = useRef<HTMLElement | null>(null);
 
-  const confirm = (opts: ConfirmOpts) =>
-    new Promise<boolean>((resolve) => setState({ opts, resolve }));
+  const confirm = (opts: ConfirmOpts) => {
+    openerRef.current = (document.activeElement as HTMLElement) ?? null;
+    return new Promise<boolean>((resolve) => setState({ opts, resolve }));
+  };
 
   const close = (v: boolean) => {
     state?.resolve(v);
     setState(null);
+    openerRef.current?.focus();
   };
 
   const confirmNode = state ? (
     <div
+      ref={confirmRef}
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[90] flex items-center justify-center bg-ink-950/50 p-4 backdrop-blur-[2px]"
       onKeyDown={(e) => {
         if (e.key === 'Escape') close(false);
+        trapTab(e, confirmRef.current);
       }}
     >
       <div className="card w-full max-w-md border-slate-200 p-6 shadow-2xl">

@@ -99,7 +99,7 @@ export default function LoginPage() {
           <div className="mb-8 flex items-start justify-between">
             <div>
               <h2 className="text-2xl font-bold text-slate-900">{t('login.title')}</h2>
-              <p className="mt-1 text-xs text-slate-400">{t('app.tagline')}</p>
+              <p className="mt-1 text-xs text-slate-600">{t('app.tagline')}</p>
             </div>
             <button onClick={toggle} className="btn-ghost !px-3 !py-1.5 text-xs">
               {locale === 'ar' ? 'EN' : 'ع'}
@@ -136,7 +136,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-xs text-slate-400">{t('login.hint')}</p>
+          <p className="mt-6 text-center text-xs text-slate-600">{t('login.hint')}</p>
         </div>
       </div>
     </div>

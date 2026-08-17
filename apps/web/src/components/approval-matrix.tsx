@@ -146,7 +146,7 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-3">
           <div className="max-w-2xl">
             <p className="text-xs leading-6 text-slate-500">{t('apr.rule.hint')}</p>
-            <p className="mt-1 flex items-start gap-1.5 text-[11px] leading-5 text-slate-400">
+            <p className="mt-1 flex items-start gap-1.5 text-[11px] leading-5 text-slate-600">
               <Icon name="lock" className="mt-0.5 h-3 w-3 shrink-0" />
               {t('apr.rule.selfApproval')}
             </p>
@@ -176,10 +176,10 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                 rules.map((r) => {
                   const meta = docMeta.get(r.documentType);
                   return (
-                    <tr key={r.id} className={r.isActive ? '' : 'bg-slate-50/60 text-slate-400'}>
+                    <tr key={r.id} className={r.isActive ? '' : 'bg-slate-50/60 text-slate-500'}>
                       <td className="td font-semibold text-slate-800">
                         {meta ? (ar ? meta.labelAr : meta.labelEn) : r.documentType}
-                        <div className="text-[11px] font-normal text-slate-400">
+                        <div className="text-[11px] font-normal text-slate-600">
                           {meta ? (ar ? meta.amountLabelAr : meta.amountLabelEn) : ''}
                         </div>
                       </td>
@@ -210,7 +210,7 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                           {r.isActive ? t('apr.rule.active') : t('apr.rule.inactive')}
                         </span>
                         {r._count.requests > 0 && (
-                          <div className="mt-1 text-[11px] text-slate-400">
+                          <div className="mt-1 text-[11px] text-slate-600">
                             {/* "count: N", not "N nouns" — Arabic numeral
                                 agreement changes the noun by count band. */}
                             {t('apr.rule.used')}: {r._count.requests}
@@ -271,7 +271,7 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                 </option>
               ))}
             </select>
-            <span className="mt-1 block text-[11px] text-slate-400">
+            <span className="mt-1 block text-[11px] text-slate-600">
               {docMeta.get(docType) ? (ar ? docMeta.get(docType)!.amountLabelAr : docMeta.get(docType)!.amountLabelEn) : ''}
             </span>
           </label>
@@ -301,7 +301,7 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                 value={max}
                 onChange={(e) => setMax(e.target.value)}
               />
-              <span className="mt-1 block text-[11px] text-slate-400">{t('apr.rule.maxHint')}</span>
+              <span className="mt-1 block text-[11px] text-slate-600">{t('apr.rule.maxHint')}</span>
             </label>
           </div>
 
@@ -317,7 +317,7 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                 {t('apr.rule.addStep')}
               </Btn>
             </div>
-            <p className="mb-2 text-[11px] leading-5 text-slate-400">{t('apr.rule.stepsHint')}</p>
+            <p className="mb-2 text-[11px] leading-5 text-slate-600">{t('apr.rule.stepsHint')}</p>
 
             {eligible.length === 0 ? (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">

@@ -440,7 +440,7 @@ export default function ProposalDetailPage() {
                 <button
                   type="button"
                   aria-label={t('common.close')}
-                  className="rounded-md p-1.5 text-slate-400 transition hover:bg-danger-50 hover:text-danger-600"
+                  className="rounded-md p-1.5 text-slate-500 transition hover:bg-danger-50 hover:text-danger-600"
                   onClick={() => removeLine(i)}
                 >
                   <Icon name="x" className="h-4 w-4" />
@@ -508,7 +508,7 @@ export default function ProposalDetailPage() {
             </div>
           ))}
 
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-600">
             {t('common.value')}: {winning ? formatMoney(winning.totalAmount, locale) : '—'}
           </p>
 

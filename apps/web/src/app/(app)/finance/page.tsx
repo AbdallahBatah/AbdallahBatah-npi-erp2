@@ -158,7 +158,7 @@ export default function FinanceReportsPage() {
       <div className="card overflow-hidden">
         <div className="border-b border-slate-100 px-5 py-3">
           <h3 className="font-semibold text-slate-800">{t('fin.poc.title')}</h3>
-          <p className="mt-1 text-xs text-slate-400">{t('fin.poc.hint')}</p>
+          <p className="mt-1 text-xs text-slate-600">{t('fin.poc.hint')}</p>
         </div>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
@@ -183,7 +183,7 @@ export default function FinanceReportsPage() {
                 <tr key={r.contractId} className="hover:bg-slate-50">
                   <td className="td">
                     <span className="font-mono text-xs">{r.code}</span>
-                    <p className="text-xs text-slate-400">{pick(r.customer, 'name')}</p>
+                    <p className="text-xs text-slate-600">{pick(r.customer, 'name')}</p>
                   </td>
                   <td className="td">{formatMoney(r.contractValue, locale)}</td>
                   <td className="td">
@@ -216,7 +216,7 @@ export default function FinanceReportsPage() {
                         {t('fin.poc.recognize')}
                       </Btn>
                     ) : (
-                      <span className="text-xs text-slate-400">{t('fin.poc.nothing')}</span>
+                      <span className="text-xs text-slate-600">{t('fin.poc.nothing')}</span>
                     )}
                   </td>
                 </tr>
@@ -326,7 +326,7 @@ export default function FinanceReportsPage() {
         <div className="card overflow-hidden lg:col-span-2">
           <div className="border-b border-slate-100 px-5 py-3">
             <h3 className="font-semibold text-slate-800">{t('fin.prof.title')}</h3>
-            <p className="mt-1 text-xs text-slate-400">{t('fin.prof.hint')}</p>
+            <p className="mt-1 text-xs text-slate-600">{t('fin.prof.hint')}</p>
           </div>
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
@@ -354,7 +354,7 @@ export default function FinanceReportsPage() {
                   >
                     <td className="td">
                       <span className="font-mono text-xs">{r.code}</span>
-                      <p className="text-xs text-slate-400">{pick(r.customer, 'name')}</p>
+                      <p className="text-xs text-slate-600">{pick(r.customer, 'name')}</p>
                     </td>
                     <td className="td text-end">{formatMoney(r.contractValue, locale)}</td>
                     <td className="td text-end">{formatMoney(r.estCost, locale)}</td>

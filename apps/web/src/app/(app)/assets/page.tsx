@@ -174,13 +174,13 @@ export default function AssetsPage() {
                 <tr key={s.id} className="hover:bg-slate-50">
                   <td className="td font-mono text-xs">{s.serialNo}</td>
                   <td className="td">
-                    <span className="font-mono text-xs text-slate-400">{s.item?.sku}</span>{' '}
+                    <span className="font-mono text-xs text-slate-600">{s.item?.sku}</span>{' '}
                     {s.item ? pick(s.item, 'name') : '—'}
                   </td>
                   <td className="td"><StatusBadge status={s.currentState} /></td>
                   <td className="td text-xs">
                     {s.location ? (
-                      <><span className="font-mono text-slate-400">{s.location.code}</span> {pick(s.location, 'name')}</>
+                      <><span className="font-mono text-slate-600">{s.location.code}</span> {pick(s.location, 'name')}</>
                     ) : '—'}
                   </td>
                   <td className="td font-mono text-xs">{s.project?.code ?? '—'}</td>
@@ -261,7 +261,7 @@ export default function AssetsPage() {
       <div className="card mt-6 overflow-hidden">
         <div className="border-b border-slate-100 px-5 py-3.5">
           <h3 className="text-sm font-bold text-slate-800">{t('rma.title')}</h3>
-          <p className="mt-1 text-xs text-slate-400">{t('rma.hint')}</p>
+          <p className="mt-1 text-xs text-slate-600">{t('rma.hint')}</p>
         </div>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">

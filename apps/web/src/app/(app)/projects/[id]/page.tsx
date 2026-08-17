@@ -467,7 +467,7 @@ export default function ProjectDetailPage() {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <div>
             <h3 className="text-sm font-semibold text-slate-800">{t('co.title')}</h3>
-            <p className="mt-1 text-xs text-slate-400">{t('co.hint')}</p>
+            <p className="mt-1 text-xs text-slate-600">{t('co.hint')}</p>
           </div>
           <Can perm="projects.project.write"><Btn variant="primary" sm icon="plus" onClick={() => setCoOpen(true)}>{t('co.new')}</Btn></Can>
         </div>
@@ -518,12 +518,12 @@ export default function ProjectDetailPage() {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <div>
             <h3 className="text-sm font-semibold text-slate-800">{t('sub.title')}</h3>
-            <p className="mt-1 text-xs text-slate-400">{t('sub.hint')}</p>
+            <p className="mt-1 text-xs text-slate-600">{t('sub.hint')}</p>
           </div>
           <Can perm="scm.procurement.write"><Btn variant="primary" sm icon="plus" onClick={() => setSubOpen(true)}>{t('sub.new')}</Btn></Can>
         </div>
         {p.subcontracts.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-slate-400">{t('common.none')}</p>
+          <p className="px-5 py-8 text-center text-sm text-slate-600">{t('common.none')}</p>
         ) : (
           <div className="divide-y divide-slate-100">
             {p.subcontracts.map((sub) => {
@@ -532,7 +532,7 @@ export default function ProjectDetailPage() {
                 <div key={sub.id} className="px-5 py-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <span className="font-mono text-xs text-slate-400">{sub.code}</span>{' '}
+                      <span className="font-mono text-xs text-slate-600">{sub.code}</span>{' '}
                       <span className="font-medium">{sub.vendor ? pick(sub.vendor, 'name') : ''}</span>
                       <span className="ms-2 text-xs text-slate-500">{locale === 'ar' ? sub.scopeAr : sub.scopeEn}</span>
                     </div>
@@ -546,7 +546,7 @@ export default function ProjectDetailPage() {
                   {sub.claims.length > 0 && (
                     <table className="mt-3 min-w-full text-xs">
                       <thead>
-                        <tr className="text-start text-slate-400">
+                        <tr className="text-start text-slate-600">
                           <th className="pb-1 text-start">#</th>
                           <th className="pb-1 text-start">{t('common.code')}</th>
                           <th className="pb-1 text-end">{t('sub.claimed')}</th>
