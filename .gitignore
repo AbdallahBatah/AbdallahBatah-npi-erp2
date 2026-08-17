@@ -39,3 +39,4 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+deploy/.deploy_history

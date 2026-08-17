@@ -59,6 +59,14 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      # The rolling deploy waits on this before retiring the old container;
+      # without it "web is up" would mean only that a process exists.
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   caddy:
     image: caddy:2-alpine
