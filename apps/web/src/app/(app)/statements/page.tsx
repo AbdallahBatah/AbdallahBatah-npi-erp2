@@ -8,7 +8,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDay, formatMoney } from '@/lib/format';
 import { downloadCsv, fileStamp } from '@/lib/csv';
-import { PageHeader, Modal, Field, LoadError, useConfirm, Btn } from '@/components/ui';
+import { PageHeader, Modal, Field, LoadError, TableSkeleton, useConfirm, Btn } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
 interface StatementLine {
@@ -191,23 +191,37 @@ export default function StatementsPage() {
       {lines.map((l) => (
         <tr key={l.accountId} className="hover:bg-slate-50">
           <td className="td ps-8">
-            <span className="me-2 font-mono text-xs text-slate-600">{l.code}</span>
+            <span className="me-2 font-mono text-xs text-slate-500">{l.code}</span>
             {pick(l, 'name')}
           </td>
-          <td className="td text-end">{formatMoney(l.amount, locale)}</td>
+          <td className="td-num">{formatMoney(l.amount, locale)}</td>
         </tr>
       ))}
     </>
   );
 
-  const Total = ({ label, value, strong }: { label: string; value: number; strong?: boolean }) => (
-    <tr className={strong ? 'border-t-2 border-slate-300' : 'border-t border-slate-200'}>
-      <td className={`td ${strong ? 'font-semibold text-slate-900' : 'font-medium'}`}>{label}</td>
-      <td className={`td text-end ${strong ? 'font-semibold text-slate-900' : 'font-medium'}`}>
-        {formatMoney(value, locale)}
-      </td>
-    </tr>
-  );
+  // `tone` is passed only for the net result. A balance-sheet total is not a
+  // win or a loss, so it stays neutral.
+  const Total = ({
+    label,
+    value,
+    strong,
+    tone,
+  }: {
+    label: string;
+    value: number;
+    strong?: boolean;
+    tone?: boolean;
+  }) => {
+    const color = tone ? (value < 0 ? 'text-danger-700' : 'text-success-700') : 'text-slate-900';
+    const weight = strong ? `font-semibold ${color}` : 'font-medium';
+    return (
+      <tr className={strong ? 'border-t-2 border-slate-300' : 'border-t border-slate-200'}>
+        <td className={`td ${weight}`}>{label}</td>
+        <td className={`td-num ${weight}`}>{formatMoney(value, locale)}</td>
+      </tr>
+    );
+  };
 
   return (
     <div>
@@ -258,15 +272,7 @@ export default function StatementsPage() {
           <table className="min-w-full">
             <tbody className="divide-y divide-slate-100">
               {loading || !is ? (
-                <tr aria-hidden>
-                  <td className="td" colSpan={2}>
-                    <div className="space-y-3">
-                      <div className="skeleton h-3 w-2/3" />
-                      <div className="skeleton h-3 w-1/2" />
-                      <div className="skeleton h-3 w-3/5" />
-                    </div>
-                  </td>
-                </tr>
+                <TableSkeleton cols={2} rows={6} />
               ) : is.revenue.length + is.costOfRevenue.length + is.otherExpenses.length === 0 ? (
                 <tr>
                   <td className="td text-slate-500" colSpan={2}>
@@ -280,7 +286,7 @@ export default function StatementsPage() {
                   <Total label={t('st.is.gross')} value={is.totals.grossProfit} />
                   <tr>
                     <td className="td text-xs text-slate-500">{t('st.is.margin')}</td>
-                    <td className="td text-end text-xs text-slate-500">
+                    <td className="td-num text-xs text-slate-500">
                       {is.totals.grossMarginPct}%
                     </td>
                   </tr>
@@ -291,6 +297,7 @@ export default function StatementsPage() {
                     label={is.totals.netResult >= 0 ? t('st.is.profit') : t('st.is.loss')}
                     value={is.totals.netResult}
                     strong
+                    tone
                   />
                 </>
               )}
@@ -316,15 +323,7 @@ export default function StatementsPage() {
           <table className="min-w-full">
             <tbody className="divide-y divide-slate-100">
               {loading || !bs ? (
-                <tr aria-hidden>
-                  <td className="td" colSpan={2}>
-                    <div className="space-y-3">
-                      <div className="skeleton h-3 w-2/3" />
-                      <div className="skeleton h-3 w-1/2" />
-                      <div className="skeleton h-3 w-3/5" />
-                    </div>
-                  </td>
-                </tr>
+                <TableSkeleton cols={2} rows={6} />
               ) : (
                 <>
                   <Section title={t('st.bs.assets')} lines={bs.assets} />
@@ -333,7 +332,7 @@ export default function StatementsPage() {
                   <Section title={t('st.bs.equity')} lines={bs.equity} />
                   <tr className="hover:bg-slate-50">
                     <td className="td ps-8 text-slate-600">{t('st.bs.result')}</td>
-                    <td className="td text-end">{formatMoney(bs.currentResult, locale)}</td>
+                    <td className="td-num">{formatMoney(bs.currentResult, locale)}</td>
                   </tr>
                   <Total
                     label={t('st.bs.totalLiabEq')}
@@ -342,7 +341,7 @@ export default function StatementsPage() {
                   />
                   <tr>
                     <td
-                      className={`td text-xs ${bs.isBalanced ? 'text-emerald-600' : 'text-rose-600'}`}
+                      className={`td text-xs ${bs.isBalanced ? 'text-success-600' : 'text-danger-600'}`}
                       colSpan={2}
                     >
                       {bs.isBalanced ? (
@@ -366,7 +365,7 @@ export default function StatementsPage() {
       <div className="mt-8">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-slate-800">{t('st.fy.title')}</h2>
+            <h2 className="text-lg font-bold text-slate-800">{t('st.fy.title')}</h2>
             <p className="text-xs text-slate-500">{t('st.fy.hint')}</p>
           </div>
           {canManage ? (
@@ -386,12 +385,17 @@ export default function StatementsPage() {
                   <div className="flex items-center gap-3">
                     <span className="text-lg font-semibold text-slate-900">{y.year}</span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
+                      className={`badge ${
                         y.status === 'OPEN'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-slate-200 text-slate-700'
+                          ? 'bg-success-50 text-success-700'
+                          : 'bg-slate-100 text-slate-600'
                       }`}
                     >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          y.status === 'OPEN' ? 'bg-success-500' : 'bg-slate-400'
+                        }`}
+                      />
                       {t(`st.fy.status.${y.status}`)}
                     </span>
                   </div>

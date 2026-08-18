@@ -113,6 +113,7 @@ export default function LeadsPage() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input
           className="input max-w-xs"
+          aria-label={t('common.search')}
           placeholder={t('common.search') + '…'}
           value={search}
           onChange={(e) => {
@@ -122,6 +123,7 @@ export default function LeadsPage() {
         />
         <select
           className="input !w-44"
+          aria-label={t('common.status')}
           value={statusFilter}
           onChange={(e) => {
             setStatusFilter(e.target.value);
@@ -140,13 +142,13 @@ export default function LeadsPage() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('leads.contactName')}</th>
-              <th className="th">{t('leads.company')}</th>
-              <th className="th">{t('leads.source')}</th>
-              <th className="th">{t('leads.kwp')}</th>
-              <th className="th">{t('common.status')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('leads.contactName')}</th>
+              <th scope="col" className="th">{t('leads.company')}</th>
+              <th scope="col" className="th">{t('leads.source')}</th>
+              <th scope="col" className="th">{t('leads.kwp')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -180,7 +182,7 @@ export default function LeadsPage() {
                         </Btn>
                       </Can>
                     ) : (
-                      <span className="text-xs text-emerald-600">{t('leads.converted')}</span>
+                      <span className="text-xs text-success-700">{t('leads.converted')}</span>
                     )}
                   </td>
                 </tr>
@@ -206,7 +208,7 @@ export default function LeadsPage() {
       </div>
 
       <Modal open={open} title={t('leads.new')} onClose={() => setOpen(false)}>
-        <form onSubmit={create} className="grid grid-cols-2 gap-4">
+        <form onSubmit={create} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label={t('leads.contactName')}>
             <input name="contactName" className="input" required />
           </Field>
@@ -231,7 +233,7 @@ export default function LeadsPage() {
           <Field label={t('leads.email')}>
             <input name="email" type="email" className="input" />
           </Field>
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="flex justify-end gap-2 sm:col-span-2">
             <Btn onClick={() => setOpen(false)}>{t('common.cancel')}</Btn>
             <Btn type="submit" variant="primary" busy={busy('create')} disabled={busy()}>
               {t('common.create')}

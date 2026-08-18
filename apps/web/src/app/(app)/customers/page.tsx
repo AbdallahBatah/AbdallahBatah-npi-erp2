@@ -103,6 +103,7 @@ export default function CustomersPage() {
       <div className="mb-4">
         <input
           className="input max-w-sm"
+          aria-label={t('common.search')}
           placeholder={t('common.search') + '…'}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -114,12 +115,12 @@ export default function CustomersPage() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('common.name')}</th>
-              <th className="th">{t('common.type')}</th>
-              <th className="th">{t('cust.vat')}</th>
-              <th className="th">{t('leads.phone')}</th>
-              <th className="th">{t('leads.email')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('common.name')}</th>
+              <th scope="col" className="th">{t('common.type')}</th>
+              <th scope="col" className="th">{t('cust.vat')}</th>
+              <th scope="col" className="th">{t('leads.phone')}</th>
+              <th scope="col" className="th">{t('leads.email')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -144,7 +145,7 @@ export default function CustomersPage() {
       </div>
 
       <Modal open={open} title={t('cust.new')} onClose={() => setOpen(false)}>
-        <form onSubmit={create} className="grid grid-cols-2 gap-4">
+        <form onSubmit={create} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label={t('cust.nameAr')}>
             <input name="nameAr" className="input" required dir="rtl" />
           </Field>
@@ -172,7 +173,7 @@ export default function CustomersPage() {
           <Field label={`${t('leads.email')} (${t('common.optional')})`}>
             <input name="email" type="email" className="input" dir="ltr" />
           </Field>
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="flex justify-end gap-2 sm:col-span-2">
             <Btn onClick={() => setOpen(false)}>{t('common.cancel')}</Btn>
             <Btn type="submit" variant="primary" busy={busy('create')} disabled={busy()}>
               {t('common.create')}

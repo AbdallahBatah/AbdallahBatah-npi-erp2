@@ -62,7 +62,7 @@ interface Invoice {
 function L({ ar, en }: { ar: string; en: string }) {
   return (
     <span>
-      {ar} <span className="text-slate-600">/ {en}</span>
+      {ar} <span className="text-slate-500">/ {en}</span>
     </span>
   );
 }
@@ -140,7 +140,7 @@ export default function InvoicePrintPage() {
             </div>
           </div>
           <div className="text-center">
-            <p className={`rounded-lg px-4 py-1.5 text-sm font-extrabold ${isCreditNote ? 'bg-rose-50 text-rose-800' : 'bg-slate-100 text-slate-900'}`}>
+            <p className={`rounded-lg px-4 py-1.5 text-sm font-extrabold ${isCreditNote ? 'bg-danger-50 text-danger-800' : 'bg-slate-100 text-slate-900'}`}>
               {isCreditNote ? (
                 <L ar={t('print.creditNote')} en="Credit Note" />
               ) : (
@@ -161,14 +161,14 @@ export default function InvoicePrintPage() {
         {/* Parties */}
         <div className="grid grid-cols-2 gap-6 border-b border-slate-200 py-4 text-sm">
           <div>
-            <p className="mb-1 text-xs font-bold text-slate-600">
+            <p className="mb-1 text-xs font-bold text-slate-500">
               <L ar={t('print.seller')} en="Seller" />
             </p>
             <p className="font-semibold text-slate-800">{org?.legalNameAr}</p>
             <p className="text-xs text-slate-500">{org?.legalNameEn}</p>
           </div>
           <div>
-            <p className="mb-1 text-xs font-bold text-slate-600">
+            <p className="mb-1 text-xs font-bold text-slate-500">
               <L ar={t('print.buyer')} en="Buyer" />
             </p>
             <p className="font-semibold text-slate-800">{cus?.nameAr}</p>
@@ -228,7 +228,7 @@ export default function InvoicePrintPage() {
               <tr key={l.id}>
                 <td className="py-2.5 pe-3">
                   <p className="text-slate-800">{l.descriptionAr}</p>
-                  <p className="text-xs text-slate-600">{l.descriptionEn}</p>
+                  <p className="text-xs text-slate-500">{l.descriptionEn}</p>
                 </td>
                 <td className="py-2.5 text-end">{Number(l.qty)}</td>
                 <td className="py-2.5 text-end">{formatMoney(l.unitPrice, locale)}</td>
@@ -282,7 +282,7 @@ export default function InvoicePrintPage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 border-t border-slate-200 pt-4 text-center text-[10px] leading-relaxed text-slate-600">
+        <div className="mt-8 border-t border-slate-200 pt-4 text-center text-xs leading-relaxed text-slate-500">
           <p>{t('print.generatedBy')}</p>
           {inv.eInvoice && (
             <p className="mt-1 font-mono" dir="ltr">

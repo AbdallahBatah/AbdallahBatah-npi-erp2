@@ -39,6 +39,7 @@ export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [rows, setRows] = useState<NotificationRow[]>([]);
+  const [feed, setFeed] = useState<'idle' | 'loading' | 'error'>('idle');
   const wrapRef = useRef<HTMLDivElement>(null);
   const ar = locale === 'ar';
 
@@ -77,12 +78,16 @@ export function NotificationsBell() {
     const next = !open;
     setOpen(next);
     if (next) {
+      setFeed('loading');
       try {
         const r = await api.get<{ rows: NotificationRow[]; unreadCount: number }>('/notifications');
         setRows(r.rows);
         setUnread(r.unreadCount);
+        setFeed('idle');
       } catch {
-        /* keep the last list */
+        /* keep the last list, but say so — a broken feed used to render as
+           "no notifications yet", which is a different fact entirely. */
+        setFeed('error');
       }
     }
   }
@@ -105,20 +110,28 @@ export function NotificationsBell() {
   return (
     <div ref={wrapRef} className="no-print fixed end-4 top-2 z-50 lg:end-8 lg:top-3">
       <button
-        aria-label={t('notif.open')}
+        // aria-label overrides the inner badge, so the count has to be said here
+        // or a screen reader hears "Notifications" whether there are 0 or 40.
+        aria-label={unread > 0 ? `${t('notif.open')} (${unread})` : t('notif.open')}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls="notif-panel"
         onClick={toggleOpen}
         className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-card transition hover:text-brand-600"
       >
         <Icon name="bell" className="h-[18px] w-[18px]" />
         {unread > 0 && (
-          <span className="absolute -end-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+          <span className="absolute -end-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger-600 px-1 text-xs font-bold text-white ring-2 ring-white">
             {unread > 99 ? '99+' : unread}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute end-0 mt-2 w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card-hover">
+        <div
+          id="notif-panel"
+          className="absolute end-0 mt-2 w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card-hover"
+        >
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <span className="text-sm font-bold text-slate-800">{t('notif.title')}</span>
             {unread > 0 && (
@@ -128,8 +141,18 @@ export function NotificationsBell() {
             )}
           </div>
           <ul className="max-h-[60vh] divide-y divide-slate-50 overflow-y-auto [scrollbar-width:thin]">
-            {rows.length === 0 && (
-              <li className="px-4 py-8 text-center text-xs text-slate-600">{t('notif.empty')}</li>
+            {feed === 'loading' && rows.length === 0 && (
+              <li className="space-y-3 px-4 py-5" aria-hidden>
+                <div className="skeleton h-3 w-3/4" />
+                <div className="skeleton h-3 w-1/2" />
+                <div className="skeleton h-3 w-2/3" />
+              </li>
+            )}
+            {feed === 'error' && rows.length === 0 && (
+              <li className="px-4 py-8 text-center text-xs text-danger-700">{t('common.loadError')}</li>
+            )}
+            {feed === 'idle' && rows.length === 0 && (
+              <li className="px-4 py-8 text-center text-xs text-slate-500">{t('notif.empty')}</li>
             )}
             {rows.map((n) => (
               <li key={n.id}>
@@ -149,11 +172,11 @@ export function NotificationsBell() {
                       {ar ? n.titleAr : n.titleEn}
                     </span>
                     {(ar ? n.bodyAr : n.bodyEn) && (
-                      <span className="mt-0.5 block truncate text-[11px] text-slate-600">
+                      <span className="mt-0.5 block truncate text-xs text-slate-500">
                         {ar ? n.bodyAr : n.bodyEn}
                       </span>
                     )}
-                    <span className="mt-0.5 block text-[10px] text-slate-600">
+                    <span className="mt-0.5 block text-xs text-slate-500">
                       {timeAgo(n.createdAt, ar)}
                     </span>
                   </span>

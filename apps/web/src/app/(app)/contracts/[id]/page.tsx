@@ -10,7 +10,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, LoadError, useConfirm, Can, Btn, PageSkeleton } from '@/components/ui';
+import { PageHeader, StatusBadge, EmptyRow, LoadError, useConfirm, Can, Btn, PageSkeleton } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Milestone {
@@ -70,7 +70,6 @@ export default function ContractDetailPage() {
       !(await confirm({
         title: t('confirm.verifyTitle'),
         message: t('confirm.verifyMsg'),
-        danger: true,
       }))
     )
       return;
@@ -98,7 +97,9 @@ export default function ContractDetailPage() {
   return (
     <div>
       <PageHeader
-        title={contract.code}
+        title={
+          contract.customer ? `${contract.code} · ${pick(contract.customer, 'name')}` : contract.code
+        }
         backHref="/contracts"
         backLabel={t('contracts.title')}
         action={
@@ -139,27 +140,23 @@ export default function ContractDetailPage() {
       </div>
 
       <div className="card mt-6 overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3">
+        <div className="card-title">
           <h3 className="font-semibold text-slate-800">{t('contracts.milestones')}</h3>
         </div>
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">#</th>
-              <th className="th">{t('contracts.milestone')}</th>
-              <th className="th">{t('contracts.amount')}</th>
-              <th className="th">{t('common.status')}</th>
-              <th className="th">{t('contracts.verified')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">#</th>
+              <th scope="col" className="th">{t('contracts.milestone')}</th>
+              <th scope="col" className="th">{t('contracts.amount')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
+              <th scope="col" className="th">{t('contracts.verified')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {contract.milestones.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-600">
-                  {t('common.none')}
-                </td>
-              </tr>
+              <EmptyRow colSpan={6} text={t('common.none')} />
             ) : (
               contract.milestones.map((m) => (
                 <tr key={m.id} className="hover:bg-slate-50">
@@ -200,7 +197,7 @@ export default function ContractDetailPage() {
                         {t('contracts.viewInvoice')}
                       </Link>
                     ) : (
-                      <span className="text-xs text-slate-600">—</span>
+                      <span className="text-xs text-slate-500">—</span>
                     )}
                   </td>
                 </tr>

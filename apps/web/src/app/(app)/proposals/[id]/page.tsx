@@ -285,19 +285,19 @@ export default function ProposalDetailPage() {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-slate-500">
-                  <th className="py-2 text-start">{t('proposals.item')}</th>
-                  <th className="py-2 text-end">{t('proposals.qty')}</th>
-                  <th className="py-2 text-end">{t('proposals.unitPrice')}</th>
-                  <th className="py-2 text-end">{t('common.total')}</th>
+                  <th scope="col" className="th">{t('proposals.item')}</th>
+                  <th scope="col" className="th text-end">{t('proposals.qty')}</th>
+                  <th scope="col" className="th text-end">{t('proposals.unitPrice')}</th>
+                  <th scope="col" className="th text-end">{t('common.total')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rev.bomLines.map((bl) => (
                   <tr key={bl.id} className="border-b border-slate-50">
                     <td className="py-2">{bl.item.sku} · {pick(bl.item, 'name')}</td>
-                    <td className="py-2 text-end">{Number(bl.qty)}</td>
-                    <td className="py-2 text-end">{formatMoney(bl.unitPrice, locale)}</td>
-                    <td className="py-2 text-end">{formatMoney(bl.lineTotal, locale)}</td>
+                    <td className="td-num">{Number(bl.qty)}</td>
+                    <td className="td-num">{formatMoney(bl.unitPrice, locale)}</td>
+                    <td className="td-num">{formatMoney(bl.lineTotal, locale)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -310,7 +310,7 @@ export default function ProposalDetailPage() {
               <span className="text-slate-500">
                 {t('proposals.margin')}: {formatMoney(rev.marginAmount, locale)}
               </span>
-              <span className="text-base font-bold text-slate-900">
+              <span className="text-lg font-bold text-slate-900">
                 {t('common.total')}: {formatMoney(rev.totalAmount, locale)}
               </span>
             </div>
@@ -391,15 +391,16 @@ export default function ProposalDetailPage() {
 
           <label className="label">{t('proposals.bom')}</label>
           {validation.errorOf('lines') && (
-            <p role="alert" className="mb-2 text-[11px] font-medium text-danger-600">
+            <p role="alert" className="mb-2 text-xs font-medium text-danger-600">
               {validation.errorOf('lines')}
             </p>
           )}
           <div className="space-y-2">
             {lines.map((l, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="flex flex-wrap items-center gap-2">
                 <select
-                  className="input flex-1"
+                  aria-label={t('proposals.item')}
+                  className="input min-w-[12rem] flex-1"
                   value={l.itemId}
                   onChange={(e) => {
                     const it = items.find((x) => x.id === e.target.value);
@@ -421,6 +422,7 @@ export default function ProposalDetailPage() {
                   step="0.001"
                   min={0}
                   className={`input w-24 ${l.itemId && (!l.qty || l.qty <= 0) ? '!border-danger-300' : ''}`}
+                  aria-label={t('proposals.qty')}
                   placeholder={t('proposals.qty')}
                   value={l.qty}
                   onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
@@ -430,6 +432,7 @@ export default function ProposalDetailPage() {
                   type="number"
                   step="0.01"
                   className="input w-28"
+                  aria-label={t('proposals.unitPrice')}
                   placeholder={t('proposals.unitPrice')}
                   value={l.unitPrice}
                   onChange={(e) => updateLine(i, { unitPrice: Number(e.target.value) })}
@@ -439,8 +442,8 @@ export default function ProposalDetailPage() {
                 </span>
                 <button
                   type="button"
-                  aria-label={t('common.close')}
-                  className="rounded-md p-1.5 text-slate-500 transition hover:bg-danger-50 hover:text-danger-600"
+                  aria-label={`${t('proposals.removeLine')} ${i + 1}`}
+                  className="rounded-md p-1.5 text-slate-500 transition hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-300"
                   onClick={() => removeLine(i)}
                 >
                   <Icon name="x" className="h-4 w-4" />
@@ -470,7 +473,7 @@ export default function ProposalDetailPage() {
       {/* Create-contract modal */}
       <Modal open={contractOpen} title={t('proposals.createContract')} onClose={() => setContractOpen(false)}>
         <form onSubmit={createContract} className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label={t('contracts.type')}>
               <select name="contractType" className="input" defaultValue="EPC">
                 {enums?.contractTypes.map((o) => (
@@ -490,12 +493,12 @@ export default function ProposalDetailPage() {
 
           <p className="text-xs font-medium text-slate-500">{t('contracts.milestones')}</p>
           {contractErr && (
-            <p role="alert" className="rounded-lg bg-danger-50 px-3 py-2 text-[11px] font-medium text-danger-700">
+            <p role="alert" className="rounded-lg bg-danger-50 px-3 py-2 text-xs font-medium text-danger-700">
               {contractErr}
             </p>
           )}
           {[1, 2, 3].map((n) => (
-            <div key={n} className="grid grid-cols-4 gap-2">
+            <div key={n} className="grid grid-cols-1 gap-2 sm:grid-cols-4">
               <input name={`m${n}_ar`} className="input" placeholder={`مرحلة ${n} (ع)`} />
               <input name={`m${n}_en`} className="input" placeholder={`Milestone ${n} (en)`} />
               <input
@@ -508,7 +511,7 @@ export default function ProposalDetailPage() {
             </div>
           ))}
 
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-slate-500">
             {t('common.value')}: {winning ? formatMoney(winning.totalAmount, locale) : '—'}
           </p>
 

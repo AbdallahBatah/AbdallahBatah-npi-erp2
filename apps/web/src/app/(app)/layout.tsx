@@ -32,13 +32,29 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // Close the mobile drawer when navigating.
   useEffect(() => setNavOpen(false), [pathname]);
 
+  // On mobile the drawer covers the page, so it owes the page the same things
+  // any overlay does: Esc closes it, and the content behind stops scrolling.
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [navOpen]);
+
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
   }, [loading, user, router]);
 
   if (loading || !user) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-slate-600">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-slate-500">
         <img src="/brand/npi-icon.svg" alt="" className="h-11 w-11" />
         <span className="flex items-center gap-2 text-xs" role="status">
           <Spinner className="h-3.5 w-3.5" />
@@ -54,8 +70,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-3 border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:hidden">
         <button
           aria-label={locale === 'ar' ? 'فتح القائمة' : 'Open menu'}
+          aria-expanded={navOpen}
+          aria-controls="app-sidebar"
           onClick={() => setNavOpen(true)}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M4 6h16M4 12h16M4 18h16" />
@@ -71,6 +89,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         />
       )}
       <aside
+        id="app-sidebar"
+        {...(navOpen ? ({ role: 'dialog', 'aria-modal': true } as const) : {})}
         className={`fixed inset-y-0 start-0 z-50 flex w-[264px] flex-col border-e border-white/[0.04] bg-gradient-to-b from-ink-900 via-ink-950 to-ink-950 text-slate-300 lg:z-40 ${
           navOpen ? '' : 'max-lg:hidden'
         }`}
@@ -82,10 +102,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <div className="relative flex items-center gap-3">
             <img src="/brand/npi-icon.svg" alt="" className="h-10 w-10 shrink-0" />
             <div className="min-w-0">
-              <p className="truncate text-[13.5px] font-bold leading-tight text-white">
+              <p className="truncate text-sm font-bold leading-tight text-white">
                 {t('app.name')}
               </p>
-              <p className="mt-0.5 truncate text-[10.5px] text-slate-500">
+              <p className="mt-0.5 truncate text-xs text-slate-400">
                 {pick(user.organization, 'name')}
               </p>
             </div>
@@ -102,7 +122,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             if (visible.length === 0) return null;
             return (
             <div key={section.labelEn}>
-              <p className="mb-2 flex items-center gap-2 px-2.5 text-[11px] font-bold text-slate-400">
+              <p className="mb-2 flex items-center gap-2 px-2.5 text-xs font-bold text-slate-400">
                 {locale === 'ar' ? section.labelAr : section.labelEn}
                 <span className="h-px flex-1 bg-white/[0.05]" />
               </p>
@@ -114,14 +134,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                       key={item.href}
                       href={item.href}
                       aria-current={active ? 'page' : undefined}
-                      className={`group relative flex items-center gap-3 rounded-lg py-[9px] pe-3 ps-3.5 text-[13px] transition-all duration-150 ${
+                      className={`group relative flex min-h-11 items-center gap-3 rounded-lg py-2 pe-3 ps-3.5 text-sm transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 lg:min-h-0 ${
                         active
-                          ? 'bg-gradient-to-l from-brand-500/[0.16] to-brand-500/[0.05] font-semibold text-brand-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
+                          ? 'bg-gradient-to-r from-brand-500/[0.16] to-brand-500/[0.05] font-semibold text-brand-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] rtl:bg-gradient-to-l'
                           : 'font-medium text-slate-400 hover:bg-white/[0.045] hover:text-slate-100'
                       }`}
                     >
                       {active && (
-                        <span className="absolute inset-y-[7px] start-0 w-[3px] rounded-full bg-gradient-to-b from-brand-300 to-brand-500 shadow-[0_0_8px_rgba(45,212,191,0.6)]" />
+                        <span className="absolute inset-y-2 start-0 w-[3px] rounded-full bg-gradient-to-b from-brand-300 to-brand-500 shadow-[0_0_8px_rgba(45,212,191,0.6)]" />
                       )}
                       <Icon
                         name={item.icon}
@@ -147,7 +167,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <button
                 key={l}
                 onClick={() => locale !== l && toggle()}
-                className={`flex items-center justify-center gap-1.5 rounded-md py-1.5 text-[11px] font-semibold transition ${
+                className={`flex min-h-11 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 lg:min-h-9 ${
                   locale === l
                     ? 'bg-white/10 text-white shadow-sm'
                     : 'text-slate-500 hover:text-slate-300'
@@ -168,7 +188,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 <p className="truncate text-xs font-semibold text-slate-200">
                   {pick(user, 'name')}
                 </p>
-                <p className="truncate text-[10px] text-slate-400">
+                <p className="truncate text-xs text-slate-400">
                   {(() => {
                     // Custom roles carry their own display names from the server.
                     const own = locale === 'ar' ? user.roleNameAr : user.roleNameEn;
@@ -185,7 +205,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 onClick={logout}
                 title={t('nav.logout')}
                 aria-label={t('nav.logout')}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-rose-500/10 hover:text-rose-400 rtl:-scale-x-100"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-danger-500/10 hover:text-danger-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 rtl:-scale-x-100"
               >
                 <Icon name="log-out" className="h-4 w-4" />
               </button>

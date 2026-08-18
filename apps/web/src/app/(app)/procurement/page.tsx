@@ -227,20 +227,20 @@ export default function ProcurementPage() {
       {loadErr && <div className="mb-6"><LoadError message={loadErr} onRetry={load} /></div>}
 
       {/* Purchase orders */}
-      <div className="card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+      <div className="card table-sticky">
+        <h2 className="card-title">
           {t('po.orders')}
-        </div>
+        </h2>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('po.vendor')}</th>
-              <th className="th">{t('po.project')}</th>
-              <th className="th text-end">{t('po.subtotal')}</th>
-              <th className="th text-end">{t('po.total')}</th>
-              <th className="th">{t('common.status')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('po.vendor')}</th>
+              <th scope="col" className="th">{t('po.project')}</th>
+              <th scope="col" className="th text-end">{t('po.subtotal')}</th>
+              <th scope="col" className="th text-end">{t('po.total')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -254,8 +254,8 @@ export default function ProcurementPage() {
                   <td className="td font-mono text-xs">{po.code}</td>
                   <td className="td">{po.vendor ? pick(po.vendor, 'name') : '—'}</td>
                   <td className="td font-mono text-xs">{po.project?.code ?? '—'}</td>
-                  <td className="td text-end">{formatMoney(po.subtotal, locale)}</td>
-                  <td className="td text-end">{formatMoney(po.total, locale)}</td>
+                  <td className="td-num">{formatMoney(po.subtotal, locale)}</td>
+                  <td className="td-num">{formatMoney(po.total, locale)}</td>
                   <td className="td"><StatusBadge status={po.status} /></td>
                   <td className="td">
                     <Link href={`/procurement/${po.id}`} className="btn-ghost btn-sm">
@@ -271,17 +271,17 @@ export default function ProcurementPage() {
 
       {/* Vendors */}
       <div className="card mt-6 overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+        <h2 className="card-title">
           {t('po.vendors')}
-        </div>
+        </h2>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('common.name')}</th>
-              <th className="th">{t('po.vendorType')}</th>
-              <th className="th text-center">{t('po.manufacturer')}</th>
-              <th className="th text-center">{t('po.orders')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('common.name')}</th>
+              <th scope="col" className="th">{t('po.vendorType')}</th>
+              <th scope="col" className="th text-center">{t('po.manufacturer')}</th>
+              <th scope="col" className="th text-center">{t('po.orders')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -312,8 +312,8 @@ export default function ProcurementPage() {
 
       {/* SCM-04: stock by location */}
       <div className="card mt-6 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-          <h3 className="text-sm font-semibold text-slate-800">{t('stk.title')}</h3>
+        <div className="card-title flex items-center justify-between">
+          <h3 className="font-bold">{t('stk.title')}</h3>
           <Can perm="scm.procurement.write">
             <Btn sm icon="refresh" onClick={() => setTOpen(true)}>
               {t('stk.transfer')}
@@ -323,9 +323,9 @@ export default function ProcurementPage() {
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('po.item')}</th>
-              <th className="th">{t('stk.location')}</th>
-              <th className="th text-end">{t('stk.qty')}</th>
+              <th scope="col" className="th">{t('po.item')}</th>
+              <th scope="col" className="th">{t('stk.location')}</th>
+              <th scope="col" className="th text-end">{t('stk.qty')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -337,14 +337,14 @@ export default function ProcurementPage() {
               stock.map((s) => (
                 <tr key={s.id}>
                   <td className="td">
-                    <span className="font-mono text-xs text-slate-600">{s.item.sku}</span>{' '}
+                    <span className="font-mono text-xs text-slate-500">{s.item.sku}</span>{' '}
                     {pick(s.item, 'name')}
                   </td>
                   <td className="td">
-                    <span className="font-mono text-xs text-slate-600">{s.location.code}</span>{' '}
+                    <span className="font-mono text-xs text-slate-500">{s.location.code}</span>{' '}
                     {pick(s.location, 'name')}
                   </td>
-                  <td className="td text-end font-medium">{Number(s.qty)} {s.item.uom}</td>
+                  <td className="td-num font-medium">{Number(s.qty)} {s.item.uom}</td>
                 </tr>
               ))
             )}
@@ -456,7 +456,7 @@ export default function ProcurementPage() {
               <Btn sm icon="plus" onClick={addLine}>{t('po.addLine')}</Btn>
             </div>
             {poValidation.errorOf('pLines') && (
-              <p role="alert" className="mb-2 text-[11px] font-medium text-danger-600">
+              <p role="alert" className="mb-2 text-xs font-medium text-danger-600">
                 {poValidation.errorOf('pLines')}
               </p>
             )}
@@ -476,8 +476,8 @@ export default function ProcurementPage() {
                     onChange={(e) => setLine(i, { unitPrice: Number(e.target.value) })} placeholder={t('po.unitPrice')} />
                   <button
                     type="button"
-                    aria-label={t('common.close')}
-                    className="rounded-md p-1.5 text-slate-500 transition hover:bg-danger-50 hover:text-danger-600"
+                    aria-label={`${t('po.removeLine')} ${i + 1}`}
+                    className="rounded-md p-1.5 text-slate-500 transition hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-300"
                     onClick={() => setPLines(pLines.filter((_, idx) => idx !== i))}
                   >
                     <Icon name="x" className="h-4 w-4" />

@@ -22,8 +22,7 @@ export default function ApprovalsPage() {
 
   return (
     <div>
-      <PageHeader title={t('apr.title')} />
-      <p className="-mt-3 mb-5 text-xs text-slate-500">{t('apr.hint')}</p>
+      <PageHeader title={t('apr.title')} subtitle={t('apr.hint')} />
 
       {canManage && (
         <Tabs

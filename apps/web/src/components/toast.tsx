@@ -9,6 +9,7 @@ import {
   ReactNode,
 } from 'react';
 import { Icon } from '@/components/icons';
+import { useI18n } from '@/lib/i18n';
 
 interface Toast {
   id: number;
@@ -24,6 +25,9 @@ interface ToastValue {
 const ToastContext = createContext<ToastValue | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  // ToastProvider mounts inside I18nProvider, so the close button has no
+  // reason to be labelled in hardcoded Arabic for English users.
+  const { t: tr } = useI18n();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const seq = useRef(0);
 
@@ -51,30 +55,35 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value.current}>
       {children}
+      {/* A single always-mounted live region. Each toast used to carry its own
+          role="alert"/"status" INSIDE this one, and nesting live regions is
+          undefined — screen readers double-announce or drop the inner one. */}
       <div
+        role="status"
         aria-live="polite"
+        aria-atomic="false"
         className="pointer-events-none fixed bottom-4 start-4 z-[100] flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2"
       >
         {toasts.map((t) => (
           <div
             key={t.id}
-            role={t.kind === 'error' ? 'alert' : 'status'}
             className={`pointer-events-auto flex items-start gap-2.5 rounded-xl border bg-white p-3.5 text-sm leading-6 shadow-card ${
               t.kind === 'success'
-                ? 'border-emerald-200 text-emerald-800'
-                : 'border-rose-200 text-rose-700'
+                ? 'border-success-200 text-success-800'
+                : 'border-danger-200 text-danger-700'
             }`}
           >
-            <span
-              className={`mt-2 h-2 w-2 shrink-0 rounded-full ${
-                t.kind === 'success' ? 'bg-emerald-500' : 'bg-rose-500'
-              }`}
+            {/* Shape, not just hue: the dot made success and error identical
+                for a red/green-deficient reader. */}
+            <Icon
+              name={t.kind === 'success' ? 'check-circle' : 'alert-triangle'}
+              className="mt-0.5 h-4 w-4 shrink-0"
             />
             <span className="flex-1">{t.text}</span>
             <button
               onClick={() => dismiss(t.id)}
-              aria-label="إغلاق"
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              aria-label={tr('common.close')}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               <Icon name="x" className="h-3.5 w-3.5" />
             </button>

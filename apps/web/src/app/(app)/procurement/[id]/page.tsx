@@ -190,7 +190,7 @@ export default function PoDetailPage() {
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-500">{t('po.vat')}</p>
-          <p className="mt-1 font-medium text-amber-600">{formatMoney(po.vatAmount, locale)}</p>
+          <p className="mt-1 font-medium text-warning-700">{formatMoney(po.vatAmount, locale)}</p>
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-500">{t('po.total')}</p>
@@ -200,36 +200,36 @@ export default function PoDetailPage() {
 
       {/* Lines */}
       <div className="card mt-6 overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+        <h2 className="card-title">
           {t('po.lines')}
-        </div>
+        </h2>
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('po.item')}</th>
-              <th className="th">{t('po.wbs')}</th>
-              <th className="th text-end">{t('po.qty')}</th>
-              <th className="th text-end">{t('po.received')}</th>
-              <th className="th text-end">{t('po.unitPrice')}</th>
-              <th className="th text-end">{t('common.total')}</th>
+              <th scope="col" className="th">{t('po.item')}</th>
+              <th scope="col" className="th">{t('po.wbs')}</th>
+              <th scope="col" className="th text-end">{t('po.qty')}</th>
+              <th scope="col" className="th text-end">{t('po.received')}</th>
+              <th scope="col" className="th text-end">{t('po.unitPrice')}</th>
+              <th scope="col" className="th text-end">{t('common.total')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {po.lines.map((l) => (
               <tr key={l.id}>
                 <td className="td">
-                  <span className="font-mono text-xs text-slate-600">{l.item.sku}</span>{' '}
+                  <span className="font-mono text-xs text-slate-500">{l.item.sku}</span>{' '}
                   {pick(l.item, 'name')}{l.item.isSerialised ? ' · S/N' : ''}
                 </td>
                 <td className="td text-xs">{l.wbsElement ? `${l.wbsElement.code}` : '—'}</td>
-                <td className="td text-end">{Number(l.qty)}</td>
-                <td className="td text-end">
-                  <span className={Number(l.receivedQty) >= Number(l.qty) ? 'text-emerald-600' : ''}>
+                <td className="td-num">{Number(l.qty)}</td>
+                <td className="td-num">
+                  <span className={Number(l.receivedQty) >= Number(l.qty) ? 'text-success-700' : ''}>
                     {Number(l.receivedQty)}
                   </span>
                 </td>
-                <td className="td text-end">{formatMoney(l.unitPrice, locale)}</td>
-                <td className="td text-end">{formatMoney(l.lineTotal, locale)}</td>
+                <td className="td-num">{formatMoney(l.unitPrice, locale)}</td>
+                <td className="td-num">{formatMoney(l.lineTotal, locale)}</td>
               </tr>
             ))}
           </tbody>
@@ -238,17 +238,17 @@ export default function PoDetailPage() {
 
       {/* Receipts */}
       <div className="card mt-6 overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+        <h2 className="card-title">
           {t('po.receipts')}
-        </div>
+        </h2>
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('common.date')}</th>
-              <th className="th text-center">{t('prj.serials')}</th>
-              <th className="th">{t('po.bill')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('common.date')}</th>
+              <th scope="col" className="th text-center">{t('prj.serials')}</th>
+              <th scope="col" className="th">{t('po.bill')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -262,11 +262,11 @@ export default function PoDetailPage() {
                   <td className="td text-center">{g.serialUnits.length}</td>
                   <td className="td">
                     {g.vendorBills.length > 0 ? (
-                      <span className="badge bg-emerald-100 text-emerald-700">
+                      <span className="badge bg-success-100 text-success-700">
                         {g.vendorBills[0].code}
                       </span>
                     ) : (
-                      <span className="text-xs text-slate-600">—</span>
+                      <span className="text-xs text-slate-500">—</span>
                     )}
                   </td>
                   <td className="td">
@@ -306,9 +306,9 @@ export default function PoDetailPage() {
             .map((l) => (
               <div key={l.id} className="rounded-lg border border-slate-200 p-3">
                 <p className="mb-2 text-sm font-medium">
-                  <span className="font-mono text-xs text-slate-600">{l.item.sku}</span>{' '}
+                  <span className="font-mono text-xs text-slate-500">{l.item.sku}</span>{' '}
                   {pick(l.item, 'name')}{l.item.isSerialised ? ' · S/N' : ''}
-                  <span className="ms-2 text-xs text-slate-600">
+                  <span className="ms-2 text-xs text-slate-500">
                     {t('po.received')}: {Number(l.receivedQty)} / {Number(l.qty)}
                   </span>
                 </p>
@@ -346,11 +346,11 @@ export default function PoDetailPage() {
                         const dups = list.filter((s, i) => list.indexOf(s) !== i);
                         return (
                           <p className="mt-1 text-xs">
-                            <span className={list.length === need ? 'text-emerald-600' : 'text-amber-600'}>
+                            <span className={list.length === need ? 'text-success-700' : 'text-warning-700'}>
                               {t('po.serialCount')}: {list.length} / {need}
                             </span>
                             {dups.length > 0 && (
-                              <span className="ms-3 text-rose-600">
+                              <span className="ms-3 text-danger-600">
                                 {t('po.dupSerial')}: {Array.from(new Set(dups)).join('، ')}
                               </span>
                             )}

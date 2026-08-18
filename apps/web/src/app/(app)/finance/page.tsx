@@ -54,9 +54,9 @@ interface ProfRow {
 }
 
 const POSITION_STYLE: Record<PocRow['position'], string> = {
-  CONTRACT_ASSET: 'bg-sky-100 text-sky-700',
-  CONTRACT_LIABILITY: 'bg-amber-100 text-amber-700',
-  BALANCED: 'bg-emerald-100 text-emerald-700',
+  CONTRACT_ASSET: 'bg-info-100 text-info-700',
+  CONTRACT_LIABILITY: 'bg-warning-100 text-warning-700',
+  BALANCED: 'bg-success-100 text-success-700',
 };
 
 export default function FinanceReportsPage() {
@@ -125,16 +125,16 @@ export default function FinanceReportsPage() {
   const kpis = [
     { key: 'fin.kpi.contracts', v: poc ? formatMoney(totContracts, locale) : '—', tone: 'text-slate-800' },
     { key: 'fin.kpi.recognized', v: poc ? formatMoney(totRecognized, locale) : '—', tone: 'text-brand-700' },
-    { key: 'fin.kpi.billed', v: poc ? formatMoney(totBilled, locale) : '—', tone: 'text-emerald-600' },
+    { key: 'fin.kpi.billed', v: poc ? formatMoney(totBilled, locale) : '—', tone: 'text-success-600' },
     {
       key: vat && vat.netVatDue < 0 ? 'fin.vat.refundable' : 'fin.kpi.netVat',
       v: vat ? formatMoney(Math.abs(vat.netVatDue), locale) : '—',
-      tone: vat && vat.netVatDue < 0 ? 'text-emerald-600' : 'text-amber-600',
+      tone: vat && vat.netVatDue < 0 ? 'text-success-600' : 'text-warning-600',
     },
     {
       key: 'fin.kpi.avgMargin',
       v: avgMargin !== null ? `${avgMargin.toFixed(1)}%` : '—',
-      tone: avgMargin !== null && avgMargin < 0 ? 'text-rose-600' : 'text-slate-800',
+      tone: avgMargin !== null && avgMargin < 0 ? 'text-danger-600' : 'text-slate-800',
     },
   ];
 
@@ -156,21 +156,21 @@ export default function FinanceReportsPage() {
 
       {/* FIN-05: IFRS-15 percentage of completion */}
       <div className="card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3">
+        <div className="card-title">
           <h3 className="font-semibold text-slate-800">{t('fin.poc.title')}</h3>
-          <p className="mt-1 text-xs text-slate-600">{t('fin.poc.hint')}</p>
+          <p className="mt-1 text-xs text-slate-500">{t('fin.poc.hint')}</p>
         </div>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('fin.poc.contract')}</th>
-              <th className="th">{t('fin.poc.value')}</th>
-              <th className="th">{t('fin.poc.progress')}</th>
-              <th className="th text-end">{t('fin.poc.recognized')}</th>
-              <th className="th text-end">{t('fin.poc.billed')}</th>
-              <th className="th">{t('fin.poc.position')}</th>
-              <th className="th text-end">{t('fin.poc.posted')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('fin.poc.contract')}</th>
+              <th scope="col" className="th">{t('fin.poc.value')}</th>
+              <th scope="col" className="th">{t('fin.poc.progress')}</th>
+              <th scope="col" className="th text-end">{t('fin.poc.recognized')}</th>
+              <th scope="col" className="th text-end">{t('fin.poc.billed')}</th>
+              <th scope="col" className="th">{t('fin.poc.position')}</th>
+              <th scope="col" className="th text-end">{t('fin.poc.posted')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -183,7 +183,7 @@ export default function FinanceReportsPage() {
                 <tr key={r.contractId} className="hover:bg-slate-50">
                   <td className="td">
                     <span className="font-mono text-xs">{r.code}</span>
-                    <p className="text-xs text-slate-600">{pick(r.customer, 'name')}</p>
+                    <p className="text-xs text-slate-500">{pick(r.customer, 'name')}</p>
                   </td>
                   <td className="td">{formatMoney(r.contractValue, locale)}</td>
                   <td className="td">
@@ -197,12 +197,12 @@ export default function FinanceReportsPage() {
                       <span className="text-xs text-slate-500">{r.progressPct}%</span>
                     </div>
                   </td>
-                  <td className="td text-end">{formatMoney(r.recognizedRevenue, locale)}</td>
-                  <td className="td text-end">{formatMoney(r.billedRevenue, locale)}</td>
+                  <td className="td-num">{formatMoney(r.recognizedRevenue, locale)}</td>
+                  <td className="td-num">{formatMoney(r.billedRevenue, locale)}</td>
                   <td className="td">
                     <span className={`badge ${POSITION_STYLE[r.position]}`}>{positionLabel(r.position)}</span>
                   </td>
-                  <td className="td text-end">{formatMoney(r.postedAdjustment, locale)}</td>
+                  <td className="td-num">{formatMoney(r.postedAdjustment, locale)}</td>
                   <td className="td">
                     {Math.abs(r.unpostedDelta) >= 0.01 && can('finance.invoice.write') ? (
                       <Btn
@@ -216,7 +216,7 @@ export default function FinanceReportsPage() {
                         {t('fin.poc.recognize')}
                       </Btn>
                     ) : (
-                      <span className="text-xs text-slate-600">{t('fin.poc.nothing')}</span>
+                      <span className="text-xs text-slate-500">{t('fin.poc.nothing')}</span>
                     )}
                   </td>
                 </tr>
@@ -229,8 +229,8 @@ export default function FinanceReportsPage() {
                 <td className="td text-xs font-bold text-slate-600">{t('fin.total')}</td>
                 <td className="td font-bold">{formatMoney(totContracts, locale)}</td>
                 <td className="td" />
-                <td className="td text-end font-bold">{formatMoney(totRecognized, locale)}</td>
-                <td className="td text-end font-bold">{formatMoney(totBilled, locale)}</td>
+                <td className="td-num font-bold">{formatMoney(totRecognized, locale)}</td>
+                <td className="td-num font-bold">{formatMoney(totBilled, locale)}</td>
                 <td className="td" colSpan={3} />
               </tr>
             </tfoot>
@@ -241,16 +241,16 @@ export default function FinanceReportsPage() {
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* VAT return */}
         <div className="card overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-3">
+          <div className="card-title">
             <h3 className="font-semibold text-slate-800">{t('fin.vat.title')}</h3>
           </div>
           <div className="space-y-3 p-5 text-sm">
-            <div className="flex items-end gap-2">
-              <label className="flex-1 text-xs text-slate-500">
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="min-w-[9rem] flex-1 text-xs text-slate-500">
                 {t('fin.vat.from')}
                 <input type="date" className="input mt-1" value={from} onChange={(e) => setFrom(e.target.value)} />
               </label>
-              <label className="flex-1 text-xs text-slate-500">
+              <label className="min-w-[9rem] flex-1 text-xs text-slate-500">
                 {t('fin.vat.to')}
                 <input type="date" className="input mt-1" value={to} onChange={(e) => setTo(e.target.value)} />
               </label>
@@ -269,23 +269,23 @@ export default function FinanceReportsPage() {
                 <div
                   className={`mb-4 rounded-xl border p-4 text-center ${
                     vat.netVatDue < 0
-                      ? 'border-emerald-200 bg-emerald-50/60'
-                      : 'border-amber-200 bg-amber-50/60'
+                      ? 'border-success-200 bg-success-50/60'
+                      : 'border-warning-200 bg-warning-50/60'
                   }`}
                 >
                   <p className="text-xs text-slate-500">
                     {vat.netVatDue < 0 ? t('fin.vat.refundable') : t('fin.vat.netDue')}
                   </p>
                   <p
-                    className={`mt-1 text-2xl font-bold ${
-                      vat.netVatDue < 0 ? 'text-emerald-700' : 'text-amber-700'
+                    className={`mt-2 text-3xl font-bold tabular-nums ${
+                      vat.netVatDue < 0 ? 'text-success-700' : 'text-warning-700'
                     }`}
                   >
                     {formatMoney(Math.abs(vat.netVatDue), locale)}
                   </p>
                 </div>
 
-                <p className="mb-1 text-[11px] font-bold text-slate-500">{t('fin.vat.salesGroup')}</p>
+                <p className="mb-1 text-xs font-bold text-slate-500">{t('fin.vat.salesGroup')}</p>
                 <div className="mb-3 divide-y divide-slate-100 rounded-lg bg-slate-50/60 px-3">
                   {[
                     ['fin.vat.stdSales', vat.boxes.standardRatedSales],
@@ -299,7 +299,7 @@ export default function FinanceReportsPage() {
                     </div>
                   ))}
                 </div>
-                <p className="mb-1 text-[11px] font-bold text-slate-500">{t('fin.vat.purchGroup')}</p>
+                <p className="mb-1 text-xs font-bold text-slate-500">{t('fin.vat.purchGroup')}</p>
                 <div className="divide-y divide-slate-100 rounded-lg bg-slate-50/60 px-3">
                   {[
                     ['fin.vat.purchases', vat.boxes.standardRatedPurchases],
@@ -324,21 +324,21 @@ export default function FinanceReportsPage() {
 
         {/* FIN-07: profitability */}
         <div className="card overflow-hidden lg:col-span-2">
-          <div className="border-b border-slate-100 px-5 py-3">
+          <div className="card-title">
             <h3 className="font-semibold text-slate-800">{t('fin.prof.title')}</h3>
-            <p className="mt-1 text-xs text-slate-600">{t('fin.prof.hint')}</p>
+            <p className="mt-1 text-xs text-slate-500">{t('fin.prof.hint')}</p>
           </div>
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('fin.poc.contract')}</th>
-                <th className="th text-end">{t('fin.poc.value')}</th>
-                <th className="th text-end">{t('fin.prof.estCost')}</th>
-                <th className="th text-end">{t('fin.prof.actualCost')}</th>
-                <th className="th text-end">{t('fin.prof.marginPct')}</th>
-                <th className="th text-end">{t('fin.poc.billed')}</th>
-                <th className="th text-end">{t('fin.prof.marginToDate')}</th>
-                <th className="th text-end">{t('fin.prof.earned')}</th>
+                <th scope="col" className="th">{t('fin.poc.contract')}</th>
+                <th scope="col" className="th text-end">{t('fin.poc.value')}</th>
+                <th scope="col" className="th text-end">{t('fin.prof.estCost')}</th>
+                <th scope="col" className="th text-end">{t('fin.prof.actualCost')}</th>
+                <th scope="col" className="th text-end">{t('fin.prof.marginPct')}</th>
+                <th scope="col" className="th text-end">{t('fin.poc.billed')}</th>
+                <th scope="col" className="th text-end">{t('fin.prof.marginToDate')}</th>
+                <th scope="col" className="th text-end">{t('fin.prof.earned')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -350,38 +350,38 @@ export default function FinanceReportsPage() {
                 prof.map((r) => (
                   <tr
                     key={r.contractId}
-                    className={`hover:bg-slate-50 ${r.marginToDate < 0 ? 'bg-rose-50/40' : ''}`}
+                    className={`hover:bg-slate-50 ${r.marginToDate < 0 ? 'bg-danger-50/40' : ''}`}
                   >
                     <td className="td">
                       <span className="font-mono text-xs">{r.code}</span>
-                      <p className="text-xs text-slate-600">{pick(r.customer, 'name')}</p>
+                      <p className="text-xs text-slate-500">{pick(r.customer, 'name')}</p>
                     </td>
-                    <td className="td text-end">{formatMoney(r.contractValue, locale)}</td>
-                    <td className="td text-end">{formatMoney(r.estCost, locale)}</td>
-                    <td className="td text-end">
+                    <td className="td-num">{formatMoney(r.contractValue, locale)}</td>
+                    <td className="td-num">{formatMoney(r.estCost, locale)}</td>
+                    <td className="td-num">
                       {formatMoney(r.actualCost, locale)}
                       {r.costBasis === 'ACTUAL' && (
                         <span className="ms-1 badge bg-brand-100 text-brand-800">{t('fin.prof.actualBadge')}</span>
                       )}
                     </td>
-                    <td className="td text-end">
+                    <td className="td-num">
                       <div className="flex items-center justify-end gap-2">
-                        <span className={r.estMarginPct < 0 ? 'font-medium text-rose-600' : ''}>
+                        <span className={r.estMarginPct < 0 ? 'font-medium text-danger-600' : ''}>
                           {r.estMarginPct}%
                         </span>
                         <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
                           <div
-                            className={`h-full rounded-full ${r.estMarginPct < 0 ? 'bg-rose-500' : r.estMarginPct < 10 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                            className={`h-full rounded-full ${r.estMarginPct < 0 ? 'bg-danger-500' : r.estMarginPct < 10 ? 'bg-warning-500' : 'bg-success-500'}`}
                             style={{ width: `${Math.min(100, Math.max(4, Math.abs(r.estMarginPct)))}%` }}
                           />
                         </div>
                       </div>
                     </td>
-                    <td className="td text-end">{formatMoney(r.billed, locale)}</td>
-                    <td className={`td text-end font-medium ${r.marginToDate >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    <td className="td-num">{formatMoney(r.billed, locale)}</td>
+                    <td className={`td text-end font-medium ${r.marginToDate >= 0 ? 'text-success-700' : 'text-danger-600'}`}>
                       {formatMoney(r.marginToDate, locale)}
                     </td>
-                    <td className="td text-end">{formatMoney(r.earnedMargin, locale)}</td>
+                    <td className="td-num">{formatMoney(r.earnedMargin, locale)}</td>
                   </tr>
                 ))
               )}

@@ -23,13 +23,14 @@ interface Opportunity {
 
 export default function OpportunitiesPage() {
   const { t, locale, pick } = useI18n();
-  useEnums();
+  const enums = useEnums();
   const router = useRouter();
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState('');
   const [open, setOpen] = useState(false);
+  const [stageFilter, setStageFilter] = useState('');
   const { act, busy } = useAct();
 
   const load = useCallback(() => {
@@ -80,6 +81,8 @@ export default function OpportunitiesPage() {
     if (ok && pid) router.push(`/proposals/${pid}`);
   }
 
+  const shown = stageFilter ? opps.filter((o) => o.stage === stageFilter) : opps;
+
   return (
     <div>
       <PageHeader
@@ -94,25 +97,47 @@ export default function OpportunitiesPage() {
       />
 
       {loadErr && !loading ? <LoadError message={loadErr} onRetry={load} /> : null}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <select
+          className="input !w-56"
+          aria-label={t('opps.stage')}
+          value={stageFilter}
+          onChange={(e) => setStageFilter(e.target.value)}
+        >
+          <option value="">
+            {t('opps.stage')}: {t('common.all')}
+          </option>
+          {enums?.opportunityStages.map((o) => (
+            <option key={o.value} value={o.value}>
+              {locale === 'ar' ? o.labelAr : o.labelEn}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="card table-sticky">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('opps.name')}</th>
-              <th className="th">{t('opps.customer')}</th>
-              <th className="th">{t('opps.stage')}</th>
-              <th className="th">{t('opps.estValue')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('opps.name')}</th>
+              <th scope="col" className="th">{t('opps.customer')}</th>
+              <th scope="col" className="th">{t('opps.stage')}</th>
+              <th scope="col" className="th">{t('opps.estValue')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
               <TableSkeleton cols={6} />
-            ) : opps.length === 0 ? (
-              <EmptyRow colSpan={6} text={t('common.none')} />
+            ) : shown.length === 0 ? (
+              <EmptyRow
+                colSpan={6}
+                text={t('opps.emptyHint')}
+                actionHref="/customers"
+                actionText={t('nav.customers')}
+              />
             ) : (
-              opps.map((o) => (
+              shown.map((o) => (
                 <tr key={o.id} className="hover:bg-slate-50">
                   <td className="td font-mono text-xs">{o.code}</td>
                   <td className="td font-medium">{o.name}</td>
@@ -143,7 +168,7 @@ export default function OpportunitiesPage() {
       </div>
 
       <Modal open={open} title={t('opps.new')} onClose={() => setOpen(false)}>
-        <form onSubmit={create} className="grid grid-cols-2 gap-4">
+        <form onSubmit={create} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label={t('opps.name')}>
             <input name="name" className="input" required />
           </Field>
@@ -159,7 +184,7 @@ export default function OpportunitiesPage() {
               ))}
             </select>
             {customers.length === 0 && (
-              <p className="mt-1 text-xs text-amber-600">
+              <p className="mt-1 text-xs text-warning-700">
                 {locale === 'ar' ? 'لا يوجد عملاء بعد — ' : 'No customers yet — '}
                 <a href="/customers" className="underline">
                   {locale === 'ar' ? 'أنشئ عميلاً أولاً' : 'create one first'}
@@ -173,7 +198,7 @@ export default function OpportunitiesPage() {
           <Field label={t('opps.estValue')}>
             <input name="estimatedValue" type="number" step="0.01" className="input" />
           </Field>
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="flex justify-end gap-2 sm:col-span-2">
             <Btn onClick={() => setOpen(false)}>{t('common.cancel')}</Btn>
             <Btn type="submit" variant="primary" busy={busy('create')} disabled={busy()}>
               {t('common.create')}

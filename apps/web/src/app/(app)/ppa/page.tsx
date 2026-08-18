@@ -67,8 +67,11 @@ export default function PpaPage() {
   const load = useCallback(() => {
     setLoadErr('');
     const fail = (e: unknown) => setLoadErr(translateError(e, locale));
-    api.get<Term[]>('/ppa/terms').then(setTerms).catch(fail);
-    api.get<Run[]>('/ppa/runs').then(setRuns).catch(fail);
+    // Setting the row state on failure matters: both tables are gated on
+    // `!terms` / `!runs`, so leaving them null left the skeleton animating
+    // forever underneath the retry card.
+    api.get<Term[]>('/ppa/terms').then(setTerms).catch((e) => { fail(e); setTerms([]); });
+    api.get<Run[]>('/ppa/runs').then(setRuns).catch((e) => { fail(e); setRuns([]); });
     // Projects and contracts only populate the "new term" modal's pickers. An
     // accountant can settle a term without being able to read either, so a 403
     // here must not blank the page — it previously did.
@@ -100,6 +103,7 @@ export default function PpaPage() {
     <div>
       <PageHeader
         title={t('ppa.title')}
+        subtitle={t('ppa.hint')}
         action={
           <Can perm="commercial.contract.write">
             <Btn variant="primary" icon="zap" onClick={() => setTOpen(true)}>
@@ -108,25 +112,24 @@ export default function PpaPage() {
           </Can>
         }
       />
-      <p className="mb-4 -mt-4 text-xs text-slate-600">{t('ppa.hint')}</p>
       {loadErr ? <div className="mb-4"><LoadError message={loadErr} onRetry={load} /></div> : null}
 
       {/* Terms */}
       <div className="card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+        <h2 className="card-title">
           {t('ppa.terms')}
-        </div>
+        </h2>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('ppa.contract')}</th>
-              <th className="th">{t('ppa.project')}</th>
-              <th className="th text-end">{t('ppa.rate')}</th>
-              <th className="th text-end">{t('ppa.escalation')}</th>
-              <th className="th text-end">{t('ppa.fixedFee')}</th>
-              <th className="th">{t('common.status')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('ppa.contract')}</th>
+              <th scope="col" className="th">{t('ppa.project')}</th>
+              <th scope="col" className="th text-end">{t('ppa.rate')}</th>
+              <th scope="col" className="th text-end">{t('ppa.escalation')}</th>
+              <th scope="col" className="th text-end">{t('ppa.fixedFee')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -140,14 +143,14 @@ export default function PpaPage() {
                   <td className="td font-mono text-xs">{tm.code}</td>
                   <td className="td">
                     <span className="font-mono text-xs">{tm.contract?.code}</span>
-                    <p className="text-xs text-slate-600">
+                    <p className="text-xs text-slate-500">
                       {tm.contract?.customer ? pick(tm.contract.customer, 'name') : ''}
                     </p>
                   </td>
                   <td className="td font-mono text-xs">{tm.project?.code}</td>
-                  <td className="td text-end">{Number(tm.ratePerKwh)}</td>
-                  <td className="td text-end">{Number(tm.escalationPctPerYear)}%</td>
-                  <td className="td text-end">{formatMoney(tm.fixedMonthlyFee, locale)}</td>
+                  <td className="td-num">{Number(tm.ratePerKwh)}</td>
+                  <td className="td-num">{Number(tm.escalationPctPerYear)}%</td>
+                  <td className="td-num">{formatMoney(tm.fixedMonthlyFee, locale)}</td>
                   <td className="td"><StatusBadge status={tm.status} /></td>
                   <td className="td">
                     {tm.status === 'ACTIVE' && (
@@ -167,20 +170,20 @@ export default function PpaPage() {
 
       {/* Runs */}
       <div className="card mt-6 overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+        <h2 className="card-title">
           {t('ppa.runs')}
-        </div>
+        </h2>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('ppa.period')}</th>
-              <th className="th text-end">{t('ppa.energy')}</th>
-              <th className="th text-end">{t('ppa.appliedRate')}</th>
-              <th className="th text-end">{t('ppa.variable')}</th>
-              <th className="th text-end">{t('ppa.fixed')}</th>
-              <th className="th text-end">{t('inv.subtotal')}</th>
-              <th className="th">{t('ppa.invoice')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('ppa.period')}</th>
+              <th scope="col" className="th text-end">{t('ppa.energy')}</th>
+              <th scope="col" className="th text-end">{t('ppa.appliedRate')}</th>
+              <th scope="col" className="th text-end">{t('ppa.variable')}</th>
+              <th scope="col" className="th text-end">{t('ppa.fixed')}</th>
+              <th scope="col" className="th text-end">{t('inv.subtotal')}</th>
+              <th scope="col" className="th">{t('ppa.invoice')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -195,11 +198,11 @@ export default function PpaPage() {
                   <td className="td text-xs text-slate-500">
                     {formatDate(r.periodStart, locale)} — {formatDate(r.periodEnd, locale)}
                   </td>
-                  <td className="td text-end font-medium">{formatNumber(Number(r.energyKwh), locale)}</td>
-                  <td className="td text-end">{Number(r.appliedRate)}</td>
-                  <td className="td text-end">{formatMoney(r.variableAmount, locale)}</td>
-                  <td className="td text-end">{formatMoney(r.fixedAmount, locale)}</td>
-                  <td className="td text-end font-medium">{formatMoney(r.subtotal, locale)}</td>
+                  <td className="td-num font-medium">{formatNumber(Number(r.energyKwh), locale)}</td>
+                  <td className="td-num">{Number(r.appliedRate)}</td>
+                  <td className="td-num">{formatMoney(r.variableAmount, locale)}</td>
+                  <td className="td-num">{formatMoney(r.fixedAmount, locale)}</td>
+                  <td className="td-num font-medium">{formatMoney(r.subtotal, locale)}</td>
                   <td className="td">
                     {r.invoice ? (
                       <Link href={`/invoices/${r.invoice.id}`} className="font-mono text-xs text-brand-700 hover:underline">
@@ -283,7 +286,7 @@ export default function PpaPage() {
         })()}`}
         onClose={() => setSOpen(false)}
       >
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label={t('fin.vat.from')}>
             <input type="date" className="input" value={sFrom} onChange={(e) => setSFrom(e.target.value)} />
           </Field>

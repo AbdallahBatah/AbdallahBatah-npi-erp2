@@ -50,10 +50,12 @@ export default function InvoicesPage() {
   useEffect(load, [load]);
 
   const cards = [
+    // One tile leads. The other three were each a different colour, so the eye
+    // had to read all four to find the number this screen exists to show.
     { key: 'inv.summary.receivable', value: formatMoney(summary?.accountsReceivable, locale), tone: 'text-brand-700' },
-    { key: 'inv.summary.vat', value: formatMoney(summary?.vatOutput, locale), tone: 'text-amber-600' },
-    { key: 'inv.summary.retention', value: formatMoney(summary?.retentionHeld, locale), tone: 'text-slate-700' },
-    { key: 'inv.summary.issued', value: String(summary?.issuedInvoices ?? '—'), tone: 'text-emerald-600' },
+    { key: 'inv.summary.vat', value: formatMoney(summary?.vatOutput, locale), tone: 'text-slate-900' },
+    { key: 'inv.summary.retention', value: formatMoney(summary?.retentionHeld, locale), tone: 'text-slate-900' },
+    { key: 'inv.summary.issued', value: String(summary?.issuedInvoices ?? '—'), tone: 'text-slate-900' },
   ];
 
   return (
@@ -63,9 +65,9 @@ export default function InvoicesPage() {
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map((c) => (
-          <div key={c.key} className="card p-4">
-            <p className="text-xs text-slate-500">{t(c.key)}</p>
-            <p className={`mt-1 text-xl font-bold ${c.tone}`}>{c.value}</p>
+          <div key={c.key} className="stat">
+            <p className="text-xs font-semibold text-slate-500">{t(c.key)}</p>
+            <p className={`mt-2 text-3xl font-bold tabular-nums ${c.tone}`}>{c.value}</p>
           </div>
         ))}
       </div>
@@ -74,13 +76,13 @@ export default function InvoicesPage() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('inv.customer')}</th>
-              <th className="th">{t('inv.total')}</th>
-              <th className="th">{t('inv.netPayable')}</th>
-              <th className="th">{t('inv.status')}</th>
-              <th className="th">{t('inv.zatcaStatus')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('inv.customer')}</th>
+              <th scope="col" className="th">{t('inv.total')}</th>
+              <th scope="col" className="th">{t('inv.netPayable')}</th>
+              <th scope="col" className="th">{t('inv.status')}</th>
+              <th scope="col" className="th">{t('inv.zatcaStatus')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -108,7 +110,7 @@ export default function InvoicesPage() {
                     {inv.eInvoice ? (
                       <StatusBadge status={inv.eInvoice.authorityStatus} />
                     ) : (
-                      <span className="text-xs text-slate-600">—</span>
+                      <span className="text-xs text-slate-500">—</span>
                     )}
                   </td>
                   <td className="td">

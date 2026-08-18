@@ -127,18 +127,18 @@ export default function PayablesPage() {
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <div className="stat">
-          <div className="text-sm text-slate-500">{t('ap.kpi.outstanding')}</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">
+          <div className="text-xs font-semibold text-slate-500">{t('ap.kpi.outstanding')}</div>
+          <div className="mt-2 text-3xl font-bold tabular-nums text-slate-900">
             {formatMoney(totalOutstanding, locale)}
           </div>
         </div>
         <div className="stat">
-          <div className="text-sm text-slate-500">{t('ap.kpi.documents')}</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">{unsettled.length}</div>
+          <div className="text-xs font-semibold text-slate-500">{t('ap.kpi.documents')}</div>
+          <div className="mt-2 text-3xl font-bold tabular-nums text-slate-900">{unsettled.length}</div>
         </div>
         <div className="stat">
-          <div className="text-sm text-slate-500">{t('ap.kpi.retention')}</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">
+          <div className="text-xs font-semibold text-slate-500">{t('ap.kpi.retention')}</div>
+          <div className="mt-2 text-3xl font-bold tabular-nums text-slate-900">
             {formatMoney(totalRetention, locale)}
           </div>
         </div>
@@ -146,19 +146,19 @@ export default function PayablesPage() {
 
       {loadErr && !loading ? <LoadError message={loadErr} onRetry={load} /> : null}
 
-      <h2 className="mb-3 text-base font-semibold text-slate-800">{t('ap.open.title')}</h2>
+      <h2 className="mb-3 text-lg font-bold text-slate-800">{t('ap.open.title')}</h2>
       <div className="card mb-8 overflow-hidden">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('ap.doc')}</th>
-              <th className="th">{t('ap.vendor')}</th>
-              <th className="th">{t('common.date')}</th>
-              <th className="th">{t('ap.due')}</th>
-              <th className="th">{t('ap.paid')}</th>
-              <th className="th">{t('ap.outstanding')}</th>
-              <th className="th">{t('ap.retentionHeld')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('ap.doc')}</th>
+              <th scope="col" className="th">{t('ap.vendor')}</th>
+              <th scope="col" className="th">{t('common.date')}</th>
+              <th scope="col" className="th">{t('ap.due')}</th>
+              <th scope="col" className="th">{t('ap.paid')}</th>
+              <th scope="col" className="th">{t('ap.outstanding')}</th>
+              <th scope="col" className="th">{t('ap.retentionHeld')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -181,7 +181,7 @@ export default function PayablesPage() {
                     {r.outstanding > 0.009 ? (
                       formatMoney(r.outstanding, locale)
                     ) : (
-                      <span className="text-emerald-600">{t('ap.settled')}</span>
+                      <span className="text-success-700">{t('ap.settled')}</span>
                     )}
                   </td>
                   <td className="td text-xs">
@@ -221,18 +221,18 @@ export default function PayablesPage() {
         </table>
       </div>
 
-      <h2 className="mb-3 text-base font-semibold text-slate-800">{t('ap.history.title')}</h2>
+      <h2 className="mb-3 text-lg font-bold text-slate-800">{t('ap.history.title')}</h2>
       <div className="card overflow-hidden">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('ap.vendor')}</th>
-              <th className="th">{t('common.date')}</th>
-              <th className="th">{t('ap.amount')}</th>
-              <th className="th">{t('ap.method')}</th>
-              <th className="th">{t('ap.allocations')}</th>
-              <th className="th">{t('ap.reference')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('ap.vendor')}</th>
+              <th scope="col" className="th">{t('common.date')}</th>
+              <th scope="col" className="th">{t('ap.amount')}</th>
+              <th scope="col" className="th">{t('ap.method')}</th>
+              <th scope="col" className="th">{t('ap.allocations')}</th>
+              <th scope="col" className="th">{t('ap.reference')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -266,7 +266,7 @@ export default function PayablesPage() {
         title={`${t('ap.modal.title')} — ${target?.code ?? ''}`}
         onClose={() => setTarget(null)}
       >
-        <form onSubmit={pay} className="grid grid-cols-2 gap-4">
+        <form onSubmit={pay} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label={t('ap.amount')}>
             <div className="flex gap-2">
               <input
@@ -300,7 +300,7 @@ export default function PayablesPage() {
           <Field label={`${t('ap.memo')} (${t('common.optional')})`}>
             <input name="memo" className="input" />
           </Field>
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="flex justify-end gap-2 sm:col-span-2">
             <Btn onClick={() => setTarget(null)}>{t('common.cancel')}</Btn>
             <Btn type="submit" variant="primary" busy={busy('pay')} disabled={busy()}>
               {t('ap.action')}

@@ -10,7 +10,7 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney, formatDate } from '@/lib/format';
 // NB: this page defines its own read-only `Field` below — do not import ui's.
-import { PageHeader, StatusBadge, LoadError, Modal, useConfirm, Tabs, Can, Btn, PageSkeleton } from '@/components/ui';
+import { PageHeader, StatusBadge, LoadError, Modal, Field as FormField, useConfirm, Tabs, Can, Btn, PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { AttachmentsCard } from '@/components/attachments';
 
@@ -181,25 +181,25 @@ export default function InvoiceDetailPage() {
         {/* Lines + totals */}
         <div className="lg:col-span-2 space-y-6">
           <div className="card overflow-hidden">
-            <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+            <h2 className="card-title">
               {t('inv.lines')}
-            </div>
+            </h2>
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="th">{t('inv.description')}</th>
-                  <th className="th text-end">{t('inv.qty')}</th>
-                  <th className="th text-end">{t('inv.unitPrice')}</th>
-                  <th className="th text-end">{t('common.total')}</th>
+                  <th scope="col" className="th">{t('inv.description')}</th>
+                  <th scope="col" className="th text-end">{t('inv.qty')}</th>
+                  <th scope="col" className="th text-end">{t('inv.unitPrice')}</th>
+                  <th scope="col" className="th text-end">{t('common.total')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {inv.lines.map((l) => (
                   <tr key={l.id}>
                     <td className="td">{locale === 'ar' ? l.descriptionAr : l.descriptionEn}</td>
-                    <td className="td text-end">{Number(l.qty)}</td>
-                    <td className="td text-end">{formatMoney(l.unitPrice, locale)}</td>
-                    <td className="td text-end">{formatMoney(l.lineSubtotal, locale)}</td>
+                    <td className="td-num">{Number(l.qty)}</td>
+                    <td className="td-num">{formatMoney(l.unitPrice, locale)}</td>
+                    <td className="td-num">{formatMoney(l.lineSubtotal, locale)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -220,26 +220,26 @@ export default function InvoiceDetailPage() {
           {/* Journal */}
           {inv.journalEntries.length > 0 && (
             <div className="card overflow-hidden">
-              <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+              <h2 className="card-title">
                 {t('inv.journal')}
-              </div>
+              </h2>
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="th">{t('inv.account')}</th>
-                    <th className="th text-end">{t('inv.debit')}</th>
-                    <th className="th text-end">{t('inv.credit')}</th>
+                    <th scope="col" className="th">{t('inv.account')}</th>
+                    <th scope="col" className="th text-end">{t('inv.debit')}</th>
+                    <th scope="col" className="th text-end">{t('inv.credit')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {inv.journalEntries[0].lines.map((jl) => (
                     <tr key={jl.id}>
                       <td className="td">
-                        <span className="font-mono text-xs text-slate-600">{jl.account.code}</span>{' '}
+                        <span className="font-mono text-xs text-slate-500">{jl.account.code}</span>{' '}
                         {locale === 'ar' ? jl.account.nameAr : jl.account.nameEn}
                       </td>
-                      <td className="td text-end">{Number(jl.debit) ? formatMoney(jl.debit, locale) : '—'}</td>
-                      <td className="td text-end">{Number(jl.credit) ? formatMoney(jl.credit, locale) : '—'}</td>
+                      <td className="td-num">{Number(jl.debit) ? formatMoney(jl.debit, locale) : '—'}</td>
+                      <td className="td-num">{Number(jl.credit) ? formatMoney(jl.credit, locale) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -252,7 +252,7 @@ export default function InvoiceDetailPage() {
         <div className="space-y-6">
           {e ? (
             <div className="card overflow-hidden">
-              <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-l from-emerald-50 to-white px-5 py-3">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-l from-success-50 to-white px-5 py-3">
                 <span className="text-sm font-semibold text-slate-800">{t('inv.einvoice')}</span>
                 <StatusBadge status={e.authorityStatus} />
               </div>
@@ -260,7 +260,7 @@ export default function InvoiceDetailPage() {
                 {inv.qrDataUrl && (
                   <div className="mb-4 flex flex-col items-center">
                     <img src={inv.qrDataUrl} alt="ZATCA QR" width={180} height={180} className="rounded border border-slate-200" />
-                    <span className="mt-1 text-[11px] text-slate-600">{t('inv.qr')}</span>
+                    <span className="mt-1 text-xs text-slate-500">{t('inv.qr')}</span>
                   </div>
                 )}
                 <div className="space-y-2 text-xs">
@@ -270,7 +270,7 @@ export default function InvoiceDetailPage() {
                   />
                 </div>
                 <details className="mt-3 text-xs">
-                  <summary className="cursor-pointer select-none text-slate-600 hover:text-slate-800">
+                  <summary className="cursor-pointer select-none text-slate-500 hover:text-slate-600">
                     {t('inv.techDetails')}
                   </summary>
                   <div className="mt-2 space-y-2">
@@ -281,7 +281,7 @@ export default function InvoiceDetailPage() {
                   </div>
                 </details>
                 {e.isSimulated && (
-                  <p className="mt-4 flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-[11px] leading-relaxed text-amber-700">
+                  <p className="mt-4 flex items-start gap-1.5 rounded-lg bg-warning-50 p-2 text-xs leading-relaxed text-warning-700">
                     <Icon name="alert-triangle" className="mt-px h-3.5 w-3.5 shrink-0" />
                     {t('inv.simulated')}
                   </p>
@@ -289,9 +289,12 @@ export default function InvoiceDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="card p-5 text-center text-sm text-slate-600">
-              {t('inv.einvoice')}
-              <p className="mt-2 text-xs">{inv.status === 'DRAFT' ? '—' : ''}</p>
+            <div className="card p-6 text-center">
+              <Icon name="alert-triangle" className="mx-auto h-6 w-6 text-slate-300" aria-hidden />
+              <p className="mt-3 text-sm font-semibold text-slate-700">{t('inv.einvoice')}</p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                {inv.status === 'DRAFT' ? t('inv.einvoice.draftHint') : t('inv.einvoice.noneHint')}
+              </p>
             </div>
           )}
 
@@ -317,7 +320,7 @@ export default function InvoiceDetailPage() {
                       variant="solar"
                       sm
                       icon="unlock"
-                      className="!px-2 !py-0.5 !text-[11px]"
+                      className="!px-2 !py-0.5 !text-xs"
                       busy={busy('release')}
                       disabled={busy()}
                       title={t('pay.releaseHint')}
@@ -349,18 +352,18 @@ export default function InvoiceDetailPage() {
           {/* W7: payments */}
           {tab === 'pay' && (
           <div className="card overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
-              <h3 className="text-sm font-bold text-slate-800">{t('pay.title')}</h3>
-              <span className="text-xs text-slate-600">
+            <div className="card-title flex items-center justify-between">
+              <h3 className="font-bold">{t('pay.title')}</h3>
+              <span className="text-xs text-slate-500">
                 {inv.outstanding < -0.009 ? (
                   <>
                     {t('cn.refundDue')}:{' '}
-                    <b className="text-rose-600">{formatMoney(-inv.outstanding, locale)}</b>
+                    <b className="text-danger-600">{formatMoney(-inv.outstanding, locale)}</b>
                   </>
                 ) : (
                   <>
                     {t('pay.outstanding')}:{' '}
-                    <b className={outstanding > 0.009 ? 'text-amber-600' : 'text-emerald-600'}>
+                    <b className={outstanding > 0.009 ? 'text-warning-700' : 'text-success-700'}>
                       {formatMoney(outstanding, locale)}
                     </b>
                   </>
@@ -373,47 +376,57 @@ export default function InvoiceDetailPage() {
                   {inv.payments.map((p) => (
                     <li key={p.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs">
                       <span>
-                        <span className="font-mono text-slate-600">{p.code}</span>
+                        <span className="font-mono text-slate-500">{p.code}</span>
                         <span className="ms-2 text-slate-500">{formatDate(p.receivedAt, locale)}</span>
-                        {p.reference && <span className="ms-2 text-slate-600">{p.reference}</span>}
+                        {p.reference && <span className="ms-2 text-slate-500">{p.reference}</span>}
                       </span>
-                      <span className="font-bold text-emerald-700">{formatMoney(p.amount, locale)}</span>
+                      <span className="font-bold text-success-700">{formatMoney(p.amount, locale)}</span>
                     </li>
                   ))}
                 </ul>
               )}
               {canPay ? (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      min={0.01}
-                      max={outstanding}
-                      step="0.01"
-                      className="input flex-1"
-                      placeholder={t('pay.amount')}
-                      value={payAmount || ''}
-                      onChange={(ev) => setPayAmount(Number(ev.target.value))}
-                    />
-                    <button
-                      type="button"
-                      className="btn-ghost !px-2 text-[11px]"
-                      onClick={() => setPayAmount(Number(outstanding.toFixed(2)))}
-                    >
-                      {t('pay.full')}
-                    </button>
-                    <select className="input !w-32" value={payMethod} onChange={(ev) => setPayMethod(ev.target.value)}>
-                      <option value="BANK_TRANSFER">{locale === 'ar' ? 'تحويل بنكي' : 'Bank transfer'}</option>
-                      <option value="CHEQUE">{locale === 'ar' ? 'شيك' : 'Cheque'}</option>
-                      <option value="CASH">{locale === 'ar' ? 'نقداً' : 'Cash'}</option>
-                    </select>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <FormField label={t('pay.amount')}>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min={0.01}
+                          max={outstanding}
+                          step="0.01"
+                          className="input flex-1"
+                          value={payAmount || ''}
+                          onChange={(ev) => setPayAmount(Number(ev.target.value))}
+                        />
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm shrink-0"
+                          onClick={() => setPayAmount(Number(outstanding.toFixed(2)))}
+                        >
+                          {t('pay.full')}
+                        </button>
+                      </div>
+                    </FormField>
+                    <FormField label={t('pay.method')}>
+                      <select
+                        className="input"
+                        value={payMethod}
+                        onChange={(ev) => setPayMethod(ev.target.value)}
+                      >
+                        <option value="BANK_TRANSFER">{locale === 'ar' ? 'تحويل بنكي' : 'Bank transfer'}</option>
+                        <option value="CHEQUE">{locale === 'ar' ? 'شيك' : 'Cheque'}</option>
+                        <option value="CASH">{locale === 'ar' ? 'نقداً' : 'Cash'}</option>
+                      </select>
+                    </FormField>
                   </div>
-                  <input
-                    className="input"
-                    placeholder={t('pay.reference')}
-                    value={payRef}
-                    onChange={(ev) => setPayRef(ev.target.value)}
-                  />
+                  <FormField label={t('pay.reference')}>
+                    <input
+                      className="input"
+                      value={payRef}
+                      onChange={(ev) => setPayRef(ev.target.value)}
+                    />
+                  </FormField>
                   <Btn
                     variant="primary"
                     sm
@@ -440,7 +453,7 @@ export default function InvoiceDetailPage() {
                   </Btn>
                 </div>
               ) : inv.status === 'PAID' ? (
-                <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-success-600">
+                <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-success-700">
                   <Icon name="check-circle" className="h-4 w-4" />
                   {locale === 'ar' ? 'مدفوعة بالكامل' : 'Fully paid'}
                 </p>
@@ -452,12 +465,12 @@ export default function InvoiceDetailPage() {
           {/* Credit notes: this invoice's corrections, or what it corrects. */}
           {tab === 'credit' && (inv.creditNotes.length > 0 || isCreditNote ? (
             <div className="card overflow-hidden">
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
-                <h3 className="text-sm font-bold text-slate-800">{t('cn.title')}</h3>
+              <div className="card-title flex items-center justify-between">
+                <h3 className="font-bold">{t('cn.title')}</h3>
                 {inv.creditedTotal > 0 ? (
-                  <span className="text-xs text-slate-600">
+                  <span className="text-xs text-slate-500">
                     {t('cn.credited')}:{' '}
-                    <b className="text-rose-600">{formatMoney(inv.creditedTotal, locale)}</b>
+                    <b className="text-danger-600">{formatMoney(inv.creditedTotal, locale)}</b>
                   </span>
                 ) : null}
               </div>
@@ -482,7 +495,7 @@ export default function InvoiceDetailPage() {
                     {inv.creditNotes.map((c) => (
                       <li
                         key={c.id}
-                        className="flex items-center justify-between rounded-lg bg-rose-50/60 px-3 py-2"
+                        className="flex items-center justify-between rounded-lg bg-danger-50/60 px-3 py-2"
                       >
                         <span>
                           <Link
@@ -495,10 +508,10 @@ export default function InvoiceDetailPage() {
                             {formatDate(c.issueDate, locale)}
                           </span>
                           {c.creditReason ? (
-                            <span className="ms-2 text-slate-600">{c.creditReason}</span>
+                            <span className="ms-2 text-slate-500">{c.creditReason}</span>
                           ) : null}
                         </span>
-                        <span className="font-bold text-rose-700">
+                        <span className="font-bold text-danger-700">
                           −{formatMoney(c.total, locale)}
                         </span>
                       </li>
@@ -508,7 +521,7 @@ export default function InvoiceDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="card p-5 text-center text-sm text-slate-600">{t('common.none')}</div>
+            <div className="card p-5 text-center text-sm text-slate-500">{t('common.none')}</div>
           ))}
 
           {/* M2: documents attached to this invoice */}
@@ -526,13 +539,12 @@ export default function InvoiceDetailPage() {
             createCreditNote(String(f.get('reason') || '').trim(), amount);
           }}
         >
-          <p className="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+          <p className="rounded-lg bg-warning-50 p-3 text-xs leading-relaxed text-warning-800">
             {t('cn.hint')}
           </p>
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-600">{t('cn.reason')}</span>
+          <FormField label={t('cn.reason')}>
             <input name="reason" className="input" required maxLength={300} />
-          </label>
+          </FormField>
           <div className="flex gap-4 text-sm">
             <label className="flex items-center gap-2">
               <input type="radio" checked={cnFull} onChange={() => setCnFull(true)} />
@@ -548,8 +560,7 @@ export default function InvoiceDetailPage() {
               {t('cn.fullAmount')}: <b>{formatMoney(creditable, locale)}</b>
             </p>
           ) : (
-            <label className="block">
-              <span className="mb-1 block text-sm text-slate-600">{t('cn.amount')}</span>
+            <FormField label={t('cn.amount')}>
               <input
                 name="amount"
                 type="number"
@@ -560,7 +571,7 @@ export default function InvoiceDetailPage() {
                 required
                 dir="ltr"
               />
-            </label>
+            </FormField>
           )}
           <div className="flex justify-end gap-2">
             <Btn onClick={() => setCnOpen(false)}>{t('common.cancel')}</Btn>
@@ -579,7 +590,7 @@ export default function InvoiceDetailPage() {
 function Field({ label, value, mono, truncate }: { label: string; value: string; mono?: boolean; truncate?: boolean }) {
   return (
     <div>
-      <span className="block text-slate-600">{label}</span>
+      <span className="block text-slate-500">{label}</span>
       <span
         className={`block ${mono ? 'font-mono' : ''} ${truncate ? 'truncate' : 'break-all'} text-slate-700`}
         title={value}

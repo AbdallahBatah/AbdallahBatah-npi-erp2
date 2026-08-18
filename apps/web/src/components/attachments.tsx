@@ -76,11 +76,11 @@ export function AttachmentsCard({
 
   return (
     <div className="no-print card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
+      <div className="card-title flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800">
           <Icon name="paperclip" className="h-4 w-4 text-slate-400" />
           {t('att.title')}
-          {rows.length > 0 && <span className="text-xs font-normal text-slate-600">({rows.length})</span>}
+          {rows.length > 0 && <span className="text-xs font-normal text-slate-500">({rows.length})</span>}
         </h3>
         {canWrite && (
           <>
@@ -94,7 +94,7 @@ export function AttachmentsCard({
             <Btn
               sm
               icon="paperclip"
-              className="!px-2.5 !py-1 !text-[11px]"
+              className="!px-2.5 !py-1 !text-xs"
               busy={busy('upload')}
               disabled={busy()}
               title={t('att.hint')}
@@ -107,7 +107,7 @@ export function AttachmentsCard({
       </div>
       <div className="p-4">
         {rows.length === 0 ? (
-          <p className="py-3 text-center text-xs text-slate-600">{t('att.empty')}</p>
+          <p className="py-3 text-center text-xs text-slate-500">{t('att.empty')}</p>
         ) : (
           <ul className="space-y-2">
             {rows.map((row) => (
@@ -127,7 +127,7 @@ export function AttachmentsCard({
                   <Icon name="download" className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                   <span className="min-w-0">
                     <span className="block truncate font-semibold text-slate-700">{row.fileName}</span>
-                    <span className="block text-[10px] text-slate-600">
+                    <span className="block text-xs text-slate-500">
                       {formatBytes(row.sizeBytes)}
                       {row.uploadedBy && (
                         <> · {locale === 'ar' ? row.uploadedBy.nameAr : row.uploadedBy.nameEn}</>
@@ -143,7 +143,7 @@ export function AttachmentsCard({
                     title={t('att.delete')}
                     disabled={busy()}
                     onClick={() => onDelete(row)}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-danger-50 hover:text-danger-600"
                   >
                     <Icon name="trash" className="h-3.5 w-3.5" />
                   </button>

@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { ApiError } from '@/lib/api';
 import { translateError } from '@/lib/errors';
-import { Spinner } from '@/components/ui';
+import { Btn, Field } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
 export default function LoginPage() {
@@ -72,10 +72,12 @@ export default function LoginPage() {
           <img src="/brand/npi-logo-on-dark.svg" alt="NPI" className="mb-8 h-20 w-auto" />
 
           <h1 className="text-3xl font-bold leading-tight text-white">{t('app.name')}</h1>
+          {/* On the dark hero, slate-400 is the higher-contrast choice (7.5:1);
+              slate-500 belongs on the light surfaces only. */}
           <p className="mt-3 text-sm leading-relaxed text-slate-400">{t('app.tagline')}</p>
           <ul className="mt-10 space-y-4">
             {highlights.map((h) => (
-              <li key={h} className="flex items-center gap-3 text-sm text-slate-300">
+              <li key={h} className="flex items-center gap-3 text-sm text-slate-400">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300">
                   <Icon name="check" className="h-3.5 w-3.5" />
                 </span>
@@ -98,42 +100,50 @@ export default function LoginPage() {
 
           <div className="mb-8 flex items-start justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900">{t('login.title')}</h2>
+              <h2 className="text-3xl font-bold text-slate-900">{t('login.title')}</h2>
               <p className="mt-1 text-xs text-slate-600">{t('app.tagline')}</p>
             </div>
-            <button onClick={toggle} className="btn-ghost !px-3 !py-1.5 text-xs">
+            <button
+              onClick={toggle}
+              aria-label={locale === 'ar' ? 'Switch to English' : 'التبديل إلى العربية'}
+              className="btn-ghost btn-sm"
+            >
               {locale === 'ar' ? 'EN' : 'ع'}
             </button>
           </div>
 
           <form onSubmit={onSubmit} className="space-y-5">
-            <div>
-              <label className="label">{t('login.email')}</label>
+            <Field label={t('login.email')}>
               <input
                 className="input !py-2.5"
                 type="email"
+                name="email"
+                autoComplete="email"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
               />
-            </div>
-            <div>
-              <label className="label">{t('login.password')}</label>
+            </Field>
+            <Field label={t('login.password')}>
               <input
                 className="input !py-2.5"
                 type="password"
+                name="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
-            </div>
+            </Field>
             {error && (
-              <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>
+              <p role="alert" className="rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">
+                {error}
+              </p>
             )}
-            <button type="submit" className="btn-primary w-full !py-2.5" disabled={busy} aria-busy={busy || undefined}>
-              {busy && <Spinner />}
+            <Btn type="submit" variant="primary" className="w-full !py-2.5" busy={busy}>
               {t('login.submit')}
-            </button>
+            </Btn>
           </form>
 
           <p className="mt-6 text-center text-xs text-slate-600">{t('login.hint')}</p>
