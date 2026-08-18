@@ -49,7 +49,7 @@ export function PageHeader({
           </Link>
         )}
         <h1 className="text-lg font-bold text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}
+        {subtitle && <p className="mt-1 text-xs text-slate-600">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -272,7 +272,7 @@ const STATUS_META: Record<string, { ar: string; en: string; cls: string; dot: st
   DRAFT: { ar: 'مسودة', en: 'Draft', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
   ACTIVE: { ar: 'نشط', en: 'Active', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
   SUSPENDED: { ar: 'موقوف', en: 'Suspended', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
-  CLOSED: { ar: 'مغلق', en: 'Closed', cls: 'bg-slate-100 text-slate-500', dot: 'bg-slate-400' },
+  CLOSED: { ar: 'مغلق', en: 'Closed', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
   CANCELLED: { ar: 'ملغى', en: 'Cancelled', cls: 'bg-danger-50 text-danger-600', dot: 'bg-danger-500' },
   // CRM
   NEW: { ar: 'جديد', en: 'New', cls: 'bg-info-50 text-info-700', dot: 'bg-info-500' },

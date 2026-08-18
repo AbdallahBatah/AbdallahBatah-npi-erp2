@@ -78,9 +78,11 @@ body {
   .badge {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold leading-none;
   }
-  /* No uppercase/tracking: letter-spacing breaks connected Arabic glyphs. */
+  /* No uppercase/tracking: letter-spacing breaks connected Arabic glyphs.
+     slate-600 for the same reason as .label: slate-500 on the thead's
+     bg-slate-50 sits at 4.55:1 — technically passing, one tint from not. */
   .th {
-    @apply whitespace-nowrap px-4 py-3 text-start text-xs font-bold text-slate-500;
+    @apply whitespace-nowrap px-4 py-3 text-start text-xs font-bold text-slate-600;
   }
   /* Wide tables scroll inside their card instead of breaking the page on
      small screens. */

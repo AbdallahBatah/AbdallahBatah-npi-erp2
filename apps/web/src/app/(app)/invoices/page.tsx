@@ -18,6 +18,7 @@ interface Summary {
 interface Invoice {
   id: string;
   code: string;
+  invoiceType: string;
   status: string;
   subtotal: string;
   vatAmount: string;
@@ -90,12 +91,20 @@ export default function InvoicesPage() {
             ) : rows.length === 0 ? (
               <EmptyRow colSpan={7} text={t('inv.emptyHint')} actionHref="/contracts" actionText={t('nav.contracts')} />
             ) : (
-              rows.map((inv) => (
+              rows.map((inv) => {
+                // A credit note reduces what the customer owes: its total is
+                // shown signed, and "net payable" does not apply to it.
+                const isCreditNote = inv.invoiceType === 'CREDIT_NOTE';
+                return (
                 <tr key={inv.id} className="hover:bg-slate-50">
                   <td className="td font-mono text-xs">{inv.code}</td>
                   <td className="td">{inv.customer ? pick(inv.customer, 'name') : '—'}</td>
-                  <td className="td">{formatMoney(inv.total, locale)}</td>
-                  <td className="td font-medium">{formatMoney(inv.netPayable, locale)}</td>
+                  <td className={`td ${isCreditNote ? 'text-rose-700' : ''}`}>
+                    {formatMoney(isCreditNote ? -Number(inv.total) : inv.total, locale)}
+                  </td>
+                  <td className="td font-medium">
+                    {isCreditNote ? <span className="font-normal text-slate-500">—</span> : formatMoney(inv.netPayable, locale)}
+                  </td>
                   <td className="td"><StatusBadge status={inv.status} /></td>
                   <td className="td">
                     {inv.eInvoice ? (
@@ -110,7 +119,8 @@ export default function InvoicesPage() {
                     </Link>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>

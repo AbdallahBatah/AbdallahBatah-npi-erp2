@@ -265,11 +265,15 @@ export default function InvoicePrintPage() {
             {Number(inv.retentionAmount) > 0 && (
               <>
                 <div className="flex justify-between text-slate-500">
-                  <span>− {t('inv.retention')}</span>
+                  <span>
+                    − <L ar={t('inv.retention')} en="Retention" />
+                  </span>
                   <span>{formatMoney(inv.retentionAmount, locale)}</span>
                 </div>
                 <div className="flex justify-between border-t border-dashed border-slate-300 pt-1.5 font-bold">
-                  <span>{t('inv.netPayable')}</span>
+                  <span>
+                    <L ar={t('inv.netPayable')} en="Net payable" />
+                  </span>
                   <span>{formatMoney(inv.netPayable, locale)}</span>
                 </div>
               </>

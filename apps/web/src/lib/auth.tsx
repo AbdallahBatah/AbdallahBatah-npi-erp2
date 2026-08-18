@@ -8,7 +8,7 @@ import {
   ReactNode,
   useCallback,
 } from 'react';
-import { api, setToken } from './api';
+import { api, getToken, setToken } from './api';
 import { clearAllDrafts } from './useDraft';
 
 export interface AuthUser {
@@ -40,6 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    // No stored token means no session to restore — asking the API anyway
+    // just fills the console with guaranteed 401s on the login screen.
+    if (!getToken()) {
+      setLoading(false);
+      return;
+    }
     (async () => {
       try {
         const me = await api.get<AuthUser>('/auth/me');

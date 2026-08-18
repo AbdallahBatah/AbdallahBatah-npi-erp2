@@ -145,10 +145,14 @@ export default function ProcurementPage() {
     setPLines(pLines.map((l, idx) => {
       if (idx !== i) return l;
       const next = { ...l, ...patch };
-      // Picking a new item defaults the price to its catalogue cost.
+      // Picking a new item defaults the price to its catalogue cost — but a
+      // price the buyer typed in (≠ the old item's catalogue cost) is a
+      // negotiated figure and must survive the item switch.
       if (patch.itemId) {
+        const prev = items.find((x) => x.id === l.itemId);
         const it = items.find((x) => x.id === patch.itemId);
-        if (it) next.unitPrice = Number(it.unitCost);
+        const priceUntouched = !prev || l.unitPrice === Number(prev.unitCost);
+        if (it && priceUntouched) next.unitPrice = Number(it.unitCost);
       }
       return next;
     }));

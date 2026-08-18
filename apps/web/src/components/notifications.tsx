@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, getToken } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { Icon } from './icons';
 
@@ -44,6 +44,9 @@ export function NotificationsBell() {
   const ar = locale === 'ar';
 
   const refreshCount = useCallback(() => {
+    // The bell can mount for a beat before auth redirects to /login —
+    // polling without a token only produces guaranteed 401 console noise.
+    if (!getToken()) return;
     api
       .get<{ unreadCount: number }>('/notifications/unread-count')
       .then((r) => setUnread(r.unreadCount))
