@@ -568,16 +568,39 @@ export class FsmService {
   async submitClaim(user: AuthUser, id: string) {
     const claim = await this.mustGetClaim(user, id);
     if (claim.status !== 'DRAFT') throw new BadRequestException(`Claim is ${claim.status}`);
-    return this.prisma.warrantyClaim.update({
+    const updated = await this.prisma.warrantyClaim.update({
       where: { id },
       data: { status: 'SUBMITTED', submittedAt: new Date() },
     });
+    await this.audit.record({
+      organizationId: user.organizationId,
+      actorId: user.userId,
+      entityType: 'WarrantyClaim',
+      entityId: id,
+      action: 'SUBMIT',
+      before: { status: claim.status },
+      after: { status: 'SUBMITTED' },
+    });
+    return updated;
   }
 
   async approveClaim(user: AuthUser, id: string) {
     const claim = await this.mustGetClaim(user, id);
     if (claim.status !== 'SUBMITTED') throw new BadRequestException(`Claim is ${claim.status}`);
-    return this.prisma.warrantyClaim.update({ where: { id }, data: { status: 'APPROVED' } });
+    const updated = await this.prisma.warrantyClaim.update({
+      where: { id },
+      data: { status: 'APPROVED' },
+    });
+    await this.audit.record({
+      organizationId: user.organizationId,
+      actorId: user.userId,
+      entityType: 'WarrantyClaim',
+      entityId: id,
+      action: 'APPROVE',
+      before: { status: claim.status },
+      after: { status: 'APPROVED' },
+    });
+    return updated;
   }
 
   async rejectClaim(user: AuthUser, id: string) {

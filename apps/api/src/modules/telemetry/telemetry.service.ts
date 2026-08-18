@@ -279,10 +279,20 @@ export class TelemetryService {
     });
     if (!alert) throw new NotFoundException('Alert not found');
     if (alert.status !== 'OPEN') throw new BadRequestException(`Alert is ${alert.status}`);
-    return this.prisma.performanceAlert.update({
+    const updated = await this.prisma.performanceAlert.update({
       where: { id },
       data: { status: 'ACKNOWLEDGED', acknowledgedById: user.userId, acknowledgedAt: new Date() },
     });
+    await this.audit.record({
+      organizationId: user.organizationId,
+      actorId: user.userId,
+      entityType: 'PerformanceAlert',
+      entityId: id,
+      action: 'ACKNOWLEDGE',
+      before: { status: alert.status },
+      after: { status: 'ACKNOWLEDGED' },
+    });
+    return updated;
   }
 
   /** FSM-11 manual path: raise a work order from a WARNING/INFO alert. */

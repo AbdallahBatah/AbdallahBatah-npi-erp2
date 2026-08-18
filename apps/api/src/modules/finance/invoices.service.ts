@@ -247,7 +247,7 @@ export class InvoicesService {
       // The serializable isolation level makes the read-then-append atomic,
       // and the loser of the race is retried rather than surfaced as an error.
       const prev = await tx.eInvoiceDocument.findFirst({
-        where: { invoice: { organizationId: user.organizationId } },
+        where: { organizationId: user.organizationId },
         orderBy: { submittedAt: 'desc' },
         select: { invoiceHash: true },
       });
@@ -279,6 +279,7 @@ export class InvoicesService {
       await tx.eInvoiceDocument.create({
         data: {
           invoiceId: invoice.id,
+          organizationId: user.organizationId,
           uuid: zatca.uuid,
           invoiceHash: zatca.invoiceHash,
           previousInvoiceHash: zatca.previousInvoiceHash,
@@ -470,7 +471,7 @@ export class InvoicesService {
 
         // Same hash chain as any other reported document.
         const prev = await tx.eInvoiceDocument.findFirst({
-          where: { invoice: { organizationId: user.organizationId } },
+          where: { organizationId: user.organizationId },
           orderBy: { submittedAt: 'desc' },
           select: { invoiceHash: true },
         });
@@ -507,6 +508,7 @@ export class InvoicesService {
         await tx.eInvoiceDocument.create({
           data: {
             invoiceId: note.id,
+            organizationId: user.organizationId,
             uuid: zatca.uuid,
             invoiceHash: zatca.invoiceHash,
             previousInvoiceHash: zatca.previousInvoiceHash,
