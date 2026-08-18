@@ -85,7 +85,7 @@ export default function TelemetryPage() {
           </Can>
         }
       />
-      <p className="mb-4 -mt-4 flex items-center gap-1.5 text-xs text-slate-400">
+      <p className="mb-4 -mt-4 flex items-center gap-1.5 text-xs text-slate-600">
         <Icon name="alert-triangle" className="h-3.5 w-3.5 shrink-0 text-warning-500" />
         {t('tel.simulateHint')}
       </p>
@@ -124,7 +124,7 @@ export default function TelemetryPage() {
         </div>
         <div className="p-5">
           {!dash || dash.series.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">{t('tel.noPlant')}</p>
+            <p className="py-8 text-center text-sm text-slate-600">{t('tel.noPlant')}</p>
           ) : (
             <div className="flex items-end gap-1" style={{ height: 160 }} dir="ltr">
               {dash.series.map((s, i) => {
@@ -191,7 +191,7 @@ export default function TelemetryPage() {
                   </td>
                   <td className="td max-w-xs truncate text-xs text-slate-500" title={a.message}>
                     {a.message}
-                    <span className="ms-1 font-mono text-[10px] text-slate-400">{a.ruleRef}</span>
+                    <span className="ms-1 font-mono text-[10px] text-slate-600">{a.ruleRef}</span>
                   </td>
                   <td className="td"><StatusBadge status={a.status} /></td>
                   <td className="td">
@@ -200,7 +200,7 @@ export default function TelemetryPage() {
                         {a.workOrder.code} <StatusBadge status={a.workOrder.status} />
                       </Link>
                     ) : (
-                      <span className="text-xs text-slate-400">—</span>
+                      <span className="text-xs text-slate-600">—</span>
                     )}
                   </td>
                   <td className="td">

@@ -80,7 +80,7 @@ export function AttachmentsCard({
         <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800">
           <Icon name="paperclip" className="h-4 w-4 text-slate-400" />
           {t('att.title')}
-          {rows.length > 0 && <span className="text-xs font-normal text-slate-400">({rows.length})</span>}
+          {rows.length > 0 && <span className="text-xs font-normal text-slate-600">({rows.length})</span>}
         </h3>
         {canWrite && (
           <>
@@ -107,7 +107,7 @@ export function AttachmentsCard({
       </div>
       <div className="p-4">
         {rows.length === 0 ? (
-          <p className="py-3 text-center text-xs text-slate-400">{t('att.empty')}</p>
+          <p className="py-3 text-center text-xs text-slate-600">{t('att.empty')}</p>
         ) : (
           <ul className="space-y-2">
             {rows.map((row) => (
@@ -127,7 +127,7 @@ export function AttachmentsCard({
                   <Icon name="download" className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                   <span className="min-w-0">
                     <span className="block truncate font-semibold text-slate-700">{row.fileName}</span>
-                    <span className="block text-[10px] text-slate-400">
+                    <span className="block text-[10px] text-slate-600">
                       {formatBytes(row.sizeBytes)}
                       {row.uploadedBy && (
                         <> · {locale === 'ar' ? row.uploadedBy.nameAr : row.uploadedBy.nameEn}</>
@@ -143,7 +143,7 @@ export function AttachmentsCard({
                     title={t('att.delete')}
                     disabled={busy()}
                     onClick={() => onDelete(row)}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
                   >
                     <Icon name="trash" className="h-3.5 w-3.5" />
                   </button>

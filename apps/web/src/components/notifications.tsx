@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, getToken } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { Icon } from './icons';
 
@@ -43,6 +43,9 @@ export function NotificationsBell() {
   const ar = locale === 'ar';
 
   const refreshCount = useCallback(() => {
+    // The bell can mount for a beat before auth redirects to /login —
+    // polling without a token only produces guaranteed 401 console noise.
+    if (!getToken()) return;
     api
       .get<{ unreadCount: number }>('/notifications/unread-count')
       .then((r) => setUnread(r.unreadCount))
@@ -126,7 +129,7 @@ export function NotificationsBell() {
           </div>
           <ul className="max-h-[60vh] divide-y divide-slate-50 overflow-y-auto [scrollbar-width:thin]">
             {rows.length === 0 && (
-              <li className="px-4 py-8 text-center text-xs text-slate-400">{t('notif.empty')}</li>
+              <li className="px-4 py-8 text-center text-xs text-slate-600">{t('notif.empty')}</li>
             )}
             {rows.map((n) => (
               <li key={n.id}>
@@ -146,11 +149,11 @@ export function NotificationsBell() {
                       {ar ? n.titleAr : n.titleEn}
                     </span>
                     {(ar ? n.bodyAr : n.bodyEn) && (
-                      <span className="mt-0.5 block truncate text-[11px] text-slate-400">
+                      <span className="mt-0.5 block truncate text-[11px] text-slate-600">
                         {ar ? n.bodyAr : n.bodyEn}
                       </span>
                     )}
-                    <span className="mt-0.5 block text-[10px] text-slate-300">
+                    <span className="mt-0.5 block text-[10px] text-slate-600">
                       {timeAgo(n.createdAt, ar)}
                     </span>
                   </span>

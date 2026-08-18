@@ -166,7 +166,7 @@ export function GlobalSearch() {
         >
           <Icon name="search" className="h-[16px] w-[16px]" />
           <span className="hidden text-xs font-medium sm:inline">{t('search.open')}</span>
-          <kbd className="hidden rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 md:inline">
+          <kbd className="hidden rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 md:inline">
             Ctrl K
           </kbd>
         </button>
@@ -188,14 +188,14 @@ export function GlobalSearch() {
                 placeholder={t('search.placeholder')}
                 className="flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-slate-400"
               />
-              <button className="text-[11px] text-slate-400 hover:text-slate-600" onClick={close}>
+              <button className="text-[11px] text-slate-600 hover:text-slate-800" onClick={close}>
                 {t('search.close')}
               </button>
             </div>
 
             <div className="max-h-[60vh] overflow-y-auto [scrollbar-width:thin]">
               {q.trim().length < 2 ? (
-                <p className="px-4 py-8 text-center text-xs text-slate-400">{t('search.hint')}</p>
+                <p className="px-4 py-8 text-center text-xs text-slate-600">{t('search.hint')}</p>
               ) : loading && totalHits === 0 ? (
                 <div className="space-y-3 px-4 py-5" aria-hidden>
                   <div className="skeleton h-3 w-2/3" />
@@ -203,11 +203,11 @@ export function GlobalSearch() {
                   <div className="skeleton h-3 w-3/5" />
                 </div>
               ) : totalHits === 0 ? (
-                <p className="px-4 py-8 text-center text-xs text-slate-400">{t('search.noResults')}</p>
+                <p className="px-4 py-8 text-center text-xs text-slate-600">{t('search.noResults')}</p>
               ) : (
                 groups.map(([type, rows]) => (
                   <div key={type} className="py-2">
-                    <p className="px-4 pb-1 text-[11px] font-bold text-slate-400">{t(GROUP_NAV_KEY[type])}</p>
+                    <p className="px-4 pb-1 text-[11px] font-bold text-slate-600">{t(GROUP_NAV_KEY[type])}</p>
                     {rows.map((hit) => {
                       const idx = flat.indexOf(hit);
                       return (
@@ -226,7 +226,7 @@ export function GlobalSearch() {
                             {ar ? hit.labelAr : hit.labelEn}
                           </span>
                           {hit.sublabel && (
-                            <span className="block truncate text-[11px] text-slate-400">{hit.sublabel}</span>
+                            <span className="block truncate text-[11px] text-slate-600">{hit.sublabel}</span>
                           )}
                         </span>
                       </button>

@@ -180,13 +180,13 @@ export default function WorkOrderDetailPage() {
             {optionLabel(enums?.woTypes, wo.woType, locale)} · {optionLabel(enums?.woOrigins, wo.origin, locale)}
           </p>
           {wo.maintenancePlan && (
-            <p className="mt-1 text-xs text-slate-400">{wo.maintenancePlan.code} — {pick(wo.maintenancePlan, 'name')}</p>
+            <p className="mt-1 text-xs text-slate-600">{wo.maintenancePlan.code} — {pick(wo.maintenancePlan, 'name')}</p>
           )}
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-500">{t('wo.asset')}</p>
           <p className="mt-1 text-sm font-medium">{wo.asset ? `${wo.asset.code} · ${pick(wo.asset, 'name')}` : '—'}</p>
-          {wo.project && <p className="mt-1 text-xs text-slate-400">{wo.project.code}</p>}
+          {wo.project && <p className="mt-1 text-xs text-slate-600">{wo.project.code}</p>}
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-500">{t('wo.assignee')}</p>
@@ -211,7 +211,7 @@ export default function WorkOrderDetailPage() {
               </Btn>
             </div>
           ) : (
-            <p className="mt-1 text-sm text-slate-400">—</p>
+            <p className="mt-1 text-sm text-slate-600">—</p>
           )}
         </div>
         <div className="card p-4">
@@ -219,7 +219,7 @@ export default function WorkOrderDetailPage() {
           <p className={`mt-1 text-sm font-medium ${wo.slaDueAt && new Date(wo.slaDueAt) < new Date() && !['CLOSED', 'COMPLETED', 'CANCELLED'].includes(wo.status) ? 'text-rose-600' : ''}`}>
             {wo.slaDueAt ? formatDate(wo.slaDueAt, locale) : '—'}
           </p>
-          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
             {wo.startedAt && (
               <span className="inline-flex items-center gap-1">
                 <Icon name="play" className="h-3 w-3" />
@@ -277,7 +277,7 @@ export default function WorkOrderDetailPage() {
                 wo.parts.map((p) => (
                   <tr key={p.id}>
                     <td className="td">
-                      <span className="font-mono text-xs text-slate-400">{p.item.sku}</span>{' '}
+                      <span className="font-mono text-xs text-slate-600">{p.item.sku}</span>{' '}
                       {pick(p.item, 'name')}
                     </td>
                     <td className="td text-end">{Number(p.qty)} {p.item.uom}</td>
@@ -378,17 +378,17 @@ export default function WorkOrderDetailPage() {
                     />
                     {locale === 'ar' ? c.labelAr ?? c.label : c.labelEn ?? c.label}
                     {c.mandatory && (
-                      <span className="ms-2 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600">
+                      <span className="ms-2 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">
                         {locale === 'ar' ? 'إلزامي' : 'Required'}
                       </span>
                     )}
                   </span>
-                  {c.note && <span className="text-xs text-slate-400">{c.note}</span>}
+                  {c.note && <span className="text-xs text-slate-600">{c.note}</span>}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="px-5 py-8 text-center text-sm text-slate-400">{t('common.none')}</p>
+            <p className="px-5 py-8 text-center text-sm text-slate-600">{t('common.none')}</p>
           )}
         </div>
       </div>
@@ -443,7 +443,7 @@ export default function WorkOrderDetailPage() {
 
       {/* Complete modal (checklist) */}
       <Modal open={cOpen} title={t('wo.complete')} onClose={() => setCOpen(false)}>
-        <p className="mb-3 text-xs text-slate-400">{t('wo.checklistHint')}</p>
+        <p className="mb-3 text-xs text-slate-600">{t('wo.checklistHint')}</p>
         <div className="space-y-2">
           {checklist.map((c, i) => (
             <label key={i} className="flex items-center gap-2 text-sm">
@@ -454,7 +454,7 @@ export default function WorkOrderDetailPage() {
               />
               {locale === 'ar' ? c.labelAr ?? c.label : c.labelEn ?? c.label}
               {c.mandatory && (
-                <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600">
+                <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">
                   {locale === 'ar' ? 'إلزامي' : 'Required'}
                 </span>
               )}
@@ -473,7 +473,7 @@ export default function WorkOrderDetailPage() {
                 }
               }}
             />
-            <span className="text-xs text-slate-400">↵</span>
+            <span className="text-xs text-slate-600">↵</span>
           </div>
         </div>
         <div className="mt-4 flex justify-end gap-2">

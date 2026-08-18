@@ -128,7 +128,7 @@ export default function LedgerPage() {
   const balanceCell = (v: number) => (
     <>
       {formatMoney(Math.abs(v), locale)}
-      <span className="ms-1 text-[11px] text-slate-400">
+      <span className="ms-1 text-[11px] text-slate-600">
         {v === 0 ? '' : v > 0 ? t('gl.debit') : t('gl.credit')}
       </span>
     </>
@@ -263,7 +263,7 @@ export default function LedgerPage() {
                 </span>
               )}
             </div>
-            <p className="mt-1 text-xs text-slate-400">{t('gl.tb.hint')}</p>
+            <p className="mt-1 text-xs text-slate-600">{t('gl.tb.hint')}</p>
           </div>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-xs text-slate-500">
@@ -352,7 +352,7 @@ export default function LedgerPage() {
               )}
             </h3>
             {gl && (
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-600">
                 {t('gl.detail.entries')}: {gl.total} · {t('gl.opening')}: {balanceCell(gl.opening)} ·{' '}
                 {t('gl.debit')}: {formatMoney(gl.periodDebit, locale)} · {t('gl.credit')}:{' '}
                 {formatMoney(gl.periodCredit, locale)} · {t('gl.closing')}: {balanceCell(gl.closing)}
@@ -408,7 +408,7 @@ export default function LedgerPage() {
                           <td className="td">
                             <span className="text-xs text-slate-700">{sourceLabel(r.sourceType)}</span>
                             {r.invoiceCode && (
-                              <span className="ms-1 font-mono text-[11px] text-slate-400">{r.invoiceCode}</span>
+                              <span className="ms-1 font-mono text-[11px] text-slate-600">{r.invoiceCode}</span>
                             )}
                             {r.isReversal && (
                               <span className="ms-1 badge bg-amber-50 text-amber-700">

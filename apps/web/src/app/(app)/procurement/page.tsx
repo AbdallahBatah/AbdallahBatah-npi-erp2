@@ -145,10 +145,14 @@ export default function ProcurementPage() {
     setPLines(pLines.map((l, idx) => {
       if (idx !== i) return l;
       const next = { ...l, ...patch };
-      // Picking a new item defaults the price to its catalogue cost.
+      // Picking a new item defaults the price to its catalogue cost — but a
+      // price the buyer typed in (≠ the old item's catalogue cost) is a
+      // negotiated figure and must survive the item switch.
       if (patch.itemId) {
+        const prev = items.find((x) => x.id === l.itemId);
         const it = items.find((x) => x.id === patch.itemId);
-        if (it) next.unitPrice = Number(it.unitCost);
+        const priceUntouched = !prev || l.unitPrice === Number(prev.unitCost);
+        if (it && priceUntouched) next.unitPrice = Number(it.unitCost);
       }
       return next;
     }));
@@ -295,7 +299,7 @@ export default function ProcurementPage() {
                     {v.isManufacturer ? (
                       <Icon name="check" className="mx-auto h-4 w-4 text-success-600" />
                     ) : (
-                      <span className="text-slate-300">—</span>
+                      <span className="text-slate-500">—</span>
                     )}
                   </td>
                   <td className="td text-center">{v._count?.purchaseOrders ?? 0}</td>
@@ -333,11 +337,11 @@ export default function ProcurementPage() {
               stock.map((s) => (
                 <tr key={s.id}>
                   <td className="td">
-                    <span className="font-mono text-xs text-slate-400">{s.item.sku}</span>{' '}
+                    <span className="font-mono text-xs text-slate-600">{s.item.sku}</span>{' '}
                     {pick(s.item, 'name')}
                   </td>
                   <td className="td">
-                    <span className="font-mono text-xs text-slate-400">{s.location.code}</span>{' '}
+                    <span className="font-mono text-xs text-slate-600">{s.location.code}</span>{' '}
                     {pick(s.location, 'name')}
                   </td>
                   <td className="td text-end font-medium">{Number(s.qty)} {s.item.uom}</td>
@@ -473,7 +477,7 @@ export default function ProcurementPage() {
                   <button
                     type="button"
                     aria-label={t('common.close')}
-                    className="rounded-md p-1.5 text-slate-400 transition hover:bg-danger-50 hover:text-danger-600"
+                    className="rounded-md p-1.5 text-slate-500 transition hover:bg-danger-50 hover:text-danger-600"
                     onClick={() => setPLines(pLines.filter((_, idx) => idx !== i))}
                   >
                     <Icon name="x" className="h-4 w-4" />

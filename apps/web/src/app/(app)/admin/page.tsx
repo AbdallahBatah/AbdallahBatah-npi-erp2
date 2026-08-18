@@ -327,7 +327,7 @@ export default function AdminPage() {
                 {org.logoDataUrl ? (
                   <img src={org.logoDataUrl} alt="" className="h-16 w-16 rounded-lg border border-slate-200 object-contain" />
                 ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-400">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-600">
                     {t('org.logo')}
                   </div>
                 )}
@@ -348,7 +348,7 @@ export default function AdminPage() {
                       </Btn>
                     )}
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-400">{t('org.logoHint')}</p>
+                  <p className="mt-1 text-[11px] text-slate-600">{t('org.logoHint')}</p>
                   {orgLogoErr && <p className="mt-1 text-[11px] text-rose-600">{orgLogoErr}</p>}
                 </div>
               </div>
@@ -466,7 +466,7 @@ export default function AdminPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {users.map((u) => (
-                <tr key={u.id} className={u.isActive ? '' : 'bg-slate-50/60 text-slate-400'}>
+                <tr key={u.id} className={u.isActive ? '' : 'bg-slate-50/60 text-slate-500'}>
                   <td className="td font-semibold text-slate-800">
                     {ar ? u.nameAr : u.nameEn}
                     {u.id === me?.id && <span className="ms-2 text-[10px] font-normal text-brand-600">({ar ? 'أنت' : 'you'})</span>}
@@ -524,7 +524,7 @@ export default function AdminPage() {
               {roles.map((r) => (
                 <tr key={r.id}>
                   <td className="td font-semibold text-slate-800">{roleName(r)}</td>
-                  <td className="td font-mono text-xs text-slate-400" dir="ltr">{r.key}</td>
+                  <td className="td font-mono text-xs text-slate-600" dir="ltr">{r.key}</td>
                   <td className="td">{r._count.users}</td>
                   <td className="td text-xs text-slate-500">
                     {r.permissions.length} {t('adm.role.permsCount')}
@@ -600,7 +600,7 @@ export default function AdminPage() {
                 value={uPassword}
                 onChange={(e) => setUPassword(e.target.value)}
               />
-              <span className="mt-1 block text-[11px] text-slate-400">{t('adm.user.passwordHint')}</span>
+              <span className="mt-1 block text-[11px] text-slate-600">{t('adm.user.passwordHint')}</span>
             </label>
           )}
           <label className="block">
@@ -646,7 +646,7 @@ export default function AdminPage() {
               value={pValue}
               onChange={(e) => setPValue(e.target.value)}
             />
-            <span className="mt-1 block text-[11px] text-slate-400">{t('adm.user.passwordHint')}</span>
+            <span className="mt-1 block text-[11px] text-slate-600">{t('adm.user.passwordHint')}</span>
           </label>
           <div className="flex justify-end gap-2">
             <Btn onClick={() => setPOpen(null)}>{t('common.cancel')}</Btn>
@@ -691,7 +691,7 @@ export default function AdminPage() {
                 value={rKey}
                 onChange={(e) => setRKey(e.target.value)}
               />
-              <span className="mt-1 block text-[11px] text-slate-400">{t('adm.role.keyHint')}</span>
+              <span className="mt-1 block text-[11px] text-slate-600">{t('adm.role.keyHint')}</span>
             </label>
           )}
 
@@ -702,7 +702,7 @@ export default function AdminPage() {
                 <button type="button" className="text-brand-600 hover:underline" onClick={() => setRPerms(new Set(catalog.map((p) => p.key)))}>
                   {t('adm.role.selectAll')}
                 </button>
-                <button type="button" className="text-slate-400 hover:underline" onClick={() => setRPerms(new Set())}>
+                <button type="button" className="text-slate-600 hover:underline" onClick={() => setRPerms(new Set())}>
                   {t('adm.role.clearAll')}
                 </button>
               </div>

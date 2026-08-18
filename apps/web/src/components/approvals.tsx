@@ -188,7 +188,7 @@ export function ApprovalInbox({ onDecided }: { onDecided?: () => void }) {
                   </td>
                   <td className="td text-xs">
                     {r.raisedBy ? (ar ? r.raisedBy.nameAr : r.raisedBy.nameEn) : '—'}
-                    <div className="text-[11px] text-slate-400">{formatDateTime(r.createdAt, locale)}</div>
+                    <div className="text-[11px] text-slate-600">{formatDateTime(r.createdAt, locale)}</div>
                   </td>
                   <td className="td">
                     <ApprovalChain request={r} />
@@ -347,7 +347,7 @@ export function ApprovalHistory() {
           </select>
         </label>
         {data && (
-          <span className="ms-auto text-[11px] text-slate-400">
+          <span className="ms-auto text-[11px] text-slate-600">
             {t('apr.total')}: {data.total}
           </span>
         )}
@@ -380,7 +380,7 @@ export function ApprovalHistory() {
                   <td className="td text-end font-semibold text-slate-800">{formatMoney(r.amount, locale)}</td>
                   <td className="td text-xs">
                     {r.raisedBy ? (ar ? r.raisedBy.nameAr : r.raisedBy.nameEn) : '—'}
-                    <div className="text-[11px] text-slate-400">{formatDateTime(r.createdAt, locale)}</div>
+                    <div className="text-[11px] text-slate-600">{formatDateTime(r.createdAt, locale)}</div>
                   </td>
                   <td className="td">
                     <StatusBadge status={r.status} />

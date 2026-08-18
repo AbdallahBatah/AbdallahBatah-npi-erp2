@@ -62,7 +62,7 @@ interface Invoice {
 function L({ ar, en }: { ar: string; en: string }) {
   return (
     <span>
-      {ar} <span className="text-slate-400">/ {en}</span>
+      {ar} <span className="text-slate-600">/ {en}</span>
     </span>
   );
 }
@@ -161,14 +161,14 @@ export default function InvoicePrintPage() {
         {/* Parties */}
         <div className="grid grid-cols-2 gap-6 border-b border-slate-200 py-4 text-sm">
           <div>
-            <p className="mb-1 text-xs font-bold text-slate-400">
+            <p className="mb-1 text-xs font-bold text-slate-600">
               <L ar={t('print.seller')} en="Seller" />
             </p>
             <p className="font-semibold text-slate-800">{org?.legalNameAr}</p>
             <p className="text-xs text-slate-500">{org?.legalNameEn}</p>
           </div>
           <div>
-            <p className="mb-1 text-xs font-bold text-slate-400">
+            <p className="mb-1 text-xs font-bold text-slate-600">
               <L ar={t('print.buyer')} en="Buyer" />
             </p>
             <p className="font-semibold text-slate-800">{cus?.nameAr}</p>
@@ -228,7 +228,7 @@ export default function InvoicePrintPage() {
               <tr key={l.id}>
                 <td className="py-2.5 pe-3">
                   <p className="text-slate-800">{l.descriptionAr}</p>
-                  <p className="text-xs text-slate-400">{l.descriptionEn}</p>
+                  <p className="text-xs text-slate-600">{l.descriptionEn}</p>
                 </td>
                 <td className="py-2.5 text-end">{Number(l.qty)}</td>
                 <td className="py-2.5 text-end">{formatMoney(l.unitPrice, locale)}</td>
@@ -265,11 +265,15 @@ export default function InvoicePrintPage() {
             {Number(inv.retentionAmount) > 0 && (
               <>
                 <div className="flex justify-between text-slate-500">
-                  <span>− {t('inv.retention')}</span>
+                  <span>
+                    − <L ar={t('inv.retention')} en="Retention" />
+                  </span>
                   <span>{formatMoney(inv.retentionAmount, locale)}</span>
                 </div>
                 <div className="flex justify-between border-t border-dashed border-slate-300 pt-1.5 font-bold">
-                  <span>{t('inv.netPayable')}</span>
+                  <span>
+                    <L ar={t('inv.netPayable')} en="Net payable" />
+                  </span>
                   <span>{formatMoney(inv.netPayable, locale)}</span>
                 </div>
               </>
@@ -278,7 +282,7 @@ export default function InvoicePrintPage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 border-t border-slate-200 pt-4 text-center text-[10px] leading-relaxed text-slate-400">
+        <div className="mt-8 border-t border-slate-200 pt-4 text-center text-[10px] leading-relaxed text-slate-600">
           <p>{t('print.generatedBy')}</p>
           {inv.eInvoice && (
             <p className="mt-1 font-mono" dir="ltr">

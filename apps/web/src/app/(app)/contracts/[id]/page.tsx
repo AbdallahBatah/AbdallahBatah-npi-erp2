@@ -156,7 +156,7 @@ export default function ContractDetailPage() {
           <tbody className="divide-y divide-slate-100">
             {contract.milestones.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-600">
                   {t('common.none')}
                 </td>
               </tr>
@@ -200,7 +200,7 @@ export default function ContractDetailPage() {
                         {t('contracts.viewInvoice')}
                       </Link>
                     ) : (
-                      <span className="text-xs text-slate-400">—</span>
+                      <span className="text-xs text-slate-600">—</span>
                     )}
                   </td>
                 </tr>

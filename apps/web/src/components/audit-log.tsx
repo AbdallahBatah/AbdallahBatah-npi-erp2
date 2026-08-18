@@ -287,7 +287,7 @@ export function AuditLogCard() {
                     {r.actor ? (
                       <span title={r.actor.email}>{ar ? r.actor.nameAr : r.actor.nameEn}</span>
                     ) : (
-                      <span className="text-slate-400">{t('audit.system')}</span>
+                      <span className="text-slate-600">{t('audit.system')}</span>
                     )}
                   </td>
                   <td className="td">
@@ -295,11 +295,11 @@ export function AuditLogCard() {
                   </td>
                   <td className="td">
                     {entityLabel(r.entityType)}
-                    <span className="ms-2 font-mono text-[10px] text-slate-400" dir="ltr">
+                    <span className="ms-2 font-mono text-[10px] text-slate-600" dir="ltr">
                       {r.entityId}
                     </span>
                   </td>
-                  <td className="td font-mono text-[10px] text-slate-400" dir="ltr">
+                  <td className="td font-mono text-[10px] text-slate-600" dir="ltr">
                     {r.ip ?? '—'}
                   </td>
                   <td className="td text-end">

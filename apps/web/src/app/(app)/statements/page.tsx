@@ -191,7 +191,7 @@ export default function StatementsPage() {
       {lines.map((l) => (
         <tr key={l.accountId} className="hover:bg-slate-50">
           <td className="td ps-8">
-            <span className="me-2 font-mono text-xs text-slate-400">{l.code}</span>
+            <span className="me-2 font-mono text-xs text-slate-600">{l.code}</span>
             {pick(l, 'name')}
           </td>
           <td className="td text-end">{formatMoney(l.amount, locale)}</td>
