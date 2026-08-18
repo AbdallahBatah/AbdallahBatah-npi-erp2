@@ -182,7 +182,7 @@ export default function LeadsPage() {
                         </Btn>
                       </Can>
                     ) : (
-                      <span className="text-xs text-success-600">{t('leads.converted')}</span>
+                      <span className="text-xs text-success-700">{t('leads.converted')}</span>
                     )}
                   </td>
                 </tr>

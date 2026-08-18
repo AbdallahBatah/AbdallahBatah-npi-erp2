@@ -135,17 +135,17 @@ export default function DashboardPage() {
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg bg-info-50 py-2">
               <p className="text-lg font-bold tabular-nums text-info-700">{num(wo?.open)}</p>
-              <p className="text-xs font-medium text-info-600">{t('wo.summary.open')}</p>
+              <p className="text-xs font-medium text-info-700">{t('wo.summary.open')}</p>
             </div>
             <div className="rounded-lg bg-warning-50 py-2">
               <p className="text-lg font-bold tabular-nums text-warning-700">{num(wo?.inProgress)}</p>
-              <p className="text-xs font-medium text-warning-600">{t('wo.summary.inProgress')}</p>
+              <p className="text-xs font-medium text-warning-700">{t('wo.summary.inProgress')}</p>
             </div>
             <div className={`rounded-lg py-2 ${(wo?.overdue ?? 0) > 0 ? 'bg-danger-50' : 'bg-success-50'}`}>
               <p className={`text-lg font-bold tabular-nums ${(wo?.overdue ?? 0) > 0 ? 'text-danger-700' : 'text-success-700'}`}>
                 {num(wo?.overdue)}
               </p>
-              <p className={`text-xs font-medium ${(wo?.overdue ?? 0) > 0 ? 'text-danger-600' : 'text-success-600'}`}>
+              <p className={`text-xs font-medium ${(wo?.overdue ?? 0) > 0 ? 'text-danger-700' : 'text-success-700'}`}>
                 {t('wo.summary.overdue')}
               </p>
             </div>
@@ -168,13 +168,13 @@ export default function DashboardPage() {
               <p className="mt-0.5 text-xs text-slate-500">{t('tel.actual14')}</p>
             </div>
             <div className="text-end">
-              <p className={`text-lg font-bold tabular-nums ${tel?.portfolioPr && tel.portfolioPr < 0.8 ? 'text-warning-600' : 'text-success-600'}`}>
+              <p className={`text-lg font-bold tabular-nums ${tel?.portfolioPr && tel.portfolioPr < 0.8 ? 'text-warning-700' : 'text-success-700'}`}>
                 {tel?.portfolioPr != null ? `${Math.round(tel.portfolioPr * 100)}%` : '—'}
               </p>
               <p className="mt-0.5 text-xs text-slate-500">PR</p>
             </div>
             <div className="text-end">
-              <p className={`text-lg font-bold tabular-nums ${(tel?.openAlerts ?? 0) > 0 ? 'text-danger-600' : 'text-success-600'}`}>
+              <p className={`text-lg font-bold tabular-nums ${(tel?.openAlerts ?? 0) > 0 ? 'text-danger-700' : 'text-success-700'}`}>
                 {num(tel?.openAlerts)}
               </p>
               <p className="mt-0.5 text-xs text-slate-500">{t('tel.openAlerts')}</p>

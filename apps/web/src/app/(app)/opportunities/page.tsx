@@ -184,7 +184,7 @@ export default function OpportunitiesPage() {
               ))}
             </select>
             {customers.length === 0 && (
-              <p className="mt-1 text-xs text-warning-600">
+              <p className="mt-1 text-xs text-warning-700">
                 {locale === 'ar' ? 'لا يوجد عملاء بعد — ' : 'No customers yet — '}
                 <a href="/customers" className="underline">
                   {locale === 'ar' ? 'أنشئ عميلاً أولاً' : 'create one first'}

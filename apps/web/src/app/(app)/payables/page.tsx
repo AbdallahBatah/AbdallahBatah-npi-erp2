@@ -181,7 +181,7 @@ export default function PayablesPage() {
                     {r.outstanding > 0.009 ? (
                       formatMoney(r.outstanding, locale)
                     ) : (
-                      <span className="text-success-600">{t('ap.settled')}</span>
+                      <span className="text-success-700">{t('ap.settled')}</span>
                     )}
                   </td>
                   <td className="td text-xs">

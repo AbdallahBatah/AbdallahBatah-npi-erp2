@@ -256,7 +256,7 @@ export default function LedgerPage() {
               <h3 className="font-semibold text-slate-800">{t('gl.tb.title')}</h3>
               {tb && (
                 <span
-                  className={`badge ${tb.isBalanced ? 'bg-success-50 text-success-700' : 'bg-danger-50 text-danger-600'}`}
+                  className={`badge ${tb.isBalanced ? 'bg-success-50 text-success-700' : 'bg-danger-50 text-danger-700'}`}
                 >
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${tb.isBalanced ? 'bg-success-500' : 'bg-danger-500'}`}

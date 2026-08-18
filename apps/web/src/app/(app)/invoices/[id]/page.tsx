@@ -363,7 +363,7 @@ export default function InvoiceDetailPage() {
                 ) : (
                   <>
                     {t('pay.outstanding')}:{' '}
-                    <b className={outstanding > 0.009 ? 'text-warning-600' : 'text-success-600'}>
+                    <b className={outstanding > 0.009 ? 'text-warning-700' : 'text-success-700'}>
                       {formatMoney(outstanding, locale)}
                     </b>
                   </>
@@ -453,7 +453,7 @@ export default function InvoiceDetailPage() {
                   </Btn>
                 </div>
               ) : inv.status === 'PAID' ? (
-                <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-success-600">
+                <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-success-700">
                   <Icon name="check-circle" className="h-4 w-4" />
                   {locale === 'ar' ? 'مدفوعة بالكامل' : 'Fully paid'}
                 </p>

@@ -190,7 +190,7 @@ export default function PoDetailPage() {
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-500">{t('po.vat')}</p>
-          <p className="mt-1 font-medium text-warning-600">{formatMoney(po.vatAmount, locale)}</p>
+          <p className="mt-1 font-medium text-warning-700">{formatMoney(po.vatAmount, locale)}</p>
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-500">{t('po.total')}</p>
@@ -224,7 +224,7 @@ export default function PoDetailPage() {
                 <td className="td text-xs">{l.wbsElement ? `${l.wbsElement.code}` : '—'}</td>
                 <td className="td-num">{Number(l.qty)}</td>
                 <td className="td-num">
-                  <span className={Number(l.receivedQty) >= Number(l.qty) ? 'text-success-600' : ''}>
+                  <span className={Number(l.receivedQty) >= Number(l.qty) ? 'text-success-700' : ''}>
                     {Number(l.receivedQty)}
                   </span>
                 </td>
@@ -346,7 +346,7 @@ export default function PoDetailPage() {
                         const dups = list.filter((s, i) => list.indexOf(s) !== i);
                         return (
                           <p className="mt-1 text-xs">
-                            <span className={list.length === need ? 'text-success-600' : 'text-warning-600'}>
+                            <span className={list.length === need ? 'text-success-700' : 'text-warning-700'}>
                               {t('po.serialCount')}: {list.length} / {need}
                             </span>
                             {dups.length > 0 && (
