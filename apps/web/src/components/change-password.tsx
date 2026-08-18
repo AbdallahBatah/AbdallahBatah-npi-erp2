@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { useToast } from '@/components/toast';
-import { Modal } from '@/components/ui';
+import { Field, Modal } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { Btn } from '@/components/ui';
 
@@ -24,6 +24,8 @@ export function ChangePasswordButton() {
     setNext('');
     setConfirm('');
   }
+
+  const mismatch = confirm.length > 0 && next !== confirm;
 
   async function submit() {
     if (next !== confirm) {
@@ -52,7 +54,12 @@ export function ChangePasswordButton() {
         <Icon name="key" className="h-4 w-4" />
       </button>
 
-      <Modal open={open} title={t('pw.change')} onClose={() => { reset(); setOpen(false); }}>
+      <Modal
+        open={open}
+        title={t('pw.change')}
+        onClose={() => { reset(); setOpen(false); }}
+        dirty={!!current || !!next || !!confirm}
+      >
         <form
           className="grid gap-4"
           onSubmit={(ev) => {
@@ -60,8 +67,7 @@ export function ChangePasswordButton() {
             submit();
           }}
         >
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-600">{t('pw.current')}</span>
+          <Field label={t('pw.current')}>
             <input
               type="password"
               className="input"
@@ -70,9 +76,8 @@ export function ChangePasswordButton() {
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
             />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-600">{t('pw.new')}</span>
+          </Field>
+          <Field label={t('pw.new')}>
             <input
               type="password"
               className="input"
@@ -82,9 +87,10 @@ export function ChangePasswordButton() {
               value={next}
               onChange={(e) => setNext(e.target.value)}
             />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-600">{t('pw.confirm')}</span>
+          </Field>
+          {/* The mismatch belongs next to the field that is wrong, not in a
+              toast that appears after you press Save. */}
+          <Field label={t('pw.confirm')} error={mismatch ? t('pw.mismatch') : undefined}>
             <input
               type="password"
               className="input"
@@ -94,7 +100,7 @@ export function ChangePasswordButton() {
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
             />
-          </label>
+          </Field>
           <div className="flex justify-end gap-2">
             <Btn onClick={() => { reset(); setOpen(false); }}>{t('common.cancel')}</Btn>
             <Btn type="submit" variant="primary" busy={busy('changePw')} disabled={busy()}>

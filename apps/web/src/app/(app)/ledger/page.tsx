@@ -55,11 +55,13 @@ interface GeneralLedger {
 }
 
 const TYPE_STYLE: Record<AccountType, string> = {
-  ASSET: 'bg-sky-50 text-sky-700',
-  LIABILITY: 'bg-amber-50 text-amber-700',
+  ASSET: 'bg-info-50 text-info-700',
+  LIABILITY: 'bg-warning-50 text-warning-700',
   EQUITY: 'bg-violet-50 text-violet-700',
-  REVENUE: 'bg-emerald-50 text-emerald-700',
-  EXPENSE: 'bg-rose-50 text-rose-600',
+  REVENUE: 'bg-success-50 text-success-700',
+  // Not `danger`: an expense account is a normal account, not a problem.
+  // `danger` on this screen is reserved for a genuinely unbalanced trial balance.
+  EXPENSE: 'bg-slate-100 text-slate-600',
 };
 
 const PAGE = 50;
@@ -128,7 +130,7 @@ export default function LedgerPage() {
   const balanceCell = (v: number) => (
     <>
       {formatMoney(Math.abs(v), locale)}
-      <span className="ms-1 text-[11px] text-slate-400">
+      <span className="ms-1 text-xs text-slate-500">
         {v === 0 ? '' : v > 0 ? t('gl.debit') : t('gl.credit')}
       </span>
     </>
@@ -248,22 +250,22 @@ export default function LedgerPage() {
 
       {/* Trial balance */}
       <div className="card table-sticky">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 card-title">
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-slate-800">{t('gl.tb.title')}</h3>
               {tb && (
                 <span
-                  className={`badge ${tb.isBalanced ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}
+                  className={`badge ${tb.isBalanced ? 'bg-success-50 text-success-700' : 'bg-danger-50 text-danger-600'}`}
                 >
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${tb.isBalanced ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                    className={`h-1.5 w-1.5 rounded-full ${tb.isBalanced ? 'bg-success-500' : 'bg-danger-500'}`}
                   />
                   {tb.isBalanced ? t('gl.tb.balanced') : t('gl.tb.unbalanced')}
                 </span>
               )}
             </div>
-            <p className="mt-1 text-xs text-slate-400">{t('gl.tb.hint')}</p>
+            <p className="mt-1 text-xs text-slate-500">{t('gl.tb.hint')}</p>
           </div>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-xs text-slate-500">
@@ -278,13 +280,13 @@ export default function LedgerPage() {
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('gl.accountNo')}</th>
-              <th className="th">{t('gl.account')}</th>
-              <th className="th">{t('gl.type')}</th>
-              <th className="th text-end">{t('gl.opening')}</th>
-              <th className="th text-end">{t('gl.debit')}</th>
-              <th className="th text-end">{t('gl.credit')}</th>
-              <th className="th text-end">{t('gl.closing')}</th>
+              <th scope="col" className="th">{t('gl.accountNo')}</th>
+              <th scope="col" className="th">{t('gl.account')}</th>
+              <th scope="col" className="th">{t('gl.type')}</th>
+              <th scope="col" className="th text-end">{t('gl.opening')}</th>
+              <th scope="col" className="th text-end">{t('gl.debit')}</th>
+              <th scope="col" className="th text-end">{t('gl.credit')}</th>
+              <th scope="col" className="th text-end">{t('gl.closing')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -296,8 +298,16 @@ export default function LedgerPage() {
               visibleRows.map((r) => (
                 <tr
                   key={r.accountId}
+                  tabIndex={0}
+                  aria-current={r.accountId === accountId ? 'true' : undefined}
                   onClick={() => openAccount(r.accountId)}
-                  className={`cursor-pointer hover:bg-slate-50 ${
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      openAccount(r.accountId);
+                    }
+                  }}
+                  className={`cursor-pointer hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400 ${
                     r.accountId === accountId ? 'bg-brand-50/60' : ''
                   }`}
                 >
@@ -306,16 +316,10 @@ export default function LedgerPage() {
                   <td className="td">
                     <span className={`badge ${TYPE_STYLE[r.accountType]}`}>{typeLabel(r.accountType)}</span>
                   </td>
-                  <td className="td text-end text-slate-500">{balanceCell(r.opening)}</td>
-                  <td className="td text-end">{r.debit ? formatMoney(r.debit, locale) : '—'}</td>
-                  <td className="td text-end">{r.credit ? formatMoney(r.credit, locale) : '—'}</td>
-                  <td
-                    className={`td text-end font-medium ${
-                      r.closing >= 0 ? 'text-slate-800' : 'text-amber-700'
-                    }`}
-                  >
-                    {balanceCell(r.closing)}
-                  </td>
+                  <td className="td-num text-slate-500">{balanceCell(r.opening)}</td>
+                  <td className="td-num">{r.debit ? formatMoney(r.debit, locale) : '—'}</td>
+                  <td className="td-num">{r.credit ? formatMoney(r.credit, locale) : '—'}</td>
+                  <td className="td-num font-medium text-slate-800">{balanceCell(r.closing)}</td>
                 </tr>
               ))
             )}
@@ -326,10 +330,10 @@ export default function LedgerPage() {
                 <td className="td text-xs font-bold text-slate-600" colSpan={3}>
                   {t('fin.total')}
                 </td>
-                <td className="td text-end text-slate-500">{formatMoney(tb.totals.opening, locale)}</td>
-                <td className="td text-end font-bold">{formatMoney(tb.totals.debit, locale)}</td>
-                <td className="td text-end font-bold">{formatMoney(tb.totals.credit, locale)}</td>
-                <td className="td text-end text-xs text-slate-500">
+                <td className="td-num text-slate-500">{formatMoney(tb.totals.opening, locale)}</td>
+                <td className="td-num font-bold">{formatMoney(tb.totals.debit, locale)}</td>
+                <td className="td-num font-bold">{formatMoney(tb.totals.credit, locale)}</td>
+                <td className="td-num text-xs text-slate-500">
                   {formatMoney(tb.totals.closingDebit, locale)} {t('gl.debit')} /{' '}
                   {formatMoney(tb.totals.closingCredit, locale)} {t('gl.credit')}
                 </td>
@@ -341,7 +345,7 @@ export default function LedgerPage() {
 
       {/* General ledger for the selected account */}
       <div className="card mt-6 overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 card-title">
           <div>
             <h3 className="font-semibold text-slate-800">
               {t('gl.detail.title')}
@@ -352,7 +356,7 @@ export default function LedgerPage() {
               )}
             </h3>
             {gl && (
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-500">
                 {t('gl.detail.entries')}: {gl.total} · {t('gl.opening')}: {balanceCell(gl.opening)} ·{' '}
                 {t('gl.debit')}: {formatMoney(gl.periodDebit, locale)} · {t('gl.credit')}:{' '}
                 {formatMoney(gl.periodCredit, locale)} · {t('gl.closing')}: {balanceCell(gl.closing)}
@@ -378,12 +382,12 @@ export default function LedgerPage() {
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="th">{t('common.date')}</th>
-                  <th className="th">{t('gl.detail.source')}</th>
-                  <th className="th">{t('gl.detail.memo')}</th>
-                  <th className="th text-end">{t('gl.debit')}</th>
-                  <th className="th text-end">{t('gl.credit')}</th>
-                  <th className="th text-end">{t('gl.detail.balance')}</th>
+                  <th scope="col" className="th">{t('common.date')}</th>
+                  <th scope="col" className="th">{t('gl.detail.source')}</th>
+                  <th scope="col" className="th">{t('gl.detail.memo')}</th>
+                  <th scope="col" className="th text-end">{t('gl.debit')}</th>
+                  <th scope="col" className="th text-end">{t('gl.credit')}</th>
+                  <th scope="col" className="th text-end">{t('gl.detail.balance')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -395,7 +399,7 @@ export default function LedgerPage() {
                       <td className="td text-xs text-slate-500" colSpan={5}>
                         {page === 0 ? t('gl.detail.openingRow') : t('gl.detail.carried')}
                       </td>
-                      <td className="td text-end text-xs font-medium text-slate-600">
+                      <td className="td-num text-xs font-medium text-slate-600">
                         {balanceCell(page === 0 ? gl.opening : gl.pageOpening)}
                       </td>
                     </tr>
@@ -408,10 +412,10 @@ export default function LedgerPage() {
                           <td className="td">
                             <span className="text-xs text-slate-700">{sourceLabel(r.sourceType)}</span>
                             {r.invoiceCode && (
-                              <span className="ms-1 font-mono text-[11px] text-slate-400">{r.invoiceCode}</span>
+                              <span className="ms-1 font-mono text-xs text-slate-500">{r.invoiceCode}</span>
                             )}
                             {r.isReversal && (
-                              <span className="ms-1 badge bg-amber-50 text-amber-700">
+                              <span className="ms-1 badge bg-warning-50 text-warning-700">
                                 {t('gl.detail.reversal')}
                               </span>
                             )}
@@ -419,9 +423,9 @@ export default function LedgerPage() {
                           <td className="td text-xs text-slate-500">
                             {translateMemo(r.memo, locale) || '—'}
                           </td>
-                          <td className="td text-end">{r.debit ? formatMoney(r.debit, locale) : '—'}</td>
-                          <td className="td text-end">{r.credit ? formatMoney(r.credit, locale) : '—'}</td>
-                          <td className="td text-end font-medium">{balanceCell(r.balance)}</td>
+                          <td className="td-num">{r.debit ? formatMoney(r.debit, locale) : '—'}</td>
+                          <td className="td-num">{r.credit ? formatMoney(r.credit, locale) : '—'}</td>
+                          <td className="td-num font-medium">{balanceCell(r.balance)}</td>
                         </tr>
                       ))
                     )}

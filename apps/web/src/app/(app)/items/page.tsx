@@ -83,12 +83,12 @@ export default function ItemsPage() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('items.sku')}</th>
-              <th className="th">{t('common.name')}</th>
-              <th className="th">{t('items.category')}</th>
-              <th className="th">{t('items.uom')}</th>
-              <th className="th">{t('items.unitCost')}</th>
-              <th className="th">{t('items.serialised')}</th>
+              <th scope="col" className="th">{t('items.sku')}</th>
+              <th scope="col" className="th">{t('common.name')}</th>
+              <th scope="col" className="th">{t('items.category')}</th>
+              <th scope="col" className="th">{t('items.uom')}</th>
+              <th scope="col" className="th">{t('items.unitCost')}</th>
+              <th scope="col" className="th">{t('items.serialised')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -108,7 +108,7 @@ export default function ItemsPage() {
                     {it.isSerialised ? (
                       <Icon name="check" className="h-4 w-4 text-success-600" />
                     ) : (
-                      <span className="text-slate-300">—</span>
+                      <span className="text-slate-500">—</span>
                     )}
                   </td>
                 </tr>
@@ -119,7 +119,7 @@ export default function ItemsPage() {
       </div>
 
       <Modal open={open} title={t('items.new')} onClose={() => setOpen(false)}>
-        <form onSubmit={create} className="grid grid-cols-2 gap-4">
+        <form onSubmit={create} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label={t('items.sku')}>
             <input name="sku" className="input" required />
           </Field>
@@ -148,7 +148,7 @@ export default function ItemsPage() {
             <input name="isSerialised" type="checkbox" />
             {t('items.serialised')}
           </label>
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="flex justify-end gap-2 sm:col-span-2">
             <Btn onClick={() => setOpen(false)}>{t('common.cancel')}</Btn>
             <Btn type="submit" variant="primary" busy={busy('create')} disabled={busy()}>
               {t('common.create')}

@@ -71,7 +71,19 @@ export default function WorkOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [wo, setWo] = useState<Wo | null>(null);
-  const [tab, setTab] = useState('parts');
+  const WO_TABS = ['parts', 'labour', 'checklist', 'files'];
+  const [tab, setTabState] = useState('parts');
+
+  useEffect(() => {
+    const h = window.location.hash.slice(1);
+    if (WO_TABS.includes(h)) setTabState(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setTab = (k: string) => {
+    setTabState(k);
+    window.history.replaceState(null, '', `#${k}`);
+  };
   const [techs, setTechs] = useState<Tech[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [locations, setLocations] = useState<Loc[]>([]);
@@ -162,7 +174,7 @@ export default function WorkOrderDetailPage() {
                 </Btn>
               )}
               {!['CLOSED', 'CANCELLED'].includes(wo.status) && (
-                <Btn sm icon="x" className="!text-rose-600" busy={busy('cancel')} disabled={busy()} onClick={cancelWo}>
+                <Btn sm icon="x" variant="danger" busy={busy('cancel')} disabled={busy()} onClick={cancelWo}>
                   {t('wo.cancel')}
                 </Btn>
               )}
@@ -180,13 +192,13 @@ export default function WorkOrderDetailPage() {
             {optionLabel(enums?.woTypes, wo.woType, locale)} · {optionLabel(enums?.woOrigins, wo.origin, locale)}
           </p>
           {wo.maintenancePlan && (
-            <p className="mt-1 text-xs text-slate-400">{wo.maintenancePlan.code} — {pick(wo.maintenancePlan, 'name')}</p>
+            <p className="mt-1 text-xs text-slate-500">{wo.maintenancePlan.code} — {pick(wo.maintenancePlan, 'name')}</p>
           )}
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-500">{t('wo.asset')}</p>
           <p className="mt-1 text-sm font-medium">{wo.asset ? `${wo.asset.code} · ${pick(wo.asset, 'name')}` : '—'}</p>
-          {wo.project && <p className="mt-1 text-xs text-slate-400">{wo.project.code}</p>}
+          {wo.project && <p className="mt-1 text-xs text-slate-500">{wo.project.code}</p>}
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-500">{t('wo.assignee')}</p>
@@ -211,15 +223,15 @@ export default function WorkOrderDetailPage() {
               </Btn>
             </div>
           ) : (
-            <p className="mt-1 text-sm text-slate-400">—</p>
+            <p className="mt-1 text-sm text-slate-500">—</p>
           )}
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-500">{t('wo.slaDue')}</p>
-          <p className={`mt-1 text-sm font-medium ${wo.slaDueAt && new Date(wo.slaDueAt) < new Date() && !['CLOSED', 'COMPLETED', 'CANCELLED'].includes(wo.status) ? 'text-rose-600' : ''}`}>
+          <p className={`mt-1 text-sm font-medium ${wo.slaDueAt && new Date(wo.slaDueAt) < new Date() && !['CLOSED', 'COMPLETED', 'CANCELLED'].includes(wo.status) ? 'text-danger-600' : ''}`}>
             {wo.slaDueAt ? formatDate(wo.slaDueAt, locale) : '—'}
           </p>
-          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             {wo.startedAt && (
               <span className="inline-flex items-center gap-1">
                 <Icon name="play" className="h-3 w-3" />
@@ -255,8 +267,8 @@ export default function WorkOrderDetailPage() {
       <div className="grid grid-cols-1 gap-6">
         {/* Parts */}
         <div className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-            <h3 className="text-sm font-semibold text-slate-800">{t('wo.parts')}</h3>
+          <div className="card-title flex items-center justify-between">
+            <h3 className="font-bold">{t('wo.parts')}</h3>
             <span className="text-xs text-slate-500">
               {t('wo.partsCost')}: <b className="text-brand-700">{formatMoney(wo.partsCost, locale)}</b>
             </span>
@@ -264,10 +276,10 @@ export default function WorkOrderDetailPage() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('po.item')}</th>
-                <th className="th text-end">{t('po.qty')}</th>
-                <th className="th text-end">{t('items.unitCost')}</th>
-                <th className="th text-end">{t('common.total')}</th>
+                <th scope="col" className="th">{t('po.item')}</th>
+                <th scope="col" className="th text-end">{t('po.qty')}</th>
+                <th scope="col" className="th text-end">{t('items.unitCost')}</th>
+                <th scope="col" className="th text-end">{t('common.total')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -277,12 +289,12 @@ export default function WorkOrderDetailPage() {
                 wo.parts.map((p) => (
                   <tr key={p.id}>
                     <td className="td">
-                      <span className="font-mono text-xs text-slate-400">{p.item.sku}</span>{' '}
+                      <span className="font-mono text-xs text-slate-500">{p.item.sku}</span>{' '}
                       {pick(p.item, 'name')}
                     </td>
-                    <td className="td text-end">{Number(p.qty)} {p.item.uom}</td>
-                    <td className="td text-end">{formatMoney(p.unitCost, locale)}</td>
-                    <td className="td text-end">{formatMoney(p.totalCost, locale)}</td>
+                    <td className="td-num">{Number(p.qty)} {p.item.uom}</td>
+                    <td className="td-num">{formatMoney(p.unitCost, locale)}</td>
+                    <td className="td-num">{formatMoney(p.totalCost, locale)}</td>
                   </tr>
                 ))
               )}
@@ -296,8 +308,8 @@ export default function WorkOrderDetailPage() {
       <div className="grid grid-cols-1 gap-6">
         {/* FSM-07: labour hours */}
         <div className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-            <h3 className="text-sm font-semibold text-slate-800">{t('time.title')}</h3>
+          <div className="card-title flex items-center justify-between">
+            <h3 className="font-bold">{t('time.title')}</h3>
             <span className="text-xs text-slate-500">
               {t('time.labourCost')}: <b className="text-brand-700">{formatMoney(wo.labourCost, locale)}</b>
             </span>
@@ -305,11 +317,11 @@ export default function WorkOrderDetailPage() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('time.tech')}</th>
-                <th className="th text-end">{t('time.hours')}</th>
-                <th className="th text-end">{t('time.rate')}</th>
-                <th className="th text-end">{t('common.total')}</th>
-                <th className="th">{t('common.date')}</th>
+                <th scope="col" className="th">{t('time.tech')}</th>
+                <th scope="col" className="th text-end">{t('time.hours')}</th>
+                <th scope="col" className="th text-end">{t('time.rate')}</th>
+                <th scope="col" className="th text-end">{t('common.total')}</th>
+                <th scope="col" className="th">{t('common.date')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -319,9 +331,9 @@ export default function WorkOrderDetailPage() {
                 wo.timesheets.map((ts) => (
                   <tr key={ts.id}>
                     <td className="td text-xs">{pick(ts.user, 'name')}</td>
-                    <td className="td text-end">{Number(ts.hours)}</td>
-                    <td className="td text-end">{formatMoney(ts.hourlyRate, locale)}</td>
-                    <td className="td text-end font-medium">{formatMoney(ts.amount, locale)}</td>
+                    <td className="td-num">{Number(ts.hours)}</td>
+                    <td className="td-num">{formatMoney(ts.hourlyRate, locale)}</td>
+                    <td className="td-num font-medium">{formatMoney(ts.amount, locale)}</td>
                     <td className="td text-xs text-slate-500">{formatDate(ts.workDate, locale)}</td>
                   </tr>
                 ))
@@ -364,9 +376,9 @@ export default function WorkOrderDetailPage() {
       <div className="grid grid-cols-1 gap-6">
         {/* Checklist */}
         <div className="card overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+          <h2 className="card-title">
             {t('wo.checklist')}
-          </div>
+          </h2>
           {wo.checklistJson && wo.checklistJson.length > 0 ? (
             <ul className="divide-y divide-slate-100">
               {wo.checklistJson.map((c, i) => (
@@ -374,21 +386,21 @@ export default function WorkOrderDetailPage() {
                   <span className={`flex items-center gap-2 ${c.done ? 'text-slate-500 line-through' : 'text-slate-700'}`}>
                     <Icon
                       name={c.done ? 'square-check' : 'square'}
-                      className={`h-4 w-4 shrink-0 ${c.done ? 'text-success-500' : 'text-slate-300'}`}
+                      className={`h-4 w-4 shrink-0 ${c.done ? 'text-success-500' : 'text-slate-500'}`}
                     />
                     {locale === 'ar' ? c.labelAr ?? c.label : c.labelEn ?? c.label}
                     {c.mandatory && (
-                      <span className="ms-2 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600">
+                      <span className="ms-2 rounded bg-danger-50 px-1.5 py-0.5 text-xs font-semibold text-danger-600">
                         {locale === 'ar' ? 'إلزامي' : 'Required'}
                       </span>
                     )}
                   </span>
-                  {c.note && <span className="text-xs text-slate-400">{c.note}</span>}
+                  {c.note && <span className="text-xs text-slate-500">{c.note}</span>}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="px-5 py-8 text-center text-sm text-slate-400">{t('common.none')}</p>
+            <p className="px-5 py-8 text-center text-sm text-slate-500">{t('common.none')}</p>
           )}
         </div>
       </div>
@@ -443,7 +455,7 @@ export default function WorkOrderDetailPage() {
 
       {/* Complete modal (checklist) */}
       <Modal open={cOpen} title={t('wo.complete')} onClose={() => setCOpen(false)}>
-        <p className="mb-3 text-xs text-slate-400">{t('wo.checklistHint')}</p>
+        <p className="mb-3 text-xs text-slate-500">{t('wo.checklistHint')}</p>
         <div className="space-y-2">
           {checklist.map((c, i) => (
             <label key={i} className="flex items-center gap-2 text-sm">
@@ -454,7 +466,7 @@ export default function WorkOrderDetailPage() {
               />
               {locale === 'ar' ? c.labelAr ?? c.label : c.labelEn ?? c.label}
               {c.mandatory && (
-                <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600">
+                <span className="rounded bg-danger-50 px-1.5 py-0.5 text-xs font-semibold text-danger-600">
                   {locale === 'ar' ? 'إلزامي' : 'Required'}
                 </span>
               )}
@@ -473,7 +485,7 @@ export default function WorkOrderDetailPage() {
                 }
               }}
             />
-            <span className="text-xs text-slate-400">↵</span>
+            <span className="text-xs text-slate-500">↵</span>
           </div>
         </div>
         <div className="mt-4 flex justify-end gap-2">

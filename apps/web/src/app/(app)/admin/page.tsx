@@ -14,7 +14,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
-import { PageHeader, LoadError, Modal, useConfirm, Btn, Tabs, PageSkeleton } from '@/components/ui';
+import { PageHeader, LoadError, Modal, Field, StatusBadge, useConfirm, Btn, Tabs, PageSkeleton } from '@/components/ui';
 import { AuditLogCard } from '@/components/audit-log';
 import { ApprovalMatrixCard } from '@/components/approval-matrix';
 
@@ -66,7 +66,24 @@ export default function AdminPage() {
   const approvalManage = can('admin.approval.manage');
 
   type AdminTab = 'users' | 'roles' | 'matrix' | 'org' | 'audit';
-  const [tab, setTab] = useState<AdminTab>('users');
+  const ADMIN_TABS: AdminTab[] = ['users', 'roles', 'matrix', 'org', 'audit'];
+  const [tab, setTabState] = useState<AdminTab>('users');
+
+  // The five sections of the densest screen in the product used to live only
+  // in component state: the audit log could not be bookmarked or linked to a
+  // colleague, and a refresh after saving org settings dumped you back on the
+  // user list. The hash carries it without forcing a Suspense boundary the
+  // way useSearchParams would.
+  useEffect(() => {
+    const h = window.location.hash.slice(1) as AdminTab;
+    if (ADMIN_TABS.includes(h)) setTabState(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setTab = (k: AdminTab) => {
+    setTabState(k);
+    window.history.replaceState(null, '', `#${k}`);
+  };
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [roles, setRoles] = useState<RoleRow[] | null>(null);
   const [catalog, setCatalog] = useState<PermMeta[]>([]);
@@ -327,7 +344,7 @@ export default function AdminPage() {
                 {org.logoDataUrl ? (
                   <img src={org.logoDataUrl} alt="" className="h-16 w-16 rounded-lg border border-slate-200 object-contain" />
                 ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-400">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-500">
                     {t('org.logo')}
                   </div>
                 )}
@@ -343,87 +360,79 @@ export default function AdminPage() {
                       />
                     </label>
                     {org.logoDataUrl && (
-                      <Btn sm icon="trash" className="!text-rose-600" onClick={removeLogo}>
+                      <Btn sm icon="trash" variant="danger" onClick={removeLogo}>
                         {t('org.logoRemove')}
                       </Btn>
                     )}
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-400">{t('org.logoHint')}</p>
-                  {orgLogoErr && <p className="mt-1 text-[11px] text-rose-600">{orgLogoErr}</p>}
+                  <p className="mt-1 text-xs text-slate-500">{t('org.logoHint')}</p>
+                  {orgLogoErr && <p className="mt-1 text-xs text-danger-600">{orgLogoErr}</p>}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="mb-1 block text-sm text-slate-600">{t('org.legalNameAr')}</span>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label={t('org.legalNameAr')}>
                   <input
                     className="input"
                     required
                     value={org.legalNameAr}
                     onChange={(e) => setOrg({ ...org, legalNameAr: e.target.value })}
                   />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm text-slate-600">{t('org.legalNameEn')}</span>
+                </Field>
+                <Field label={t('org.legalNameEn')}>
                   <input
                     className="input"
                     dir="ltr"
                     value={org.legalNameEn}
                     onChange={(e) => setOrg({ ...org, legalNameEn: e.target.value })}
                   />
-                </label>
+                </Field>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="mb-1 block text-sm text-slate-600">{t('org.vatNumber')}</span>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label={t('org.vatNumber')}>
                   <input
                     className="input font-mono"
                     dir="ltr"
                     value={org.vatNumber ?? ''}
                     onChange={(e) => setOrg({ ...org, vatNumber: e.target.value })}
                   />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm text-slate-600">{t('org.crNumber')}</span>
+                </Field>
+                <Field label={t('org.crNumber')}>
                   <input
                     className="input font-mono"
                     dir="ltr"
                     value={org.crNumber ?? ''}
                     onChange={(e) => setOrg({ ...org, crNumber: e.target.value })}
                   />
-                </label>
+                </Field>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="mb-1 block text-sm text-slate-600">{t('org.addressAr')}</span>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label={t('org.addressAr')}>
                   <input
                     className="input"
                     value={org.addressAr ?? ''}
                     onChange={(e) => setOrg({ ...org, addressAr: e.target.value })}
                   />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm text-slate-600">{t('org.addressEn')}</span>
+                </Field>
+                <Field label={t('org.addressEn')}>
                   <input
                     className="input"
                     dir="ltr"
                     value={org.addressEn ?? ''}
                     onChange={(e) => setOrg({ ...org, addressEn: e.target.value })}
                   />
-                </label>
+                </Field>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <label className="block">
-                  <span className="mb-1 block text-sm text-slate-600">{t('org.phone')}</span>
+                <Field label={t('org.phone')}>
                   <input
                     className="input"
                     dir="ltr"
                     value={org.phone ?? ''}
                     onChange={(e) => setOrg({ ...org, phone: e.target.value })}
                   />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm text-slate-600">{t('org.email')}</span>
+                </Field>
+                <Field label={t('org.email')}>
                   <input
                     type="email"
                     className="input"
@@ -431,16 +440,15 @@ export default function AdminPage() {
                     value={org.email ?? ''}
                     onChange={(e) => setOrg({ ...org, email: e.target.value })}
                   />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm text-slate-600">{t('org.website')}</span>
+                </Field>
+                <Field label={t('org.website')}>
                   <input
                     className="input"
                     dir="ltr"
                     value={org.website ?? ''}
                     onChange={(e) => setOrg({ ...org, website: e.target.value })}
                   />
-                </label>
+                </Field>
               </div>
 
               <div className="flex justify-end">
@@ -456,36 +464,32 @@ export default function AdminPage() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('adm.user.name')}</th>
-                <th className="th">{t('adm.user.email')}</th>
-                <th className="th">{t('adm.user.role')}</th>
-                <th className="th">{t('adm.user.status')}</th>
-                <th className="th">{t('common.date')}</th>
-                <th className="th text-end">{t('common.actions')}</th>
+                <th scope="col" className="th">{t('adm.user.name')}</th>
+                <th scope="col" className="th">{t('adm.user.email')}</th>
+                <th scope="col" className="th">{t('adm.user.role')}</th>
+                <th scope="col" className="th">{t('adm.user.status')}</th>
+                <th scope="col" className="th">{t('common.date')}</th>
+                <th scope="col" className="th">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {users.map((u) => (
-                <tr key={u.id} className={u.isActive ? '' : 'bg-slate-50/60 text-slate-400'}>
+                <tr
+                  key={u.id}
+                  className={u.isActive ? '' : 'bg-slate-50/60 [&_td]:text-slate-500'}
+                >
                   <td className="td font-semibold text-slate-800">
                     {ar ? u.nameAr : u.nameEn}
-                    {u.id === me?.id && <span className="ms-2 text-[10px] font-normal text-brand-600">({ar ? 'أنت' : 'you'})</span>}
+                    {u.id === me?.id && <span className="ms-2 text-xs font-normal text-brand-600">({ar ? 'أنت' : 'you'})</span>}
                   </td>
                   <td className="td" dir="ltr">{u.email}</td>
                   <td className="td">{roleName(u.role)}</td>
                   <td className="td">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        u.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full ${u.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                      {u.isActive ? t('adm.user.active') : t('adm.user.inactive')}
-                    </span>
+                    <StatusBadge status={u.isActive ? 'ACTIVE' : 'SUSPENDED'} />
                   </td>
                   <td className="td text-xs">{formatDate(u.createdAt, locale)}</td>
                   <td className="td">
-                    <div className="flex justify-end gap-1.5 text-[11px]">
+                    <div className="flex flex-wrap gap-1.5">
                       <Btn sm onClick={() => openEditUser(u)}>{t('common.edit')}</Btn>
                       <Btn sm icon="key" onClick={() => { setPOpen(u); setPValue(''); }}>
                         {t('adm.user.resetPass')}
@@ -493,7 +497,7 @@ export default function AdminPage() {
                       {u.id !== me?.id && (
                         <Btn
                           sm
-                          className={u.isActive ? '!text-rose-600' : '!text-emerald-600'}
+                          variant={u.isActive ? 'danger' : 'success'}
                           busy={busy(`active:${u.id}`)}
                           disabled={busy()}
                           onClick={() => toggleActive(u)}
@@ -513,30 +517,30 @@ export default function AdminPage() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('adm.role.name')}</th>
-                <th className="th">{t('adm.role.key')}</th>
-                <th className="th">{t('adm.role.users')}</th>
-                <th className="th">{t('adm.role.perms')}</th>
-                <th className="th text-end">{t('common.actions')}</th>
+                <th scope="col" className="th">{t('adm.role.name')}</th>
+                <th scope="col" className="th">{t('adm.role.key')}</th>
+                <th scope="col" className="th">{t('adm.role.users')}</th>
+                <th scope="col" className="th">{t('adm.role.perms')}</th>
+                <th scope="col" className="th">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {roles.map((r) => (
                 <tr key={r.id}>
                   <td className="td font-semibold text-slate-800">{roleName(r)}</td>
-                  <td className="td font-mono text-xs text-slate-400" dir="ltr">{r.key}</td>
+                  <td className="td font-mono text-xs text-slate-500" dir="ltr">{r.key}</td>
                   <td className="td">{r._count.users}</td>
                   <td className="td text-xs text-slate-500">
                     {r.permissions.length} {t('adm.role.permsCount')}
                   </td>
                   <td className="td">
-                    <div className="flex justify-end gap-1.5 text-[11px]">
+                    <div className="flex flex-wrap gap-1.5">
                       <Btn sm onClick={() => openEditRole(r)}>{t('common.edit')}</Btn>
                       {r._count.users === 0 && (
                         <Btn
                           sm
                           icon="trash"
-                          className="!text-rose-600"
+                          variant="danger"
                           busy={busy(`delRole:${r.id}`)}
                           disabled={busy()}
                           onClick={() => deleteRole(r)}
@@ -566,18 +570,15 @@ export default function AdminPage() {
             submitUser();
           }}
         >
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="mb-1 block text-sm text-slate-600">{t('adm.user.name')} (عربي)</span>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label={`${t('adm.user.name')} (عربي)`}>
               <input className="input" required={!uNameEn.trim()} value={uNameAr} onChange={(e) => setUNameAr(e.target.value)} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm text-slate-600">{t('adm.user.name')} (EN — {ar ? 'اختياري' : 'optional'})</span>
+            </Field>
+            <Field label={`${t('adm.user.name')} (EN — ${ar ? 'اختياري' : 'optional'})`}>
               <input className="input" dir="ltr" value={uNameEn} onChange={(e) => setUNameEn(e.target.value)} />
-            </label>
+            </Field>
           </div>
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-600">{t('adm.user.email')}</span>
+          <Field label={t('adm.user.email')}>
             <input
               type="email"
               className="input"
@@ -587,10 +588,9 @@ export default function AdminPage() {
               value={uEmail}
               onChange={(e) => setUEmail(e.target.value)}
             />
-          </label>
+          </Field>
           {!uEdit && (
-            <label className="block">
-              <span className="mb-1 block text-sm text-slate-600">{t('adm.user.password')}</span>
+            <Field label={t('adm.user.password')} hint={t('adm.user.passwordHint')}>
               <input
                 type="text"
                 className="input font-mono"
@@ -600,11 +600,9 @@ export default function AdminPage() {
                 value={uPassword}
                 onChange={(e) => setUPassword(e.target.value)}
               />
-              <span className="mt-1 block text-[11px] text-slate-400">{t('adm.user.passwordHint')}</span>
-            </label>
+            </Field>
           )}
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-600">{t('adm.user.role')}</span>
+          <Field label={t('adm.user.role')}>
             <select className="input" required value={uRoleId} onChange={(e) => setURoleId(e.target.value)}>
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -612,7 +610,7 @@ export default function AdminPage() {
                 </option>
               ))}
             </select>
-          </label>
+          </Field>
           <div className="flex justify-end gap-2">
             <Btn onClick={() => setUOpen(false)}>{t('common.cancel')}</Btn>
             <Btn type="submit" variant="primary" busy={busy('user')} disabled={busy()}>
@@ -635,8 +633,7 @@ export default function AdminPage() {
             submitSetPassword();
           }}
         >
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-600">{t('adm.user.newPassword')}</span>
+          <Field label={t('adm.user.newPassword')} hint={t('adm.user.passwordHint')}>
             <input
               type="text"
               className="input font-mono"
@@ -646,8 +643,7 @@ export default function AdminPage() {
               value={pValue}
               onChange={(e) => setPValue(e.target.value)}
             />
-            <span className="mt-1 block text-[11px] text-slate-400">{t('adm.user.passwordHint')}</span>
-          </label>
+          </Field>
           <div className="flex justify-end gap-2">
             <Btn onClick={() => setPOpen(null)}>{t('common.cancel')}</Btn>
             <Btn type="submit" variant="primary" busy={busy('setPw')} disabled={busy()}>
@@ -670,19 +666,16 @@ export default function AdminPage() {
             submitRole();
           }}
         >
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="mb-1 block text-sm text-slate-600">{t('adm.role.name')} (عربي)</span>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label={`${t('adm.role.name')} (عربي)`}>
               <input className="input" required={!rNameEn.trim()} value={rNameAr} onChange={(e) => setRNameAr(e.target.value)} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm text-slate-600">{t('adm.role.name')} (EN — {ar ? 'اختياري' : 'optional'})</span>
+            </Field>
+            <Field label={`${t('adm.role.name')} (EN — ${ar ? 'اختياري' : 'optional'})`}>
               <input className="input" dir="ltr" value={rNameEn} onChange={(e) => setRNameEn(e.target.value)} />
-            </label>
+            </Field>
           </div>
           {!rEdit && (
-            <label className="block">
-              <span className="mb-1 block text-sm text-slate-600">{t('adm.role.key')}</span>
+            <Field label={t('adm.role.key')} hint={t('adm.role.keyHint')}>
               <input
                 className="input font-mono"
                 dir="ltr"
@@ -691,18 +684,17 @@ export default function AdminPage() {
                 value={rKey}
                 onChange={(e) => setRKey(e.target.value)}
               />
-              <span className="mt-1 block text-[11px] text-slate-400">{t('adm.role.keyHint')}</span>
-            </label>
+            </Field>
           )}
 
           <div>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-semibold text-slate-700">{t('adm.role.perms')}</span>
-              <div className="flex gap-2 text-[11px]">
+              <div className="flex gap-2 text-xs">
                 <button type="button" className="text-brand-600 hover:underline" onClick={() => setRPerms(new Set(catalog.map((p) => p.key)))}>
                   {t('adm.role.selectAll')}
                 </button>
-                <button type="button" className="text-slate-400 hover:underline" onClick={() => setRPerms(new Set())}>
+                <button type="button" className="text-slate-500 hover:underline" onClick={() => setRPerms(new Set())}>
                   {t('adm.role.clearAll')}
                 </button>
               </div>

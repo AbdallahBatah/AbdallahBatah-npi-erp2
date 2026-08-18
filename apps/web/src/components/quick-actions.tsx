@@ -44,9 +44,9 @@ export function QuickActions() {
         <Link
           key={a.href}
           href={a.href}
-          className="btn-ghost !px-3 !py-1.5 text-xs"
+          className="btn-ghost btn-sm"
         >
-          <Icon name={a.icon} className="h-4 w-4 text-slate-400" />
+          <Icon name={a.icon} className="h-3.5 w-3.5 text-slate-500" />
           {t(a.key)}
         </Link>
       ))}

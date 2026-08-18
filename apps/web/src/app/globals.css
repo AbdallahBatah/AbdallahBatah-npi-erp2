@@ -33,6 +33,13 @@ body {
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
   }
+  /* `busy` is not `disabled`. Btn disables while a request is in flight so it
+     cannot be fired twice, but "waiting" must not render as "not allowed" —
+     opacity-50 dropped the spinner and its label to ~1.9:1. */
+  .btn[aria-busy='true']:disabled {
+    opacity: 1;
+    cursor: wait;
+  }
   .btn-primary {
     @apply btn bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-sm shadow-brand-700/25 hover:from-brand-500 hover:to-brand-600 focus-visible:ring-brand-400;
   }
@@ -60,13 +67,16 @@ body {
     @apply animate-pulse rounded bg-slate-200/80;
   }
   .input {
-    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10;
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/40;
   }
+  /* slate-600, not slate-500: at 4.76:1 on white a label passes, but the same
+     token on the #f4f6f8 page background is 4.39:1 — under AA. slate-600 is
+     6.9:1 there and still reads clearly secondary to the slate-800 input text. */
   .label {
-    @apply mb-1.5 block text-xs font-semibold text-slate-500;
+    @apply mb-1.5 block text-xs font-semibold text-slate-600;
   }
   .badge {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none;
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold leading-none;
   }
   /* No uppercase/tracking: letter-spacing breaks connected Arabic glyphs. */
   .th {
@@ -89,10 +99,13 @@ body {
     @apply px-4 py-3 text-end text-sm text-slate-700;
     font-variant-numeric: tabular-nums;
   }
-  /* Zebra striping. Deliberately in @layer components so that any row
-     carrying its own semantic tint (loss rows, inactive users) overrides it —
-     Tailwind utilities outrank component classes. */
-  .card table tbody tr:nth-child(even) {
+  /* Zebra striping, wrapped in :where() so it carries ZERO specificity.
+     It used to be `.card table tbody tr:nth-child(even)` — (0,2,3) — which
+     silently beat every row-level utility: loss rows tinted `bg-danger-50/40`
+     and selected rows stayed grey on every even row, and even `hover:` died.
+     At (0,0,0) any row carrying its own semantic tint now genuinely wins,
+     which is what the old comment claimed and never delivered. */
+  :where(.card table tbody tr:nth-child(even)) {
     @apply bg-slate-50/50;
   }
   /* Long tables: bound the card's height and pin the header while the body

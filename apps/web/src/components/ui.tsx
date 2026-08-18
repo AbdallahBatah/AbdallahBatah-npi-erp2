@@ -3,9 +3,12 @@
 import {
   ButtonHTMLAttributes,
   ReactNode,
+  RefObject,
   cloneElement,
   isValidElement,
+  useEffect,
   useId,
+  useRef,
   useState,
 } from 'react';
 import Link from 'next/link';
@@ -45,8 +48,8 @@ export function PageHeader({
             {backLabel ?? t('common.back')}
           </Link>
         )}
-        <h1 className="text-xl font-bold tracking-tight text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
+        <h1 className="text-lg font-bold text-slate-900">{title}</h1>
+        {subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -238,7 +241,7 @@ export function Tabs({
           type="button"
           onClick={() => onChange(tb.key)}
           aria-current={value === tb.key ? 'page' : undefined}
-          className={`flex shrink-0 items-center gap-2 rounded-lg px-4 py-1.5 transition ${
+          className={`flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
             value === tb.key
               ? 'bg-white text-slate-900 shadow-sm'
               : 'text-slate-500 hover:text-slate-700'
@@ -247,8 +250,8 @@ export function Tabs({
           {tb.label}
           {!!tb.count && (
             <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                value === tb.key ? 'bg-brand-50 text-brand-700' : 'bg-slate-200 text-slate-500'
+              className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${
+                value === tb.key ? 'bg-brand-50 text-brand-700' : 'bg-slate-200 text-slate-700'
               }`}
             >
               {tb.count}
@@ -267,69 +270,80 @@ export function Tabs({
 const STATUS_META: Record<string, { ar: string; en: string; cls: string; dot: string }> = {
   // generic / documents
   DRAFT: { ar: 'مسودة', en: 'Draft', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
-  ACTIVE: { ar: 'نشط', en: 'Active', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  SUSPENDED: { ar: 'موقوف', en: 'Suspended', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
+  ACTIVE: { ar: 'نشط', en: 'Active', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  SUSPENDED: { ar: 'موقوف', en: 'Suspended', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
   CLOSED: { ar: 'مغلق', en: 'Closed', cls: 'bg-slate-100 text-slate-500', dot: 'bg-slate-400' },
-  CANCELLED: { ar: 'ملغى', en: 'Cancelled', cls: 'bg-rose-50 text-rose-600', dot: 'bg-rose-500' },
+  CANCELLED: { ar: 'ملغى', en: 'Cancelled', cls: 'bg-danger-50 text-danger-600', dot: 'bg-danger-500' },
   // CRM
-  NEW: { ar: 'جديد', en: 'New', cls: 'bg-sky-50 text-sky-700', dot: 'bg-sky-500' },
+  NEW: { ar: 'جديد', en: 'New', cls: 'bg-info-50 text-info-700', dot: 'bg-info-500' },
   QUALIFIED: { ar: 'مؤهَّل', en: 'Qualified', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
-  CONVERTED: { ar: 'محوَّل', en: 'Converted', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  DISQUALIFIED: { ar: 'غير مؤهَّل', en: 'Disqualified', cls: 'bg-rose-50 text-rose-600', dot: 'bg-rose-500' },
+  CONVERTED: { ar: 'محوَّل', en: 'Converted', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  DISQUALIFIED: { ar: 'غير مؤهَّل', en: 'Disqualified', cls: 'bg-danger-50 text-danger-600', dot: 'bg-danger-500' },
   PROSPECTING: { ar: 'استكشاف', en: 'Prospecting', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
   PROPOSAL: { ar: 'عرض سعر', en: 'Proposal', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
-  NEGOTIATION: { ar: 'تفاوض', en: 'Negotiation', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
-  WON: { ar: 'مكسوبة', en: 'Won', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  LOST: { ar: 'خاسرة', en: 'Lost', cls: 'bg-rose-50 text-rose-600', dot: 'bg-rose-500' },
-  SENT: { ar: 'مُرسَل', en: 'Sent', cls: 'bg-sky-50 text-sky-700', dot: 'bg-sky-500' },
-  ACCEPTED: { ar: 'مقبول', en: 'Accepted', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  REJECTED: { ar: 'مرفوض', en: 'Rejected', cls: 'bg-rose-50 text-rose-600', dot: 'bg-rose-500' },
+  NEGOTIATION: { ar: 'تفاوض', en: 'Negotiation', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
+  WON: { ar: 'مكسوبة', en: 'Won', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  LOST: { ar: 'خاسرة', en: 'Lost', cls: 'bg-danger-50 text-danger-600', dot: 'bg-danger-500' },
+  SENT: { ar: 'مُرسَل', en: 'Sent', cls: 'bg-info-50 text-info-700', dot: 'bg-info-500' },
+  ACCEPTED: { ar: 'مقبول', en: 'Accepted', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  REJECTED: { ar: 'مرفوض', en: 'Rejected', cls: 'bg-danger-50 text-danger-600', dot: 'bg-danger-500' },
   // milestones / invoices
   PENDING: { ar: 'قيد الانتظار', en: 'Pending', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
-  VERIFIED: { ar: 'تم التحقق', en: 'Verified', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+  VERIFIED: { ar: 'تم التحقق', en: 'Verified', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
   INVOICED: { ar: 'مفوترة', en: 'Invoiced', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
-  ISSUED: { ar: 'مُصدَرة', en: 'Issued', cls: 'bg-sky-50 text-sky-700', dot: 'bg-sky-500' },
-  CLEARED: { ar: 'معتمدة ZATCA', en: 'ZATCA cleared', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  PAID: { ar: 'مدفوعة', en: 'Paid', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  REPORTED: { ar: 'مُبلَّغة', en: 'Reported', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+  ISSUED: { ar: 'مُصدَرة', en: 'Issued', cls: 'bg-info-50 text-info-700', dot: 'bg-info-500' },
+  CLEARED: { ar: 'معتمدة ZATCA', en: 'ZATCA cleared', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  PAID: { ar: 'مدفوعة', en: 'Paid', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  REPORTED: { ar: 'مُبلَّغة', en: 'Reported', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
   // projects
   PLANNING: { ar: 'تخطيط', en: 'Planning', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
   PROCUREMENT: { ar: 'مشتريات', en: 'Procurement', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
-  EXECUTION: { ar: 'تنفيذ', en: 'Execution', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
-  COMMISSIONING: { ar: 'تشغيل تجريبي', en: 'Commissioning', cls: 'bg-sky-50 text-sky-700', dot: 'bg-sky-500' },
+  EXECUTION: { ar: 'تنفيذ', en: 'Execution', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
+  COMMISSIONING: { ar: 'تشغيل تجريبي', en: 'Commissioning', cls: 'bg-info-50 text-info-700', dot: 'bg-info-500' },
   // procurement
-  APPROVED: { ar: 'معتمد', en: 'Approved', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  PARTIALLY_RECEIVED: { ar: 'مستلم جزئياً', en: 'Partially received', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
-  RECEIVED: { ar: 'مستلم', en: 'Received', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  POSTED: { ar: 'مرحَّلة', en: 'Posted', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  SUBMITTED: { ar: 'مقدَّم', en: 'Submitted', cls: 'bg-sky-50 text-sky-700', dot: 'bg-sky-500' },
-  COMPLETED: { ar: 'منجز', en: 'Completed', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  TERMINATED: { ar: 'منهاة', en: 'Terminated', cls: 'bg-rose-50 text-rose-600', dot: 'bg-rose-500' },
+  APPROVED: { ar: 'معتمد', en: 'Approved', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  PARTIALLY_RECEIVED: { ar: 'مستلم جزئياً', en: 'Partially received', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
+  RECEIVED: { ar: 'مستلم', en: 'Received', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  POSTED: { ar: 'مرحَّلة', en: 'Posted', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  SUBMITTED: { ar: 'مقدَّم', en: 'Submitted', cls: 'bg-info-50 text-info-700', dot: 'bg-info-500' },
+  COMPLETED: { ar: 'منجز', en: 'Completed', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  TERMINATED: { ar: 'منهاة', en: 'Terminated', cls: 'bg-danger-50 text-danger-600', dot: 'bg-danger-500' },
   // serial units / assets
   IN_STOCK: { ar: 'في المخزون', en: 'In stock', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
-  INSTALLED: { ar: 'مركَّب', en: 'Installed', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  FAULTY: { ar: 'معطّل', en: 'Faulty', cls: 'bg-rose-50 text-rose-600', dot: 'bg-rose-500' },
-  RETURNED: { ar: 'مرتجع', en: 'Returned', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
-  SCRAPPED: { ar: 'مُتلَف', en: 'Scrapped', cls: 'bg-slate-100 text-slate-400', dot: 'bg-slate-300' },
-  OPERATING: { ar: 'عامل', en: 'Operating', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  UNDER_MAINTENANCE: { ar: 'تحت الصيانة', en: 'Under maintenance', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
-  RETIRED: { ar: 'خارج الخدمة', en: 'Retired', cls: 'bg-slate-100 text-slate-400', dot: 'bg-slate-300' },
+  INSTALLED: { ar: 'مركَّب', en: 'Installed', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  FAULTY: { ar: 'معطّل', en: 'Faulty', cls: 'bg-danger-50 text-danger-600', dot: 'bg-danger-500' },
+  RETURNED: { ar: 'مرتجع', en: 'Returned', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
+  SCRAPPED: { ar: 'مُتلَف', en: 'Scrapped', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
+  OPERATING: { ar: 'عامل', en: 'Operating', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  UNDER_MAINTENANCE: { ar: 'تحت الصيانة', en: 'Under maintenance', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
+  RETIRED: { ar: 'خارج الخدمة', en: 'Retired', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
   // work orders
-  OPEN: { ar: 'مفتوح', en: 'Open', cls: 'bg-sky-50 text-sky-700', dot: 'bg-sky-500' },
+  OPEN: { ar: 'مفتوح', en: 'Open', cls: 'bg-info-50 text-info-700', dot: 'bg-info-500' },
   ASSIGNED: { ar: 'مُسنَد', en: 'Assigned', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
-  IN_PROGRESS: { ar: 'قيد التنفيذ', en: 'In progress', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
+  IN_PROGRESS: { ar: 'قيد التنفيذ', en: 'In progress', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
   // alerts
-  ACKNOWLEDGED: { ar: 'مؤكَّد', en: 'Acknowledged', cls: 'bg-sky-50 text-sky-700', dot: 'bg-sky-500' },
+  ACKNOWLEDGED: { ar: 'مؤكَّد', en: 'Acknowledged', cls: 'bg-info-50 text-info-700', dot: 'bg-info-500' },
   WORK_ORDERED: { ar: 'صدر أمر عمل', en: 'Work ordered', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
-  RESOLVED: { ar: 'محلول', en: 'Resolved', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+  RESOLVED: { ar: 'محلول', en: 'Resolved', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
   // ppa
-  ENDED: { ar: 'منتهية', en: 'Ended', cls: 'bg-slate-100 text-slate-400', dot: 'bg-slate-300' },
+  ENDED: { ar: 'منتهية', en: 'Ended', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
   // warranty / RMA
-  REPLACED: { ar: 'تم الاستبدال', en: 'Replaced', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+  REPLACED: { ar: 'تم الاستبدال', en: 'Replaced', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
   // retention
-  WITHHELD: { ar: 'محتجزة', en: 'Withheld', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
-  RELEASED: { ar: 'مُفرَج عنها', en: 'Released', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+  WITHHELD: { ar: 'محتجزة', en: 'Withheld', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
+  RELEASED: { ar: 'مُفرَج عنها', en: 'Released', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
 };
+
+/**
+ * The label half of `StatusBadge`, for the places that need the wording
+ * without the pill — filter dropdowns, mostly. Re-typing these strings inline
+ * is how a filter option and the badge it filters on drift apart.
+ */
+export function statusLabel(status: string, locale: string): string {
+  const meta = STATUS_META[status];
+  if (!meta) return status;
+  return locale === 'ar' ? meta.ar : meta.en;
+}
 
 export function StatusBadge({ status }: { status: string }) {
   const { locale } = useI18n();
@@ -360,10 +374,17 @@ export function Field({
 }) {
   // Wire label→control so clicking the label focuses the field and screen
   // readers announce a name. Works when the child is a single form element.
-  const id = useId();
+  // Honour an id the caller already put on the control instead of bailing out:
+  // the old `&& !children.props.id` guard left `htmlFor` pointing at an element
+  // that never existed, and skipped the aria-invalid/describedby branch with it.
+  const autoId = useId();
+  const ownId = isValidElement(children)
+    ? ((children.props as any).id as string | undefined)
+    : undefined;
+  const id = ownId ?? autoId;
   const msgId = `${id}-msg`;
   const child =
-    isValidElement(children) && !(children.props as any).id
+    isValidElement(children)
       ? cloneElement(children as any, {
           id,
           // aria-invalid + aria-describedby is what actually makes the error
@@ -386,16 +407,63 @@ export function Field({
       </label>
       {child}
       {error ? (
-        <p id={msgId} role="alert" className="mt-1 text-[11px] font-medium text-danger-600">
+        <p id={msgId} role="alert" className="mt-1 text-xs font-medium text-danger-600">
           {error}
         </p>
       ) : hint ? (
-        <p id={msgId} className="mt-1 text-[11px] text-slate-400">
+        <p id={msgId} className="mt-1 text-xs text-slate-500">
           {hint}
         </p>
       ) : null}
     </div>
   );
+}
+
+/**
+ * The four things `role="dialog" aria-modal="true"` promises and neither
+ * dialog was delivering: the page behind stops scrolling, focus moves into
+ * the panel (so the Esc handler can actually receive the key), Tab cycles
+ * inside instead of walking the page under the scrim, and focus returns to
+ * whatever opened it. Focus already inside the panel is left alone, so an
+ * `autoFocus` on a specific control still wins.
+ */
+function useDialogBehavior(open: boolean, panelRef: RefObject<HTMLElement>) {
+  useEffect(() => {
+    if (!open) return;
+    const restore = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const panel = panelRef.current;
+    if (panel && !panel.contains(document.activeElement)) panel.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const el = panelRef.current;
+      if (!el) return;
+      const f = Array.from(
+        el.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((n) => n.offsetParent !== null);
+      if (f.length === 0) return;
+      const first = f[0];
+      const last = f[f.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === el)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+      restore?.focus?.();
+    };
+  }, [open, panelRef]);
 }
 
 export function Modal({
@@ -414,6 +482,9 @@ export function Modal({
 }) {
   const { t } = useI18n();
   const [confirmClose, setConfirmClose] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useDialogBehavior(open, panelRef);
   if (!open) return null;
   const requestClose = () => {
     if (dirty) setConfirmClose(true);
@@ -421,8 +492,6 @@ export function Modal({
   };
   return (
     <div
-      role="dialog"
-      aria-modal="true"
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-950/50 p-4 pt-16 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) requestClose();
@@ -431,13 +500,23 @@ export function Modal({
         if (e.key === 'Escape') requestClose();
       }}
     >
-      <div className="card w-full max-w-2xl border-slate-200 p-6 shadow-2xl">
+      {/* role/aria-modal belong on the panel, not the scrim that wraps it. */}
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="card w-full max-w-2xl border-slate-200 p-6 shadow-2xl outline-none"
+      >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">{title}</h2>
+          <h2 id={titleId} className="text-lg font-bold text-slate-900">
+            {title}
+          </h2>
           <button
             onClick={requestClose}
             aria-label={t('common.close')}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
             <Icon name="x" className="h-4 w-4" />
           </button>
@@ -491,6 +570,10 @@ export function useConfirm() {
     resolve: (v: boolean) => void;
   } | null>(null);
 
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useDialogBehavior(!!state, panelRef);
+
   const confirm = (opts: ConfirmOpts) =>
     new Promise<boolean>((resolve) => setState({ opts, resolve }));
 
@@ -501,22 +584,31 @@ export function useConfirm() {
 
   const confirmNode = state ? (
     <div
-      role="dialog"
-      aria-modal="true"
       className="fixed inset-0 z-[90] flex items-center justify-center bg-ink-950/50 p-4 backdrop-blur-[2px]"
       onKeyDown={(e) => {
         if (e.key === 'Escape') close(false);
       }}
     >
-      <div className="card w-full max-w-md border-slate-200 p-6 shadow-2xl">
-        <h2 className="text-base font-bold text-slate-900">{state.opts.title}</h2>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="card w-full max-w-md border-slate-200 p-6 shadow-2xl outline-none"
+      >
+        <h2 id={titleId} className="text-lg font-bold text-slate-900">
+          {state.opts.title}
+        </h2>
         <p className="mt-2 text-sm leading-7 text-slate-600">{state.opts.message}</p>
         <div className="mt-6 flex items-center justify-end gap-2">
-          <button className="btn-ghost" onClick={() => close(false)}>
+          {/* An irreversible action must not open with its own button armed:
+              a stray Enter would commit it. Cancel takes the focus instead. */}
+          <button autoFocus={!!state.opts.danger} className="btn-ghost" onClick={() => close(false)}>
             {t('common.cancel')}
           </button>
           <button
-            autoFocus
+            autoFocus={!state.opts.danger}
             className={state.opts.danger ? 'btn-danger' : 'btn-primary'}
             onClick={() => close(true)}
           >
@@ -534,8 +626,8 @@ export function useConfirm() {
 export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="card border-rose-200 bg-rose-50/40 p-8 text-center">
-      <p className="text-sm leading-6 text-rose-700">{message}</p>
+    <div className="card border-danger-200 bg-danger-50/40 p-8 text-center">
+      <p className="text-sm leading-6 text-danger-700">{message}</p>
       <button onClick={onRetry} className="btn-ghost mt-4">
         {t('common.retry')}
       </button>
@@ -559,9 +651,12 @@ export function EmptyRow({
       <td colSpan={colSpan} className="px-4 py-12 text-center text-sm text-slate-500">
         {text}
         {actionHref && actionText && (
-          <a href={actionHref} className="ms-2 font-medium text-brand-700 underline">
+          <Link
+            href={actionHref}
+            className="ms-2 font-semibold text-brand-700 underline decoration-brand-700/30 underline-offset-4 transition hover:decoration-brand-700"
+          >
             {actionText}
-          </a>
+          </Link>
         )}
       </td>
     </tr>

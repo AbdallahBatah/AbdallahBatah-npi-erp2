@@ -15,7 +15,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatMoney } from '@/lib/format';
-import { Btn, EmptyRow, LoadError, Modal, TableSkeleton, useConfirm } from '@/components/ui';
+import { Btn, EmptyRow, Field, LoadError, Modal, TableSkeleton, useConfirm } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
 interface DocMeta {
@@ -143,10 +143,10 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
   return (
     <>
       <div className="card overflow-hidden">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-3 card-title">
           <div className="max-w-2xl">
             <p className="text-xs leading-6 text-slate-500">{t('apr.rule.hint')}</p>
-            <p className="mt-1 flex items-start gap-1.5 text-[11px] leading-5 text-slate-400">
+            <p className="mt-1 flex items-start gap-1.5 text-xs leading-5 text-slate-500">
               <Icon name="lock" className="mt-0.5 h-3 w-3 shrink-0" />
               {t('apr.rule.selfApproval')}
             </p>
@@ -162,11 +162,11 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('apr.rule.docType')}</th>
-                <th className="th">{t('apr.rule.band')}</th>
-                <th className="th">{t('apr.rule.steps')}</th>
-                <th className="th">{t('common.status')}</th>
-                <th className="th text-end">{t('common.actions')}</th>
+                <th scope="col" className="th">{t('apr.rule.docType')}</th>
+                <th scope="col" className="th">{t('apr.rule.band')}</th>
+                <th scope="col" className="th">{t('apr.rule.steps')}</th>
+                <th scope="col" className="th">{t('common.status')}</th>
+                <th scope="col" className="th text-end">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -176,10 +176,10 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                 rules.map((r) => {
                   const meta = docMeta.get(r.documentType);
                   return (
-                    <tr key={r.id} className={r.isActive ? '' : 'bg-slate-50/60 text-slate-400'}>
+                    <tr key={r.id} className={r.isActive ? '' : 'bg-slate-50/60 text-slate-500'}>
                       <td className="td font-semibold text-slate-800">
                         {meta ? (ar ? meta.labelAr : meta.labelEn) : r.documentType}
-                        <div className="text-[11px] font-normal text-slate-400">
+                        <div className="text-xs font-normal text-slate-500">
                           {meta ? (ar ? meta.amountLabelAr : meta.amountLabelEn) : ''}
                         </div>
                       </td>
@@ -191,7 +191,7 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                               {i > 0 && (
                                 <Icon name="chevron-end" className="h-3 w-3 text-slate-300 rtl:-scale-x-100" />
                               )}
-                              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                                 {ar ? s.role.nameAr : s.role.nameEn}
                               </span>
                             </span>
@@ -201,16 +201,16 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                       <td className="td">
                         <span
                           className={`badge ${
-                            r.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                            r.isActive ? 'bg-success-50 text-success-700' : 'bg-slate-100 text-slate-500'
                           }`}
                         >
                           <span
-                            className={`h-1.5 w-1.5 rounded-full ${r.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`}
+                            className={`h-1.5 w-1.5 rounded-full ${r.isActive ? 'bg-success-500' : 'bg-slate-400'}`}
                           />
                           {r.isActive ? t('apr.rule.active') : t('apr.rule.inactive')}
                         </span>
                         {r._count.requests > 0 && (
-                          <div className="mt-1 text-[11px] text-slate-400">
+                          <div className="mt-1 text-xs text-slate-500">
                             {/* "count: N", not "N nouns" — Arabic numeral
                                 agreement changes the noun by count band. */}
                             {t('apr.rule.used')}: {r._count.requests}
@@ -218,14 +218,14 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                         )}
                       </td>
                       <td className="td">
-                        <div className="flex justify-end gap-1.5 text-[11px]">
+                        <div className="flex justify-end gap-1.5 text-xs">
                           <Btn sm onClick={() => openEdit(r)}>
                             {t('common.edit')}
                           </Btn>
                           <Btn
                             sm
                             icon="trash"
-                            className="!text-rose-600"
+                            variant="danger"
                             busy={busy(`delRule:${r.id}`)}
                             disabled={busy()}
                             onClick={() => remove(r)}
@@ -243,7 +243,12 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
         )}
       </div>
 
-      <Modal open={open} title={edit ? t('apr.rule.edit') : t('apr.rule.new')} onClose={() => setOpen(false)}>
+      <Modal
+        open={open}
+        title={edit ? t('apr.rule.edit') : t('apr.rule.new')}
+        onClose={() => setOpen(false)}
+        dirty={stepRoles.length > 0 || min !== '0' || max.trim() !== ''}
+      >
         <form
           className="grid gap-4"
           onSubmit={(ev) => {
@@ -251,8 +256,16 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
             submit();
           }}
         >
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-600">{t('apr.rule.docType')}</span>
+          <Field
+            label={t('apr.rule.docType')}
+            hint={
+              docMeta.get(docType)
+                ? ar
+                  ? docMeta.get(docType)!.amountLabelAr
+                  : docMeta.get(docType)!.amountLabelEn
+                : undefined
+            }
+          >
             <select
               className="input"
               required
@@ -271,14 +284,10 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                 </option>
               ))}
             </select>
-            <span className="mt-1 block text-[11px] text-slate-400">
-              {docMeta.get(docType) ? (ar ? docMeta.get(docType)!.amountLabelAr : docMeta.get(docType)!.amountLabelEn) : ''}
-            </span>
-          </label>
+          </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="mb-1 block text-sm text-slate-600">{t('apr.rule.min')}</span>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label={t('apr.rule.min')}>
               <input
                 type="number"
                 min={0}
@@ -289,9 +298,8 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                 value={min}
                 onChange={(e) => setMin(e.target.value)}
               />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm text-slate-600">{t('apr.rule.max')}</span>
+            </Field>
+            <Field label={t('apr.rule.max')} hint={t('apr.rule.maxHint')}>
               <input
                 type="number"
                 min={0}
@@ -301,8 +309,7 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                 value={max}
                 onChange={(e) => setMax(e.target.value)}
               />
-              <span className="mt-1 block text-[11px] text-slate-400">{t('apr.rule.maxHint')}</span>
-            </label>
+            </Field>
           </div>
 
           <div>
@@ -317,17 +324,17 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                 {t('apr.rule.addStep')}
               </Btn>
             </div>
-            <p className="mb-2 text-[11px] leading-5 text-slate-400">{t('apr.rule.stepsHint')}</p>
+            <p className="mb-2 text-xs leading-5 text-slate-500">{t('apr.rule.stepsHint')}</p>
 
             {eligible.length === 0 ? (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p className="rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-800">
                 {t('apr.rule.noEligibleRoles')}
               </p>
             ) : (
               <div className="grid gap-2">
                 {stepRoles.map((roleId, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-500">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
                       {i + 1}
                     </span>
                     <select
@@ -353,7 +360,7 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
                     <Btn
                       sm
                       icon="trash"
-                      className="!text-rose-600"
+                      variant="danger"
                       onClick={() => setStepRoles(stepRoles.filter((_, j) => j !== i))}
                     >
                       {t('common.delete')}

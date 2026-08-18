@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
-import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Can, Btn, TableSkeleton } from '@/components/ui';
+import { PageHeader, StatusBadge, statusLabel, EmptyRow, Modal, Field, LoadError, useConfirm, Can, Btn, TableSkeleton } from '@/components/ui';
 
 interface Serial {
   id: string;
@@ -127,7 +127,9 @@ export default function AssetsPage() {
       {loadErr && <div className="mb-6"><LoadError message={loadErr} onRetry={load} /></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input
+          type="search"
           className="input max-w-xs"
+          aria-label={t('ast.searchHint')}
           placeholder={t('ast.searchHint')}
           value={search}
           onChange={(e) => {
@@ -137,15 +139,20 @@ export default function AssetsPage() {
         />
         <select
           className="input !w-44"
+          aria-label={t('common.status')}
           value={stateFilter}
           onChange={(e) => {
             setStateFilter(e.target.value);
             setPage(0);
           }}
         >
-          <option value="">{t('common.status')}: {locale === 'ar' ? 'الكل' : 'All'}</option>
+          <option value="">
+            {t('common.status')}: {t('common.all')}
+          </option>
           {['IN_STOCK', 'INSTALLED', 'FAULTY', 'RETURNED', 'SCRAPPED'].map((s) => (
-            <option key={s} value={s}>{s === 'IN_STOCK' ? (locale === 'ar' ? 'في المخزون' : 'In stock') : s === 'INSTALLED' ? (locale === 'ar' ? 'مركَّب' : 'Installed') : s === 'FAULTY' ? (locale === 'ar' ? 'معطّل' : 'Faulty') : s === 'RETURNED' ? (locale === 'ar' ? 'مرتجع' : 'Returned') : locale === 'ar' ? 'مُتلَف' : 'Scrapped'}</option>
+            <option key={s} value={s}>
+              {statusLabel(s, locale)}
+            </option>
           ))}
         </select>
       </div>
@@ -153,15 +160,15 @@ export default function AssetsPage() {
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('ast.serial')}</th>
-              <th className="th">{t('ast.item')}</th>
-              <th className="th">{t('ast.state')}</th>
-              <th className="th">{t('ast.location')}</th>
-              <th className="th">{t('ast.project')}</th>
-              <th className="th">{t('ast.grn')}</th>
-              <th className="th">{t('ast.manufacturer')}</th>
-              <th className="th">{t('ast.installedAt')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('ast.serial')}</th>
+              <th scope="col" className="th">{t('ast.item')}</th>
+              <th scope="col" className="th">{t('ast.state')}</th>
+              <th scope="col" className="th hidden xl:table-cell">{t('ast.location')}</th>
+              <th scope="col" className="th hidden xl:table-cell">{t('ast.project')}</th>
+              <th scope="col" className="th hidden xl:table-cell">{t('ast.grn')}</th>
+              <th scope="col" className="th hidden xl:table-cell">{t('ast.manufacturer')}</th>
+              <th scope="col" className="th hidden xl:table-cell">{t('ast.installedAt')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -174,19 +181,23 @@ export default function AssetsPage() {
                 <tr key={s.id} className="hover:bg-slate-50">
                   <td className="td font-mono text-xs">{s.serialNo}</td>
                   <td className="td">
-                    <span className="font-mono text-xs text-slate-400">{s.item?.sku}</span>{' '}
+                    <span className="font-mono text-xs text-slate-500">{s.item?.sku}</span>{' '}
                     {s.item ? pick(s.item, 'name') : '—'}
+                    {/* The folded location, re-surfaced where the eye already is. */}
+                    <span className="mt-0.5 block text-xs text-slate-500 xl:hidden">
+                      {s.location ? `${s.location.code} · ${pick(s.location, 'name')}` : '—'}
+                    </span>
                   </td>
                   <td className="td"><StatusBadge status={s.currentState} /></td>
-                  <td className="td text-xs">
+                  <td className="td hidden text-xs xl:table-cell">
                     {s.location ? (
-                      <><span className="font-mono text-slate-400">{s.location.code}</span> {pick(s.location, 'name')}</>
+                      <><span className="font-mono text-slate-500">{s.location.code}</span> {pick(s.location, 'name')}</>
                     ) : '—'}
                   </td>
-                  <td className="td font-mono text-xs">{s.project?.code ?? '—'}</td>
-                  <td className="td font-mono text-xs">{s.goodsReceipt?.code ?? '—'}</td>
-                  <td className="td text-xs">{s.manufacturerVendor ? pick(s.manufacturerVendor, 'name') : '—'}</td>
-                  <td className="td text-xs text-slate-500">
+                  <td className="td hidden font-mono text-xs xl:table-cell">{s.project?.code ?? '—'}</td>
+                  <td className="td hidden font-mono text-xs xl:table-cell">{s.goodsReceipt?.code ?? '—'}</td>
+                  <td className="td hidden text-xs xl:table-cell">{s.manufacturerVendor ? pick(s.manufacturerVendor, 'name') : '—'}</td>
+                  <td className="td hidden text-xs text-slate-500 xl:table-cell">
                     {s.installedAt ? formatDate(s.installedAt, locale) : '—'}
                   </td>
                   <td className="td">
@@ -259,20 +270,20 @@ export default function AssetsPage() {
 
       {/* FSM-09: warranty claims */}
       <div className="card mt-6 overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3.5">
+        <div className="card-title">
           <h3 className="text-sm font-bold text-slate-800">{t('rma.title')}</h3>
-          <p className="mt-1 text-xs text-slate-400">{t('rma.hint')}</p>
+          <p className="mt-1 text-xs text-slate-500">{t('rma.hint')}</p>
         </div>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('rma.serial')}</th>
-              <th className="th">{t('rma.defect')}</th>
-              <th className="th">{t('rma.manufacturer')}</th>
-              <th className="th">{t('rma.replacement')}</th>
-              <th className="th">{t('common.status')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('rma.serial')}</th>
+              <th scope="col" className="th">{t('rma.defect')}</th>
+              <th scope="col" className="th">{t('rma.manufacturer')}</th>
+              <th scope="col" className="th">{t('rma.replacement')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">

@@ -6,8 +6,15 @@ import colors from 'tailwindcss/colors';
  *   text-xs  (11–12px) labels, table headers, hints
  *   text-sm  (14px)    body, table cells, buttons, inputs   ← the default
  *   text-lg  (18px)    card/section headings
- *   text-3xl (30px)    KPI figures only
+ *   text-3xl (30px)    KPI figures, and the login hero heading
  * Anything else is a bug: pick the nearest of these four.
+ *
+ * Enforced as of the UI polish pass: the app had grown to eight sizes
+ * (text-xl, text-2xl, text-base and five arbitrary text-[Npx] values,
+ * two of them fractional and therefore rendered soft). A KPI figure is
+ * text-3xl in a top-of-screen stat strip and text-lg when it sits inside
+ * a section card — that distinction is what carries the hierarchy now,
+ * since size, not colour, is what should say "read me first".
  *
  * Font: IBM Plex Sans Arabic (self-hosted via next/font in app/layout.tsx).
  * Numbers render with Western digits everywhere, including the Arabic UI —

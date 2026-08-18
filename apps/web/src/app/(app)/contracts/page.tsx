@@ -24,6 +24,7 @@ export default function ContractsPage() {
   const { t, locale, pick } = useI18n();
   const enums = useEnums();
   const [rows, setRows] = useState<Contract[]>([]);
+  const [stageFilter, setStageFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState('');
 
@@ -38,30 +39,50 @@ export default function ContractsPage() {
   }, [locale]);
   useEffect(load, [load]);
 
+  const shown = stageFilter ? rows.filter((r) => r.status === stageFilter) : rows;
+
   return (
     <div>
       <PageHeader title={t('contracts.title')} />
       {loadErr && !loading ? <LoadError message={loadErr} onRetry={load} /> : null}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <select
+          className="input !w-56"
+          aria-label={t('common.status')}
+          value={stageFilter}
+          onChange={(e) => setStageFilter(e.target.value)}
+        >
+          <option value="">
+            {t('common.status')}: {t('common.all')}
+          </option>
+          {enums?.contractStatuses.map((o) => (
+            <option key={o.value} value={o.value}>
+              {locale === 'ar' ? o.labelAr : o.labelEn}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="card table-sticky">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('contracts.customer')}</th>
-              <th className="th">{t('contracts.type')}</th>
-              <th className="th">{t('contracts.value')}</th>
-              <th className="th">{t('contracts.milestones')}</th>
-              <th className="th">{t('common.status')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('contracts.customer')}</th>
+              <th scope="col" className="th">{t('contracts.type')}</th>
+              <th scope="col" className="th">{t('contracts.value')}</th>
+              <th scope="col" className="th">{t('contracts.milestones')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
               <TableSkeleton cols={7} />
-            ) : rows.length === 0 ? (
+            ) : shown.length === 0 ? (
               <EmptyRow colSpan={7} text={t('contracts.emptyHint')} actionHref="/proposals" actionText={t('nav.proposals')} />
             ) : (
-              rows.map((c) => (
+              shown.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50">
                   <td className="td font-mono text-xs">{c.code}</td>
                   <td className="td">{c.customer ? pick(c.customer, 'name') : '—'}</td>

@@ -181,7 +181,7 @@ export default function ProjectDetailPage() {
 
   async function approveCo(coId: string) {
     if (
-      !(await confirm({ title: t('confirm.approveCoTitle'), message: t('confirm.approveCoMsg'), danger: true }))
+      !(await confirm({ title: t('confirm.approveCoTitle'), message: t('confirm.approveCoMsg') }))
     )
       return;
     await approveThenReload(`approveCo:${coId}`, `/projects/change-orders/${coId}/approve`);
@@ -226,7 +226,6 @@ export default function ProjectDetailPage() {
       !(await confirm({
         title: t('confirm.approveClaimTitle'),
         message: t('confirm.approveClaimMsg'),
-        danger: true,
       }))
     )
       return;
@@ -251,7 +250,7 @@ export default function ProjectDetailPage() {
   return (
     <div>
       <PageHeader
-        title={`${p.code} — ${pick(p, 'name')}`}
+        title={`${p.code} · ${pick(p, 'name')}`}
         backHref="/projects"
         backLabel={t('prj.title')}
         action={
@@ -273,13 +272,13 @@ export default function ProjectDetailPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           { key: 'prj.budget', v: cs.budget, tone: 'text-slate-700' },
-          { key: 'prj.committed', v: cs.committed, tone: 'text-amber-600' },
+          { key: 'prj.committed', v: cs.committed, tone: 'text-warning-600' },
           { key: 'prj.actual', v: cs.actual, tone: 'text-brand-700' },
-          { key: 'prj.variance', v: cs.variance, tone: cs.variance >= 0 ? 'text-emerald-600' : 'text-rose-600' },
+          { key: 'prj.variance', v: cs.variance, tone: cs.variance >= 0 ? 'text-success-600' : 'text-danger-600' },
         ].map((c) => (
           <div key={c.key} className="card p-4">
             <p className="text-xs text-slate-500">{t(c.key)}</p>
-            <p className={`mt-1 text-xl font-bold ${c.tone}`}>{formatMoney(c.v, locale)}</p>
+            <p className={`mt-1 text-lg font-bold tabular-nums ${c.tone}`}>{formatMoney(c.v, locale)}</p>
           </div>
         ))}
       </div>
@@ -299,7 +298,7 @@ export default function ProjectDetailPage() {
             <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
               <div className="flex h-full">
                 <div className="h-full bg-brand-500" style={{ width: `${(cs.actual / maxBar) * 100}%` }} />
-                <div className="h-full bg-amber-400" style={{ width: `${(cs.committed / maxBar) * 100}%` }} />
+                <div className="h-full bg-warning-400" style={{ width: `${(cs.committed / maxBar) * 100}%` }} />
               </div>
             </div>
           </div>
@@ -326,18 +325,18 @@ export default function ProjectDetailPage() {
       <div className="grid grid-cols-1 gap-6">
         {/* WBS */}
         <div className="card overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+          <h2 className="card-title">
             {t('prj.wbs')}
-          </div>
+          </h2>
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('common.code')}</th>
-                <th className="th">{t('common.name')}</th>
-                <th className="th text-end">{t('prj.budget')}</th>
-                <th className="th text-end">{t('prj.committed')}</th>
-                <th className="th text-end">{t('prj.actual')}</th>
-                <th className="th text-end">{t('prj.variance')}</th>
+                <th scope="col" className="th">{t('common.code')}</th>
+                <th scope="col" className="th">{t('common.name')}</th>
+                <th scope="col" className="th text-end">{t('prj.budget')}</th>
+                <th scope="col" className="th text-end">{t('prj.committed')}</th>
+                <th scope="col" className="th text-end">{t('prj.actual')}</th>
+                <th scope="col" className="th text-end">{t('prj.variance')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -345,10 +344,10 @@ export default function ProjectDetailPage() {
                 <tr key={w.id}>
                   <td className="td font-mono text-xs">{w.code}</td>
                   <td className="td">{locale === 'ar' ? w.nameAr : w.nameEn}</td>
-                  <td className="td text-end">{formatMoney(w.budgetAmount, locale)}</td>
-                  <td className="td text-end">{formatMoney(w.committed, locale)}</td>
-                  <td className="td text-end">{formatMoney(w.actual, locale)}</td>
-                  <td className={`td text-end ${w.variance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  <td className="td-num">{formatMoney(w.budgetAmount, locale)}</td>
+                  <td className="td-num">{formatMoney(w.committed, locale)}</td>
+                  <td className="td-num">{formatMoney(w.actual, locale)}</td>
+                  <td className={`td text-end ${w.variance >= 0 ? 'text-success-600' : 'text-danger-600'}`}>
                     {formatMoney(w.variance, locale)}
                   </td>
                 </tr>
@@ -363,17 +362,17 @@ export default function ProjectDetailPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* POs */}
         <div className="card overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+          <h2 className="card-title">
             {t('prj.pos')}
-          </div>
+          </h2>
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('common.code')}</th>
-                <th className="th">{t('po.vendor')}</th>
-                <th className="th text-end">{t('po.total')}</th>
-                <th className="th">{t('common.status')}</th>
-                <th className="th">{t('common.actions')}</th>
+                <th scope="col" className="th">{t('common.code')}</th>
+                <th scope="col" className="th">{t('po.vendor')}</th>
+                <th scope="col" className="th text-end">{t('po.total')}</th>
+                <th scope="col" className="th">{t('common.status')}</th>
+                <th scope="col" className="th">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -384,7 +383,7 @@ export default function ProjectDetailPage() {
                   <tr key={po.id}>
                     <td className="td font-mono text-xs">{po.code}</td>
                     <td className="td">{po.vendor ? pick(po.vendor, 'name') : '—'}</td>
-                    <td className="td text-end">{formatMoney(po.total, locale)}</td>
+                    <td className="td-num">{formatMoney(po.total, locale)}</td>
                     <td className="td"><StatusBadge status={po.status} /></td>
                     <td className="td">
                       <Link href={`/procurement/${po.id}`} className="btn-ghost btn-sm">
@@ -400,16 +399,16 @@ export default function ProjectDetailPage() {
 
         {/* Cost ledger */}
         <div className="card overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+          <h2 className="card-title">
             {t('prj.costEntries')}
-          </div>
+          </h2>
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('prj.costType')}</th>
-                <th className="th">{t('prj.source')}</th>
-                <th className="th text-end">{t('contracts.amount')}</th>
-                <th className="th">{t('common.date')}</th>
+                <th scope="col" className="th">{t('prj.costType')}</th>
+                <th scope="col" className="th">{t('prj.source')}</th>
+                <th scope="col" className="th text-end">{t('contracts.amount')}</th>
+                <th scope="col" className="th">{t('common.date')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -420,7 +419,7 @@ export default function ProjectDetailPage() {
                   <tr key={ce.id}>
                     <td className="td">{optionLabel(enums?.costTypes, ce.costType, locale)}</td>
                     <td className="td text-xs text-slate-500">{ce.memo ?? ce.sourceType}</td>
-                    <td className="td text-end">{formatMoney(ce.amount, locale)}</td>
+                    <td className="td-num">{formatMoney(ce.amount, locale)}</td>
                     <td className="td text-xs text-slate-500">{formatDate(ce.postedAt, locale)}</td>
                   </tr>
                 ))
@@ -431,15 +430,15 @@ export default function ProjectDetailPage() {
 
         {/* Serial units */}
         <div className="card overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+          <h2 className="card-title">
             {t('prj.serials')}
-          </div>
+          </h2>
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('ast.serial')}</th>
-                <th className="th">{t('ast.item')}</th>
-                <th className="th">{t('ast.state')}</th>
+                <th scope="col" className="th">{t('ast.serial')}</th>
+                <th scope="col" className="th">{t('ast.item')}</th>
+                <th scope="col" className="th">{t('ast.state')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -464,22 +463,22 @@ export default function ProjectDetailPage() {
       <>
       {/* PRJ-06: change orders */}
       <div className="card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+        <div className="card-title flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-slate-800">{t('co.title')}</h3>
-            <p className="mt-1 text-xs text-slate-400">{t('co.hint')}</p>
+            <h3 className="font-bold">{t('co.title')}</h3>
+            <p className="mt-1 text-xs text-slate-500">{t('co.hint')}</p>
           </div>
           <Can perm="projects.project.write"><Btn variant="primary" sm icon="plus" onClick={() => setCoOpen(true)}>{t('co.new')}</Btn></Can>
         </div>
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('co.desc')}</th>
-              <th className="th text-end">{t('co.delta')}</th>
-              <th className="th text-center">{t('co.days')}</th>
-              <th className="th">{t('common.status')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('co.desc')}</th>
+              <th scope="col" className="th text-end">{t('co.delta')}</th>
+              <th scope="col" className="th text-center">{t('co.days')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -490,7 +489,7 @@ export default function ProjectDetailPage() {
                 <tr key={co.id}>
                   <td className="td font-mono text-xs">{co.code}</td>
                   <td className="td">{locale === 'ar' ? co.descriptionAr : co.descriptionEn}</td>
-                  <td className={`td text-end font-medium ${Number(co.amountDelta) >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  <td className={`td text-end font-medium ${Number(co.amountDelta) >= 0 ? 'text-success-700' : 'text-danger-600'}`}>
                     {Number(co.amountDelta) >= 0 ? '+' : ''}{formatMoney(co.amountDelta, locale)}
                   </td>
                   <td className="td text-center">{co.scheduleImpactDays}</td>
@@ -515,15 +514,15 @@ export default function ProjectDetailPage() {
 
       {/* PRJ-07: subcontracts & claims */}
       <div className="card mt-6 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+        <div className="card-title flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-slate-800">{t('sub.title')}</h3>
-            <p className="mt-1 text-xs text-slate-400">{t('sub.hint')}</p>
+            <h3 className="font-bold">{t('sub.title')}</h3>
+            <p className="mt-1 text-xs text-slate-500">{t('sub.hint')}</p>
           </div>
           <Can perm="scm.procurement.write"><Btn variant="primary" sm icon="plus" onClick={() => setSubOpen(true)}>{t('sub.new')}</Btn></Can>
         </div>
         {p.subcontracts.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-slate-400">{t('common.none')}</p>
+          <p className="px-5 py-8 text-center text-sm text-slate-500">{t('common.none')}</p>
         ) : (
           <div className="divide-y divide-slate-100">
             {p.subcontracts.map((sub) => {
@@ -532,7 +531,7 @@ export default function ProjectDetailPage() {
                 <div key={sub.id} className="px-5 py-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <span className="font-mono text-xs text-slate-400">{sub.code}</span>{' '}
+                      <span className="font-mono text-xs text-slate-500">{sub.code}</span>{' '}
                       <span className="font-medium">{sub.vendor ? pick(sub.vendor, 'name') : ''}</span>
                       <span className="ms-2 text-xs text-slate-500">{locale === 'ar' ? sub.scopeAr : sub.scopeEn}</span>
                     </div>
@@ -546,33 +545,33 @@ export default function ProjectDetailPage() {
                   {sub.claims.length > 0 && (
                     <table className="mt-3 min-w-full text-xs">
                       <thead>
-                        <tr className="text-start text-slate-400">
-                          <th className="pb-1 text-start">#</th>
-                          <th className="pb-1 text-start">{t('common.code')}</th>
-                          <th className="pb-1 text-end">{t('sub.claimed')}</th>
-                          <th className="pb-1 text-end">{t('inv.vat')}</th>
-                          <th className="pb-1 text-end">{t('inv.retention')}</th>
-                          <th className="pb-1 text-end">{t('sub.net')}</th>
-                          <th className="pb-1 text-start">{t('common.status')}</th>
-                          <th className="pb-1"></th>
+                        <tr>
+                          <th scope="col" className="th">#</th>
+                          <th scope="col" className="th">{t('common.code')}</th>
+                          <th scope="col" className="th text-end">{t('sub.claimed')}</th>
+                          <th scope="col" className="th text-end">{t('inv.vat')}</th>
+                          <th scope="col" className="th text-end">{t('inv.retention')}</th>
+                          <th scope="col" className="th text-end">{t('sub.net')}</th>
+                          <th scope="col" className="th">{t('common.status')}</th>
+                          <th scope="col" className="th"><span className="sr-only">{t('common.actions')}</span></th>
                         </tr>
                       </thead>
                       <tbody>
                         {sub.claims.map((c) => (
                           <tr key={c.id} className="border-t border-slate-50">
-                            <td className="py-1">{c.sequence}</td>
-                            <td className="py-1 font-mono">{c.code}</td>
-                            <td className="py-1 text-end">{formatMoney(c.claimedAmount, locale)}</td>
-                            <td className="py-1 text-end">{formatMoney(c.vatAmount, locale)}</td>
-                            <td className="py-1 text-end">{formatMoney(c.retentionWithheld, locale)}</td>
-                            <td className="py-1 text-end font-medium">{formatMoney(c.netPayable, locale)}</td>
-                            <td className="py-1"><StatusBadge status={c.status} /></td>
-                            <td className="py-1 text-end">
+                            <td className="td">{c.sequence}</td>
+                            <td className="td font-mono">{c.code}</td>
+                            <td className="td-num">{formatMoney(c.claimedAmount, locale)}</td>
+                            <td className="td-num">{formatMoney(c.vatAmount, locale)}</td>
+                            <td className="td-num">{formatMoney(c.retentionWithheld, locale)}</td>
+                            <td className="td-num font-medium">{formatMoney(c.netPayable, locale)}</td>
+                            <td className="td"><StatusBadge status={c.status} /></td>
+                            <td className="td-num">
                               {c.pendingApproval ? (
                                 <div className="flex justify-end"><ApprovalChain request={c.pendingApproval} /></div>
                               ) : (
                                 c.status === 'SUBMITTED' && (
-                                  <Can perm="scm.procurement.write"><Btn variant="primary" sm className="!px-2 !py-0.5 !text-[11px]" busy={busy(`approveClaim:${c.id}`)} disabled={busy()} onClick={() => approveClaim(c.id)}>
+                                  <Can perm="scm.procurement.write"><Btn variant="primary" sm className="!px-2 !py-0.5 !text-xs" busy={busy(`approveClaim:${c.id}`)} disabled={busy()} onClick={() => approveClaim(c.id)}>
                                     {t('sub.approveClaim')}
                                   </Btn></Can>
                                 )

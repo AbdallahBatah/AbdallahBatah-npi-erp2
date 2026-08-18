@@ -167,6 +167,14 @@ export const messages: Record<Locale, Record<string, string>> = {
     'common.discardTitle': 'تجاهل التغييرات؟',
     'common.discardMsg': 'أدخلت بيانات لم تُحفظ بعد. إغلاق النافذة سيمحوها.',
     'common.discard': 'تجاهل',
+    'common.all': 'الكل',
+
+    // Empty states and control names added by the UI polish pass.
+    'opps.emptyHint': 'تبدأ الفرص من عميل قائم — حوّل عميلاً محتملاً أو أنشئ العميل أولاً',
+    'proposals.removeLine': 'حذف البند',
+    'po.removeLine': 'حذف السطر',
+    'inv.einvoice.draftHint': 'لم تُصدر بعد. أصدر الفاتورة لتوليد مستند ZATCA ورمز QR.',
+    'inv.einvoice.noneHint': 'لا يوجد مستند ZATCA لهذه الفاتورة.',
     'inv.techDetails': 'التفاصيل التقنية (ZATCA)',
     'inv.modeClearance': 'فوترة فورية (شركات B2B)',
     'inv.modeReporting': 'إبلاغ (أفراد B2C)',
@@ -963,6 +971,14 @@ export const messages: Record<Locale, Record<string, string>> = {
     'common.discardTitle': 'Discard changes?',
     'common.discardMsg': 'You have unsaved input. Closing will erase it.',
     'common.discard': 'Discard',
+    'common.all': 'All',
+
+    // Empty states and control names added by the UI polish pass.
+    'opps.emptyHint': 'Opportunities start from a customer — convert a lead, or create the customer first',
+    'proposals.removeLine': 'Remove line',
+    'po.removeLine': 'Remove line',
+    'inv.einvoice.draftHint': 'Not issued yet. Issue the invoice to generate its ZATCA document and QR code.',
+    'inv.einvoice.noneHint': 'This invoice has no ZATCA document.',
     'inv.techDetails': 'Technical details (ZATCA)',
     'inv.modeClearance': 'Clearance (B2B)',
     'inv.modeReporting': 'Reporting (B2C)',

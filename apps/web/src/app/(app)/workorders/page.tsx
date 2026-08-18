@@ -54,8 +54,8 @@ interface Plan {
 const PRIORITY_STYLE: Record<string, string> = {
   LOW: 'bg-slate-100 text-slate-600',
   MEDIUM: 'bg-brand-100 text-brand-800',
-  HIGH: 'bg-amber-100 text-amber-800',
-  CRITICAL: 'bg-rose-100 text-rose-700',
+  HIGH: 'bg-warning-100 text-warning-800',
+  CRITICAL: 'bg-danger-100 text-danger-700',
 };
 
 export default function WorkOrdersPage() {
@@ -176,9 +176,9 @@ export default function WorkOrdersPage() {
 
   const cards = [
     { key: 'wo.summary.open', v: summary?.open, tone: 'text-brand-700' },
-    { key: 'wo.summary.inProgress', v: summary?.inProgress, tone: 'text-amber-600' },
-    { key: 'wo.summary.overdue', v: summary?.overdue, tone: 'text-rose-600' },
-    { key: 'wo.summary.closed', v: summary?.closedThisMonth, tone: 'text-emerald-600' },
+    { key: 'wo.summary.inProgress', v: summary?.inProgress, tone: 'text-warning-600' },
+    { key: 'wo.summary.overdue', v: summary?.overdue, tone: 'text-danger-600' },
+    { key: 'wo.summary.closed', v: summary?.closedThisMonth, tone: 'text-success-600' },
   ];
 
   return (
@@ -198,26 +198,28 @@ export default function WorkOrdersPage() {
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map((c) => (
-          <div key={c.key} className="card p-4">
-            <p className="text-xs text-slate-500">{t(c.key)}</p>
-            <p className={`mt-1 text-xl font-bold ${c.tone}`}>{c.v ?? '—'}</p>
+          <div key={c.key} className="stat">
+            <p className="text-xs font-semibold text-slate-500">{t(c.key)}</p>
+            <p className={`mt-2 text-3xl font-bold tabular-nums ${c.tone}`}>{c.v ?? '—'}</p>
           </div>
         ))}
       </div>
 
       {/* Work orders table */}
-      <div className="card overflow-hidden">
+      {/* table-sticky, not overflow-hidden: an unbounded list needs its header
+          pinned, and overflow-hidden defeats the sticky thead. */}
+      <div className="card table-sticky">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('wo.titleField')}</th>
-              <th className="th">{t('wo.type')}</th>
-              <th className="th">{t('wo.priority')}</th>
-              <th className="th">{t('wo.asset')}</th>
-              <th className="th">{t('wo.assignee')}</th>
-              <th className="th">{t('common.status')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('wo.titleField')}</th>
+              <th scope="col" className="th hidden lg:table-cell">{t('wo.type')}</th>
+              <th scope="col" className="th">{t('wo.priority')}</th>
+              <th scope="col" className="th hidden lg:table-cell">{t('wo.asset')}</th>
+              <th scope="col" className="th">{t('wo.assignee')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -229,14 +231,19 @@ export default function WorkOrdersPage() {
               rows.map((w) => (
                 <tr key={w.id} className="hover:bg-slate-50">
                   <td className="td font-mono text-xs">{w.code}</td>
-                  <td className="td">{locale === 'ar' ? w.titleAr : w.titleEn}</td>
-                  <td className="td">{optionLabel(enums?.woTypes, w.woType, locale)}</td>
+                  <td className="td">
+                    {locale === 'ar' ? w.titleAr : w.titleEn}
+                    <span className="mt-0.5 block text-xs text-slate-500 lg:hidden">
+                      {w.asset ? w.asset.code : '—'}
+                    </span>
+                  </td>
+                  <td className="td hidden lg:table-cell">{optionLabel(enums?.woTypes, w.woType, locale)}</td>
                   <td className="td">
                     <span className={`badge ${PRIORITY_STYLE[w.priority] ?? ''}`}>
                       {optionLabel(enums?.woPriorities, w.priority, locale)}
                     </span>
                   </td>
-                  <td className="td text-xs">{w.asset ? `${w.asset.code}` : '—'}</td>
+                  <td className="td hidden text-xs lg:table-cell">{w.asset ? `${w.asset.code}` : '—'}</td>
                   <td className="td text-xs">{w.assignedTo ? pick(w.assignedTo, 'name') : '—'}</td>
                   <td className="td"><StatusBadge status={w.status} /></td>
                   <td className="td">
@@ -254,8 +261,8 @@ export default function WorkOrdersPage() {
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Maintenance plans */}
         <div className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-            <h3 className="text-sm font-semibold text-slate-800">{t('mp.title')}</h3>
+          <div className="card-title flex items-center justify-between">
+            <h3 className="font-bold">{t('mp.title')}</h3>
             <Can perm="fsm.workorder.write">
               <div className="flex gap-2">
                 <Btn sm icon="plus" onClick={() => setMOpen(true)}>{t('mp.new')}</Btn>
@@ -268,12 +275,12 @@ export default function WorkOrdersPage() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('common.code')}</th>
-                <th className="th">{t('common.name')}</th>
-                <th className="th">{t('wo.asset')}</th>
-                <th className="th text-center">{t('mp.interval')}</th>
-                <th className="th">{t('mp.nextDue')}</th>
-                <th className="th text-center">{t('mp.generated')}</th>
+                <th scope="col" className="th">{t('common.code')}</th>
+                <th scope="col" className="th">{t('common.name')}</th>
+                <th scope="col" className="th">{t('wo.asset')}</th>
+                <th scope="col" className="th text-center">{t('mp.interval')}</th>
+                <th scope="col" className="th">{t('mp.nextDue')}</th>
+                <th scope="col" className="th text-center">{t('mp.generated')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -299,17 +306,17 @@ export default function WorkOrdersPage() {
 
         {/* Asset register */}
         <div className="card overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+          <h2 className="card-title">
             {t('astr.title')}
-          </div>
+          </h2>
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="th">{t('common.code')}</th>
-                <th className="th">{t('common.name')}</th>
-                <th className="th">{t('astr.type')}</th>
-                <th className="th">{t('common.status')}</th>
-                <th className="th text-center">{t('astr.workorders')}</th>
+                <th scope="col" className="th">{t('common.code')}</th>
+                <th scope="col" className="th">{t('common.name')}</th>
+                <th scope="col" className="th">{t('astr.type')}</th>
+                <th scope="col" className="th">{t('common.status')}</th>
+                <th scope="col" className="th text-center">{t('astr.workorders')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -319,7 +326,7 @@ export default function WorkOrdersPage() {
                 assets.map((a) => (
                   <tr key={a.id}>
                     <td className="td font-mono text-xs">
-                      {a.parent ? <span className="text-slate-300">└ </span> : ''}{a.code}
+                      {a.parent ? <span className="text-slate-500">└ </span> : ''}{a.code}
                     </td>
                     <td className="td">{pick(a, 'name')}</td>
                     <td className="td">{optionLabel(enums?.assetTypes, a.assetType, locale)}</td>

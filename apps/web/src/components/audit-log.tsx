@@ -263,12 +263,12 @@ export function AuditLogCard() {
       <table className="min-w-full text-sm">
         <thead className="bg-slate-50">
           <tr>
-            <th className="th">{t('audit.when')}</th>
-            <th className="th">{t('audit.actor')}</th>
-            <th className="th">{t('audit.action')}</th>
-            <th className="th">{t('audit.entity')}</th>
-            <th className="th">IP</th>
-            <th className="th text-end">{t('audit.details')}</th>
+            <th scope="col" className="th">{t('audit.when')}</th>
+            <th scope="col" className="th">{t('audit.actor')}</th>
+            <th scope="col" className="th">{t('audit.action')}</th>
+            <th scope="col" className="th">{t('audit.entity')}</th>
+            <th scope="col" className="th">IP</th>
+            <th scope="col" className="th text-end">{t('audit.details')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -287,7 +287,7 @@ export function AuditLogCard() {
                     {r.actor ? (
                       <span title={r.actor.email}>{ar ? r.actor.nameAr : r.actor.nameEn}</span>
                     ) : (
-                      <span className="text-slate-400">{t('audit.system')}</span>
+                      <span className="text-slate-500">{t('audit.system')}</span>
                     )}
                   </td>
                   <td className="td">
@@ -295,18 +295,19 @@ export function AuditLogCard() {
                   </td>
                   <td className="td">
                     {entityLabel(r.entityType)}
-                    <span className="ms-2 font-mono text-[10px] text-slate-400" dir="ltr">
+                    <span className="ms-2 font-mono text-xs text-slate-500" dir="ltr">
                       {r.entityId}
                     </span>
                   </td>
-                  <td className="td font-mono text-[10px] text-slate-400" dir="ltr">
+                  <td className="td font-mono text-xs text-slate-500" dir="ltr">
                     {r.ip ?? '—'}
                   </td>
-                  <td className="td text-end">
+                  <td className="td-num">
                     {hasDiff && (
                       <Btn
                         sm
                         icon={expanded ? 'chevron-end' : 'eye'}
+                        iconClassName={expanded ? 'rtl:-scale-x-100' : ''}
                         aria-expanded={expanded}
                         onClick={() =>
                           setOpen((prev) => {
@@ -331,10 +332,12 @@ export function AuditLogCard() {
                           ['audit.after', r.afterJson],
                         ] as const).map(([key, json]) => (
                           <div key={key}>
-                            <div className="mb-1 text-[11px] font-semibold text-slate-500">{t(key)}</div>
+                            <div className="mb-1 text-xs font-semibold text-slate-500">{t(key)}</div>
                             <pre
                               dir="ltr"
-                              className="max-h-64 overflow-auto rounded-lg bg-white p-3 text-start font-mono text-[11px] leading-relaxed text-slate-700 ring-1 ring-slate-200"
+                              tabIndex={0}
+                              aria-label={t(key)}
+                              className="max-h-64 overflow-auto rounded-lg bg-white p-3 text-start font-mono text-xs leading-relaxed text-slate-700 ring-1 ring-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                             >
                               {json == null ? '—' : JSON.stringify(json, null, 2)}
                             </pre>

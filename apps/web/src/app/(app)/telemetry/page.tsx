@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
-import { formatNumber } from '@/lib/format';
+import { formatDay, formatNumber } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, LoadError, useConfirm, Can, Btn, TableSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
@@ -35,8 +35,8 @@ interface Project { id: string; code: string; nameAr: string; nameEn: string }
 
 const SEV_STYLE: Record<string, string> = {
   INFO: 'bg-slate-100 text-slate-600',
-  WARNING: 'bg-amber-100 text-amber-800',
-  CRITICAL: 'bg-rose-100 text-rose-700',
+  WARNING: 'bg-warning-100 text-warning-800',
+  CRITICAL: 'bg-danger-100 text-danger-700',
 };
 
 export default function TelemetryPage() {
@@ -85,7 +85,7 @@ export default function TelemetryPage() {
           </Can>
         }
       />
-      <p className="mb-4 -mt-4 flex items-center gap-1.5 text-xs text-slate-400">
+      <p className="mb-4 -mt-4 flex items-center gap-1.5 text-xs text-slate-500">
         <Icon name="alert-triangle" className="h-3.5 w-3.5 shrink-0 text-warning-500" />
         {t('tel.simulateHint')}
       </p>
@@ -93,38 +93,38 @@ export default function TelemetryPage() {
       {confirmNode}
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="card p-4">
-          <p className="text-xs text-slate-500">{t('tel.plants')}</p>
-          <p className="mt-1 text-xl font-bold text-slate-700">{dash?.plants ?? '—'}</p>
+        <div className="stat">
+          <p className="text-xs font-semibold text-slate-500">{t('tel.plants')}</p>
+          <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900">{dash?.plants ?? '—'}</p>
         </div>
-        <div className="card p-4">
-          <p className="text-xs text-slate-500">{t('tel.openAlerts')}</p>
-          <p className={`mt-1 text-xl font-bold ${(dash?.openAlerts ?? 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+        <div className="stat">
+          <p className="text-xs font-semibold text-slate-500">{t('tel.openAlerts')}</p>
+          <p className={`mt-2 text-3xl font-bold tabular-nums ${(dash?.openAlerts ?? 0) > 0 ? 'text-danger-600' : 'text-success-600'}`}>
             {dash?.openAlerts ?? '—'}
           </p>
         </div>
-        <div className="card p-4">
-          <p className="text-xs text-slate-500">{t('tel.actual14')}</p>
-          <p className="mt-1 text-xl font-bold text-brand-700">
+        <div className="stat">
+          <p className="text-xs font-semibold text-slate-500">{t('tel.actual14')}</p>
+          <p className="mt-2 text-3xl font-bold tabular-nums text-brand-700">
             {dash ? `${formatNumber(dash.totalActualKwh, locale)} kWh` : '—'}
           </p>
         </div>
-        <div className="card p-4">
-          <p className="text-xs text-slate-500">{t('tel.pr')}</p>
-          <p className={`mt-1 text-xl font-bold ${dash?.portfolioPr && dash.portfolioPr < 0.8 ? 'text-amber-600' : 'text-emerald-600'}`}>
+        <div className="stat">
+          <p className="text-xs font-semibold text-slate-500">{t('tel.pr')}</p>
+          <p className={`mt-2 text-3xl font-bold tabular-nums ${dash?.portfolioPr && dash.portfolioPr < 0.8 ? 'text-warning-600' : 'text-success-600'}`}>
             {dash?.portfolioPr != null ? `${Math.round(dash.portfolioPr * 100)}%` : '—'}
           </p>
         </div>
       </div>
 
       {/* Actual vs expected bar chart */}
-      <div className="card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+      <div className="card table-sticky">
+        <h2 className="card-title">
           {t('tel.chart')}
-        </div>
+        </h2>
         <div className="p-5">
           {!dash || dash.series.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">{t('tel.noPlant')}</p>
+            <p className="py-8 text-center text-sm text-slate-500">{t('tel.noPlant')}</p>
           ) : (
             <div className="flex items-end gap-1" style={{ height: 160 }} dir="ltr">
               {dash.series.map((s, i) => {
@@ -132,14 +132,23 @@ export default function TelemetryPage() {
                 const hE = Math.max(3, ((s.expectedKwh ?? 0) / maxKwh) * 150);
                 const low = s.pr != null && s.pr < 0.8;
                 return (
-                  <div key={i} className="group relative flex flex-1 items-end justify-center gap-0.5">
+                  <div
+                    key={i}
+                    tabIndex={0}
+                    role="img"
+                    aria-label={`${formatDay(s.date, locale)} · ${formatNumber(s.energyKwh, locale)}/${
+                      s.expectedKwh ?? '—'
+                    } kWh${s.pr != null ? ` · PR ${Math.round(s.pr * 100)}%` : ''}`}
+                    className="group relative flex flex-1 items-end justify-center gap-0.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                  >
                     <div className="w-2 rounded-t bg-slate-200" style={{ height: hE }} />
                     <div
-                      className={`w-2 rounded-t ${low ? 'bg-rose-400' : 'bg-brand-500'}`}
+                      className={`w-2 rounded-t ${low ? 'bg-warning-400' : 'bg-brand-500'}`}
                       style={{ height: hA }}
                     />
-                    <div className="pointer-events-none absolute -top-8 hidden whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-[10px] text-white group-hover:block">
-                      {new Date(s.date).toISOString().slice(5, 10)} · {s.energyKwh}/{s.expectedKwh ?? '—'} kWh
+                    <div className="pointer-events-none absolute -top-8 hidden whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white group-hover:block group-focus:block">
+                      {formatDay(s.date, locale)} · {formatNumber(s.energyKwh, locale)}/
+                      {s.expectedKwh ?? '—'} kWh
                       {s.pr != null ? ` · PR ${Math.round(s.pr * 100)}%` : ''}
                     </div>
                   </div>
@@ -147,30 +156,30 @@ export default function TelemetryPage() {
               })}
             </div>
           )}
-          <div className="mt-3 flex items-center gap-4 text-[11px] text-slate-500">
+          <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
             <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-slate-200" /> {t('tel.expected')}</span>
             <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-brand-500" /> {t('tel.actual')}</span>
-            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-rose-400" /> PR &lt; 80%</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-warning-400" /> PR &lt; 80%</span>
           </div>
         </div>
       </div>
 
       {/* Alerts */}
-      <div className="card mt-6 overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
+      <div className="card table-sticky mt-6">
+        <h2 className="card-title">
           {t('tel.alerts')}
-        </div>
+        </h2>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="th">{t('common.code')}</th>
-              <th className="th">{t('wo.asset')}</th>
-              <th className="th">{t('tel.alertType')}</th>
-              <th className="th">{t('tel.severity')}</th>
-              <th className="th">{t('tel.message')}</th>
-              <th className="th">{t('common.status')}</th>
-              <th className="th">{t('tel.wo')}</th>
-              <th className="th">{t('common.actions')}</th>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('wo.asset')}</th>
+              <th scope="col" className="th hidden lg:table-cell">{t('tel.alertType')}</th>
+              <th scope="col" className="th">{t('tel.severity')}</th>
+              <th scope="col" className="th">{t('tel.message')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
+              <th scope="col" className="th hidden lg:table-cell">{t('tel.wo')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -183,7 +192,7 @@ export default function TelemetryPage() {
                 <tr key={a.id} className="hover:bg-slate-50">
                   <td className="td font-mono text-xs">{a.code}</td>
                   <td className="td text-xs">{a.asset?.code}</td>
-                  <td className="td">{optionLabel(enums?.alertTypes, a.alertType, locale)}</td>
+                  <td className="td hidden lg:table-cell">{optionLabel(enums?.alertTypes, a.alertType, locale)}</td>
                   <td className="td">
                     <span className={`badge ${SEV_STYLE[a.severity] ?? ''}`}>
                       {optionLabel(enums?.alertSeverities, a.severity, locale)}
@@ -191,16 +200,16 @@ export default function TelemetryPage() {
                   </td>
                   <td className="td max-w-xs truncate text-xs text-slate-500" title={a.message}>
                     {a.message}
-                    <span className="ms-1 font-mono text-[10px] text-slate-400">{a.ruleRef}</span>
+                    <span className="ms-1 font-mono text-xs text-slate-500">{a.ruleRef}</span>
                   </td>
                   <td className="td"><StatusBadge status={a.status} /></td>
-                  <td className="td">
+                  <td className="td hidden lg:table-cell">
                     {a.workOrder ? (
                       <Link href={`/workorders/${a.workOrder.id}`} className="font-mono text-xs text-brand-700 hover:underline">
                         {a.workOrder.code} <StatusBadge status={a.workOrder.status} />
                       </Link>
                     ) : (
-                      <span className="text-xs text-slate-400">—</span>
+                      <span className="text-xs text-slate-500">—</span>
                     )}
                   </td>
                   <td className="td">
