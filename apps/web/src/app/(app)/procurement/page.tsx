@@ -57,6 +57,9 @@ export default function ProcurementPage() {
   const [vType, setVType] = useState('SUPPLIER');
   const [vManufacturer, setVManufacturer] = useState(false);
   const [vVat, setVVat] = useState('');
+  // Mirrors the server's rule so the reader learns about a bad VAT inside the
+  // dialog, not from a corner toast after a rejected submit.
+  const vVatBad = vVat.trim() !== '' && !/^3\d{13}3$/.test(vVat.trim());
 
   const [pOpen, setPOpen] = useState(false);
   const [pVendorId, setPVendorId] = useState('');
@@ -408,7 +411,22 @@ export default function ProcurementPage() {
             </select>
           </Field>
           <Field label="الرقم الضريبي / VAT No.">
-            <input className="input" value={vVat} onChange={(e) => setVVat(e.target.value)} />
+            <input
+              className={`input${vVatBad ? ' border-danger-400 focus:ring-danger-400' : ''}`}
+              dir="ltr"
+              inputMode="numeric"
+              maxLength={15}
+              value={vVat}
+              onChange={(e) => setVVat(e.target.value)}
+              aria-invalid={vVatBad}
+            />
+            {vVatBad && (
+              <p className="mt-1 text-xs text-danger-600">
+                {locale === 'ar'
+                  ? 'الرقم الضريبي غير صحيح — 15 رقماً يبدأ وينتهي بالرقم 3'
+                  : 'Invalid VAT number — 15 digits starting and ending with 3'}
+              </p>
+            )}
           </Field>
           <label className="flex items-center gap-2 text-sm text-slate-600">
             <input type="checkbox" checked={vManufacturer} onChange={(e) => setVManufacturer(e.target.checked)} />
@@ -417,7 +435,7 @@ export default function ProcurementPage() {
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <Btn sm onClick={() => setVOpen(false)}>{t('common.cancel')}</Btn>
-          <Btn variant="primary" sm busy={busy('vendor')} disabled={busy() || !(vNameAr.trim() || vNameEn.trim())} onClick={createVendor}>
+          <Btn variant="primary" sm busy={busy('vendor')} disabled={busy() || !(vNameAr.trim() || vNameEn.trim()) || vVatBad} onClick={createVendor}>
             {t('common.create')}
           </Btn>
         </div>
