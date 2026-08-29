@@ -1,0 +1,2076 @@
+[
+  {
+    "id": "TC001",
+    "title": "Sign in to the protected workspace",
+    "description": "A user can log in with valid credentials and reach the dashboard after authentication.",
+    "category": "User Login",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify KPI content is visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Log in and land on the dashboard",
+    "description": "An authenticated user can log in and reach the main dashboard workspace.",
+    "category": "Authentication and Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Issue a ZATCA invoice and open the printable QR view",
+    "description": "A finance user can issue an invoice, record a payment or credit note, and open the printable QR invoice view.",
+    "category": "Authentication and Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /invoices"
+      },
+      {
+        "type": "action",
+        "description": "Open an invoice from the list"
+      },
+      {
+        "type": "action",
+        "description": "Issue the invoice"
+      },
+      {
+        "type": "action",
+        "description": "Record a payment or credit note"
+      },
+      {
+        "type": "action",
+        "description": "Open the printable invoice view"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the printable invoice view is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the ZATCA QR information is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "View dashboard KPIs after sign-in",
+    "description": "After signing in, a user can open the dashboard and view the core KPI summary and recent activity area.",
+    "category": "Dashboard KPIs",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify KPI cards are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify recent activity content is visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Access the proposal workspace after login",
+    "description": "A sales rep can log in, reach the proposals workspace, and view the proposal creation area.",
+    "category": "Proposals and Contracts",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the proposals workspace link"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the proposal workspace is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the proposal creation area is available"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Create a lead and convert it to a customer opportunity",
+    "description": "A sales rep can create a lead from CRM and convert it into an opportunity and customer record.",
+    "category": "Authentication and Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /leads"
+      },
+      {
+        "type": "action",
+        "description": "Create a new lead with valid details"
+      },
+      {
+        "type": "action",
+        "description": "Convert the lead to an opportunity and customer"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the opportunity and customer records are created"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Issue a draft invoice",
+    "description": "A finance user can issue a draft invoice and see it move to an issued state with ZATCA hash chain details.",
+    "category": "ZATCA e-Invoicing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the invoices workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open a draft invoice"
+      },
+      {
+        "type": "action",
+        "description": "Issue the invoice"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the invoice is marked as issued"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify ZATCA hash chain details are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "Record a payment against an invoice",
+    "description": "A finance user can record a payment on an invoice and see the outstanding balance reduced.",
+    "category": "ZATCA e-Invoicing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the invoices workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open an invoice with an outstanding balance"
+      },
+      {
+        "type": "action",
+        "description": "Record a payment"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the invoice balance is reduced"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the payment is shown on the invoice"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC009",
+    "title": "Convert a lead into an opportunity and customer",
+    "description": "A sales user can open an existing lead and complete conversion so that related opportunity and customer records are created.",
+    "category": "CRM: Leads, Opportunities, and Customers",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /leads"
+      },
+      {
+        "type": "action",
+        "description": "Create a new lead with valid details"
+      },
+      {
+        "type": "action",
+        "description": "Open the created lead"
+      },
+      {
+        "type": "action",
+        "description": "Convert the lead to an opportunity and customer"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the related opportunity is created"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the related customer is created"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC010",
+    "title": "Activate a contract and complete a milestone",
+    "description": "A project manager can activate a contract and confirm that a milestone is completed and updated.",
+    "category": "Proposals and Contracts",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the contracts workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open an existing contract"
+      },
+      {
+        "type": "action",
+        "description": "Activate the contract"
+      },
+      {
+        "type": "action",
+        "description": "Confirm a milestone completion"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the contract is active"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the milestone state is updated"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC011",
+    "title": "Accept a proposal revision and activate the contract",
+    "description": "A sales rep can accept a proposal revision, create a contract from it, and activate the contract.",
+    "category": "Authentication and Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /proposals"
+      },
+      {
+        "type": "action",
+        "description": "Open an existing proposal"
+      },
+      {
+        "type": "action",
+        "description": "Add a revision to the proposal"
+      },
+      {
+        "type": "action",
+        "description": "Accept the proposal revision"
+      },
+      {
+        "type": "action",
+        "description": "Create a contract from the accepted revision"
+      },
+      {
+        "type": "action",
+        "description": "Activate the contract"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the contract is active"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC012",
+    "title": "Approve a pending document with a comment",
+    "description": "This test verifies that a user can open a pending approval item, approve it with a comment, and see the decision recorded.",
+    "category": "Approvals",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the approvals inbox link"
+      },
+      {
+        "type": "action",
+        "description": "Open a pending approval item"
+      },
+      {
+        "type": "action",
+        "description": "Approve the item with a comment"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the approval decision is recorded"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC013",
+    "title": "Create a credit note for an invoice",
+    "description": "A finance user can create a credit note from an invoice and see the invoice adjusted accordingly.",
+    "category": "ZATCA e-Invoicing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the invoices workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open an issued invoice"
+      },
+      {
+        "type": "action",
+        "description": "Create a credit note"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the invoice is adjusted"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the credit note is shown"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC014",
+    "title": "Create a contract from an accepted proposal",
+    "description": "A sales rep can create a contract from an accepted proposal, save it, and open the contract detail page.",
+    "category": "Proposals and Contracts",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the contracts workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Create a contract from an accepted proposal"
+      },
+      {
+        "type": "action",
+        "description": "Save the contract"
+      },
+      {
+        "type": "action",
+        "description": "Open the saved contract"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the contract detail page is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new contract is shown"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC015",
+    "title": "Open the printable invoice view with QR code",
+    "description": "A finance user can open the printable invoice view and see the ZATCA QR code ready for printing.",
+    "category": "ZATCA e-Invoicing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the invoices workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open an invoice"
+      },
+      {
+        "type": "action",
+        "description": "Open the printable invoice view"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the printable invoice view is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the ZATCA QR code is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC016",
+    "title": "Accept a proposal revision",
+    "description": "A sales rep can add a proposal revision, review it, accept it, and see the proposal marked as accepted.",
+    "category": "Proposals and Contracts",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the proposals workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open an existing proposal"
+      },
+      {
+        "type": "action",
+        "description": "Add a revision"
+      },
+      {
+        "type": "action",
+        "description": "Review the revised proposal"
+      },
+      {
+        "type": "action",
+        "description": "Accept the revision"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the proposal is marked as accepted"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the accepted revision is shown"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC017",
+    "title": "Create a proposal for an opportunity",
+    "description": "A sales rep can create a proposal from an opportunity and see it saved in the proposals area.",
+    "category": "Authentication and Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /proposals"
+      },
+      {
+        "type": "action",
+        "description": "Create a proposal for an opportunity with valid details"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the proposal is saved and displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC018",
+    "title": "Create a proposal with line items",
+    "description": "A sales rep can create a proposal for an opportunity, add line items, save it, and open the saved proposal detail page.",
+    "category": "Proposals and Contracts",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the proposals workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Create a new proposal for an opportunity"
+      },
+      {
+        "type": "action",
+        "description": "Add proposal line items"
+      },
+      {
+        "type": "action",
+        "description": "Save the proposal"
+      },
+      {
+        "type": "action",
+        "description": "Open the saved proposal"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the proposal detail page is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the saved proposal is shown"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC019",
+    "title": "Create a purchase order with line items",
+    "description": "A procurement user can create a purchase order with items and save it as a draft that opens in detail view.",
+    "category": "Procurement and Inventory",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /procurement"
+      },
+      {
+        "type": "action",
+        "description": "Create a purchase order with valid line items"
+      },
+      {
+        "type": "action",
+        "description": "Save the purchase order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the purchase order detail view is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC020",
+    "title": "View a balanced trial balance",
+    "description": "A finance user can open the trial balance report and confirm that it balances.",
+    "category": "Finance Reports",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the trial balance report link"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the trial balance report is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the trial balance is balanced"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC021",
+    "title": "Assign and complete a work order",
+    "description": "A field technician can assign a work order, start it, add parts, complete it, and close it.",
+    "category": "Field Service: Work Orders, Assets, and Warranty",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /workorders"
+      },
+      {
+        "type": "action",
+        "description": "Open a work order from the list"
+      },
+      {
+        "type": "action",
+        "description": "Assign a technician to the work order"
+      },
+      {
+        "type": "action",
+        "description": "Start the work order"
+      },
+      {
+        "type": "action",
+        "description": "Add parts to the work order"
+      },
+      {
+        "type": "action",
+        "description": "Complete the work order"
+      },
+      {
+        "type": "action",
+        "description": "Close the work order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the work order is closed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the work order history reflects the completed lifecycle"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC022",
+    "title": "Reject a pending document with a comment",
+    "description": "This test verifies that a user can reject a pending approval item with a comment and see the rejection recorded.",
+    "category": "Approvals",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the approvals inbox link"
+      },
+      {
+        "type": "action",
+        "description": "Open a pending approval item"
+      },
+      {
+        "type": "action",
+        "description": "Reject the item with a comment"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the rejection decision is recorded"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC023",
+    "title": "Create a new lead",
+    "description": "A sales user can create a lead and see it appear in the leads list.",
+    "category": "CRM: Leads, Opportunities, and Customers",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /leads"
+      },
+      {
+        "type": "action",
+        "description": "Create a new lead with valid details"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new lead appears in the list"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC024",
+    "title": "View the invoice list and open an invoice",
+    "description": "A finance user can log in, review the invoice list, and open an invoice detail page.",
+    "category": "ZATCA e-Invoicing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the invoices workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open an invoice from the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the invoice list is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the invoice detail page is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC025",
+    "title": "Advance a project stage",
+    "description": "A project manager can move a project to the next stage and see the updated stage reflected in the project view.",
+    "category": "Projects (EPC)",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /projects"
+      },
+      {
+        "type": "action",
+        "description": "Open a project from the list"
+      },
+      {
+        "type": "action",
+        "description": "Transition the project stage"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the project stage is updated"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC026",
+    "title": "View approval inbox items",
+    "description": "This test verifies that a user can open the approvals inbox and see pending items ready for review.",
+    "category": "Approvals",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the approvals inbox link"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify pending approval items are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC027",
+    "title": "Approve a purchase order",
+    "description": "A procurement user can open a saved purchase order and approve it so the order status is updated.",
+    "category": "Procurement and Inventory",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /procurement"
+      },
+      {
+        "type": "action",
+        "description": "Open an existing purchase order from the list"
+      },
+      {
+        "type": "action",
+        "description": "Approve the purchase order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the purchase order status is updated to approved"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC028",
+    "title": "Review finance reports",
+    "description": "A finance user can open the reporting area and view the ledger and financial statements needed for month-end review.",
+    "category": "Authentication and Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /ledger"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify trial balance information is displayed"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /statements"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify financial statement reports are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC029",
+    "title": "Review the finance overview and journal entries",
+    "description": "A finance user can open the finance overview and view the journal entries summary.",
+    "category": "Finance Reports",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the finance workspace link"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the finance overview is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify journal entries are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC030",
+    "title": "View telemetry dashboard readings and alerts",
+    "description": "This test verifies that a logged-in user can open the telemetry workspace and see production readings and alerts displayed.",
+    "category": "Telemetry and PPA",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the telemetry workspace link"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify production readings are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify alerts are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC031",
+    "title": "Receive goods into stock from a purchase order",
+    "description": "A procurement user can record a goods receipt for an approved purchase order and see receipt and stock information updated.",
+    "category": "Procurement and Inventory",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /procurement"
+      },
+      {
+        "type": "action",
+        "description": "Open an approved purchase order from the list"
+      },
+      {
+        "type": "action",
+        "description": "Receive goods into a stock location"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify receipt information and stock updates are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC032",
+    "title": "Create a project change order",
+    "description": "A project manager can create a change order on a project and see it recorded in the project detail view.",
+    "category": "Projects (EPC)",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /projects"
+      },
+      {
+        "type": "action",
+        "description": "Open a project from the list"
+      },
+      {
+        "type": "action",
+        "description": "Create a change order with valid details"
+      },
+      {
+        "type": "action",
+        "description": "Submit the change order for approval"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the change order is recorded on the project"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC033",
+    "title": "Create a customer with VAT details",
+    "description": "A user can create a customer record with VAT information and see it added to the registry.",
+    "category": "CRM: Leads, Opportunities, and Customers",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /customers"
+      },
+      {
+        "type": "action",
+        "description": "Create a new customer with valid VAT details"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the customer appears in the registry"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC034",
+    "title": "Review income statement and balance sheet reports",
+    "description": "A finance user can open the income statement and balance sheet reports and review the financial position.",
+    "category": "Finance Reports",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the statements workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open the income statement report"
+      },
+      {
+        "type": "action",
+        "description": "Open the balance sheet report"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the income statement is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the balance sheet is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC035",
+    "title": "Open the telemetry dashboard and acknowledge an alert",
+    "description": "An operations user can view telemetry data and acknowledge an alert from the telemetry workspace.",
+    "category": "Authentication and Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /telemetry"
+      },
+      {
+        "type": "action",
+        "description": "Acknowledge an alert"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify telemetry readings are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the alert acknowledgement is reflected"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC036",
+    "title": "Create and list a vendor",
+    "description": "A procurement user can create a new vendor record and see it appear in the vendor list.",
+    "category": "Procurement and Inventory",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /procurement"
+      },
+      {
+        "type": "action",
+        "description": "Create a new vendor with valid details"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new vendor appears in the vendor list"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC037",
+    "title": "View project list and open a project",
+    "description": "A project manager can review the EPC project list and open a project detail page.",
+    "category": "Projects (EPC)",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /projects"
+      },
+      {
+        "type": "action",
+        "description": "Open a project from the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the project detail view is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC038",
+    "title": "Generate a VAT return for a period",
+    "description": "A finance user can generate a VAT return for a period and review the returned amounts.",
+    "category": "Finance Reports",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the statements workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Generate a VAT return for a valid period"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the VAT return is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify returned amounts are shown"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC039",
+    "title": "Update a contract milestone",
+    "description": "A sales or project user can update a contract milestone and see the milestone reflected on the contract detail view.",
+    "category": "Authentication and Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /contracts"
+      },
+      {
+        "type": "action",
+        "description": "Open an existing contract"
+      },
+      {
+        "type": "action",
+        "description": "Update a contract milestone"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated milestone is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC040",
+    "title": "Create a new user in admin",
+    "description": "This test verifies that an admin can create a user, assign a role, save the user, and see the new user in the list.",
+    "category": "Admin",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the admin workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new user"
+      },
+      {
+        "type": "action",
+        "description": "Assign a role to the new user"
+      },
+      {
+        "type": "action",
+        "description": "Save the user"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new user appears in the user list"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC041",
+    "title": "Acknowledge a telemetry alert",
+    "description": "This test verifies that a user can open an alert in telemetry and acknowledge it so the alert status is updated.",
+    "category": "Telemetry and PPA",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the telemetry workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open an alert"
+      },
+      {
+        "type": "action",
+        "description": "Acknowledge the alert"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the alert status is updated"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC042",
+    "title": "Run a PPA settlement",
+    "description": "This test verifies that a user can create or review PPA settlement terms and run a settlement successfully.",
+    "category": "Telemetry and PPA",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the PPA workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Create or review settlement terms"
+      },
+      {
+        "type": "action",
+        "description": "Run a settlement"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify settlement results are displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC043",
+    "title": "Review outstanding payables",
+    "description": "A finance user can open the payables view and review outstanding vendor bills and payment status.",
+    "category": "Procurement and Inventory",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /payables"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify outstanding vendor bills are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify payment status information is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC044",
+    "title": "Review PPA terms and settlement area",
+    "description": "This test verifies that a user can open the PPA workspace and review the available terms and settlement information.",
+    "category": "Telemetry and PPA",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the PPA workspace link"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify PPA terms are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify settlement information is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC045",
+    "title": "Find matching customers with search or filters",
+    "description": "A user can narrow the customer registry using search or filters and see only matching records.",
+    "category": "CRM: Leads, Opportunities, and Customers",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /customers"
+      },
+      {
+        "type": "action",
+        "description": "Search or filter the customer list using a valid criterion"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify matching customer records are displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC046",
+    "title": "Review installed assets and warranty records",
+    "description": "A field technician or operations user can open the assets workspace and review installed solar asset and warranty information.",
+    "category": "Field Service: Work Orders, Assets, and Warranty",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /assets"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify installed assets are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify warranty-related records are displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC047",
+    "title": "Update organization settings in admin",
+    "description": "This test verifies that an admin can update organization settings such as VAT number and address and see the saved details reflected.",
+    "category": "Admin",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the admin workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open organization settings"
+      },
+      {
+        "type": "action",
+        "description": "Update the organization details"
+      },
+      {
+        "type": "action",
+        "description": "Save the changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated organization details are displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC048",
+    "title": "Review admin audit log with filters",
+    "description": "This test verifies that an admin can browse the audit log with filters and see matching events.",
+    "category": "Admin",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the admin workspace link"
+      },
+      {
+        "type": "action",
+        "description": "Open the audit log"
+      },
+      {
+        "type": "action",
+        "description": "Apply audit log filters"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify matching audit events are displayed"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC049",
+    "title": "Handle a duplicate vendor name",
+    "description": "A procurement user sees validation feedback when trying to save a vendor that duplicates an existing record.",
+    "category": "Procurement and Inventory",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_USER}} into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill in {{LOGIN_PASSWORD}} into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /procurement"
+      },
+      {
+        "type": "action",
+        "description": "Create a new vendor with details that duplicate an existing vendor"
+      },
+      {
+        "type": "action",
+        "description": "Save the vendor record"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a duplicate vendor validation error is visible"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC050",
+    "title": "Reject invalid login credentials",
+    "description": "A user sees an authentication error when signing in with invalid credentials.",
+    "category": "User Login",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with invalid@example.com"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with invalid-password"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a login error message is visible"
+      }
+    ],
+    "priority": "Low"
+  }
+]

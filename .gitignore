@@ -40,3 +40,7 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 deploy/.deploy_history
+
+# TestSprite scratch: tunnel config, session keys, and a multi-MB run log.
+# The generated tests and the report next to it are kept.
+testsprite_tests/tmp/
