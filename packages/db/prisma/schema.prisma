@@ -224,6 +224,15 @@ model Organization {
   approvalRules       ApprovalRule[]
   approvalRequests    ApprovalRequest[]
   eInvoiceDocuments   EInvoiceDocument[]
+  // M4 — the workflow engine, and the pieces the matrix was missing.
+  wfDefinitions       WfDefinition[]
+  wfInstances         WfInstance[]
+  domainEvents        DomainEvent[]
+  departments         Department[]
+  approvalDelegations ApprovalDelegation[]
+  requisitions        PurchaseRequisition[]
+  projectCommitments  ProjectCommitment[]
+  threeWayMatches     ThreeWayMatch[]
 
   @@index([parentOrganizationId])
 }
@@ -243,6 +252,7 @@ model Role {
 
   approvalRuleSteps ApprovalRuleStep[]
   approvalSteps     ApprovalStep[]
+  wfInstances       WfInstance[]       @relation("WfAssigneeRole")
 
   @@unique([organizationId, key])
   @@index([organizationId])
@@ -259,6 +269,10 @@ model User {
   locale         Locale   @default(AR)
   roleId         String
   role           Role     @relation(fields: [roleId], references: [id])
+  // M4: which department this person belongs to. Optional — the matrix treats
+  // a user with no department as covered only by organization-wide rules.
+  departmentId   String?
+  department     Department? @relation("DeptMembers", fields: [departmentId], references: [id])
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -272,8 +286,15 @@ model User {
   notifications      Notification[]
   raisedApprovals    ApprovalRequest[] @relation("ApprovalRaiser")
   decidedApprovals   ApprovalStep[]    @relation("ApprovalDecider")
+  managedDepartments  Department[]         @relation("DeptManager")
+  delegationsGiven    ApprovalDelegation[] @relation("DelegationFrom")
+  delegationsReceived ApprovalDelegation[] @relation("DelegationTo")
+  delegationsCreated  ApprovalDelegation[] @relation("DelegationCreator")
+  wfHistory           WfHistory[]          @relation("WfHistoryActor")
+  requisitions        PurchaseRequisition[] @relation("PrRequester")
 
   @@index([organizationId])
+  @@index([organizationId, departmentId])
 }
 
 model NumberingSequence {
@@ -405,6 +426,7 @@ model Item {
 
   bomLines       BomLine[]
   poLines        PurchaseOrderLine[]
+  prLines        PurchaseRequisitionLine[]
   serialUnits    SerialUnit[]
   stockLevels    StockLevel[]
   stockMovements StockMovement[]
@@ -781,13 +803,29 @@ enum VendorType {
   SERVICE
 }
 
+// M4 §7: the PO map gained the two states it was actually missing —
+// PENDING_APPROVAL (it is in a signature chain, not sitting in someone's
+// drafts) and SENT (approved internally is not the same as placed with the
+// vendor, and only the second is a commitment the vendor knows about).
 enum PoStatus {
   DRAFT
+  PENDING_APPROVAL
   APPROVED
+  SENT
   PARTIALLY_RECEIVED
   RECEIVED
   CLOSED
   CANCELLED
+}
+
+// M4 §7: a receipt used to have no state at all — goods were received and
+// accepted in the same instant, so "arrived but not yet inspected" could not
+// be expressed and a rejected delivery had nowhere to live.
+enum GrnStatus {
+  DRAFT
+  INSPECTED
+  ACCEPTED
+  PARTIALLY_REJECTED
 }
 
 enum SerialState {
@@ -806,8 +844,17 @@ enum CostType {
   OVERHEAD
 }
 
+// M4 §7: مسجَّلة ← مطابقة ثلاثياً ← معتمدة ← مجدولة للدفع ← مدفوعة.
+// The journal moved with the states: a bill used to be created already POSTED,
+// so recording a supplier's paperwork and accepting the liability were one
+// irreversible act. The ledger entry now waits for APPROVED.
+// POSTED is retained, unreachable by new code, so rows written before this
+// migration keep meaning what they meant — see BILL_STATUSES_WITH_AP_BALANCE.
 enum BillStatus {
   DRAFT
+  MATCHED
+  APPROVED
+  SCHEDULED
   POSTED
   PAID
 }
@@ -870,6 +917,8 @@ model Project {
   maintenancePlans MaintenancePlan[]
   ppaTerms       PpaTerm[]
   journalEntries JournalEntry[]
+  requisitions   PurchaseRequisition[]
+  commitments    ProjectCommitment[]
 
   @@unique([organizationId, code])
   @@index([organizationId, stage])
@@ -888,7 +937,9 @@ model WbsElement {
   createdAt    DateTime @default(now())
 
   poLines      PurchaseOrderLine[]
+  prLines      PurchaseRequisitionLine[]
   costEntries  ProjectCostEntry[]
+  commitments  ProjectCommitment[]
   changeOrders ChangeOrder[]
   subcontracts SubcontractAgreement[]
 
@@ -919,6 +970,8 @@ model PurchaseOrder {
   lines          PurchaseOrderLine[]
   goodsReceipts  GoodsReceipt[]
   vendorBills    VendorBill[]
+  requisition    PurchaseRequisition?
+  threeWayMatches ThreeWayMatch[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -951,16 +1004,28 @@ model GoodsReceipt {
   code           String
   purchaseOrderId String
   purchaseOrder  PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  // New receipts start as DRAFT and only move stock on acceptance. Rows that
+  // existed before this migration are backfilled to ACCEPTED — their stock
+  // moved long ago, and re-deriving it would double it.
+  status         GrnStatus @default(DRAFT)
   receivedAt     DateTime @default(now())
   receivedById   String?
+  inspectedAt    DateTime?
+  inspectedById  String?
+  /// Why the delivery was not accepted in full. Required by the flow before a
+  /// receipt may reach PARTIALLY_REJECTED — a rejection with no stated reason
+  /// is a dispute with the vendor nobody can reconstruct later.
+  rejectionNote  String?
   notes          String?
 
   lines          GoodsReceiptLine[]
   serialUnits    SerialUnit[]
   vendorBills    VendorBill[]
+  threeWayMatches ThreeWayMatch[]
 
   @@unique([organizationId, code])
   @@index([purchaseOrderId])
+  @@index([organizationId, status])
 }
 
 model GoodsReceiptLine {
@@ -970,6 +1035,12 @@ model GoodsReceiptLine {
   purchaseOrderLineId String
   purchaseOrderLine   PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id])
   qty                 Decimal @default(0) @db.Decimal(14, 3)
+  /// M4: serial numbers are read off the cartons when the delivery arrives,
+  /// but stock only exists once the receipt is accepted. They are stored here
+  /// in between — on the row, not in process memory, because a receipt left
+  /// overnight must survive a restart.
+  serials             String[]
+  batchNo             String?
 
   @@index([goodsReceiptId])
 }
@@ -1614,6 +1685,7 @@ model VendorBill {
   createdAt      DateTime @default(now())
 
   paymentAllocations VendorPaymentAllocation[]
+  threeWayMatch      ThreeWayMatch?
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1810,6 +1882,10 @@ model Notification {
 // single write permission decides. The matrix only ever adds signatures.
 
 enum ApprovalDocument {
+  // M4: the requisition is banded and signed in its own right. Without its own
+  // value it would have to borrow PURCHASE_ORDER's, and the matrix would then
+  // hand a requisition id to procurement's purchase-order applier.
+  PURCHASE_REQUISITION
   PURCHASE_ORDER
   PROGRESS_CLAIM
   CHANGE_ORDER
@@ -1837,6 +1913,16 @@ model ApprovalRule {
   documentType   ApprovalDocument
   minAmount      Decimal  @default(0) @db.Decimal(18, 2)
   maxAmount      Decimal? @db.Decimal(18, 2)
+  /// M4, the third dimension of the matrix. Null means the rule applies to the
+  /// whole organization; a rule naming a department beats an organization-wide
+  /// rule covering the same amount, which is what lets the two coexist without
+  /// the overlap guard rejecting one of them.
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id])
+  /// M4: hours the current step may sit unsigned before the chain is escalated.
+  /// Null = never escalate. Escalation notifies; it never signs — a control
+  /// that approves things by itself when nobody is looking is not a control.
+  escalationHours Int?
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -1845,6 +1931,7 @@ model ApprovalRule {
   requests ApprovalRequest[]
 
   @@index([organizationId, documentType, isActive])
+  @@index([organizationId, documentType, departmentId, isActive])
 }
 
 /// The signature chain of a rule, in order. Roles — not users: a chain built
@@ -1879,6 +1966,13 @@ model ApprovalRequest {
   rule           ApprovalRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
   status         ApprovalStatus @default(PENDING)
   currentStep    Int      @default(1)
+  /// When the current step became current. Escalation is measured from here,
+  /// not from createdAt — otherwise a chain whose first step was signed
+  /// promptly escalates its second step the moment it opens.
+  currentStepAt  DateTime @default(now())
+  /// The department the document belonged to when the chain opened, frozen so
+  /// a later reorganisation cannot change which rule "should" have applied.
+  departmentId   String?
   raisedById     String?
   raisedBy       User?    @relation("ApprovalRaiser", fields: [raisedById], references: [id])
   createdAt      DateTime @default(now())
@@ -1905,7 +1999,390 @@ model ApprovalStep {
   decidedBy   User?  @relation("ApprovalDecider", fields: [decidedById], references: [id])
   decidedAt   DateTime?
   note        String?
+  /// Set once, the first time this step is escalated for sitting too long.
+  /// Once, not every hour: an escalation that repeats itself is spam, and spam
+  /// is how a real escalation ends up ignored.
+  escalatedAt DateTime?
+  /// The delegation used to sign this step, when one was. The trail has to be
+  /// able to answer "the finance manager was on leave — who actually signed?"
+  delegationId String?
 
   @@unique([requestId, sequence])
   @@index([roleId, status])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// M4 — the workflow engine (المرحلة الأولى of the approved architecture)
+//
+// Until now every module owned its own lifecycle: a status column, an enum,
+// and a service that wrote to it directly. That is why "who moved this
+// document, when, and why" had no single answer, and why cross-module
+// consequences (a receipt that must reach the ledger) were hand-wired calls a
+// future author could simply forget to make.
+//
+// These six tables are the one place a document may change state. They live in
+// the `public` schema like everything else — the modular boundary is enforced
+// by the `wf_` prefix, the engine's single entry point, and review, not by a
+// Postgres schema (which would mean enabling Prisma's multiSchema preview and
+// annotating all ~75 existing models for no behavioural gain).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Where a state sits in its flow. A document in a FINAL state is done: no
+/// transition may leave it, and the engine closes the instance on arrival.
+enum WfStateKind {
+  INITIAL
+  INTERMEDIATE
+  FINAL
+}
+
+enum WfEventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+/// One flow — "purchase requisition", "vendor bill" — at one version.
+/// Versioned rather than edited in place: instances keep pointing at the
+/// definition they were opened under, so changing tomorrow's flow cannot
+/// rewrite the rules a document already travelled through.
+model WfDefinition {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String // PURCHASE_REQUISITION | PURCHASE_ORDER | GOODS_RECEIPT | VENDOR_BILL
+  nameAr         String
+  nameEn         String
+  documentType   String // the Prisma model this flow governs, e.g. "PurchaseOrder"
+  version        Int      @default(1)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  states      WfState[]
+  transitions WfTransition[]
+  instances   WfInstance[]
+
+  @@unique([organizationId, code, version])
+  @@index([organizationId, code, isActive])
+  @@map("wf_definitions")
+}
+
+/// The states of one flow. `code` is stable and machine-facing; the pair of
+/// name columns is what the user sees, in the project's bilingual convention.
+model WfState {
+  id           String   @id @default(cuid())
+  definitionId String
+  definition   WfDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  code         String
+  nameAr       String
+  nameEn       String
+  kind         WfStateKind @default(INTERMEDIATE)
+  sortOrder    Int      @default(0)
+
+  transitionsFrom WfTransition[] @relation("WfTransitionFrom")
+  transitionsTo   WfTransition[] @relation("WfTransitionTo")
+  instances       WfInstance[]
+
+  @@unique([definitionId, code])
+  @@index([definitionId])
+  @@map("wf_states")
+}
+
+/// The legal moves. A move that is not a row here cannot happen — this table
+/// is the whole reason `engine.transition()` is able to refuse something.
+///
+/// `requiredPermission` is checked against the actor's live permission set,
+/// not against whatever role existed when the flow was seeded. `conditionExpr`
+/// is a deliberately tiny comparison language (see `condition.ts`) and never an
+/// eval, so a row in this table can never become code execution.
+model WfTransition {
+  id                 String   @id @default(cuid())
+  definitionId       String
+  definition         WfDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  fromState          String
+  toState            String
+  from               WfState  @relation("WfTransitionFrom", fields: [definitionId, fromState], references: [definitionId, code], onDelete: Cascade)
+  to                 WfState  @relation("WfTransitionTo", fields: [definitionId, toState], references: [definitionId, code], onDelete: Cascade)
+  actionCode         String // SUBMIT | APPROVE | REJECT | RETURN | SEND | CLOSE ...
+  nameAr             String
+  nameEn             String
+  requiredPermission String
+  conditionExpr      String?
+  /// The event written to the outbox when this transition commits. Null means
+  /// the move is internal and nothing outside the module needs to hear it.
+  emitsEvent         String?
+  /// When true the transition does not run on request: it opens a signature
+  /// chain in the approval matrix, and only the last signature performs it.
+  requiresApproval   Boolean  @default(false)
+  sortOrder          Int      @default(0)
+
+  @@unique([definitionId, fromState, actionCode])
+  @@index([definitionId])
+  @@index([definitionId, toState])
+  @@map("wf_transitions")
+}
+
+/// The live position of one real document. One row per document, ever — the
+/// unique index is what stops two flows being opened for the same PO.
+model WfInstance {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  definitionId   String
+  definition     WfDefinition @relation(fields: [definitionId], references: [id])
+  documentType   String
+  documentId     String
+  documentCode   String // denormalised so the task box reads without a join per row
+  currentState   String
+  state          WfState  @relation(fields: [definitionId, currentState], references: [definitionId, code])
+  /// Who owes the next action. Role-shaped, not person-shaped: a task box built
+  /// on named people empties itself the first time somebody leaves.
+  assigneeRoleId String?
+  assigneeRole   Role?    @relation("WfAssigneeRole", fields: [assigneeRoleId], references: [id])
+  openedAt       DateTime @default(now())
+  closedAt       DateTime?
+
+  history WfHistory[]
+
+  @@unique([organizationId, documentType, documentId])
+  @@index([organizationId, documentType, currentState])
+  @@index([organizationId, assigneeRoleId, closedAt])
+  @@map("wf_instances")
+}
+
+/// Append-only. Never updated, never deleted — this is the audit answer to
+/// "who moved it, when, from what, to what, and what did they say".
+model WfHistory {
+  id               String   @id @default(cuid())
+  instanceId       String
+  instance         WfInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  fromState        String
+  toState          String
+  actionCode       String
+  actorId          String?
+  actor            User?    @relation("WfHistoryActor", fields: [actorId], references: [id])
+  /// Set when the actor signed on behalf of another role through an active
+  /// delegation — the trail must say whose authority was actually used.
+  onBehalfOfRoleId String?
+  comment          String?
+  createdAt        DateTime @default(now())
+
+  @@index([instanceId, createdAt])
+  @@map("wf_history")
+}
+
+/// The outbox. Written inside the same transaction as the state change it
+/// describes, so an event cannot exist for a move that rolled back, and a move
+/// cannot commit without its event. A background dispatcher drains it.
+///
+/// `attempts`/`nextAttemptAt` give retries with exponential back-off; a row
+/// that exhausts them lands in FAILED with `lastError` intact rather than
+/// disappearing, because a lost consequence must stay visible.
+model DomainEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  eventCode      String // pr.approved | po.approved | goods.received ...
+  payloadJson    Json
+  status         WfEventStatus @default(PENDING)
+  attempts       Int      @default(0)
+  lastError      String?
+  nextAttemptAt  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  processedAt    DateTime?
+
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, eventCode, createdAt])
+  @@map("domain_events")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// M4 — the three dimensions the approval matrix was missing
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// The organizational unit an approval rule can be scoped to. Introduced here
+/// because "مدير القسم" in the matrix is meaningless without one — the system
+/// had no notion of a department at all.
+model Department {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  nameAr         String
+  nameEn         String
+  parentId       String?
+  parent         Department?  @relation("DeptHierarchy", fields: [parentId], references: [id])
+  children       Department[] @relation("DeptHierarchy")
+  managerId      String?
+  manager        User?    @relation("DeptManager", fields: [managerId], references: [id])
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  members       User[]                @relation("DeptMembers")
+  approvalRules ApprovalRule[]
+  requisitions  PurchaseRequisition[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive])
+}
+
+/// A temporary transfer of signing authority — the "إجازات المعتمدين" case.
+/// Deliberately narrow: it lends the delegate the *delegator's role* for
+/// approval steps only, for a bounded window, and is recorded on every
+/// signature it enables. It never grants a permission the delegator lacks.
+model ApprovalDelegation {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fromUserId     String
+  fromUser       User     @relation("DelegationFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId       String
+  toUser         User     @relation("DelegationTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  startsAt       DateTime
+  endsAt         DateTime
+  reason         String?
+  isActive       Boolean  @default(true)
+  createdById    String?
+  createdBy      User?    @relation("DelegationCreator", fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, toUserId, isActive])
+  @@index([organizationId, fromUserId, isActive])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// M4 — purchase requisition: the step the purchasing cycle never had
+//
+// §7 of the architecture starts the cycle at PR, not PO. Without it there is
+// no record of *who asked* for a spend before someone committed the company to
+// it — the request and the commitment were the same document.
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum PrStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  RETURNED
+  CONVERTED
+  CANCELLED
+}
+
+model PurchaseRequisition {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  /// Free text, deliberately required: a requisition with no stated need is
+  /// the thing an auditor asks about first.
+  justification  String
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id])
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id])
+  requestedById  String?
+  requestedBy    User?    @relation("PrRequester", fields: [requestedById], references: [id])
+  neededBy       DateTime?
+  status         PrStatus @default(DRAFT)
+  currency       String   @default("SAR")
+  estimatedTotal Decimal  @default(0) @db.Decimal(18, 2)
+  /// Set when the approved requisition became a PO. One PR, one PO — a second
+  /// conversion would double-commit the same request.
+  purchaseOrderId String? @unique
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lines PurchaseRequisitionLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([organizationId, departmentId])
+}
+
+model PurchaseRequisitionLine {
+  id            String  @id @default(cuid())
+  requisitionId String
+  requisition   PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  itemId        String
+  item          Item    @relation(fields: [itemId], references: [id])
+  wbsElementId  String?
+  wbsElement    WbsElement? @relation(fields: [wbsElementId], references: [id])
+  qty           Decimal @default(1) @db.Decimal(14, 3)
+  estimatedUnitPrice Decimal @default(0) @db.Decimal(18, 2)
+  lineTotal     Decimal @default(0) @db.Decimal(18, 2)
+  notes         String?
+
+  @@index([requisitionId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// M4 — the commitment ledger
+//
+// §6: `po.approved ← إنشاء التزام محاسبي`. The system tracked actual cost
+// (ProjectCostEntry) but never committed cost, so a project could be fully
+// spent on paper and still have half a million riyals of approved POs in
+// flight against it. Append-only, like the actuals ledger: a release is a
+// negative row, never an edit.
+// ═══════════════════════════════════════════════════════════════════════════
+
+model ProjectCommitment {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  wbsElementId   String?
+  wbsElement     WbsElement? @relation(fields: [wbsElementId], references: [id])
+  sourceType     String // "PurchaseOrder" | "SubcontractAgreement" | "Release"
+  sourceId       String
+  amount         Decimal  @db.Decimal(18, 2) // negative on releasing rows
+  memo           String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, projectId])
+  @@index([sourceType, sourceId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// M4 — three-way match (أمر شراء / استلام / فاتورة)
+//
+// §7 makes "مطابقة ثلاثياً" a state a vendor bill must pass through. The match
+// itself is a record, not a boolean: an auditor needs the three quantities and
+// the three amounts that were compared, and the tolerance that was applied.
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum MatchResult {
+  MATCHED
+  QTY_VARIANCE
+  PRICE_VARIANCE
+  BOTH_VARIANCE
+}
+
+model ThreeWayMatch {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendorBillId   String   @unique
+  vendorBill     VendorBill @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+  purchaseOrderId String
+  purchaseOrder  PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  goodsReceiptId String
+  goodsReceipt   GoodsReceipt @relation(fields: [goodsReceiptId], references: [id])
+  result         MatchResult
+  orderedQty     Decimal  @db.Decimal(14, 3)
+  receivedQty    Decimal  @db.Decimal(14, 3)
+  billedQty      Decimal  @db.Decimal(14, 3)
+  receivedValue  Decimal  @db.Decimal(18, 2)
+  billedValue    Decimal  @db.Decimal(18, 2)
+  /// The variance actually allowed when this match ran, frozen here: changing
+  /// the tolerance next quarter must not silently re-judge last quarter.
+  tolerancePct   Decimal  @db.Decimal(6, 3)
+  detailJson     Json?
+  matchedAt      DateTime @default(now())
+  matchedById    String?
+
+  @@index([organizationId, result])
 }

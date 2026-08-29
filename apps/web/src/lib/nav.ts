@@ -36,6 +36,7 @@ export const NAV_SECTIONS: NavSection[] = [
     labelEn: 'Delivery & supply',
     items: [
       { href: '/projects', key: 'nav.projects', icon: 'building', perm: 'projects.project.read' },
+      { href: '/requisitions', key: 'nav.requisitions', icon: 'file-text', perm: 'scm.procurement.read' },
       { href: '/procurement', key: 'nav.procurement', icon: 'cart', perm: 'scm.procurement.read' },
       { href: '/assets', key: 'nav.assets', icon: 'scan', perm: 'assets.serialunit.read' },
       { href: '/items', key: 'nav.items', icon: 'package', perm: 'commercial.item.read' },
@@ -65,8 +66,10 @@ export const NAV_SECTIONS: NavSection[] = [
     labelAr: 'الإدارة',
     labelEn: 'Administration',
     items: [
-      // No `perm`: the inbox is self-scoped to the caller's own role, so every
-      // user needs to reach it — including ones who administer nothing.
+      // No `perm` on either: both are self-scoped to the caller's own role by
+      // the server, so every user needs to reach them — including ones who
+      // administer nothing.
+      { href: '/inbox', key: 'nav.inbox', icon: 'square-check' },
       { href: '/approvals', key: 'nav.approvals', icon: 'stamp' },
       { href: '/admin', key: 'nav.admin', icon: 'shield-users', perm: 'admin.user.manage' },
     ],

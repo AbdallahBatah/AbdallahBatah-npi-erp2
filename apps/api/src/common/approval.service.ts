@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
 import { NotificationService } from './notification.service';
+import { DelegationService } from './delegation.service';
 import {
   APPROVAL_DOCUMENTS,
   APPROVAL_DOCUMENT_META,
@@ -26,12 +27,32 @@ import type { Prisma } from '@npi/db';
  */
 export type ApprovalApplier = (user: AuthUser, documentId: string) => Promise<unknown>;
 
+/**
+ * The mirror of an applier, run when a chain is rejected.
+ *
+ * M4 made this necessary. Before the workflow engine, a rejected purchase
+ * order simply stayed in DRAFT and the author could edit and resubmit it — the
+ * chain closing was the whole story. Now the document sits in PENDING_APPROVAL
+ * while it waits, so a rejection that only closes the chain would strand it
+ * there forever: no transition out, and nobody able to touch it.
+ */
+export type ApprovalRejecter = (
+  user: AuthUser,
+  documentId: string,
+  note: string,
+) => Promise<unknown>;
+
 export interface GateInput {
   documentType: ApprovalDocumentType;
   documentId: string;
   documentCode: string;
   /** Always the absolute value — a −900,000 change order is not a small one. */
   amount: number;
+  /**
+   * M4, the third dimension. Null falls back to the caller's own department,
+   * and a caller with none is matched only by organization-wide rules.
+   */
+  departmentId?: string | null;
 }
 
 export type GateVerdict =
@@ -48,6 +69,7 @@ export interface ApprovalRequestView {
   amount: number;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   currentStep: number;
+  currentStepAt: Date;
   createdAt: Date;
   closedAt: Date | null;
   raisedBy: { id: string; nameAr: string; nameEn: string } | null;
@@ -58,6 +80,7 @@ export interface ApprovalRequestView {
     decidedBy: { id: string; nameAr: string; nameEn: string } | null;
     decidedAt: Date | null;
     note: string | null;
+    escalatedAt: Date | null;
   }>;
   /**
    * Inbox rows only. A request can be at the caller's role and still be
@@ -68,6 +91,14 @@ export interface ApprovalRequestView {
    */
   canDecide?: boolean;
   blockedReason?: 'RAISED_BY_YOU' | 'ALREADY_SIGNED';
+  /**
+   * Inbox rows only. Set when the caller reaches this step through a temporary
+   * delegation rather than their own role — the UI must say so before they
+   * sign, not after.
+   */
+  viaDelegationFrom?: string;
+  /** Inbox rows only: this step has been sitting past its escalation window. */
+  escalated?: boolean;
 }
 
 const REQUEST_INCLUDE = {
@@ -99,16 +130,28 @@ const REQUEST_INCLUDE = {
 export class ApprovalService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ApprovalService.name);
   private readonly appliers = new Map<ApprovalDocumentType, ApprovalApplier>();
+  private readonly rejecters = new Map<ApprovalDocumentType, ApprovalRejecter>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationService,
+    private readonly delegations: DelegationService,
   ) {}
 
-  /** Called from each owning module's onModuleInit. */
-  register(documentType: ApprovalDocumentType, applier: ApprovalApplier): void {
+  /**
+   * Called from each owning module's onModuleInit. `rejecter` is optional only
+   * for document types whose rejected state is the same as their pre-submission
+   * one; anything that parks in a "pending approval" state must supply it, or a
+   * rejection leaves the document stranded there.
+   */
+  register(
+    documentType: ApprovalDocumentType,
+    applier: ApprovalApplier,
+    rejecter?: ApprovalRejecter,
+  ): void {
     this.appliers.set(documentType, applier);
+    if (rejecter) this.rejecters.set(documentType, rejecter);
   }
 
   /**
@@ -136,7 +179,16 @@ export class ApprovalService implements OnApplicationBootstrap {
    */
   async gate(user: AuthUser, input: GateInput): Promise<GateVerdict> {
     const amount = Math.abs(input.amount);
-    const rule = await this.resolveRule(user.organizationId, input.documentType, amount);
+    const departmentId =
+      input.departmentId !== undefined
+        ? input.departmentId
+        : await this.departmentOf(user.userId);
+    const rule = await this.resolveRule(
+      user.organizationId,
+      input.documentType,
+      amount,
+      departmentId,
+    );
     if (!rule) return { cleared: true, request: null };
 
     const open = await this.prisma.approvalRequest.findFirst({
@@ -163,6 +215,8 @@ export class ApprovalService implements OnApplicationBootstrap {
           documentCode: input.documentCode,
           amount,
           ruleId: rule.id,
+          departmentId,
+          currentStepAt: new Date(),
           raisedById: user.userId,
           steps: {
             create: rule.steps.map((s) => ({ sequence: s.sequence, roleId: s.roleId })),
@@ -181,6 +235,8 @@ export class ApprovalService implements OnApplicationBootstrap {
             documentType: input.documentType,
             documentCode: input.documentCode,
             amount,
+            departmentId,
+            escalationHours: rule.escalationHours,
             steps: rule.steps.map((s) => s.sequence),
           },
         },
@@ -198,15 +254,35 @@ export class ApprovalService implements OnApplicationBootstrap {
    * Null means the matrix has nothing to say — which is the state every
    * organization starts in, so nothing changes until someone configures a rule.
    */
-  async resolveRule(organizationId: string, documentType: ApprovalDocumentType, amount: number) {
+  async resolveRule(
+    organizationId: string,
+    documentType: ApprovalDocumentType,
+    amount: number,
+    departmentId?: string | null,
+  ) {
     const rules = await this.prisma.approvalRule.findMany({
-      where: { organizationId, documentType, isActive: true },
+      where: {
+        organizationId,
+        documentType,
+        isActive: true,
+        // Either scoped to this document's department, or scoped to nobody in
+        // particular. A rule belonging to *another* department is not a
+        // candidate at all — which is what lets two departments hold
+        // overlapping bands without either being ambiguous.
+        OR: [{ departmentId: null }, ...(departmentId ? [{ departmentId }] : [])],
+      },
       include: { steps: { orderBy: { sequence: 'asc' } } },
       orderBy: { minAmount: 'asc' },
     });
-    const match = rules.find((r) =>
+    const covering = rules.filter((r) =>
       inBand(amount, Number(r.minAmount), r.maxAmount === null ? null : Number(r.maxAmount)),
     );
+    // Specific beats general. Two rules can legitimately cover one amount now —
+    // "POs over 100k need finance" for the whole company, and "…but in
+    // Engineering they also need the technical director" — and the department
+    // one has to win, or the exception is unexpressible.
+    const match =
+      covering.find((r) => r.departmentId !== null) ?? covering.find((r) => r.departmentId === null);
     // A band with no steps would open a chain nobody could ever close. Saving
     // one is already refused; ignoring it here too means a row hand-inserted
     // into the database degrades to the old behaviour instead of deadlocking.
@@ -247,11 +323,28 @@ export class ApprovalService implements OnApplicationBootstrap {
     if (!user.permissions.includes(required)) {
       throw new ForbiddenException('Insufficient permissions');
     }
+    // The caller's own role, or a role lent to them by an active delegation.
+    // Checked in that order so the common case costs no extra query.
+    let delegation: { id: string; fromUserId: string } | null = null;
     if (step.roleId !== user.roleId) {
-      throw new ForbiddenException('Your role is not the approver at this step');
+      delegation = await this.delegations.delegationFor(
+        user.organizationId,
+        user.userId,
+        step.roleId,
+      );
+      if (!delegation) {
+        throw new ForbiddenException('Your role is not the approver at this step');
+      }
     }
     if (request.raisedById === user.userId) {
       throw new ForbiddenException('You cannot approve a document you submitted yourself');
+    }
+    // …nor may the person who raised it hand their approver's authority to
+    // themselves through a delegation. Same control, one hop further out.
+    if (delegation && delegation.fromUserId === request.raisedById) {
+      throw new ForbiddenException(
+        'This delegation comes from the person who submitted the document — it cannot be used to approve it',
+      );
     }
     if (request.steps.some((s) => s.decidedById === user.userId)) {
       throw new ForbiddenException('You have already signed an earlier step of this request');
@@ -268,6 +361,7 @@ export class ApprovalService implements OnApplicationBootstrap {
           decidedById: user.userId,
           decidedAt: new Date(),
           note: note?.trim() || null,
+          delegationId: delegation?.id ?? null,
         },
       });
       const next = await tx.approvalRequest.update({
@@ -275,7 +369,10 @@ export class ApprovalService implements OnApplicationBootstrap {
         data: approved
           ? isLast
             ? { status: 'APPROVED', closedAt: new Date() }
-            : { currentStep: { increment: 1 } }
+            // currentStepAt restarts with the step: the next approver gets
+            // their own full escalation window, not the remainder of someone
+            // else's.
+            : { currentStep: { increment: 1 }, currentStepAt: new Date() }
           : { status: 'REJECTED', closedAt: new Date() },
         include: REQUEST_INCLUDE,
       });
@@ -293,6 +390,7 @@ export class ApprovalService implements OnApplicationBootstrap {
             documentType: request.documentType,
             documentCode: request.documentCode,
             note: note?.trim() || null,
+            viaDelegationId: delegation?.id ?? null,
           },
         },
         tx,
@@ -301,7 +399,24 @@ export class ApprovalService implements OnApplicationBootstrap {
     });
 
     let applied = false;
-    if (updated.status === 'APPROVED') {
+    if (updated.status === 'REJECTED') {
+      // Move the document too, not just the chain. Best-effort on purpose: the
+      // rejection itself has already committed, and turning a recorded refusal
+      // into a 500 would invite the approver to click again and produce a
+      // second one.
+      const rejecter = this.rejecters.get(request.documentType as ApprovalDocumentType);
+      if (rejecter) {
+        try {
+          await rejecter(user, request.documentId, note?.trim() || 'Rejected');
+        } catch (err) {
+          this.logger.error(
+            `Rejection applier failed for ${request.documentType} ${request.documentCode} — ` +
+              'the chain is closed but the document did not move',
+            err instanceof Error ? err.stack : String(err),
+          );
+        }
+      }
+    } else if (updated.status === 'APPROVED') {
       // The chain is complete: now — and only now — the document changes.
       const applier = this.appliers.get(request.documentType as ApprovalDocumentType);
       if (!applier) {
@@ -323,11 +438,17 @@ export class ApprovalService implements OnApplicationBootstrap {
 
   /** Everything waiting on *this user's* role right now. */
   async inbox(user: AuthUser): Promise<ApprovalRequestView[]> {
+    // Own role plus any lent to them right now. A delegate whose window has
+    // closed simply stops seeing the rows — nothing has to be un-assigned.
+    const delegated = await this.delegations.rolesFor(user.organizationId, user.userId);
+    const byRole = new Map(delegated.map((d) => [d.roleId, d]));
+    const roleIds = [...new Set([user.roleId, ...byRole.keys()])];
+
     const rows = await this.prisma.approvalRequest.findMany({
       where: {
         organizationId: user.organizationId,
         status: 'PENDING',
-        steps: { some: { roleId: user.roleId, status: 'PENDING' } },
+        steps: { some: { roleId: { in: roleIds }, status: 'PENDING' } },
       },
       include: REQUEST_INCLUDE,
       orderBy: { createdAt: 'asc' },
@@ -335,18 +456,26 @@ export class ApprovalService implements OnApplicationBootstrap {
     // `steps.some` cannot express "…and it is the *current* step", so filter
     // the tail here rather than returning things this user cannot act on yet.
     return rows
-      .filter((r) => r.steps.find((s) => s.sequence === r.currentStep)?.roleId === user.roleId)
+      .filter((r) => {
+        const current = r.steps.find((s) => s.sequence === r.currentStep);
+        return !!current && roleIds.includes(current.roleId);
+      })
       .map((r) => {
+        const current = r.steps.find((s) => s.sequence === r.currentStep)!;
         const raisedByYou = r.raisedById === user.userId;
         const alreadySigned = r.steps.some((s) => s.decidedById === user.userId);
+        const via = current.roleId === user.roleId ? undefined : byRole.get(current.roleId);
+        const lentByRaiser = !!via && via.fromUserId === r.raisedById;
         return {
           ...this.view(r),
-          canDecide: !raisedByYou && !alreadySigned,
+          canDecide: !raisedByYou && !alreadySigned && !lentByRaiser,
           blockedReason: raisedByYou
             ? ('RAISED_BY_YOU' as const)
             : alreadySigned
               ? ('ALREADY_SIGNED' as const)
               : undefined,
+          viaDelegationFrom: via?.fromUserName,
+          escalated: current.escalatedAt !== null,
         };
       });
   }
@@ -421,6 +550,19 @@ export class ApprovalService implements OnApplicationBootstrap {
 
   // ── internals ─────────────────────────────────────────────────────────────
 
+  /**
+   * The submitter's department, used when the caller does not state one. A
+   * user with no department is not an error: they are simply covered by the
+   * organization-wide rules only.
+   */
+  private async departmentOf(userId: string): Promise<string | null> {
+    const row = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { departmentId: true },
+    });
+    return row?.departmentId ?? null;
+  }
+
   private view(row: {
     id: string;
     documentType: string;
@@ -429,6 +571,7 @@ export class ApprovalService implements OnApplicationBootstrap {
     amount: Prisma.Decimal;
     status: string;
     currentStep: number;
+    currentStepAt: Date;
     createdAt: Date;
     closedAt: Date | null;
     raisedBy: { id: string; nameAr: string; nameEn: string } | null;
@@ -439,6 +582,7 @@ export class ApprovalService implements OnApplicationBootstrap {
       decidedBy: { id: string; nameAr: string; nameEn: string } | null;
       decidedAt: Date | null;
       note: string | null;
+      escalatedAt: Date | null;
     }>;
   }): ApprovalRequestView {
     return {
@@ -449,6 +593,7 @@ export class ApprovalService implements OnApplicationBootstrap {
       amount: Number(row.amount),
       status: row.status as ApprovalRequestView['status'],
       currentStep: row.currentStep,
+      currentStepAt: row.currentStepAt,
       createdAt: row.createdAt,
       closedAt: row.closedAt,
       raisedBy: row.raisedBy,
@@ -459,6 +604,7 @@ export class ApprovalService implements OnApplicationBootstrap {
         decidedBy: s.decidedBy,
         decidedAt: s.decidedAt,
         note: s.note,
+        escalatedAt: s.escalatedAt,
       })),
     };
   }

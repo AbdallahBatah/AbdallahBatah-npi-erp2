@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { ApprovalService } from './approval.service';
-import { bandsOverlap, inBand } from '@npi/shared';
+import { APPROVAL_DOCUMENTS, bandsOverlap, inBand } from '@npi/shared';
 import type { AuthUser } from './auth-user';
 
 const user = (over: Partial<AuthUser> = {}): AuthUser => ({
@@ -37,6 +37,7 @@ interface PrismaDouble {
   };
   approvalStep: { update: jest.Mock };
   notification: { create: jest.Mock };
+  user: { findUnique: jest.Mock };
   $transaction: jest.Mock;
 }
 
@@ -53,14 +54,30 @@ const prismaWith = (over: Record<string, unknown> = {}): PrismaDouble => {
     },
     approvalStep: { update: jest.fn() },
     notification: { create: jest.fn().mockResolvedValue({}) },
+    // departmentOf(): no department unless a test says otherwise.
+    user: { findUnique: jest.fn().mockResolvedValue({ departmentId: null }) },
     ...over,
   };
   db.$transaction = jest.fn(async (fn: (tx: unknown) => unknown) => fn(db));
   return db as unknown as PrismaDouble;
 };
 
-const make = (prisma: unknown) =>
-  new ApprovalService(prisma as never, audit as never, notifications as never);
+// M4: by default nobody holds a delegation, so every pre-existing test keeps
+// exercising exactly the authority rules it was written for. The delegation
+// cases below supply their own double.
+const noDelegations = {
+  rolesFor: jest.fn().mockResolvedValue([]),
+  delegationFor: jest.fn().mockResolvedValue(null),
+  delegatesOf: jest.fn().mockResolvedValue([]),
+};
+
+const make = (prisma: unknown, delegations: unknown = noDelegations) =>
+  new ApprovalService(
+    prisma as never,
+    audit as never,
+    notifications as never,
+    delegations as never,
+  );
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -327,9 +344,12 @@ describe('ApprovalService.decide', () => {
 
     expect(res.applied).toBe(false);
     expect(applier).not.toHaveBeenCalled();
-    expect(prisma.approvalRequest.update.mock.calls[0][0].data).toEqual({
-      currentStep: { increment: 1 },
-    });
+    // M4: the step clock restarts with the step. The next approver's
+    // escalation window is their own, not the remainder of the last one's.
+    const advance = prisma.approvalRequest.update.mock.calls[0][0].data;
+    expect(advance.currentStep).toEqual({ increment: 1 });
+    expect(advance.currentStepAt).toBeInstanceOf(Date);
+    expect(Object.keys(advance).sort()).toEqual(['currentStep', 'currentStepAt']);
   });
 
   it('applies the document only when the last step signs', async () => {
@@ -344,6 +364,49 @@ describe('ApprovalService.decide', () => {
 
     expect(res.applied).toBe(true);
     expect(applier).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }), 'po1');
+  });
+
+  // ── M4: the rejection must move the document, not only close the chain ────
+
+  it('runs the rejecter so a refused document does not strand in PENDING_APPROVAL', async () => {
+    // Before M4 a rejected PO simply stayed in DRAFT and the chain closing was
+    // the whole story. Now it waits in PENDING_APPROVAL, so a rejection that
+    // only closes the chain would leave it in a state no transition leaves.
+    const prisma = withRequest(pendingRequest(), { status: 'REJECTED' });
+    const svc = make(prisma);
+    const applier = jest.fn();
+    const rejecter = jest.fn().mockResolvedValue(undefined);
+    svc.register('PURCHASE_ORDER', applier, rejecter);
+
+    await svc.decide(user(), 'req1', 'REJECT', 'price is wrong');
+
+    expect(applier).not.toHaveBeenCalled();
+    expect(rejecter).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u1' }),
+      'po1',
+      'price is wrong',
+    );
+  });
+
+  it('does not turn a failing rejecter into a 500 on an already-recorded refusal', async () => {
+    // The rejection has committed. Throwing here would invite the approver to
+    // click again and produce a second one.
+    const prisma = withRequest(pendingRequest(), { status: 'REJECTED' });
+    const svc = make(prisma);
+    svc.register('PURCHASE_ORDER', jest.fn(), jest.fn().mockRejectedValue(new Error('boom')));
+
+    await expect(svc.decide(user(), 'req1', 'REJECT', 'nope')).resolves.toMatchObject({
+      applied: false,
+    });
+  });
+
+  it('is content with no rejecter for a type whose refused state needs no move', async () => {
+    const prisma = withRequest(pendingRequest(), { status: 'REJECTED' });
+    const svc = make(prisma);
+    svc.register('PURCHASE_ORDER', jest.fn());
+    await expect(svc.decide(user(), 'req1', 'REJECT', 'nope')).resolves.toMatchObject({
+      applied: false,
+    });
   });
 
   it('rejects the whole chain on one rejection and never applies', async () => {
@@ -378,14 +441,17 @@ describe('ApprovalService.onApplicationBootstrap', () => {
     // and then fail — the worst possible moment to find out.
     const svc = make(prismaWith());
     svc.register('PURCHASE_ORDER', jest.fn());
-    expect(() => svc.onApplicationBootstrap()).toThrow(/PROGRESS_CLAIM, CHANGE_ORDER/);
+    const unowned = APPROVAL_DOCUMENTS.map((d) => d.value).filter((v) => v !== 'PURCHASE_ORDER');
+    expect(() => svc.onApplicationBootstrap()).toThrow(new RegExp(unowned.join(', ')));
   });
 
   it('starts once every advertised type is registered', () => {
     const svc = make(prismaWith());
-    svc.register('PURCHASE_ORDER', jest.fn());
-    svc.register('PROGRESS_CLAIM', jest.fn());
-    svc.register('CHANGE_ORDER', jest.fn());
+    // Derived from the catalog rather than listed by hand: adding a document
+    // type to APPROVAL_DOCUMENTS must fail the *first* test in this describe —
+    // which is the guard — not silently pass this one because someone forgot
+    // to extend a hardcoded list here too.
+    for (const d of APPROVAL_DOCUMENTS) svc.register(d.value, jest.fn());
     expect(() => svc.onApplicationBootstrap()).not.toThrow();
   });
 });

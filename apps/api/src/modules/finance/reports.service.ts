@@ -3,6 +3,7 @@ import { REPORTED_INVOICE_STATUSES, isCreditNote, signedTotal } from '@npi/share
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { PostingService } from '../../common/posting.service';
+import { BILL_STATUSES_WITH_AP_BALANCE } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -372,7 +373,8 @@ export class ReportsService {
       this.prisma.vendorBill.findMany({
         where: {
           organizationId: user.organizationId,
-          status: { in: ['POSTED', 'PAID'] },
+          // M4: input VAT is deductible once the liability is accepted.
+          status: { in: [...BILL_STATUSES_WITH_AP_BALANCE] as never[] },
           billDate: { gte: from, lte: to },
         },
         select: { subtotal: true, vatAmount: true },

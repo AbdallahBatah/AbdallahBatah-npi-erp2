@@ -25,10 +25,11 @@ const ALL_PERMISSIONS = [
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
   'projects.project.read', 'projects.project.write',
-  'scm.procurement.read', 'scm.procurement.write',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
   'assets.serialunit.read',
   'fsm.workorder.read', 'fsm.workorder.write',
   'admin.org.manage', 'admin.user.manage', 'admin.audit.read', 'admin.approval.manage',
+  'admin.department.manage', 'admin.delegation.manage', 'admin.workflow.manage',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
@@ -49,14 +50,14 @@ const ACCOUNTANT_PERMISSIONS = [
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
   'crm.customer.read',
   'commercial.contract.read', 'commercial.proposal.read', 'commercial.item.read',
-  'scm.procurement.read', 'scm.procurement.write',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
 // مدير المشاريع: التنفيذ والتوريد كاملاً + قراءة العقود والتشغيل والفوترة
 const PM_PERMISSIONS = [
   'projects.project.read', 'projects.project.write',
-  'scm.procurement.read', 'scm.procurement.write',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
   'assets.serialunit.read',
   'commercial.contract.read', 'commercial.item.read',
   'crm.customer.read',
@@ -69,7 +70,10 @@ const PM_PERMISSIONS = [
 const SITE_ENGINEER_PERMISSIONS = [
   'fsm.workorder.read', 'fsm.workorder.write',
   'assets.serialunit.read',
-  'scm.procurement.read',
+  // M4: the exact case the requisition/procurement split exists for — a site
+  // engineer may ask the company to buy a cable, and must not be able to
+  // approve the purchase order that buys it.
+  'scm.procurement.read', 'scm.requisition.write',
   'commercial.item.read',
   'projects.project.read',
   'platform.attachment.read', 'platform.attachment.write',
@@ -197,6 +201,7 @@ async function main() {
     { documentType: 'VENDOR', prefix: 'VEN', startValue: 2 },
     { documentType: 'PROJECT', prefix: 'PRJ' },
     { documentType: 'PURCHASE_ORDER', prefix: 'PO' },
+    { documentType: 'PURCHASE_REQUISITION', prefix: 'PR' },
     { documentType: 'GOODS_RECEIPT', prefix: 'GRN' },
     { documentType: 'VENDOR_BILL', prefix: 'BILL' },
     { documentType: 'CHANGE_ORDER', prefix: 'CO' },
@@ -401,6 +406,117 @@ async function main() {
     },
   });
 
+  // ── M4: adopt the documents that existed before the engine did ───────────
+  //
+  // Every purchase order, receipt and vendor bill written before this release
+  // has a status but no flow instance. Without an instance the engine refuses
+  // to move them — `transition()` starts by looking one up — so an approved PO
+  // from last week could never be sent, received, or closed. They would be
+  // quietly frozen, which is the kind of migration failure nobody notices
+  // until a user does.
+  //
+  // Idempotent, and safe to re-run: it only ever adopts documents that have no
+  // instance yet. The state codes were deliberately named after the existing
+  // enum values, so adoption is a lookup rather than a translation — with one
+  // exception, noted below.
+  const adoptions: Array<{
+    flow: string;
+    rows: Array<{ id: string; code: string; status: string }>;
+  }> = [
+    {
+      flow: 'PURCHASE_REQUISITION',
+      rows: await prisma.purchaseRequisition.findMany({
+        where: { organizationId: org.id },
+        select: { id: true, code: true, status: true },
+      }),
+    },
+    {
+      flow: 'PURCHASE_ORDER',
+      rows: await prisma.purchaseOrder.findMany({
+        where: { organizationId: org.id },
+        select: { id: true, code: true, status: true },
+      }),
+    },
+    {
+      flow: 'GOODS_RECEIPT',
+      rows: await prisma.goodsReceipt.findMany({
+        where: { organizationId: org.id },
+        select: { id: true, code: true, status: true },
+      }),
+    },
+    {
+      flow: 'VENDOR_BILL',
+      rows: await prisma.vendorBill.findMany({
+        where: { organizationId: org.id },
+        select: { id: true, code: true, status: true },
+      }),
+    },
+  ];
+
+  let adopted = 0;
+  for (const group of adoptions) {
+    const def = await prisma.wfDefinition.findFirst({
+      where: { organizationId: org.id, code: group.flow, isActive: true },
+      include: { states: true },
+      orderBy: { version: 'desc' },
+    });
+    if (!def) continue;
+    const byCode = new Map(def.states.map((st) => [st.code, st]));
+
+    for (const row of group.rows) {
+      const existing = await prisma.wfInstance.findFirst({
+        where: {
+          organizationId: org.id,
+          documentType: def.documentType,
+          documentId: row.id,
+        },
+        select: { id: true },
+      });
+      if (existing) continue;
+
+      // The one translation: 'POSTED' is a pre-M4 vendor-bill status with no
+      // state in the new flow. It meant "the journal has been posted", which is
+      // exactly what APPROVED means now.
+      const stateCode = row.status === 'POSTED' ? 'APPROVED' : row.status;
+      const state = byCode.get(stateCode);
+      if (!state) {
+        console.warn(
+          `   ⚠ ${group.flow} ${row.code}: status "${row.status}" has no state in the flow — left unadopted`,
+        );
+        continue;
+      }
+
+      await prisma.wfInstance.create({
+        data: {
+          organizationId: org.id,
+          definitionId: def.id,
+          documentType: def.documentType,
+          documentId: row.id,
+          documentCode: row.code,
+          currentState: state.code,
+          // A document already in a final state is finished: closing it keeps
+          // it out of every task box rather than parking historic paperwork in
+          // somebody's inbox on the day of the upgrade.
+          closedAt: state.kind === 'FINAL' ? new Date() : null,
+          history: {
+            create: {
+              fromState: state.code,
+              toState: state.code,
+              actionCode: 'ADOPT',
+              // No actor: nobody performed this move. Attributing it to whoever
+              // happened to run the seed would be a false entry in an
+              // append-only trail.
+              actorId: null,
+              comment: 'Adopted into the workflow engine at the M4 migration',
+            },
+          },
+        },
+      });
+      adopted += 1;
+    }
+  }
+  if (adopted > 0) console.log(`   Adopted ${adopted} pre-M4 document(s) into the workflow engine.`);
+
   // ── Package و: a starting approval matrix ─────────────────────────────────
   // Seeded so a fresh tenant has a working delegation of authority rather than
   // the pre-matrix state where one permission approved any amount. Deliberately
@@ -409,10 +525,14 @@ async function main() {
   // customer wants on day one. Only created when absent — an organization that
   // has tuned its own bands must never have them overwritten by a re-seed.
   const matrixDefaults: Array<{
-    documentType: 'PURCHASE_ORDER' | 'PROGRESS_CLAIM' | 'CHANGE_ORDER';
+    documentType: 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PROGRESS_CLAIM' | 'CHANGE_ORDER';
     minAmount: number;
     chain: string[];
   }> = [
+    // The requisition band sits lower than the PO band on purpose: the point of
+    // the requisition is to catch a spend before anyone commits to it, and a
+    // threshold as high as the PO's would let most requests through unseen.
+    { documentType: 'PURCHASE_REQUISITION', minAmount: 10_000, chain: ['pm'] },
     { documentType: 'PURCHASE_ORDER', minAmount: 100_000, chain: ['pm', 'accountant'] },
     { documentType: 'PROGRESS_CLAIM', minAmount: 250_000, chain: ['pm', 'accountant'] },
     { documentType: 'CHANGE_ORDER', minAmount: 100_000, chain: ['pm', 'admin'] },
@@ -434,11 +554,221 @@ async function main() {
         documentType: d.documentType,
         minAmount: d.minAmount,
         maxAmount: null,
+        // M4: 48 hours before the chain is escalated. Escalation notifies —
+        // it never signs. See ApprovalEscalationScheduler.
+        escalationHours: 48,
         steps: {
           create: d.chain.map((key, i) => ({ sequence: i + 1, roleId: roleIdByKey[key] })),
         },
       },
     });
+  }
+
+  // ── M4: departments, the third dimension of the approval matrix ──────────
+  // "مدير القسم" in §5 is meaningless without one, and the system had no
+  // notion of a department at all before this.
+  const deptDefs = [
+    { code: 'OPS', nameAr: 'العمليات والمشاريع', nameEn: 'Operations & Projects' },
+    { code: 'ENG', nameAr: 'الهندسة', nameEn: 'Engineering' },
+    { code: 'FIN', nameAr: 'المالية', nameEn: 'Finance' },
+    { code: 'ADM', nameAr: 'الإدارة', nameEn: 'Administration' },
+  ];
+  const deptIdByCode: Record<string, string> = {};
+  for (const d of deptDefs) {
+    const dept = await prisma.department.upsert({
+      where: { organizationId_code: { organizationId: org.id, code: d.code } },
+      update: { nameAr: d.nameAr, nameEn: d.nameEn },
+      create: { organizationId: org.id, code: d.code, nameAr: d.nameAr, nameEn: d.nameEn },
+    });
+    deptIdByCode[d.code] = dept.id;
+  }
+
+  // ── M4: the four flows of §7 ─────────────────────────────────────────────
+  //
+  // These are data, not code. Which states exist and which moves are legal is
+  // configurable per organization and versioned — the engine reads them, and
+  // an unlisted move cannot happen. Editing a flow does not need a deploy;
+  // editing what a *transition means* does, which is the correct division.
+  type StateSeed = { code: string; nameAr: string; nameEn: string; kind: 'INITIAL' | 'INTERMEDIATE' | 'FINAL' };
+  type TransitionSeed = {
+    from: string;
+    to: string;
+    action: string;
+    nameAr: string;
+    nameEn: string;
+    permission: string;
+    condition?: string;
+    emits?: string;
+    requiresApproval?: boolean;
+  };
+  const flows: Array<{
+    code: string;
+    nameAr: string;
+    nameEn: string;
+    documentType: string;
+    states: StateSeed[];
+    transitions: TransitionSeed[];
+  }> = [
+    {
+      code: 'PURCHASE_REQUISITION',
+      nameAr: 'طلب شراء',
+      nameEn: 'Purchase requisition',
+      documentType: 'PurchaseRequisition',
+      states: [
+        { code: 'DRAFT', nameAr: 'مسودة', nameEn: 'Draft', kind: 'INITIAL' },
+        { code: 'PENDING_APPROVAL', nameAr: 'قيد الاعتماد', nameEn: 'Pending approval', kind: 'INTERMEDIATE' },
+        { code: 'APPROVED', nameAr: 'معتمد', nameEn: 'Approved', kind: 'INTERMEDIATE' },
+        { code: 'RETURNED', nameAr: 'معاد', nameEn: 'Returned', kind: 'INTERMEDIATE' },
+        { code: 'REJECTED', nameAr: 'مرفوض', nameEn: 'Rejected', kind: 'FINAL' },
+        { code: 'CONVERTED', nameAr: 'محوَّل لأمر شراء', nameEn: 'Converted to PO', kind: 'FINAL' },
+        { code: 'CANCELLED', nameAr: 'ملغى', nameEn: 'Cancelled', kind: 'FINAL' },
+      ],
+      transitions: [
+        // A requisition with no value cannot be banded by the matrix, so it
+        // cannot be approved by the right people. Refuse it at submission.
+        { from: 'DRAFT', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'رفع للاعتماد', nameEn: 'Submit for approval', permission: 'scm.requisition.write', condition: 'estimatedTotal > 0', requiresApproval: true },
+        { from: 'RETURNED', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'إعادة الرفع', nameEn: 'Resubmit', permission: 'scm.requisition.write', condition: 'estimatedTotal > 0', requiresApproval: true },
+        { from: 'DRAFT', to: 'CANCELLED', action: 'CANCEL', nameAr: 'إلغاء', nameEn: 'Cancel', permission: 'scm.requisition.write' },
+        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'scm.procurement.write', emits: 'pr.approved' },
+        { from: 'PENDING_APPROVAL', to: 'REJECTED', action: 'REJECT', nameAr: 'رفض', nameEn: 'Reject', permission: 'scm.procurement.write' },
+        { from: 'PENDING_APPROVAL', to: 'RETURNED', action: 'RETURN', nameAr: 'إعادة لمقدّم الطلب', nameEn: 'Return to requester', permission: 'scm.procurement.write' },
+        { from: 'APPROVED', to: 'CONVERTED', action: 'CONVERT', nameAr: 'تحويل لأمر شراء', nameEn: 'Convert to purchase order', permission: 'scm.procurement.write' },
+      ],
+    },
+    {
+      code: 'PURCHASE_ORDER',
+      nameAr: 'أمر شراء',
+      nameEn: 'Purchase order',
+      documentType: 'PurchaseOrder',
+      states: [
+        { code: 'DRAFT', nameAr: 'مسودة', nameEn: 'Draft', kind: 'INITIAL' },
+        { code: 'PENDING_APPROVAL', nameAr: 'قيد الاعتماد', nameEn: 'Pending approval', kind: 'INTERMEDIATE' },
+        { code: 'APPROVED', nameAr: 'معتمد', nameEn: 'Approved', kind: 'INTERMEDIATE' },
+        { code: 'SENT', nameAr: 'مرسَل للمورّد', nameEn: 'Sent to vendor', kind: 'INTERMEDIATE' },
+        { code: 'PARTIALLY_RECEIVED', nameAr: 'مستلَم جزئياً', nameEn: 'Partially received', kind: 'INTERMEDIATE' },
+        { code: 'RECEIVED', nameAr: 'مستلَم', nameEn: 'Received', kind: 'INTERMEDIATE' },
+        { code: 'CLOSED', nameAr: 'مغلق', nameEn: 'Closed', kind: 'FINAL' },
+        { code: 'CANCELLED', nameAr: 'ملغى', nameEn: 'Cancelled', kind: 'FINAL' },
+      ],
+      transitions: [
+        { from: 'DRAFT', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'رفع للاعتماد', nameEn: 'Submit for approval', permission: 'scm.procurement.write', condition: 'total > 0', requiresApproval: true },
+        { from: 'DRAFT', to: 'CANCELLED', action: 'CANCEL', nameAr: 'إلغاء', nameEn: 'Cancel', permission: 'scm.procurement.write' },
+        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'scm.procurement.write', emits: 'po.approved' },
+        { from: 'PENDING_APPROVAL', to: 'CANCELLED', action: 'REJECT', nameAr: 'رفض', nameEn: 'Reject', permission: 'scm.procurement.write' },
+        { from: 'APPROVED', to: 'SENT', action: 'SEND', nameAr: 'إرسال للمورّد', nameEn: 'Send to vendor', permission: 'scm.procurement.write', emits: 'po.sent' },
+        // RECEIVE moves are written by the receipt flow's acceptance, inside
+        // its transaction — they are listed so the map is complete and the
+        // history reads as one story.
+        { from: 'SENT', to: 'PARTIALLY_RECEIVED', action: 'RECEIVE', nameAr: 'استلام جزئي', nameEn: 'Partial receipt', permission: 'scm.procurement.write' },
+        { from: 'SENT', to: 'RECEIVED', action: 'CLOSE', nameAr: 'استلام كامل', nameEn: 'Full receipt', permission: 'scm.procurement.write' },
+        { from: 'PARTIALLY_RECEIVED', to: 'RECEIVED', action: 'CLOSE', nameAr: 'اكتمال الاستلام', nameEn: 'Complete receipt', permission: 'scm.procurement.write' },
+        { from: 'RECEIVED', to: 'CLOSED', action: 'CLOSE', nameAr: 'إقفال', nameEn: 'Close', permission: 'scm.procurement.write' },
+      ],
+    },
+    {
+      code: 'GOODS_RECEIPT',
+      nameAr: 'محضر استلام',
+      nameEn: 'Goods receipt',
+      documentType: 'GoodsReceipt',
+      states: [
+        { code: 'DRAFT', nameAr: 'مسودة', nameEn: 'Draft', kind: 'INITIAL' },
+        { code: 'INSPECTED', nameAr: 'مفحوص', nameEn: 'Inspected', kind: 'INTERMEDIATE' },
+        { code: 'ACCEPTED', nameAr: 'مقبول', nameEn: 'Accepted', kind: 'FINAL' },
+        { code: 'PARTIALLY_REJECTED', nameAr: 'مرفوض جزئياً', nameEn: 'Partially rejected', kind: 'FINAL' },
+      ],
+      transitions: [
+        { from: 'DRAFT', to: 'INSPECTED', action: 'INSPECT', nameAr: 'تسجيل الفحص', nameEn: 'Record inspection', permission: 'scm.procurement.write' },
+        { from: 'INSPECTED', to: 'ACCEPTED', action: 'ACCEPT', nameAr: 'قبول الاستلام', nameEn: 'Accept delivery', permission: 'scm.procurement.write', emits: 'goods.received' },
+        { from: 'INSPECTED', to: 'PARTIALLY_REJECTED', action: 'REJECT_PARTIAL', nameAr: 'رفض جزئي', nameEn: 'Partially reject', permission: 'scm.procurement.write' },
+      ],
+    },
+    {
+      code: 'VENDOR_BILL',
+      nameAr: 'فاتورة مورّد',
+      nameEn: 'Vendor bill',
+      documentType: 'VendorBill',
+      states: [
+        { code: 'DRAFT', nameAr: 'مسجَّلة', nameEn: 'Recorded', kind: 'INITIAL' },
+        { code: 'MATCHED', nameAr: 'مطابقة ثلاثياً', nameEn: 'Three-way matched', kind: 'INTERMEDIATE' },
+        { code: 'APPROVED', nameAr: 'معتمدة', nameEn: 'Approved', kind: 'INTERMEDIATE' },
+        { code: 'SCHEDULED', nameAr: 'مجدولة للدفع', nameEn: 'Scheduled for payment', kind: 'INTERMEDIATE' },
+        { code: 'PAID', nameAr: 'مدفوعة', nameEn: 'Paid', kind: 'FINAL' },
+      ],
+      transitions: [
+        { from: 'DRAFT', to: 'MATCHED', action: 'MATCH', nameAr: 'مطابقة ثلاثية', nameEn: 'Run three-way match', permission: 'scm.procurement.write', emits: 'invoice.matched' },
+        // The condition is the control: a bill whose match came back with a
+        // variance cannot be approved until someone fixes the variance. A
+        // company that wants to allow approving a price variance edits this
+        // row — it does not need a release.
+        { from: 'MATCHED', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد الفاتورة', nameEn: 'Approve bill', permission: 'finance.payment.write', condition: 'matchResult == "MATCHED"', emits: 'invoice.approved' },
+        { from: 'MATCHED', to: 'DRAFT', action: 'RETURN', nameAr: 'إعادة للمراجعة', nameEn: 'Return for review', permission: 'finance.payment.write' },
+        { from: 'APPROVED', to: 'SCHEDULED', action: 'SCHEDULE', nameAr: 'جدولة الدفع', nameEn: 'Schedule payment', permission: 'finance.payment.write' },
+        { from: 'SCHEDULED', to: 'PAID', action: 'PAY', nameAr: 'سداد', nameEn: 'Pay', permission: 'finance.payment.write', emits: 'invoice.paid' },
+      ],
+    },
+  ];
+
+  for (const f of flows) {
+    const def = await prisma.wfDefinition.upsert({
+      where: { organizationId_code_version: { organizationId: org.id, code: f.code, version: 1 } },
+      update: { nameAr: f.nameAr, nameEn: f.nameEn, documentType: f.documentType, isActive: true },
+      create: {
+        organizationId: org.id,
+        code: f.code,
+        nameAr: f.nameAr,
+        nameEn: f.nameEn,
+        documentType: f.documentType,
+        version: 1,
+      },
+    });
+    for (const [i, st] of f.states.entries()) {
+      await prisma.wfState.upsert({
+        where: { definitionId_code: { definitionId: def.id, code: st.code } },
+        update: { nameAr: st.nameAr, nameEn: st.nameEn, kind: st.kind, sortOrder: i },
+        create: {
+          definitionId: def.id,
+          code: st.code,
+          nameAr: st.nameAr,
+          nameEn: st.nameEn,
+          kind: st.kind,
+          sortOrder: i,
+        },
+      });
+    }
+    for (const [i, t] of f.transitions.entries()) {
+      await prisma.wfTransition.upsert({
+        where: {
+          definitionId_fromState_actionCode: {
+            definitionId: def.id,
+            fromState: t.from,
+            actionCode: t.action,
+          },
+        },
+        update: {
+          toState: t.to,
+          nameAr: t.nameAr,
+          nameEn: t.nameEn,
+          requiredPermission: t.permission,
+          conditionExpr: t.condition ?? null,
+          emitsEvent: t.emits ?? null,
+          requiresApproval: t.requiresApproval ?? false,
+          sortOrder: i,
+        },
+        create: {
+          definitionId: def.id,
+          fromState: t.from,
+          toState: t.to,
+          actionCode: t.action,
+          nameAr: t.nameAr,
+          nameEn: t.nameEn,
+          requiredPermission: t.permission,
+          conditionExpr: t.condition ?? null,
+          emitsEvent: t.emits ?? null,
+          requiresApproval: t.requiresApproval ?? false,
+          sortOrder: i,
+        },
+      });
+    }
   }
 
   console.log('✅ Seed complete.');

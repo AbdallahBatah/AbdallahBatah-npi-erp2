@@ -26,6 +26,20 @@ export const PERMISSIONS = {
   PROJECT_WRITE: 'projects.project.write',
   PROCUREMENT_READ: 'scm.procurement.read',
   PROCUREMENT_WRITE: 'scm.procurement.write',
+  // M4: raising a purchase requisition is deliberately a *lower* bar than
+  // running procurement. Anyone who can ask the company to buy something needs
+  // this; only a buyer needs PROCUREMENT_WRITE. Collapsing the two would mean
+  // every engineer who wants a cable can also approve purchase orders.
+  REQUISITION_WRITE: 'scm.requisition.write',
+  // M4: departments and delegations are delegation-of-authority settings —
+  // who signs for whom, and for which unit — not preferences. Grouped with the
+  // approval matrix because they configure the same control.
+  DEPARTMENT_MANAGE: 'admin.department.manage',
+  DELEGATION_MANAGE: 'admin.delegation.manage',
+  // M4: the outbox's operational view. Reading it exposes what the system did
+  // internally, and requeueing a failed event re-runs a financial consequence,
+  // so it is an administrator's key, not an operator's.
+  WORKFLOW_MANAGE: 'admin.workflow.manage',
   ASSET_READ: 'assets.serialunit.read',
   WORKORDER_READ: 'fsm.workorder.read',
   WORKORDER_WRITE: 'fsm.workorder.write',
@@ -87,6 +101,7 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     [PERMISSIONS.PROJECT_WRITE, 'إدارة المشاريع', 'Manage projects'],
     [PERMISSIONS.PROCUREMENT_READ, 'عرض المشتريات والمخزون', 'View procurement & stock'],
     [PERMISSIONS.PROCUREMENT_WRITE, 'إدارة المشتريات والمخزون', 'Manage procurement & stock'],
+    [PERMISSIONS.REQUISITION_WRITE, 'رفع طلبات الشراء', 'Raise purchase requisitions'],
     [PERMISSIONS.ASSET_READ, 'عرض الأصول المتسلسلة', 'View serialised assets'],
   ]),
   ...g('التشغيل', 'Operations', [
@@ -110,5 +125,8 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     [PERMISSIONS.ORG_MANAGE, 'إعدادات المنشأة', 'Organization settings'],
     [PERMISSIONS.AUDIT_READ, 'عرض سجل التدقيق', 'View audit log'],
     [PERMISSIONS.APPROVAL_MANAGE, 'ضبط مصفوفة الاعتماد', 'Configure approval matrix'],
+    [PERMISSIONS.DEPARTMENT_MANAGE, 'إدارة الأقسام', 'Manage departments'],
+    [PERMISSIONS.DELEGATION_MANAGE, 'إدارة التفويض المؤقت', 'Manage temporary delegations'],
+    [PERMISSIONS.WORKFLOW_MANAGE, 'مراقبة سير العمل والأحداث', 'Monitor workflow & events'],
   ]),
 ];
