@@ -1,10 +1,21 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { DepartmentsController } from './departments.controller';
+import { DepartmentsService } from './departments.service';
+import { DelegationsController } from './delegations.controller';
+import { DelegationsService } from './delegations.service';
 
-/** User & role administration (the tenant's own self-service — not superadmin). */
+/**
+ * User & role administration (the tenant's own self-service — not superadmin),
+ * plus the two M4 organisation-structure resources that shipped as tables with
+ * no HTTP surface: departments and temporary approval delegations. They live
+ * here because they are administered from the same screen and by the same
+ * people; the *use* of a delegation stays in the kernel, where the approval
+ * matrix reads it.
+ */
 @Module({
-  controllers: [AdminController],
-  providers: [AdminService],
+  controllers: [AdminController, DepartmentsController, DelegationsController],
+  providers: [AdminService, DepartmentsService, DelegationsService],
 })
 export class AdminModule {}

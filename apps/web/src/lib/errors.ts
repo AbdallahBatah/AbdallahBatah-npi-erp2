@@ -98,6 +98,38 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   { re: /current password is incorrect/i, ar: 'كلمة المرور الحالية غير صحيحة' },
   { re: /must differ from the current/i, ar: 'كلمة المرور الجديدة مطابقة للحالية — اختر كلمة مختلفة' },
   { re: /newPassword must be longer|password must be longer/i, ar: 'كلمة المرور قصيرة — 8 أحرف على الأقل' },
+  // departments
+  { re: /department code already in use/i, ar: 'رمز القسم مستخدم مسبقاً — اختر رمزاً آخر' },
+  {
+    re: /code must be an uppercase slug/i,
+    ar: 'رمز القسم: حروف إنجليزية كبيرة وأرقام و _ و - فقط، مثل ENG',
+  },
+  { re: /cannot be its own parent/i, ar: 'لا يمكن أن يكون القسم تابعاً لنفسه' },
+  {
+    re: /hierarchy would form a cycle/i,
+    ar: 'القسم المختار يقع تحت هذا القسم — الربط يُنشئ حلقة مغلقة في الهيكل',
+  },
+  {
+    re: /deactivated user cannot manage a department/i,
+    ar: 'المستخدم موقوف — لا يمكن تعيينه مديراً لقسم',
+  },
+  // temporary delegations
+  { re: /cannot delegate to themselves/i, ar: 'لا يمكن تفويض المستخدم لنفسه' },
+  { re: /endsAt must be after startsAt/i, ar: 'تاريخ نهاية التفويض يجب أن يكون بعد تاريخ بدايته' },
+  {
+    re: /delegation window has already passed/i,
+    ar: 'النافذة الزمنية المحددة انتهت بالفعل — اختر تاريخ نهاية في المستقبل',
+  },
+  { re: /invalid startsAt\/endsAt date/i, ar: 'تاريخ غير صالح — اختر التاريخ من التقويم' },
+  {
+    re: /cannot give or receive a delegation/i,
+    ar: 'لا يمكن التفويض من مستخدم موقوف ولا إليه',
+  },
+  {
+    re: /already covers part of this period/i,
+    ar: 'يوجد تفويض ساري بين الشخصين نفسيهما يتقاطع مع هذه الفترة',
+  },
+  { re: /delegation is already revoked/i, ar: 'هذا التفويض مُنهى بالفعل' },
 ];
 
 export function translateError(e: unknown, locale: Locale): string {

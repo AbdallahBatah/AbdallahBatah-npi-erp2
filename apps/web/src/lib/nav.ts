@@ -72,6 +72,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/inbox', key: 'nav.inbox', icon: 'square-check' },
       { href: '/approvals', key: 'nav.approvals', icon: 'stamp' },
       { href: '/admin', key: 'nav.admin', icon: 'shield-users', perm: 'admin.user.manage' },
+      // M4's two organisation-structure screens. They are separate routes, not
+      // tabs of /admin, because their permissions are separate: an
+      // organization can hand someone the department list or the delegation
+      // register without also handing them user and role administration.
+      { href: '/departments', key: 'nav.departments', icon: 'building', perm: 'admin.department.manage' },
+      { href: '/delegations', key: 'nav.delegations', icon: 'key', perm: 'admin.delegation.manage' },
     ],
   },
 ];
