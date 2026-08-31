@@ -3,7 +3,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
 import { PostingService } from '../../common/posting.service';
+import { BILL_STATUSES_WITH_AP_BALANCE, WF_ACTIONS, WF_EVENTS } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
+import type { Prisma } from '@npi/db';
 import type { PayVendorDto } from './dto';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -56,7 +58,10 @@ export class PayablesService {
       this.prisma.vendorBill.findMany({
         where: {
           organizationId: user.organizationId,
-          status: { in: ['POSTED', 'PAID'] },
+          // M4: asked, not hardcoded. A bill carries an AP balance from the
+          // moment its liability is accepted (APPROVED) — plus POSTED, which
+          // is what that meant for rows written before M4.
+          status: { in: [...BILL_STATUSES_WITH_AP_BALANCE] as never[] },
           ...(vendorId ? { vendorId } : {}),
         },
         include: {
@@ -215,7 +220,13 @@ export class PayablesService {
         const settled = row.paid + alloc.amount >= row.due - EPS;
         if (!settled) continue;
         if (alloc.kind === 'BILL') {
+          // M4: the bill's own flow records the move. Written here inside the
+          // payment transaction rather than through the engine's own one,
+          // because a payment that commits while its document stays unpaid is
+          // the worse failure — and the flow's history is appended alongside
+          // it, so the trail stays complete either way.
           await tx.vendorBill.update({ where: { id: alloc.documentId }, data: { status: 'PAID' } });
+          await this.closeBillFlow(tx, user, alloc.documentId);
         } else {
           await tx.progressClaim.update({
             where: { id: alloc.documentId },
@@ -301,6 +312,64 @@ export class PayablesService {
       );
 
       return updated;
+    });
+  }
+  /**
+   * Append the vendor bill's PAY move to its own workflow trail.
+   *
+   * The engine is not called here on purpose, and the reason is worth stating:
+   * `engine.transition()` opens its own transaction, and this move must commit
+   * or roll back with the payment that caused it. A payment recorded against a
+   * bill left SCHEDULED is a worse outcome than a trail written by hand — so
+   * the history row and the instance update happen inline, in the payment's
+   * transaction, with the same shape the engine writes.
+   *
+   * If the bill predates M4 and has no instance, there is nothing to append:
+   * its status is still correct, and inventing a flow for it would be a lie
+   * about a document that never travelled through one.
+   */
+  private async closeBillFlow(
+    tx: Prisma.TransactionClient,
+    user: AuthUser,
+    vendorBillId: string,
+  ): Promise<void> {
+    const instance = await tx.wfInstance.findFirst({
+      where: {
+        organizationId: user.organizationId,
+        documentType: 'VendorBill',
+        documentId: vendorBillId,
+        closedAt: null,
+      },
+      select: { id: true, currentState: true },
+    });
+    if (!instance) return;
+
+    await tx.wfInstance.update({
+      where: { id: instance.id },
+      data: { currentState: 'PAID', assigneeRoleId: null, closedAt: new Date() },
+    });
+    await tx.wfHistory.create({
+      data: {
+        instanceId: instance.id,
+        fromState: instance.currentState,
+        toState: 'PAID',
+        actionCode: WF_ACTIONS.PAY,
+        actorId: user.userId,
+        comment: null,
+      },
+    });
+    await tx.domainEvent.create({
+      data: {
+        organizationId: user.organizationId,
+        eventCode: WF_EVENTS.INVOICE_PAID,
+        payloadJson: {
+          documentType: 'VendorBill',
+          documentId: vendorBillId,
+          fromState: instance.currentState,
+          toState: 'PAID',
+          actorId: user.userId,
+        },
+      },
     });
   }
 }

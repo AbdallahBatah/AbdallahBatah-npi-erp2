@@ -9,7 +9,11 @@
  */
 import { PERMISSIONS, type PermissionKey } from './permissions';
 
-export type ApprovalDocumentType = 'PURCHASE_ORDER' | 'PROGRESS_CLAIM' | 'CHANGE_ORDER';
+export type ApprovalDocumentType =
+  | 'PURCHASE_REQUISITION'
+  | 'PURCHASE_ORDER'
+  | 'PROGRESS_CLAIM'
+  | 'CHANGE_ORDER';
 
 export interface ApprovalDocumentMeta {
   value: ApprovalDocumentType;
@@ -27,6 +31,17 @@ export interface ApprovalDocumentMeta {
 }
 
 export const APPROVAL_DOCUMENTS: ApprovalDocumentMeta[] = [
+  {
+    value: 'PURCHASE_REQUISITION',
+    labelAr: 'طلب شراء',
+    labelEn: 'Purchase requisition',
+    // Approving a requisition is procurement's authority, not the requester's.
+    // The split is the point: raising one needs REQUISITION_WRITE, which every
+    // engineer holds; approving one does not.
+    permission: PERMISSIONS.PROCUREMENT_WRITE,
+    amountLabelAr: 'القيمة التقديرية للطلب',
+    amountLabelEn: 'Estimated value of the request',
+  },
   {
     value: 'PURCHASE_ORDER',
     labelAr: 'أمر شراء',

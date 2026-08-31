@@ -13,6 +13,7 @@ import {
   ReceiveDto,
   TransferDto,
 } from './dto';
+import { WorkflowActionDto } from './requisitions.dto';
 
 @Controller('procurement')
 @UseGuards(PermissionsGuard)
@@ -57,17 +58,87 @@ export class ProcurementController {
     return this.procurement.approvePo(user, id);
   }
 
+  /** §7: معتمد ← مرسَل للمورّد — the state the map was missing. */
+  @Post('purchase-orders/:id/send')
+  @RequirePermissions(PERMISSIONS.PROCUREMENT_WRITE)
+  sendPo(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.procurement.sendPo(user, id);
+  }
+
   @Post('purchase-orders/:id/receive')
   @RequirePermissions(PERMISSIONS.PROCUREMENT_WRITE)
   receive(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReceiveDto) {
     return this.procurement.receive(user, id, dto);
   }
 
-  // ── Vendor bills ─────────────────────────────────────────────────────────
+  // ── Goods receipt lifecycle (§7: مسودة ← مفحوص ← مقبول) ──────────────────
+
+  @Post('receipts/:id/inspect')
+  @RequirePermissions(PERMISSIONS.PROCUREMENT_WRITE)
+  inspectGrn(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: WorkflowActionDto,
+  ) {
+    return this.procurement.inspectGrn(user, id, dto.comment);
+  }
+
+  @Post('receipts/:id/accept')
+  @RequirePermissions(PERMISSIONS.PROCUREMENT_WRITE)
+  acceptGrn(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: WorkflowActionDto,
+  ) {
+    return this.procurement.acceptGrn(user, id, dto.comment);
+  }
+
+  @Post('receipts/:id/reject')
+  @RequirePermissions(PERMISSIONS.PROCUREMENT_WRITE)
+  rejectGrn(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: WorkflowActionDto,
+  ) {
+    return this.procurement.rejectGrn(user, id, dto.comment ?? '');
+  }
+
+  // ── Vendor bills (§7: مسجَّلة ← مطابقة ← معتمدة ← مجدولة) ─────────────────
   @Post('bills')
   @RequirePermissions(PERMISSIONS.PROCUREMENT_WRITE)
   createBill(@CurrentUser() user: AuthUser, @Body() dto: CreateBillDto) {
     return this.procurement.createBill(user, dto);
+  }
+
+  @Post('bills/:id/match')
+  @RequirePermissions(PERMISSIONS.PROCUREMENT_WRITE)
+  matchBill(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: WorkflowActionDto,
+  ) {
+    return this.procurement.matchBill(user, id, dto.comment);
+  }
+
+  /** Accepting the liability posts the journal — hence the finance permission. */
+  @Post('bills/:id/approve')
+  @RequirePermissions(PERMISSIONS.PAYMENT_WRITE)
+  approveBill(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: WorkflowActionDto,
+  ) {
+    return this.procurement.approveBill(user, id, dto.comment);
+  }
+
+  @Post('bills/:id/schedule')
+  @RequirePermissions(PERMISSIONS.PAYMENT_WRITE)
+  scheduleBill(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: WorkflowActionDto,
+  ) {
+    return this.procurement.scheduleBill(user, id, dto.comment);
   }
 
   // ── Subcontracts & claims (PRJ-07) ───────────────────────────────────────

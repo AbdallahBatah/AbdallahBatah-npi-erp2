@@ -72,6 +72,9 @@ export const api = {
     apiFetch<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   patch: <T = any>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  /** Replaces a collection wholesale, where PATCH would mean "merge into it". */
+  put: <T = any>(path: string, body?: unknown) =>
+    apiFetch<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
   del: <T = any>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
 };
 

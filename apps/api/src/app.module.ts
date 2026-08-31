@@ -23,6 +23,7 @@ import { PlatformModule } from './modules/platform/platform.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { SearchModule } from './modules/search/search.module';
+import { InboxModule } from './modules/inbox/inbox.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { SearchModule } from './modules/search/search.module';
     AdminModule,
     ApprovalsModule,
     SearchModule,
+    InboxModule,
   ],
   controllers: [HealthController],
   providers: [

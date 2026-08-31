@@ -110,14 +110,14 @@
 
 <!-- ═══════════ 2 ═══════════ -->
 <h2 class="sec"><span class="num" style="background:#d97706">٢</span>التوريد والتنفيذ — من العقد إلى التشغيل</h2>
-<p class="sub">مساران متوازيان: مراحل التركيب في الموقع، وسلسلة الشراء من الموردين — يلتقيان عند التركيب.</p>
+<p class="sub">مساران متوازيان: مراحل التركيب في الموقع، وسلسلة الشراء من الموردين — يلتقيان عند وصول المواد المقبولة إلى الموقع.</p>
 <div class="stage">
   <div class="flow">
     <div class="node n-amber"><div class="t">مشروع</div><div class="d">يُنشأ من العقد بمراحل جاهزة (مسح، تصميم، تراخيص…)</div><div class="who"><span class="w-pm">مدير مشاريع</span></div></div>
     <div class="arrow">←</div>
-    <div class="node n-amber"><div class="t">أمر شراء</div><div class="d">ألواح وعواكس وبطاريات من المورد</div><div class="who"><span class="w-pm">مدير مشاريع</span><span class="w-acc">محاسب</span></div></div>
+    <div class="node n-amber"><div class="t">سلسلة الشراء</div><div class="d">طلب ← أمر ← استلام ← فاتورة مورّد — أربعة مستندات، تفصيلها أدناه</div><div class="who"><span class="w-pm">مدير مشاريع</span><span class="w-acc">محاسب</span></div></div>
     <div class="arrow">←</div>
-    <div class="node n-amber"><div class="t">اعتماد + استلام</div><div class="d">إدخال الأرقام التسلسلية وموقع التخزين</div><div class="who"><span class="w-pm">مدير مشاريع</span></div></div>
+    <div class="node n-amber"><div class="t">مواد في المخزن</div><div class="d">الأرقام التسلسلية وموقع التخزين تُثبَّت لحظة قبول الاستلام</div><div class="who"><span class="w-eng">مهندس موقع</span></div></div>
     <div class="arrow">←</div>
     <div class="node n-amber"><div class="t">تركيب في الموقع</div><div class="d">إنجاز المراحل، كل قطعة تُربط بمشروعها</div><div class="who"><span class="w-eng">مهندس موقع</span></div></div>
     <div class="arrow">←</div>
@@ -127,7 +127,94 @@
     <span class="lbl">أثناء التنفيذ:</span>
     <div class="note"><b>أوامر تغيير</b> — أي تعديل على النطاق يوثق بقيمته ويُعتمد قبل التنفيذ.</div>
     <div class="note"><b>مقاولو الباطن</b> — عقود ومستخلصات (مطالبات) تُعتمد وتدخل في تكلفة المشروع.</div>
-    <div class="note"><b>فاتورة المورد</b> — تُسجل على أمر الشراء وتظهر في إقرار الضريبة (مشتريات).</div>
+    <div class="note"><b>دفتر الالتزامات</b> — أمر الشراء المعتمد يحجز التزاماً على المشروع فوراً، فلا يُقرأ المشروع غير منفَق وفي طريقه أوامر معتمدة.</div>
+  </div>
+</div>
+
+<p class="sub">① <b>طلب الشراء (PR)</b> — من يطلب الصرف، قبل أن يلتزم أحد تجاه مورّد. مستند مستقل: الطلب والالتزام لم يعودا ورقة واحدة.</p>
+<div class="stage">
+  <div class="flow">
+    <div class="node n-amber"><div class="t">مسودة</div><div class="d">مبرر الصرف والبنود والقسم والمشروع وتاريخ الحاجة</div><div class="who"><span class="w-pm">مدير مشاريع</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-amber"><div class="t">قيد الاعتماد</div><div class="d">مصفوفة الاعتماد تختار الموقّعين بحسب المبلغ والقسم</div><div class="who"><span class="w-sys">تلقائي</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-amber"><div class="t">معتمد</div><div class="d">الحاجة أُقرّت — ولم يُلتزَم بها تجاه مورّد بعد</div><div class="who"><span class="w-pm">مدير مشاريع</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-dark"><div class="t">محوَّل لأمر شراء 📄</div><div class="d">ينشأ أمر الشراء ببنود الطلب، والطلب يُقفل عند هذه الحالة</div><div class="who"><span class="w-pm">مدير مشاريع</span></div></div>
+  </div>
+  <div class="branch">
+    <span class="lbl">تفرعات وضوابط:</span>
+    <div class="gate">🔒 لا رفع لطلب بلا قيمة<small>تقدير صفري لا يمكن ترجيحه في مصفوفة الاعتماد — فلا يُعرف من يوقّعه. الشرط مكتوب على الانتقال نفسه.</small></div>
+    <div class="gate">🔒 طلب واحد ⇦ أمر واحد<small>قاعدة البيانات تمنع تحويل الطلب مرتين — التحويل الثاني التزام مزدوج بالحاجة نفسها.</small></div>
+    <div class="note"><b>مرفوض</b> — نهاية المسار، بسبب موثق يبقى في السجل.</div>
+    <div class="note"><b>معاد لمقدّم الطلب</b> — حالة قائمة بذاتها: يعدّله صاحبه ثم يرفعه ثانية إلى قيد الاعتماد.</div>
+    <div class="note"><b>ملغى</b> — من المسودة فقط، قبل أن يدخل دورة الاعتماد.</div>
+  </div>
+</div>
+
+<p class="sub">② <b>أمر الشراء (PO)</b> — الالتزام تجاه المورّد. حالتان جديدتان دخلتا عليه: «قيد الاعتماد» و«مرسَل للمورّد».</p>
+<div class="stage">
+  <div class="flow">
+    <div class="node n-amber"><div class="t">مسودة</div><div class="d">المورّد والبنود والأسعار والمشروع</div><div class="who"><span class="w-pm">مدير مشاريع</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-amber"><div class="t">قيد الاعتماد</div><div class="d">سلسلة التوقيع بحسب المبلغ — من رفع الأمر لا يوقّعه</div><div class="who"><span class="w-sys">تلقائي</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-amber"><div class="t">معتمد</div><div class="d">هنا يُقيَّد التزام المشروع في دفتر الالتزامات</div><div class="who"><span class="w-pm">مدير مشاريع</span><span class="w-acc">محاسب</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-amber"><div class="t">مرسَل للمورّد</div><div class="d">ضغطة صريحة — وهي التي تفتح باب الاستلام</div><div class="who"><span class="w-pm">مدير مشاريع</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-amber"><div class="t">مستلَم جزئياً</div><div class="d">شحنة وصلت وبقي منها — الأمر يبقى مفتوحاً للباقي</div><div class="who"><span class="w-sys">تلقائي</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-amber"><div class="t">مستلَم</div><div class="d">اكتملت الكميات على كل البنود</div><div class="who"><span class="w-sys">تلقائي</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-dark"><div class="t">مغلق 🔐</div><div class="d">لا استلام ولا فوترة بعده</div><div class="who"><span class="w-pm">مدير مشاريع</span></div></div>
+  </div>
+  <div class="branch">
+    <span class="lbl">تفرعات وضوابط:</span>
+    <div class="gate">🔒 لا استلام على أمر لم يُرسل<small>الاستلام يشترط «مرسَل للمورّد» أو «مستلَم جزئياً» — بضاعة تصل على أمر لم يخرج للمورّد خطأُ استلام يستحق الالتقاط.</small></div>
+    <div class="gate">🔒 لا استلام يتجاوز المطلوب<small>الكمية المستلمة لا تتعدى المتبقي على بند الأمر، والأرقام التسلسلية لا تتكرر.</small></div>
+    <div class="note"><b>ملغى</b> — من المسودة، أو رفضاً في مرحلة الاعتماد. بعد الإرسال للمورّد لا إلغاء.</div>
+    <div class="note"><b>حالتا الاستلام تكتبهما المنظومة</b> — الانتقال إلى «مستلَم جزئياً» أو «مستلَم» أثر لقبول محضر استلام، لا زر منفصل.</div>
+  </div>
+</div>
+
+<p class="sub">③ <b>محضر الاستلام (GRN)</b> — ما وصل فعلاً. لم يكن للاستلام حالة أصلاً: كانت البضاعة تصل وتُقبل في اللحظة نفسها.</p>
+<div class="stage">
+  <div class="flow">
+    <div class="node n-amber"><div class="t">مسودة</div><div class="d">وصلت الشحنة: الكميات والأرقام التسلسلية تُقيَّد على المحضر</div><div class="who"><span class="w-eng">مهندس موقع</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-amber"><div class="t">مفحوص</div><div class="d">فُحصت البضاعة وسُجّلت نتيجة الفحص — ولم يُقبل شيء بعد</div><div class="who"><span class="w-eng">مهندس موقع</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-dark"><div class="t">مقبول ✅</div><div class="d">هنا فقط يزيد المخزون وتتحرك الوحدات المتسلسلة وتُحمَّل التكلفة الفعلية على المشروع</div><div class="who"><span class="w-eng">مهندس موقع</span></div></div>
+  </div>
+  <div class="branch">
+    <span class="lbl">تفرعات وضوابط:</span>
+    <div class="gate">🔒 لا مخزون قبل القبول<small>«مفحوص» تعني وصلت ولم تُقبل — وهي الحالة التي لم يكن للنظام تعبير عنها. أثر القبول كله في معاملة واحدة: مخزون وتكلفة وحالة أمر الشراء.</small></div>
+    <div class="note"><b>مرفوض جزئياً</b> — نهاية بديلة للمقبول: للشحنة المعيبة مكان توضع فيه بدل أن تُقبل على مضض أو تُمحى.</div>
+    <div class="note"><b>إشعار المالية</b> — قبول الاستلام يفتح للمحاسب إمكان تسجيل فاتورة المورّد، ويصل إليه إشعاراً.</div>
+  </div>
+</div>
+
+<p class="sub">④ <b>فاتورة المورّد</b> — ورق المورّد أولاً، والقيد المحاسبي عند الاعتماد لا عند التسجيل.</p>
+<div class="stage">
+  <div class="flow">
+    <div class="node n-blue"><div class="t">مسجَّلة</div><div class="d">ما أرسله المورّد، مقيّداً على محضر استلام مقبول — ولا قيد محاسبي بعد</div><div class="who"><span class="w-acc">محاسب</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-blue"><div class="t">مطابقة ثلاثياً</div><div class="d">أمر الشراء + محضر الاستلام + الفاتورة، بنسبة تسامح تُجمَّد وقت المطابقة</div><div class="who"><span class="w-acc">محاسب</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-blue"><div class="t">معتمدة</div><div class="d">قبول الالتزام — وهنا يُرحَّل القيد: أعمال تحت التنفيذ + ضريبة مدخلات / ذمم دائنة</div><div class="who"><span class="w-acc">محاسب</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-blue"><div class="t">مجدولة للدفع</div><div class="d">الطابور الذي تسحب منه دورة السداد</div><div class="who"><span class="w-acc">محاسب</span></div></div>
+    <div class="arrow">←</div>
+    <div class="node n-dark"><div class="t">مدفوعة 💵</div><div class="d">تسقط من كشف المستحقات ومن أعمار الذمم</div><div class="who"><span class="w-acc">محاسب</span></div></div>
+  </div>
+  <div class="branch">
+    <span class="lbl">تفرعات وضوابط:</span>
+    <div class="gate">🔒 لا فوترة قبل قبول الاستلام<small>فاتورة على شحنة لم يقبلها أحد هي الطريق الذي يُدفع به ثمن توريد متنازع عليه.</small></div>
+    <div class="gate">🔒 لا اعتماد مع فرق مطابقة<small>الاعتماد مشروط بنتيجة مطابقة سليمة؛ فرق في الكمية أو السعر يوقف الفاتورة حتى يُحسم.</small></div>
+    <div class="gate">🔒 لا سداد قبل الاعتماد<small>الفاتورة تحمل رصيد ذمم دائنة من لحظة اعتمادها فقط — قبلها ورق مورّد لا التزام.</small></div>
+    <div class="note"><b>إعادة للمراجعة</b> — الفاتورة المطابَقة تعود «مسجَّلة» لتُصحَّح وتُعاد مطابقتها.</div>
+    <div class="note"><b>ضريبة المشتريات</b> — تدخل إقرار الضريبة مع القيد، أي عند الاعتماد.</div>
   </div>
 </div>
 
@@ -167,7 +254,7 @@
   <div class="branch">
     <span class="lbl">ضوابط:</span>
     <div class="gate">🔒 لا تعديل بعد الإصدار<small>الفاتورة المختومة لا تُعدل — التصحيح بإشعار دائن فقط، وهو نفسه فاتورة إلكترونية مختومة.</small></div>
-    <div class="gate">🔒 القيود المحاسبية تلقائية<small>كل فاتورة ودفعة تولّد قيدها في دفتر الأستاذ — لا إدخال يدوي ولا نسيان.</small></div>
+    <div class="gate">🔒 القيود المحاسبية تلقائية<small>كل فاتورة ودفعة تولّد قيدها في دفتر الأستاذ — لا إدخال يدوي ولا نسيان. وفاتورة المورّد تولّد قيدها لحظة اعتمادها، لا لحظة تسجيلها.</small></div>
     <div class="note"><b>إقرار الضريبة</b> — صافي المستحق يُحسب تلقائياً: ضريبة المبيعات − ضريبة المشتريات (وقد يكون مسترداً).</div>
   </div>
 </div>
@@ -175,7 +262,7 @@
 <p class="sub">الوجه الآخر للدورة المالية: التزامات الموردين والمقاولين، ثم الإقفال الدوري الذي يختم الدفاتر.</p>
 <div class="stage">
   <div class="flow">
-    <div class="node n-blue"><div class="t">مستحقات الموردين</div><div class="d">فواتير الموردين ومستخلصات مقاولي الباطن المعتمدة في كشف واحد</div><div class="who"><span class="w-acc">محاسب</span></div></div>
+    <div class="node n-blue"><div class="t">مستحقات الموردين</div><div class="d">الفواتير المعتمدة فقط — ومعها مستخلصات مقاولي الباطن المعتمدة — في كشف واحد</div><div class="who"><span class="w-acc">محاسب</span></div></div>
     <div class="arrow">←</div>
     <div class="node n-blue"><div class="t">سداد الموردين</div><div class="d">دفعة واحدة توزَّع على عدة مستندات، ولا تتجاوز المتبقي على أيٍّ منها</div><div class="who"><span class="w-acc">محاسب</span></div></div>
     <div class="arrow">←</div>
@@ -199,7 +286,10 @@
     <div class="node"><div class="t">🔔 الإشعارات</div><div class="d">فاتورة صدرت، دفعة سُجلت، مرحلة صارت جاهزة للفوترة — تصل لمن يملك التصرف</div></div>
     <div class="node"><div class="t">⌘ البحث الشامل</div><div class="d">Ctrl+K من أي شاشة: عملاء، عقود، فواتير، مشاريع، أوامر عمل، أرقام تسلسلية</div></div>
     <div class="node"><div class="t">👥 المستخدمون والأدوار</div><div class="d">أدوار مخصصة بصلاحيات منتقاة من كتالوج ثنائي اللغة — دون الرجوع للمطور</div></div>
-    <div class="node"><div class="t">✍️ مصفوفة الاعتماد</div><div class="d">من يوقّع وفوق أي مبلغ: «أمر شراء فوق 100 ألف يعتمده مدير المشاريع ثم المحاسب». من رفع المستند لا يوقّعه</div></div>
+    <div class="node"><div class="t">🔀 محرك التدفقات</div><div class="d">حالات كل مستند وانتقالاته معلنة في جدول واحد — <b>انتقال غير مُدرَج لا يمكن أن يحدث</b>، ولا مسار جانبي يلتف على الحالة</div></div>
+    <div class="node"><div class="t">✍️ مصفوفة الاعتماد</div><div class="d">من يوقّع وفوق أي مبلغ وفي أي قسم: «أمر شراء فوق 100 ألف يعتمده مدير المشاريع ثم المحاسب». من رفع المستند لا يوقّعه</div></div>
+    <div class="node"><div class="t">⏱️ التصعيد والتفويض</div><div class="d">تأخر التوقيع عن مهلته يُنبّه الأعلى — <b>التصعيد يُشعِر ولا يوقّع</b>. والتفويض يُعير دوراً بنافذة زمنية، مسجَّلاً على كل توقيع أتاحه</div></div>
+    <div class="node"><div class="t">📥 صندوق المهام</div><div class="d">ما ينتظر توقيعك في شاشة واحدة، بالأقدم أولاً مع عمر المهمة — والمستند في سلسلة توقيع يظهر مرة واحدة لا مرتين</div></div>
     <div class="node"><div class="t">🕵️ سجل التدقيق</div><div class="d">كل عملية مسجلة: من فعلها ومتى، والقيمة قبل التغيير وبعده — سجل لا يُعدل ولا يُحذف</div></div>
   </div>
 </div>
@@ -212,7 +302,7 @@
   <span style="margin-inline-start:auto">◼ الخانات الداكنة = مخرجات المرحلة</span>
 </div>
 
-<footer>نظام NPI للطاقة الشمسية · المخطط يعكس الدورات الفعلية المبنية في النظام · حُدِّث 2026/08/05</footer>
+<footer>نظام NPI للطاقة الشمسية · المخطط يعكس الدورات الفعلية المبنية في النظام · حُدِّث 2026/08/29</footer>
 </div>
 </body>
 </html>

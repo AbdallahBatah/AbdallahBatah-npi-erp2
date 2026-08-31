@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
@@ -39,14 +40,27 @@ export default function ProjectsPage() {
   const [contractId, setContractId] = useState('');
   const [loadErr, setLoadErr] = useState('');
   const { act, busy } = useAct();
+  const { can } = useAuth();
 
   const load = useCallback(() => {
     setLoadErr('');
-    Promise.all([api.get<Project[]>('/projects'), api.get<Contract[]>('/contracts')])
-      .then(([p, c]) => {
+    api
+      .get<Project[]>('/projects')
+      .then((p) => {
         setRows(p);
-        const taken = new Set(p.map((x) => x.contractId));
-        setContracts(c.filter((x) => x.status === 'ACTIVE' && !taken.has(x.id)));
+        // Contracts feed only the create-from-contract picker, and a role that
+        // can read projects may not read contracts (the site engineer). Gate
+        // the fetch on the permission instead of letting its 403 replace the
+        // whole page with a retry card — the /ppa defect class.
+        if (can('commercial.contract.read')) {
+          api
+            .get<Contract[]>('/contracts')
+            .then((c) => {
+              const taken = new Set(p.map((x) => x.contractId));
+              setContracts(c.filter((x) => x.status === 'ACTIVE' && !taken.has(x.id)));
+            })
+            .catch(() => setContracts([]));
+        }
       })
       .catch((e) => {
         setLoadErr(translateError(e, locale));
@@ -54,7 +68,7 @@ export default function ProjectsPage() {
         // animates forever underneath the retry card.
         setRows([]);
       });
-  }, [locale]);
+  }, [locale, can]);
   useEffect(load, [load]);
 
   async function create() {

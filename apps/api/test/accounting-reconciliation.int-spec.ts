@@ -25,6 +25,10 @@ import { PostingService } from '../src/common/posting.service';
 import { TaxService } from '../src/common/tax.service';
 import { NotificationService } from '../src/common/notification.service';
 import { ApprovalService } from '../src/common/approval.service';
+import { DelegationService } from '../src/common/delegation.service';
+import { WorkflowEngine } from '../src/common/workflow/workflow.engine';
+import { OutboxService } from '../src/common/workflow/outbox.service';
+import { EventDispatcher } from '../src/common/workflow/event-dispatcher.service';
 import { ZatcaService } from '../src/modules/finance/zatca.service';
 import { InvoicesService } from '../src/modules/finance/invoices.service';
 import { ReportsService } from '../src/modules/finance/reports.service';
@@ -39,12 +43,16 @@ const audit = new AuditService(prisma);
 const posting = new PostingService(prisma);
 const tax = new TaxService(prisma);
 const notifications = new NotificationService(prisma);
-const approvals = new ApprovalService(prisma, audit, notifications);
+const delegations = new DelegationService(prisma);
+const approvals = new ApprovalService(prisma, audit, notifications, delegations);
+const outbox = new OutboxService(prisma);
+const engine = new WorkflowEngine(prisma, audit, outbox);
+const events = new EventDispatcher(prisma);
 
 const invoices = new InvoicesService(prisma, numbering, audit, posting, tax, new ZatcaService(), notifications);
 const reports = new ReportsService(prisma, audit, posting);
 const contracts = new ContractsService(prisma, numbering, audit, notifications);
-const procurement = new ProcurementService(prisma, numbering, audit, posting, tax, approvals);
+const procurement = new ProcurementService(prisma, numbering, audit, posting, tax, approvals, notifications, engine, events);
 const payables = new PayablesService(prisma, numbering, audit, posting);
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -70,8 +78,17 @@ beforeAll(async () => {
   const org = await prisma.organization.findFirst({ select: { id: true } });
   if (!org) throw new Error('No organization — run npm run db:seed');
   organizationId = org.id;
-  const user = await prisma.user.findFirst({ where: { organizationId }, select: { id: true } });
-  USER = { userId: user!.id, organizationId } as unknown as AuthUser;
+  // The M4 workflow engine checks the caller's live permissions itself, so the
+  // test user must carry the real permission set of its role, not a bare id.
+  const user = await prisma.user.findFirst({
+    where: { organizationId },
+    select: { id: true, role: { select: { permissions: true } } },
+  });
+  USER = {
+    userId: user!.id,
+    organizationId,
+    permissions: user!.role?.permissions ?? [],
+  } as unknown as AuthUser;
 });
 
 afterAll(async () => {
@@ -157,15 +174,26 @@ describe('a full cycle, then the five reconciliations', () => {
     // 23,000 total sits under the 100,000 approval threshold, so this clears
     // in one step rather than entering the matrix.
     await procurement.approvePo(USER, po.id);
+    // M4: goods may only be received against an order the vendor was told about.
+    await procurement.sendPo(USER, po.id);
 
     const poLines = await prisma.purchaseOrderLine.findMany({ where: { purchaseOrderId: po.id } });
     const grn = await procurement.receive(USER, po.id, {
       lines: [{ poLineId: poLines[0].id, qty: 1_000 }],
     } as never);
 
+    // M4: a bill can only be raised against an inspected-and-accepted receipt.
+    await procurement.inspectGrn(USER, grn!.id);
+    await procurement.acceptGrn(USER, grn!.id);
+
     const bill = await procurement.createBill(USER, { goodsReceiptId: grn!.id } as never);
     expect(Number(bill.subtotal)).toBe(20_000);
     expect(Number(bill.total)).toBe(23_000);
+
+    // M4: the journal entry now follows approval, not registration, so the
+    // bill must pass the three-way match and be approved before it can be paid.
+    await procurement.matchBill(USER, bill.id);
+    await procurement.approveBill(USER, bill.id);
 
     await payables.pay(USER, {
       vendorId: vendor!.id,
