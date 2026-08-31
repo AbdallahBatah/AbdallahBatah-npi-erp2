@@ -72,7 +72,11 @@ swap() { # $1=service
 
 verify() {
   # Through Caddy, not directly: the user's path is the one that matters.
-  code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/api/health || echo 000)
+  # -L because Caddy 308-redirects plain HTTP to HTTPS whenever SITE_ADDRESS
+  # is a real domain (production) — only the bare :80 of the local rehearsal
+  # answers on HTTP directly, and 2026-08-31 that difference failed a verify
+  # after a deploy that was in fact healthy.
+  code=$(curl -sL -o /dev/null -w '%{http_code}' http://localhost/api/health || echo 000)
   [ "$code" = 200 ] || die "post-deploy verify: /api/health via Caddy returned $code"
   log "verify: /api/health via Caddy → 200"
 }
