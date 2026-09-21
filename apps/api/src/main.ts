@@ -35,25 +35,33 @@ async function bootstrap() {
   // OpenAPI is generated from the code itself (the @nestjs/swagger CLI plugin
   // in nest-cli.json derives DTO schemas from the TypeScript types), so the
   // document can never drift from the controllers it describes.
-  const openApiConfig = new DocumentBuilder()
-    .setTitle('NPI Solar ERP API')
-    .setDescription('REST API for the NPI Solar ERP. All endpoints are prefixed with /api and, unless noted, require a Bearer token from POST /api/auth/login.')
-    .setVersion('0.1.0')
-    .addBearerAuth()
-    .build();
-  const openApiDocument = SwaggerModule.createDocument(app, openApiConfig);
-  // Group operations by their first path segment after /api (finance, crm, …)
-  // instead of one flat "default" bucket — derived from the routes, so a new
-  // module gets its own group without anyone remembering to annotate it.
-  const httpMethods = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const;
-  for (const [path, ops] of Object.entries(openApiDocument.paths)) {
-    const segment = path.replace(/^\/api\//, '').split('/')[0] ?? 'api';
-    for (const method of httpMethods) {
-      const op = (ops as Record<string, { tags?: string[] } | undefined>)[method];
-      if (op) op.tags = [segment];
+  //
+  // Registration is gated behind EXPOSE_API_DOCS=1: with the flag absent
+  // (the default — every production environment), /api/docs and
+  // /api/docs-json must not exist (404), since the schema exposes the full
+  // shape of every endpoint with no auth in front of it. The demo server
+  // sets EXPOSE_API_DOCS=1 to keep the docs available there.
+  if (process.env.EXPOSE_API_DOCS === '1') {
+    const openApiConfig = new DocumentBuilder()
+      .setTitle('NPI Solar ERP API')
+      .setDescription('REST API for the NPI Solar ERP. All endpoints are prefixed with /api and, unless noted, require a Bearer token from POST /api/auth/login.')
+      .setVersion('0.1.0')
+      .addBearerAuth()
+      .build();
+    const openApiDocument = SwaggerModule.createDocument(app, openApiConfig);
+    // Group operations by their first path segment after /api (finance, crm, …)
+    // instead of one flat "default" bucket — derived from the routes, so a new
+    // module gets its own group without anyone remembering to annotate it.
+    const httpMethods = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const;
+    for (const [path, ops] of Object.entries(openApiDocument.paths)) {
+      const segment = path.replace(/^\/api\//, '').split('/')[0] ?? 'api';
+      for (const method of httpMethods) {
+        const op = (ops as Record<string, { tags?: string[] } | undefined>)[method];
+        if (op) op.tags = [segment];
+      }
     }
+    SwaggerModule.setup('api/docs', app, openApiDocument);
   }
-  SwaggerModule.setup('api/docs', app, openApiDocument);
 
   const origins = (process.env.CORS_ORIGINS ?? 'http://localhost:3000')
     .split(',')
