@@ -36,7 +36,7 @@ export interface ChatMessage {
   memoryNotes: MemoryNoteData[];
   createdAt: string;
   /** Only ever set on the message this browser just sent/received this
-   *  session — the GET history contract carries no `kind` for older rows. */
+   *  session, and on history rows written since the `kind` column exists. */
   kind?: TurnKind;
 }
 
@@ -81,7 +81,8 @@ function isMessage(value: unknown): value is ChatMessage {
     value.badges.every((b) => typeof b === 'string') &&
     Array.isArray(value.memoryNotes) &&
     value.memoryNotes.every(isMemoryNote) &&
-    typeof value.createdAt === 'string'
+    typeof value.createdAt === 'string' &&
+    (value.kind === undefined || (typeof value.kind === 'string' && VALID_KINDS.has(value.kind as TurnKind)))
   );
 }
 

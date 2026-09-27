@@ -389,6 +389,7 @@ export async function runTurn(deps: TurnDeps, user: TurnUser, input: TurnInput):
       conversationId,
       role: 'assistant',
       contentAr: outcome.textAr,
+      kind: outcome.kind,
       badge: outcome.badges.length > 0 ? outcome.badges.join('، ') : null,
       memoryNoteJson: outcome.memoryNotes.length > 0 ? (outcome.memoryNotes as never) : undefined,
     },

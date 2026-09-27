@@ -12,6 +12,24 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:api"],
       "port": 4000
+    },
+    {
+      "name": "copilot",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "dotenv",
+        "-e",
+        ".env",
+        "-v",
+        "COPILOT_PORT=3110",
+        "--",
+        "npm",
+        "run",
+        "dev",
+        "-w",
+        "@npi/copilot"
+      ],
+      "port": 3110
     }
   ]
 }

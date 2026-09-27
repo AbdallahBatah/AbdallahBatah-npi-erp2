@@ -264,6 +264,8 @@ model Message {
   role           MessageRole
   contentAr      String      @db.Text
   badge          String?
+  /// answer | hr_refusal | flow_pending | error; null on user messages.
+  kind           String?
   memoryNoteJson Json?
   intakeJobId    String?
   createdAt      DateTime    @default(now())

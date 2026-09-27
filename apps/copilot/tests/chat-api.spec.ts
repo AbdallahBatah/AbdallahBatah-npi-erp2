@@ -256,3 +256,40 @@ describe('sendMessage', () => {
     expect(JSON.parse(init?.body as string)).toEqual({ text: 'مرحباً', conversationId: 'c1' });
   });
 });
+
+// Added in review: the kind of a reply survives a reload.
+describe('loadConversation — reply kind on history rows', () => {
+  const row = (extra: Record<string, unknown>) => ({
+    id: 'm1',
+    role: 'assistant',
+    textAr: 'نص',
+    badges: [],
+    memoryNotes: [],
+    createdAt: '2026-09-27T09:00:00.000Z',
+    ...extra,
+  });
+
+  function respondWith(messages: unknown[]) {
+    globalThis.fetch = jest.fn(async () => ({
+      status: 200,
+      json: async () => ({ conversationId: 'c1', messages }),
+    })) as unknown as typeof fetch;
+  }
+
+  it('keeps a valid kind', async () => {
+    respondWith([row({ kind: 'hr_refusal' })]);
+    const result = await loadConversation();
+    expect(result.ok && result.messages[0].kind).toBe('hr_refusal');
+  });
+
+  it('accepts a row with no kind (user messages, older rows)', async () => {
+    respondWith([row({ role: 'user' })]);
+    const result = await loadConversation();
+    expect(result.ok && result.messages[0].kind).toBeUndefined();
+  });
+
+  it('treats an unknown kind as a malformed body', async () => {
+    respondWith([row({ kind: 'approved' })]);
+    await expect(loadConversation()).resolves.toMatchObject({ ok: false, kind: 'server' });
+  });
+});

@@ -12,14 +12,19 @@ interface NavItem {
   Icon: typeof Home;
   /** Visible only to admins (spec/madar/01 §5: trust, metrics, settings). */
   adminOnly: boolean;
+  /** False until the screen exists. A link to a screen that is not built
+   *  yet would lead to a 404, so it is not shown. */
+  ready: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/', key: 'nav.home', Icon: Home, adminOnly: false },
-  { href: '/settings', key: 'nav.settings', Icon: Settings, adminOnly: true },
-  { href: '/trust', key: 'nav.trust', Icon: Shield, adminOnly: true },
-  { href: '/metrics', key: 'nav.metrics', Icon: BarChart3, adminOnly: true },
-  { href: '/handover', key: 'nav.handover', Icon: BookUser, adminOnly: false },
+  { href: '/', key: 'nav.home', Icon: Home, adminOnly: false, ready: true },
+  // Settings arrives with T-19, handover with T-30, trust with T-33 and
+  // metrics with T-35: each flips its flag in the task that builds it.
+  { href: '/settings', key: 'nav.settings', Icon: Settings, adminOnly: true, ready: false },
+  { href: '/trust', key: 'nav.trust', Icon: Shield, adminOnly: true, ready: false },
+  { href: '/metrics', key: 'nav.metrics', Icon: BarChart3, adminOnly: true, ready: false },
+  { href: '/handover', key: 'nav.handover', Icon: BookUser, adminOnly: false, ready: false },
 ];
 
 export interface AppShellProps {
@@ -38,7 +43,7 @@ export interface AppShellProps {
  */
 export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProps) {
   const pathname = usePathname();
-  const items = NAV_ITEMS.filter((item) => isAdmin || !item.adminOnly);
+  const items = NAV_ITEMS.filter((item) => item.ready && (isAdmin || !item.adminOnly));
   const npiUrl = process.env.NEXT_PUBLIC_NPI_WEB_URL ?? '/';
 
   const isActive = (href: string) =>

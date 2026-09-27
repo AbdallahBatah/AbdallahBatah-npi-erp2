@@ -222,6 +222,8 @@ describe('runTurn — no model call', () => {
     expect(llm.complete).not.toHaveBeenCalled();
     expect(npi.listCustomers).not.toHaveBeenCalled();
     expect(messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    // The kind is stored, so the refusal still reads as one after a reload.
+    expect(messages.map((m) => m.kind)).toEqual([undefined, 'hr_refusal']);
     expect(usage[0].messageCount).toBe(1);
   });
 

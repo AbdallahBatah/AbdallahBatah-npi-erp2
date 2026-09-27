@@ -107,7 +107,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     where: { conversationId: conversation.id },
     orderBy: { createdAt: 'desc' },
     take: HISTORY_LIMIT,
-    select: { id: true, role: true, contentAr: true, badge: true, memoryNoteJson: true, createdAt: true },
+    select: {
+      id: true,
+      role: true,
+      contentAr: true,
+      badge: true,
+      kind: true,
+      memoryNoteJson: true,
+      createdAt: true,
+    },
   });
 
   return json(
@@ -117,6 +125,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         id: row.id,
         role: row.role,
         textAr: row.contentAr,
+        ...(row.kind ? { kind: row.kind } : {}),
         badges: row.badge ? row.badge.split('، ') : [],
         memoryNotes: Array.isArray(row.memoryNoteJson) ? row.memoryNoteJson : [],
         createdAt: row.createdAt.toISOString(),

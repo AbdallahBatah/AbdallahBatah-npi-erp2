@@ -28,7 +28,7 @@ export function readAdminCredentials(): SeededAccount {
   const contents = seedContents();
 
   // The second group excludes `'` so it doesn't swallow the closing quote of
-  // the console.log call the line lives in (`... / Admin@123');`).
+  // the console.log call that the line lives in.
   const loginLine = contents.match(/Admin login\s*:\s*(\S+)\s*\/\s*([^'\s]+)/);
   if (!loginLine) {
     throw new Error('packages/db/prisma/seed.ts: could not find the "Admin login" summary line');
