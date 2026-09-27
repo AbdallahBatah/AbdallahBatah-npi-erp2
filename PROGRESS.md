@@ -63,7 +63,7 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-00b | done | d87ad7c | unit 4/4, int 6/6 |
 | T-00c | done | 5323df0 | unit 9/9, int 3/3 |
 | T-00d | done | `fix/phase0` | gates off on the demo server (owner decision) |
-| T-01 | todo | | M1 |
+| T-01 | done | (this commit) | M1 — copilot:build, typecheck, lint green; NPI unit 198/198. Font comes from next/font/google exactly as apps/web does (no font files exist in the repo to copy) |
 | T-02 | todo | | M1 |
 | T-03 | todo | | M1 |
 | T-04 | todo | | M1 — needs the API started with `EXPOSE_API_DOCS=1` to fetch the spec |

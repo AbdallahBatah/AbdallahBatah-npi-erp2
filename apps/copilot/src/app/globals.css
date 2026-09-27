@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  font-family: var(--font-sans), 'Segoe UI', Tahoma, system-ui, sans-serif;
+}
+
+body {
+  @apply bg-[#f4f6f8] text-slate-800 antialiased;
+}

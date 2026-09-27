@@ -23,7 +23,10 @@
     "test": "npm run test -w @npi/api",
     "test:int": "npm run test:int -w @npi/api",
     "db:deploy": "npm run migrate:deploy -w @npi/db",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "copilot:dev": "node scripts/copilot-dev.mjs",
+    "copilot:build": "npm run build -w @npi/copilot",
+    "copilot:migrate": "npm run migrate -w @npi/copilot"
   },
   "engines": {
     "node": ">=20"
