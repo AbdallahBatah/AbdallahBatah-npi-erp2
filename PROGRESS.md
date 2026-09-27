@@ -68,8 +68,8 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-03 | done | f5c3554 | M1 — migrations `0002_core` and `0003_position_role_only_unique` applied to local `npi_copilot`, second `copilot:migrate` run reports nothing pending; fts 13/13 and normalize 21/21 against the real database (run by the agent and re-run by the reviewer). Five tables derived under D-7 (see Deviations) |
 | T-04 | done | a0a41fb, fb0cb30, 8906e84 | M1 — npi-client 27/27, copilot:build, typecheck, lint green, NPI unit 198/198. `openapi.json` first fetched from NPI build `9db91d7`; after D-8 (`69a02b4`) fetched again: 69 schemas, none empty, so the write calls are now typed against real bodies. `8906e84` adds the Arabic user and role names to the `/auth/me` reader and the department directory call. `/auth/me` and `/auth/login` return no department id |
 | T-05 | todo | | M1 |
-| T-06 | todo | | M1 |
-| T-07 | todo | | M1 |
+| T-06 | done | a73f1bb | M1 — positions 41/41 (fakes; a type-level check proves the real Prisma client fits). Resolution order: own open assignment for the current role, then NPI directory when the user holds `admin.department.manage`, then role alone. Six persona files (five roles + `default`) |
+| T-07 | done | 5065584 | M1 — i18n 6/6, lint rule 14/14, `eslint .` clean for the whole repository, tsc clean, copilot build green. Screens that use the shell arrive with T-08/T-12; `design-critic` reviews them before the gate |
 | T-08 | todo | | M1 — the only allowed edit in `apps/web` (`src/lib/nav.ts`, file exists) |
 | T-09 | todo | | M1 |
 | T-10 | todo | | M1 |
@@ -155,6 +155,9 @@ Done and deployed. Two NPI defects fixed with regression tests; docs and login p
 | T-03 | added table `consent_events`, column `intake_jobs.approvedAt`, tenant column `npiOrgId` on documents, intake jobs, memory facts, audit and usage, and a CHECK on `llm_audit` that an image is never marked sent without a consent id | `02` §5.3 and I4 need a consent event and T-22 names no migration; `02` §5.9 measures created→approved; tenancy must be enforced on every row | 2026-09-27 |
 | T-03 | Arabic search uses `pg_trgm` and application-side normalization with the `simple` configuration; `unaccent` is not installed | `unaccent` does not fold Arabic letter variants, and a stemmer would mangle names and codes such as PRJ-00012 | 2026-09-27 |
 | T-03 | `src/text/normalize.ts` created here rather than in T-10; extra migration `0003_position_role_only_unique` (T-39's index migration becomes 0004) | the search needs the normalizer; PostgreSQL treats NULL departments as distinct, so role-only positions needed a partial unique index | 2026-09-27 |
+| T-06 | sixth persona file `default.md`; shared loader `src/prompts/load.ts`; readers in `src/npi/directory.ts` | NPI lets an admin create custom roles, and a role key from NPI data must never be turned into a file path; the loader is needed by every later prompt file | 2026-09-27 |
+| T-07 (D-7) | `src/i18n/ar.ts` holds a derived base set (login, navigation, generic states, screen titles) next to the verbatim strings of `03` §4 | the 2.0 base strings are not available | 2026-09-27 |
+| T-07 | the lint rule lives in `apps/copilot/eslint-rules/no-latin-ui-text.cjs` and is registered in the root `eslint.config.mjs`; `**/*.cjs` added to the lint ignores | the repository has one flat ESLint config at the root; CommonJS lets Jest load the rule with the standard `npm test` | 2026-09-27 |
 | T-04 | root script `copilot:gen-types` changed to forward its arguments | `npm run copilot:gen-types -- --fetch` silently ran without `--fetch` | 2026-09-27 |
 | STEP 2 | `PROGRESS.md` was copied and filled before STEP 5 | STEP 2 writes the inventory into it | 2026-09-27 |
 
