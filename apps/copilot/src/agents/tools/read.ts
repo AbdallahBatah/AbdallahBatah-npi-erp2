@@ -51,6 +51,13 @@ export interface ReadTool {
   def: ToolDef;
   /** Arabic label shown on the reply (the AssistantBadge). */
   badgeAr: string;
+  /**
+   * Fields of the result that hold a name or an identifier, with the
+   * placeholder label each is masked under. They are masked as whole values
+   * before the result goes to the model, so nothing depends on the value
+   * being in the dictionary or matching a pattern.
+   */
+  sensitiveFields?: Readonly<Record<string, string>>;
   run(input: unknown, ctx: ToolContext): Promise<ToolOutcome>;
 }
 
@@ -95,6 +102,7 @@ const getCustomerInput = z.object({ query: z.string().trim().min(1).max(120) });
  */
 const getCustomer: ReadTool = {
   badgeAr: 'العملاء',
+  sensitiveFields: { nameAr: 'عميل', vatNumber: 'رقم_ضريبي', phone: 'هاتف', email: 'بريد' },
   def: {
     name: 'get_customer',
     description:
@@ -138,6 +146,7 @@ const listProjectsInput = z.object({ query: z.string().trim().max(120).optional(
  */
 const listProjects: ReadTool = {
   badgeAr: 'المشاريع',
+  sensitiveFields: { nameAr: 'مشروع', customerNameAr: 'عميل' },
   def: {
     name: 'list_projects',
     description:
@@ -225,6 +234,7 @@ const getPoInput = z.object({ code: z.string().trim().min(1).max(40) });
  */
 const getPo: ReadTool = {
   badgeAr: 'أوامر الشراء',
+  sensitiveFields: { vendorNameAr: 'مورد' },
   def: {
     name: 'get_po',
     description:

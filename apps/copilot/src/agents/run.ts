@@ -225,7 +225,11 @@ async function runToolCall(
     const outcome = await tool.run(pseudo.rehydrateJson(call.input), toolCtx);
     badges.add(tool.badgeAr);
     for (const note of outcome.memoryNotes ?? []) notes.set(note.id, note);
-    return { type: 'tool_result', toolUseId: call.id, content: pseudo.redactJson(outcome.result) };
+    return {
+      type: 'tool_result',
+      toolUseId: call.id,
+      content: pseudo.redactJson(outcome.result, tool.sensitiveFields),
+    };
   } catch (err) {
     if (err instanceof ToolInputError) return fail(`Invalid input: ${err.message}`);
     if (err instanceof NpiError) {

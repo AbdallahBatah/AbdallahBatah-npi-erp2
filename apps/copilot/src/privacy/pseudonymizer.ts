@@ -998,9 +998,45 @@ export class Pseudonymizer {
     return out;
   }
 
-  redactJson(value: unknown): RedactedText {
-    const mapped = this.deepMapStrings(value, (s) => this.redact(s) as unknown as string);
+  /**
+   * `fieldLabels` names the keys whose value is known to be a name or an
+   * identifier (for example `{ vendorNameAr: 'مورد' }`). Such a value is
+   * replaced as a whole, whatever it looks like: a tool that knows it is
+   * returning a vendor's name does not depend on the dictionary or on a
+   * pattern to have it masked. Every other string goes through `redact`.
+   */
+  redactJson(value: unknown, fieldLabels: Readonly<Record<string, string>> = {}): RedactedText {
+    const mapped = this.deepMapFields(value, fieldLabels, undefined);
     return JSON.stringify(mapped) as RedactedText;
+  }
+
+  /** Replaces the whole value with one placeholder under `label`. */
+  private maskWhole(value: string, label: string): string {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return value;
+    // Already a placeholder (a value that went out and came back).
+    if (/^⟦[^s⟦⟧]+_[0-9]+⟧$/.test(trimmed)) return trimmed;
+    return this.mintOrReuseToken(label, trimmed);
+  }
+
+  private deepMapFields(
+    value: unknown,
+    fieldLabels: Readonly<Record<string, string>>,
+    key: string | undefined,
+  ): unknown {
+    if (typeof value === 'string') {
+      const label = key === undefined ? undefined : fieldLabels[key];
+      return label === undefined ? (this.redact(value) as unknown as string) : this.maskWhole(value, label);
+    }
+    if (Array.isArray(value)) return value.map((v) => this.deepMapFields(v, fieldLabels, key));
+    if (value !== null && typeof value === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        out[k] = this.deepMapFields(v, fieldLabels, k);
+      }
+      return out;
+    }
+    return value;
   }
 
   rehydrate(text: string): string {
