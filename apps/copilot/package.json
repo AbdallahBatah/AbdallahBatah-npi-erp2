@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "dotenv -e ../../.env -- next dev -p 3100",
+    "dev": "dotenv -e ../../.env -- node scripts/run-next.mjs dev",
     "build": "next build",
-    "start": "dotenv -e ../../.env -- next start -p 3100",
+    "start": "dotenv -e ../../.env -- node scripts/run-next.mjs start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "generate": "prisma generate",
