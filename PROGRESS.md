@@ -75,7 +75,7 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-10 | done | def9e46 | M1 — router 45, hr-guard 53, tokens 19. Reviewer replaced substring matching with whole-word matching (`src/text/tokens.ts`) after finding ordinary sentences refused or misrouted |
 | T-11 | done | 2842783, 597bf37 | M1 [HIGHER MODEL] — done by the main model. Turn logic, tools, memory, dictionary, prompts and the chat endpoint: agents 30, agents-tools 23, memory 24 (real database). Not yet exercised against a real model: no API key (D-1) |
 | T-12 | done | 0bfe771, bab4bd0 | M1 — chat-api 24; e2e chat-ui 9 scenarios on desktop and mobile with the chat endpoint intercepted. Tried by hand in the running app: HR refusal, fixed reply to an entry request, and the "provider not configured" message (no API key) |
-| T-13 | in-progress | 2a12cd9 | M1 gate — see "M1" under Milestone summaries |
+| T-13 | done, awaiting the owner | 2a12cd9, 3b0622f, 7e25af8 | M1 gate — smoke spec, security review, code review and design review done and their findings fixed; see "M1" under Milestone summaries. G-M1-6 is not met as written (D-9). Tag `copilot-v0.1.0` waits for the owner |
 | T-14 | todo | | M2 |
 | T-15 | todo | | M2 |
 | T-16 | todo | | M2 [HIGHER MODEL] |
@@ -114,6 +114,53 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 ### Phase 0
 Done and deployed. Two NPI defects fixed with regression tests; docs and login prefill gated and off on the demo server. Not done: nothing inside Phase 0 scope. Found and left open: REJECT/RETURN on a requisition with an open chain (decision D-6).
 ### M1
+**Gate run 2026-09-28. State: ready for the owner's walk-through; not yet approved, not tagged, not pushed.**
+
+What an employee can do now: sign in to Madar with their NPI account, see four tiles read from NPI as themselves, and chat. A question about an employee's performance is refused without any model call. A request to enter a document is recognised and answered with a fixed text until the intake flows of M3 exist. Questions about NPI data go to the model with six read-only tools; every name and identifier is masked before it leaves.
+
+Verification, all run by the reviewer on 2026-09-28 (not taken from agent reports):
+| Check | Result |
+|---|---|
+| Copilot unit suites (`npx jest` in `apps/copilot`) | 24 suites, 579 passed |
+| Copilot e2e (`npx playwright test`, desktop and 390 px) | 72 passed: auth, home, chat UI, not-found, smoke |
+| `npm run typecheck` equivalents (`tsc --noEmit` copilot, `typecheck -w @npi/web`) | clean |
+| `npx eslint .` (whole repository, incl. the no-Latin-UI rule) | clean |
+| `npm run copilot:build` equivalent (`next build`) | compiled |
+| NPI `npm run build` | exit 0, 32 pages |
+| NPI `npm test` | 21 suites, 198 passed |
+| NPI `npm run test:int` | 4 suites, 31 passed |
+| Project skill `npi-erp-testing`, script `api-smoke.mjs` against a clean local API | 21 of 23 passed. The 2 not passed are "guard not exercised": the local dataset has no project and no outstanding payable (the demo scenarios are not seeded locally). Permissions per role, trial balance, journal balance, the ZATCA chain and the login throttle all passed. The browser sweep of NPI's screens was not run |
+| Secret scan of `git diff main..HEAD` | nothing found; a literal demo password in a test comment was removed |
+| `npm audit --audit-level=high` | 11 high, 1 critical, all in packages NPI already depends on (decision D-9) |
+
+Goal conditions (`07`):
+| G | State | Evidence |
+|---|---|---|
+| G-M1-1 | met | copilot build compiled; NPI `npm run build` exit 0 |
+| G-M1-2 | met | migrations 0001…0004 applied to `npi_copilot`; db-guard rejects `/npi` and `/npi_erp` (11 tests) |
+| G-M1-3 | met | `e2e/auth.spec.ts` 22 passed over two projects; sixth failed login answers 429; both fields empty on load |
+| G-M1-4 | met | `e2e/home.spec.ts`: each tile equals what NPI's API returns for the seeded admin at that moment (all four are 0 in the local dataset) |
+| G-M1-5 | met | router, agents, memory, llm, pseudonymizer, positions suites green; HR guard path makes zero model calls (agents and smoke) |
+| G-M1-6 | **not met as written** | smoke passed and the secret scan is clean, but `npm audit --audit-level=high` is not 0 (D-9). Tag `copilot-v0.1.0` is not created until the owner decides D-9 and approves the milestone |
+
+Reviews:
+- **Security review** of the milestone diff (read-only agent): one finding, Medium, in the reviewer's own file: the name dictionary was cached per organization as a whole, so a narrow-permission caller fixed it for everyone and vendor or project names could leave unmasked. Fixed in `2a12cd9`. No authentication bypass, no cross-user or cross-organization read, no SQL or command injection, no path traversal, no token in any response, no unsafe HTML.
+- **Code review** (skill `code-review`, medium): five findings, all fixed in `7e25af8`. The serious one was confirmed by a probe: a name masked as a field of a tool result went out in clear one turn later, through the history.
+- **Design review** (`design-critic`): verdict "ships with fixes"; two blockers (composer hidden behind the phone's tab bar; every link leaving Madar ended on an English 404) and fourteen findings. Fixed in `3b0622f`.
+- **Adversarial review against `06`**: AT-07 (no NPI database URL, no service token, every NPI call carries the session's token) holds and is tested. AT-15 (permission checked before extraction) and AT-19 (tenant isolation through the layer) are partly covered: NPI's 403 and 404 are relayed and never worked around, tested with fakes; their live form belongs to M3 when writes exist. AT-09 and AT-10 are measured in M4.
+- **OWASP** (as far as 3.0 states it): A01 every page and route validates the real session, conversations and memory are scoped by user and organization; A02 AES-256-GCM with a fresh IV, cookie value stored only as SHA-256; A03 the one raw query is parameterized, replies are rendered as text; A05 the copilot's database guard refuses any database but `npi_copilot`; A07 login limit 5 per 15 minutes per address plus NPI's own throttle; A08 types are generated only from the committed OpenAPI document. Not covered yet: response security headers and CSP (T-44), upload validation (T-21).
+
+Not done, and why:
+- **No call to a real model has been made.** `ANTHROPIC_API_KEY` is missing (D-1). The three prompts (`assistant.md`, `router.md`, `memory-extract.md`), the request shape accepted by the provider and the quality of answers are untested live. Owner scenario rows 1.3 and 1.4 cannot pass until the key is added.
+- Scenario row 1.4 needs a remembered fact about a customer; facts from NPI data are built in T-29 (M3). Until then memory holds only what employees state in the chat.
+- The sidebar item «مساعد مَدار» in NPI exists (row 1.6) but leads nowhere until the reverse proxy routes `/copilot` (T-40).
+- The reply kind of the six messages written before migration 0004 is empty, so in the local conversation of the demo admin the old refusal and error look like ordinary answers. New messages carry their kind.
+- The browser sweep of NPI's own screens (second half of the `npi-erp-testing` skill) was not run. NPI's code changed in four places only: one line of `nest-cli.json` and one entry each in `nav.ts`, `messages.ts`, `icons.tsx`.
+- The local port 3100 is taken by another project's container (D-10).
+
+Process notes:
+- Three modules came back from agents with every test green and were wrong in ways their own tests could not see (pseudonymizer, HR guard, router). Each was probed with realistic sentences by the reviewer, sent back or fixed, and the sentences were added as tests.
+- A dev API started by an agent's e2e run at 23:15 stayed alive on port 4000 with the login throttle raised, and made the project smoke script report the throttle as broken. It was stopped; the check passes on a clean instance. The e2e run no longer reuses servers.
 ### M2
 ### M3
 ### M4
@@ -143,6 +190,8 @@ Done and deployed. Two NPI defects fixed with regression tests; docs and login p
 | D-8 | NPI's OpenAPI document has empty schemas for 49 of its 59 request DTOs (LoginDto, CreateCustomerDto, CreateContractDto, CreatePoDto, ReceiveDto, CreateBillDto among them). Cause, confirmed on a temporary build that was reverted: the `@nestjs/swagger` plugin only reads files ending in `.dto.ts`, and most NPI DTO files are named `dto.ts`. With `dtoFileNameSuffix` extended the document has 69 schemas and none empty. | One-line change in `apps/api/nest-cli.json` (plugin option `dtoFileNameSuffix: [".dto.ts", ".entity.ts", "dto.ts"]`), on its own commit, then `npm run copilot:gen-types -- --fetch`. It changes the generated documentation only: no endpoint, validation or business logic changes. It is a change inside `apps/api`, so it waits for the owner | P1 | **done 2026-09-27** — owner wrote «موافق»; `69a02b4` (the one line), `fb0cb30` (types regenerated: 69 schemas, none empty). NPI unit 198/198, typecheck and lint green after it |
 | D-9 | `npm audit --audit-level=high` reports 11 high and 1 critical finding, all in NPI's existing stack (`next` 14, `@nestjs/cli`, `@nestjs/platform-express`, `@nestjs/swagger` and their transitive packages); none comes from a package the copilot added. The fixes npm offers are major upgrades (Next 16, Nest 12). G-M1-6 asks for zero. | Keep ADR-26 (same majors) and treat G-M1-6 as "zero findings introduced by the copilot's own packages", checked at each gate by comparing against `main`; the upgrade of NPI's stack is a separate decision for the engineer | P2 | open — needed before the M1 gate can be declared passed |
 | D-10 | Port 3100, which the package names for the copilot on the owner's machine (`00` §4.7, `09` 1.1), is held on this machine by the container `tawazun-local-app-1` of another project. | The copilot now reads its port from `COPILOT_PORT` in the root `.env` (default 3100). Owner either stops that container while trying Madar, or adds `COPILOT_PORT=3110` to `.env` and opens `http://localhost:3110/copilot`. Nothing was changed in the other project | P2 | open — needed before the owner runs scenario 1.1 |
+| D-11 | The NPI sidebar renders every item with `next/link`. The new item points to `/copilot`, which is another application; Next.js advises a plain `<a>` for such links so that it does not try to prefetch and soft-navigate. Changing how the sidebar renders an item is more than the one nav link `02` §13 allows. | Decide at T-40, when the route exists and the behaviour can be seen: if the link misbehaves, allow a three-line change in `apps/web/src/app/(app)/layout.tsx` to render an `<a>` for an item marked external | P3 | open |
+| D-12 | Two of the three suggestions shown in an empty chat («أرفق عقداً جديداً وسأُدخله», «طلب شراء: 40 لوح…») lead in M1 and M2 to the reply "entry by chat comes in a later milestone". The strings are canonical in `03` §4. | Keep them and show the one that already works first (done). Alternative: hide the two until M3 | P3 | open |
 | D-6 | REJECT and RETURN on a requisition with an open signature chain still pass on the bare `scm.procurement.write` permission (`requisitions.service.ts` `act()`), leaving the chain PENDING and orphaned. Outside the Madar package; touches approval behaviour. | Separate branch `fix/pr-reject-return-chain` from `main`, own PR: REJECT with an open chain goes through `ApprovalService.decide(…,'REJECT')` (current step owner or delegate only); RETURN is allowed only to the current step owner and closes the chain so a resubmit opens a fresh one; the requester can do neither. Regression tests that fail before and pass after | P2 | open — waiting for the owner |
 
 ## Deviations from the package
@@ -183,4 +232,6 @@ Done and deployed. Two NPI defects fixed with regression tests; docs and login p
 - The demo server runs build `4756ba6`; `main` is ahead by deploy scripts and comments only.
 
 ## Owner-facing summary (Arabic)
+**2026-09-28 — بوابة المرحلة ١.** أُنجزت المهام T-01 إلى T-13 على الفرع `feat/copilot` المحلي. الموظف يدخل مَدار بحساب NPI، يرى أربع بطاقات من NPI بصلاحياته، ويحادث. سؤال تقييم الموظفين يُرفض بلا أي اتصال بنموذج، وطلب الإدخال يُعرَف ويُردّ عليه بنص ثابت حتى المرحلة ٣. اختبارات الطبقة 579، اختبارات المتصفح 72/72، اختبارات NPI ‏198 وحدة و31 تكامل، وبناء NPI ناجح. المراجعة الأمنية ومراجعة الكود ومراجعة التصميم أُجريت وأُصلحت ملاحظاتها. **لم يُجرَ أي اتصال بنموذج حقيقي** لغياب المفتاح (D-1). ينتظر قرارك: D-1، D-9، D-10، وموافقتك على المرحلة بعد تنفيذ سيناريو `09`.
+
 **2026-09-27 — بداية المرحلة ١.** بعد «موافق» نُفّذت T-01 (هيكل التطبيق) وT-02 (قاعدة `npi_copilot` وحارسها) وT-04 (عميل واجهة NPI). اختبارات الطبقة 38/38 واختبارات NPI 198/198. T-03 متوقفة على القرار D-7 (حزمة 2.0 غير موجودة في المستودع). القرار D-8: وثيقة واجهة NPI تصف 10 من 59 هيكل إدخال فقط، وإصلاحها سطر واحد في إعداد `apps/api` ينتظر إذنك. المفتاح `ANTHROPIC_API_KEY` ما زال غائباً.
