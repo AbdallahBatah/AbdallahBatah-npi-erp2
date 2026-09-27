@@ -521,3 +521,64 @@ describe('runTurn — learning', () => {
     await expect(runTurn(deps, USER, { text: memorable })).resolves.toMatchObject({ kind: 'answer', textAr: 'تم' });
   });
 });
+
+// Added in review.
+describe('runTurn — history that a failed turn left uneven', () => {
+  it('never starts the history with an assistant message and never replays an error reply', async () => {
+    const { deps, llm, conversations, messages } = setup(() => answer('تم'));
+    conversations.push({ id: 'conv-h', npiUserId: 'user-1', npiOrgId: 'org-1' });
+    const at = (n: number) => new Date(Date.UTC(2026, 8, 27, 8, 0, n));
+    messages.push(
+      { id: 'h1', conversationId: 'conv-h', role: 'assistant', contentAr: 'رد بلا سؤال قبله', kind: 'answer', createdAt: at(1) },
+      { id: 'h2', conversationId: 'conv-h', role: 'user', contentAr: 'سؤال قديم', createdAt: at(2) },
+      { id: 'h3', conversationId: 'conv-h', role: 'assistant', contentAr: 'مزوّد النماذج غير مهيّأ. راجع مدير النظام.', kind: 'error', createdAt: at(3) },
+      { id: 'h4', conversationId: 'conv-h', role: 'user', contentAr: 'سؤال ثانٍ', createdAt: at(4) },
+      { id: 'h5', conversationId: 'conv-h', role: 'assistant', contentAr: 'جواب ثانٍ', kind: 'answer', createdAt: at(5) },
+    );
+
+    await runTurn(deps, USER, { text: 'مرحبا، كيف الحال', conversationId: 'conv-h' });
+
+    const sent = llm.requests[0].messages;
+    expect(sent[0].role).toBe('user');
+    expect(sent.map((m) => m.content)).toEqual(['سؤال قديم', 'سؤال ثانٍ', 'جواب ثانٍ', 'مرحبا، كيف الحال']);
+  });
+});
+
+describe('runTurn — a name that reached the user through a tool', () => {
+  it('is masked again when the stored answer is sent as history on the next turn', async () => {
+    const npi = createFakeNpi({
+      listPurchaseOrders: jest.fn(async () => [{ id: 'po-1', code: 'PO-00042' }]),
+      getPurchaseOrder: jest.fn(async () => ({
+        id: 'po-1',
+        code: 'PO-00042',
+        status: 'SENT',
+        vendor: { nameAr: 'الفجر للتوريدات' },
+        lines: [],
+        goodsReceipts: [],
+        vendorBills: [],
+      })),
+    });
+    const fake = createFakeDb();
+    const llm = createFakeLlm((req, call) => {
+      if (call === 1) return toolUse('get_po', { code: 'PO-00042' });
+      if (call === 2) return answer(`المورد ${lastUserText(req).match(TOKEN)?.[0]} لم يسلّم بعد`);
+      return answer('تم');
+    });
+    const deps: TurnDeps = {
+      db: fake.db,
+      llm,
+      npi: npi as unknown as TurnDeps['npi'],
+      key: randomBytes(32),
+      // Nobody could read the vendor list: the dictionary does not know it.
+      dictionary: async () => [],
+      now: () => new Date('2026-09-27T09:00:00.000Z'),
+    };
+
+    const first = await runTurn(deps, USER, { text: 'وش حالة أمر الشراء PO-00042' });
+    expect(first.textAr).toBe('المورد الفجر للتوريدات لم يسلّم بعد');
+
+    await runTurn(deps, USER, { text: 'وهل اتصلتوا على الفجر للتوريدات', conversationId: first.conversationId });
+
+    for (const req of llm.requests) expect(outbound(req)).not.toContain('الفجر');
+  });
+});

@@ -60,8 +60,17 @@ const NEVER_EXECUTE_WORDS = normalizeList([
   'ألغِ', 'الغي', 'الغيه', 'الغيها',
 ]);
 
+// «وافق» and «اعتمد» are also the past tense: «المدير وافق، أبي 40 لوح…» tells
+// of an approval, it does not ask for one. The word counts as a request only
+// when it opens the message, after any words of politeness.
+const POLITE_OPENERS = normalizeList([
+  'ممكن', 'لو', 'سمحت', 'رجاء', 'الرجاء', 'فضلا', 'من', 'فضلك', 'أرجو', 'ارجوك', 'يا', 'مدار', 'تكفى', 'بالله',
+]);
+
 function isNeverExecuteRequest(tokens: readonly string[]): boolean {
-  return indicesOfWords(tokens, NEVER_EXECUTE_WORDS).length > 0;
+  let first = 0;
+  while (first < tokens.length && indicesOfWords([tokens[first]], POLITE_OPENERS).length > 0) first += 1;
+  return first < tokens.length && indicesOfWords([tokens[first]], NEVER_EXECUTE_WORDS).length > 0;
 }
 
 // ─── Step 3: questions and status lookups ───────────────────────────────────

@@ -14,6 +14,10 @@ export interface RetrieveParams {
   limit?: number;
   /** Hits scoring below this are dropped. Default 0.35. */
   minScore?: number;
+  /** Count each returned fact as used. Default true; a caller that only
+   *  offers the facts to the model passes false and counts the ones that
+   *  ended up in the answer itself. */
+  countUse?: boolean;
 }
 
 const DEFAULT_LIMIT = 3;
@@ -31,11 +35,13 @@ export async function retrieveFacts(
     limit: params.limit ?? DEFAULT_LIMIT,
   });
   const kept = hits.filter((hit) => hit.score >= (params.minScore ?? DEFAULT_MIN_SCORE));
-  await markUsed(
-    db,
-    kept.map((hit) => hit.id),
-    now,
-  );
+  if (params.countUse !== false) {
+    await markUsed(
+      db,
+      kept.map((hit) => hit.id),
+      now,
+    );
+  }
   return kept;
 }
 

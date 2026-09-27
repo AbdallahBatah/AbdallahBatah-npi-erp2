@@ -627,3 +627,28 @@ describe('Pseudonymizer — review additions', () => {
     expect(joined).toMatch(/^A\n⟦عميل_\d+⟧\nB$/);
   });
 });
+
+// Added in review: a value that was given a placeholder stays masked.
+describe('Pseudonymizer — values masked in a tool result', () => {
+  it('stay masked when the answer comes back as history and when the user types them', () => {
+    const p = new Pseudonymizer([]);
+    p.redactJson(
+      { vendorNameAr: 'الفجر للتوريدات', projects: [{ nameAr: 'توسعة المستودع' }], phone: '0138001234' },
+      { vendorNameAr: 'مورد', nameAr: 'مشروع', phone: 'هاتف' },
+    );
+    const answer = p.rehydrate('المورد ⟦مورد_1⟧ تأخر في مشروع ⟦مشروع_1⟧، هاتفه ⟦هاتف_1⟧');
+    expect(answer).toBe('المورد الفجر للتوريدات تأخر في مشروع توسعة المستودع، هاتفه 0138001234');
+
+    const history = p.redact(answer);
+    expect(history).toBe('المورد ⟦مورد_1⟧ تأخر في مشروع ⟦مشروع_1⟧، هاتفه ⟦هاتف_1⟧');
+
+    expect(p.redact('وش آخر أخبار الفجر للتوريدات؟')).toBe('وش آخر أخبار ⟦مورد_1⟧؟');
+  });
+
+  it('stay masked after the conversation state is saved and restored', () => {
+    const p = new Pseudonymizer([]);
+    p.redactJson({ vendorNameAr: 'الفجر للتوريدات' }, { vendorNameAr: 'مورد' });
+    const restored = new Pseudonymizer([], p.exportState());
+    expect(restored.redact('اتصل على الفجر للتوريدات اليوم')).toBe('اتصل على ⟦مورد_1⟧ اليوم');
+  });
+});

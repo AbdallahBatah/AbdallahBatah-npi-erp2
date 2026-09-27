@@ -232,3 +232,21 @@ describe('route — review additions', () => {
     });
   });
 });
+
+// Added in review: telling of an approval is not asking for one.
+describe('route — never-execute words open the request', () => {
+  it.each([
+    ['المدير وافق، أبي 40 لوح 550 واط للمشروع PRJ-00012', 'pr'],
+    ['العميل اعتمد العرض وهذا عقد جديد معه', 'customer_contract'],
+  ] as const)('a statement about an approval is still an entry: %s', async (text, flow) => {
+    await expect(route({ text, hasAttachment: false })).resolves.toEqual({ kind: 'flow', flow, by: 'rules' });
+  });
+
+  it.each([['اعتمد الطلب PR-00012'], ['لو سمحت اعتمد الطلب'], ['يا مدار احذف العقد'], ['من فضلك ألغِ أمر الشراء']])(
+    'a request to approve, delete or cancel goes to chat, attachment or not: %s',
+    async (text) => {
+      await expect(route({ text, hasAttachment: true })).resolves.toEqual({ kind: 'chat' });
+      await expect(route({ text, hasAttachment: false })).resolves.toEqual({ kind: 'chat' });
+    },
+  );
+});

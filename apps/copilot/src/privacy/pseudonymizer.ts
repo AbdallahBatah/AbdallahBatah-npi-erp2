@@ -614,6 +614,8 @@ export class Pseudonymizer {
         this.identityToToken.set(identityKey, token);
       }
 
+      this.rememberWhole(original, label);
+
       if (label === ORG_LABEL) {
         const fullWords = normalizeWord(original).split(' ').filter(Boolean);
         const core = deriveOrgCore(fullWords) ?? (fullWords.length > 0 ? fullWords : null);
@@ -625,6 +627,19 @@ export class Pseudonymizer {
         }
       }
     }
+  }
+
+  /**
+   * Whatever was given a placeholder is a name or an identifier from then
+   * on, wherever it turns up again in this conversation: in the stored
+   * answer when the history is sent on the next turn, or typed back by the
+   * user who just read it. Without this, a value masked as a field of a
+   * tool result would leave in clear one turn later.
+   */
+  private rememberWhole(original: string, label: string): void {
+    const words = normalizeWord(original).split(' ').filter(Boolean);
+    if (words.join('').length < 3) return;
+    this.addLearnedCandidate(words, label);
   }
 
   private addLearnedCandidate(words: string[], label: string): void {
@@ -645,6 +660,7 @@ export class Pseudonymizer {
     const token = `⟦${label}_${nextN}⟧`;
     this.tokens[token] = originalSpan;
     this.identityToToken.set(identityKey, token);
+    this.rememberWhole(originalSpan, label);
     return token;
   }
 

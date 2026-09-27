@@ -97,8 +97,10 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
       }
       // Nothing is lost: the error is shown as its own notice bubble, and the
       // text goes back into the composer for the user to retry.
+      // The bubble of the message that was not accepted is taken out, so a
+      // retry does not show it twice; its text goes back to the composer.
       setMessages((prev) => [
-        ...prev,
+        ...prev.filter((m) => m.id !== optimisticUser.id),
         {
           id: `local-error-${Date.now()}`,
           role: 'assistant',

@@ -21,7 +21,7 @@ import { t } from '../i18n/ar';
 import { LlmError, type LlmContext } from '../llm/client';
 import type { ModelResponse, RedactedBlock, RedactedMessage, RedactedRequest } from '../llm/provider';
 import { extractFactsFromMessage } from '../memory/extract-chat';
-import { retrieveFacts } from '../memory/retrieve';
+import { markUsed, retrieveFacts } from '../memory/retrieve';
 import { NpiError } from '../npi/errors';
 import {
   Pseudonymizer,
@@ -259,19 +259,29 @@ async function chat(
   const pseudo = new Pseudonymizer(await deps.dictionary(), await loadRedactionState(deps, conversationId, now));
 
   const remembered: MemoryNote[] = (
-    await retrieveFacts(deps.db, { npiOrgId: user.npiOrgId, positionId: user.positionId, query: text }, () => now)
+    await retrieveFacts(
+      deps.db,
+      { npiOrgId: user.npiOrgId, positionId: user.positionId, query: text, countUse: false },
+      () => now,
+    )
   ).map((hit) => ({ id: hit.id, factAr: hit.factAr, sourceType: hit.sourceType }));
 
   const history = await deps.db.message.findMany({
     where: { conversationId, id: { not: userMessageId } },
     orderBy: { createdAt: 'desc' },
     take: HISTORY_MESSAGES,
-    select: { role: true, contentAr: true },
+    select: { role: true, contentAr: true, kind: true },
   });
 
-  const messages: RedactedMessage[] = history
-    .reverse()
-    .map((m) => ({ role: m.role, content: pseudo.redact(m.contentAr) }));
+  // Oldest first. A stored error reply is not something the assistant said,
+  // so it is not replayed; and the provider requires the first message to be
+  // the user's, which a turn that failed half-way can otherwise break.
+  const replayable = history.reverse().filter((m) => !(m.role === 'assistant' && m.kind === 'error'));
+  const firstUser = replayable.findIndex((m) => m.role === 'user');
+  const messages: RedactedMessage[] = (firstUser === -1 ? [] : replayable.slice(firstUser)).map((m) => ({
+    role: m.role,
+    content: pseudo.redact(m.contentAr),
+  }));
   messages.push({ role: 'user', content: pseudo.redact(text) });
 
   const system = buildSystem(user, pseudo, remembered, now);
@@ -334,6 +344,14 @@ async function chat(
     // The model kept asking for tools; stop rather than loop on.
     return { kind: 'error', textAr: t('chat.error.generic'), badges: [...badges], memoryNotes: [] };
   }
+
+  // A fact counts as used when it is shown with the answer, not when it was
+  // merely offered to the model.
+  await markUsed(
+    deps.db,
+    outcome.memoryNotes.map((note) => note.id),
+    () => now,
+  );
 
   if (outcome.kind === 'answer') {
     try {
