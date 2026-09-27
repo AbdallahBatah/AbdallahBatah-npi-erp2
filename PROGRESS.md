@@ -63,10 +63,10 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-00b | done | d87ad7c | unit 4/4, int 6/6 |
 | T-00c | done | 5323df0 | unit 9/9, int 3/3 |
 | T-00d | done | `fix/phase0` | gates off on the demo server (owner decision) |
-| T-01 | done | (this commit) | M1 — copilot:build, typecheck, lint green; NPI unit 198/198. Font comes from next/font/google exactly as apps/web does (no font files exist in the repo to copy) |
-| T-02 | done | (this commit) | M1 — `npi_copilot` created by `prisma migrate deploy`, 0001_init applied, second run idempotent; db-guard 11/11. NPI database is named `npi_erp` (the spec says `npi`): the guard is an allow-list so both are refused. Client generated to `src/generated/prisma` so NPI's client is never overwritten. Added table `login_attempts` here for T-05's DB rate limit |
+| T-01 | done | a040b1f | M1 — copilot:build, typecheck, lint green; NPI unit 198/198. Font comes from next/font/google exactly as apps/web does (no font files exist in the repo to copy) |
+| T-02 | done | 2a9546e | M1 — `npi_copilot` created by `prisma migrate deploy`, 0001_init applied, second run idempotent; db-guard 11/11. NPI database is named `npi_erp` (the spec says `npi`): the guard is an allow-list so both are refused. Client generated to `src/generated/prisma` so NPI's client is never overwritten. Added table `login_attempts` here for T-05's DB rate limit |
 | T-03 | blocked | | M1 — five of its tables are specified only as "as v2" and package 2.0 is not in the repository (decision D-7). Skipped for now; T-04 does not depend on it |
-| T-04 | done | (this commit) | M1 — npi-client 27/27, all copilot tests 38/38, copilot:build, typecheck, lint green, NPI unit 198/198. `openapi.json` fetched from NPI build `9db91d7` started with `EXPOSE_API_DOCS=1`. Open gap: 49 of 59 request schemas are empty in NPI's document (decision D-8), so six write calls are typed against empty bodies until it is resolved. `/auth/me` and `/auth/login` return no department id |
+| T-04 | done | a0a41fb | M1 — npi-client 27/27, all copilot tests 38/38, copilot:build, typecheck, lint green, NPI unit 198/198. `openapi.json` fetched from NPI build `9db91d7` started with `EXPOSE_API_DOCS=1`. Open gap: 49 of 59 request schemas are empty in NPI's document (decision D-8), so six write calls are typed against empty bodies until it is resolved. `/auth/me` and `/auth/login` return no department id |
 | T-05 | todo | | M1 |
 | T-06 | todo | | M1 |
 | T-07 | todo | | M1 |
