@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   type OnModuleInit,
@@ -245,20 +246,24 @@ export class RequisitionsService implements OnModuleInit {
   // ── the workflow actions ──────────────────────────────────────────────────
 
   /**
-   * One entry point for every user-driven move. SUBMIT is the only one that
-   * consults the approval matrix, and it does so in a specific order:
+   * One entry point for every user-driven move. SUBMIT and APPROVE are the
+   * two that consult the approval matrix — SUBMIT to open a chain, APPROVE to
+   * sign one — and both do it in the same order:
    *
    *   1. ask the engine whether the move would be legal at all,
-   *   2. only then open a signature chain.
+   *   2. only then touch a signature chain.
    *
-   * Reversed, a chain could be raised for a move the engine would refuse —
-   * people would sign something that can never be applied, which is worse than
-   * a plain error because it wastes the one thing approval spends: attention.
+   * Reversed, a chain could be raised (or signed) for a move the engine would
+   * refuse — people would sign something that can never be applied, which is
+   * worse than a plain error because it wastes the one thing approval spends:
+   * attention. Every other action (REJECT, RETURN, CANCEL, …) still goes
+   * straight to the engine on a bare permission check, unchanged.
    */
   async act(user: AuthUser, id: string, action: string, comment?: string) {
     const pr = await this.owned(user, id);
 
     if (action === WF_ACTIONS.SUBMIT) return this.submit(user, pr, comment);
+    if (action === WF_ACTIONS.APPROVE) return this.approve(user, pr, comment);
 
     const result = await this.engine.transition(user, {
       documentType: 'PurchaseRequisition',
@@ -267,6 +272,75 @@ export class RequisitionsService implements OnModuleInit {
       comment,
       context: this.contextOf(pr),
       assigneeRoleId: this.assigneeAfter(action, user.roleId),
+      apply: async (tx, ctx) => {
+        await tx.purchaseRequisition.update({
+          where: { id: pr.id },
+          data: { status: ctx.toState as never },
+        });
+      },
+    });
+    return { ...result, status: result.toState };
+  }
+
+  /**
+   * APPROVE, specifically. Before the matrix could be bypassed here: this is
+   * the only action besides SUBMIT that a bare `engine.transition()` call is
+   * not enough for, because "may sign" is not the same question as "holds the
+   * transition's static permission" — the whole reason a signature chain
+   * exists is to name *who*, not just *which permission*.
+   */
+  private async approve(
+    user: AuthUser,
+    pr: {
+      id: string;
+      code: string;
+      estimatedTotal: Prisma.Decimal;
+      departmentId: string | null;
+      requestedById: string | null;
+    },
+    comment?: string,
+  ) {
+    // The requester cannot sign their own request — true whether or not a
+    // chain is even open. (The no-band path in `submit()` is the *system*
+    // approving because nothing crossed the threshold; a person clicking
+    // APPROVE on their own document is never that.)
+    if (pr.requestedById === user.userId) {
+      throw new ForbiddenException('You cannot approve a requisition you raised yourself');
+    }
+
+    // (1) Would the engine allow this move at all?
+    await this.engine.assertCan(user, {
+      documentType: 'PurchaseRequisition',
+      documentId: pr.id,
+      actionCode: WF_ACTIONS.APPROVE,
+      context: this.contextOf(pr),
+    });
+
+    // (2) Is a signature chain still open for this document? If so, that
+    // chain — not a bare permission check — is the only way forward: `decide`
+    // enforces who may sign it (the current step's role or an active
+    // delegation, never the raiser, never someone who already signed an
+    // earlier step), advances a multi-step chain, and applies the document on
+    // the last signature.
+    const chain = await this.approvals.forDocument(user, 'PURCHASE_REQUISITION', pr.id);
+    if (chain?.status === 'PENDING') {
+      const { request, applied } = await this.approvals.decide(user, chain.id, 'APPROVE', comment);
+      return {
+        status: applied ? 'APPROVED' : 'PENDING_APPROVAL',
+        applied,
+        pendingApproval: applied ? null : request,
+      };
+    }
+
+    // No band covers this amount, or this is legacy data with no chain at
+    // all: keep today's behaviour — a straight, permission-gated transition.
+    const result = await this.engine.transition(user, {
+      documentType: 'PurchaseRequisition',
+      documentId: pr.id,
+      actionCode: WF_ACTIONS.APPROVE,
+      comment,
+      context: this.contextOf(pr),
+      assigneeRoleId: this.assigneeAfter(WF_ACTIONS.APPROVE, user.roleId),
       apply: async (tx, ctx) => {
         await tx.purchaseRequisition.update({
           where: { id: pr.id },
