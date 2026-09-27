@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-function parseEnvFileByHand(contents: string): Record<string, string> {
+function parseEnvFile(contents: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (const rawLine of contents.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -30,19 +30,6 @@ function parseEnvFileByHand(contents: string): Record<string, string> {
     result[key] = value;
   }
   return result;
-}
-
-function parseEnvFile(contents: string): Record<string, string> {
-  try {
-    // Prefer the real `dotenv` package (available through workspace
-    // hoisting: apps/copilot depends on `dotenv-cli`, which depends on
-    // `dotenv`) so parsing matches what the npm scripts use.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const dotenv = require('dotenv') as { parse(src: string): Record<string, string> };
-    return dotenv.parse(contents);
-  } catch {
-    return parseEnvFileByHand(contents);
-  }
 }
 
 /** apps/copilot/tests/helpers -> repository root (4 levels up). */
