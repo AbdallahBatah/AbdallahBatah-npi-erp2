@@ -178,6 +178,38 @@ test.describe('home screen (T-08)', () => {
     expect(hasHorizontalScroll).toBe(false);
   });
 
+  // Fix 4 (design-critique pass): a way back to NPI on a phone, and a named
+  // logout button.
+  test('at 390px a "back to NPI" link is visible in the bottom bar', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const admin = readAdminCredentials();
+    await signIn(page, admin);
+
+    const nav = page.getByRole('navigation', { name: t('nav.main') });
+    await expect(nav.getByRole('link', { name: t('nav.back_to_npi') })).toBeVisible();
+  });
+
+  test('the logout button has an accessible name', async ({ page }) => {
+    const admin = readAdminCredentials();
+    await signIn(page, admin);
+
+    await expect(page.getByRole('button', { name: t('logout') })).toBeVisible();
+  });
+
+  test("each tile's link starts with the NPI web base", async ({ page, request }) => {
+    const admin = readAdminCredentials();
+    const token = await npiLogin(request, admin);
+    const expected = await computeExpectedTiles(request, token);
+    await signIn(page, admin);
+
+    for (const key of TILE_KEYS) {
+      if (expected[key].forbidden) continue; // no link on a "no access" tile
+      const href = await page.getByTestId(`tile-${TILE_AR_KEY[key]}`).getAttribute('href');
+      expect(href).not.toBeNull();
+      expect(href).toMatch(/^https?:\/\//);
+    }
+  });
+
   test('apps/web nav.ts and messages.ts carry the Madar copilot entry (static check — apps/web is not started here)', () => {
     const navPath = path.resolve(__dirname, '..', '..', '..', 'apps', 'web', 'src', 'lib', 'nav.ts');
     const navSrc = readFileSync(navPath, 'utf8');

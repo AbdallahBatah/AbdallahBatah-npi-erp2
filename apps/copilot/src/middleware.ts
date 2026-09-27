@@ -6,7 +6,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE_NAME } from './auth/cookie';
 
-const PUBLIC_PATHS = ['/login', '/api/auth'];
+// `/brand` holds NPI's logo files from `public/`: the login page shows them
+// to a visitor who has no session yet.
+const PUBLIC_PATHS = ['/login', '/api/auth', '/brand'];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

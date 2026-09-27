@@ -3,6 +3,7 @@
 import { forwardRef, useId, type KeyboardEvent } from 'react';
 import { Mic, Paperclip, SendHorizontal } from 'lucide-react';
 import { t } from '@/i18n/ar';
+import { formatNumber } from '@/i18n/format';
 import { Button } from '@/components/ui/Button';
 import { MAX_MESSAGE_LENGTH, COUNTER_THRESHOLD } from './api';
 
@@ -60,7 +61,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           disabled={disabled}
           placeholder={t('chat.placeholder')}
           rows={1}
-          className="max-h-40 min-h-11 flex-1 resize-none bg-transparent py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:text-slate-400"
+          className="max-h-40 min-h-11 flex-1 resize-none bg-transparent py-2 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none disabled:text-slate-400"
         />
         <button
           type="button"
@@ -81,15 +82,20 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           <SendHorizontal className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
         </Button>
       </div>
+      {/* The two disabled buttons above (attach, mic) have no hover state
+          worth relying on for "why can't I click this" — this line explains
+          it up front, in addition to their `title`. */}
+      <p className="px-1 text-xs text-slate-500">{t('chat.later_hint')}</p>
       {value.length >= COUNTER_THRESHOLD ? (
-        <p
-          className={`px-1 text-xs ${tooLong ? 'text-danger-600' : 'text-slate-500'}`}
-          dir="ltr"
-        >
-          {value.length.toLocaleString('ar-SA-u-nu-latn')} / {MAX_MESSAGE_LENGTH.toLocaleString('ar-SA-u-nu-latn')}
+        <p dir="rtl" className={`px-1 text-xs ${tooLong ? 'text-danger-600' : 'text-slate-500'}`}>
+          <bdi>{formatNumber(value.length)}</bdi> / <bdi>{formatNumber(MAX_MESSAGE_LENGTH)}</bdi>
         </p>
       ) : null}
-      {tooLong ? <p className="px-1 text-xs text-danger-600">{t('chat.error.too_long')}</p> : null}
+      {tooLong ? (
+        <p dir="rtl" className="px-1 text-xs text-danger-600">
+          {t('chat.error.too_long')}
+        </p>
+      ) : null}
     </div>
   );
 });

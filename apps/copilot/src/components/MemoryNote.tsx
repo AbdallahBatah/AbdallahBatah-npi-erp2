@@ -7,9 +7,7 @@ export function MemoryNote({ note }: { note: MemoryNoteData }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
       <p className="font-semibold text-slate-500">{t('memory.note')}</p>
-      <p className="mt-0.5" dir="auto">
-        {note.factAr}
-      </p>
+      <p className="mt-0.5 leading-6">{note.factAr}</p>
     </div>
   );
 }

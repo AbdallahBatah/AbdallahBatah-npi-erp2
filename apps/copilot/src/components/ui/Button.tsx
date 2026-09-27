@@ -12,15 +12,20 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
+// The quiet, shared disabled look for every variant — always listed last so
+// it wins over each variant's own hover/background utilities (same
+// specificity, so source order decides). `disabled:bg-none` is what actually
+// drops the primary gradient; `disabled:bg-slate-200` alone would just sit
+// under it.
+const DISABLED_CLASSES =
+  'disabled:bg-none disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none';
+
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary:
-    'bg-brand-600 text-white hover:bg-brand-700 focus-visible:ring-brand-500 disabled:bg-brand-300',
-  secondary:
-    'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 focus-visible:ring-brand-500 disabled:border-slate-200 disabled:text-slate-400',
-  danger:
-    'bg-danger-600 text-white hover:bg-danger-700 focus-visible:ring-danger-500 disabled:bg-danger-300',
-  ghost:
-    'bg-transparent text-slate-700 hover:bg-slate-100 focus-visible:ring-brand-500 disabled:text-slate-400',
+  // Copies NPI's `.btn-primary` recipe (apps/web/src/app/globals.css).
+  primary: `bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-sm shadow-brand-700/25 hover:from-brand-500 hover:to-brand-600 focus-visible:ring-brand-400 ${DISABLED_CLASSES}`,
+  secondary: `border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 focus-visible:ring-brand-500 ${DISABLED_CLASSES} disabled:border-slate-200`,
+  danger: `bg-danger-600 text-white hover:bg-danger-700 focus-visible:ring-danger-500 ${DISABLED_CLASSES}`,
+  ghost: `bg-transparent text-slate-700 hover:bg-slate-100 focus-visible:ring-brand-500 ${DISABLED_CLASSES}`,
 };
 
 // `sm` still hits the 44px touch target on mobile (below `md`); it only

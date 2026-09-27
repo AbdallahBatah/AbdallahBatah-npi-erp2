@@ -28,7 +28,11 @@ export default async function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-ink-950 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card sm:p-8">
-        <h1 className="text-center text-3xl font-bold text-slate-900">{t('app.name')}</h1>
+        <div className="flex flex-col items-center gap-2">
+          <img src="/copilot/brand/npi-icon.svg" alt="" className="h-10 w-10" />
+          <p className="text-sm font-semibold text-slate-700">{t('app.name')}</p>
+        </div>
+        <h1 className="mt-4 text-center text-3xl font-bold text-slate-900">{t('login.title')}</h1>
         <p className="mt-2 text-center text-sm text-slate-600">{t('login.subtitle')}</p>
         <div className="mt-8">
           <LoginForm />

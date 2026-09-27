@@ -258,4 +258,94 @@ test.describe('chat UI (T-12)', () => {
     );
     expect(hasHorizontalScroll).toBe(false);
   });
+
+  // Fix 1 (design-critique pass): the composer used to scroll with the page
+  // and end up hidden behind the fixed bottom tab bar on a phone. Eight
+  // messages is enough to make the page taller than either viewport below,
+  // so the sticky composer actually has to engage.
+  function eightMessages() {
+    const roles = ['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant'] as const;
+    return roles.map((role, i) => ({
+      id: `m${i}`,
+      role,
+      textAr:
+        i === 5
+          ? 'PRJ-00012 هو رقم المشروع الذي تسأل عنه، ويمكنك متابعته من صندوق المهام.'
+          : role === 'user'
+            ? `سؤال رقم ${i} عن حالة الطلب`
+            : `رد رقم ${i} على استفسارك، ومعه تفاصيل إضافية عن الحالة الحالية`,
+      badges: [] as string[],
+      memoryNotes: [] as unknown[],
+      createdAt: new Date(2026, 0, 1, 0, i).toISOString(),
+    }));
+  }
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 390, height: 640 },
+  ] as const) {
+    test(`composer stays clear of the tab bar and the last message at ${viewport.width}x${viewport.height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await gotoHomeMocked(page, (route) => {
+        if (route.request().method() === 'GET') {
+          return jsonRoute(route, 200, { conversationId: 'c1', messages: eightMessages() });
+        }
+        return jsonRoute(route, 200, {});
+      });
+
+      const composer = page.getByTestId('composer-wrapper');
+      const tabBar = page.getByRole('navigation', { name: t('nav.main') });
+      const log = page.getByRole('log');
+
+      await expect(composer).toBeVisible();
+      const composerBox = (await composer.boundingBox())!;
+      const tabBarBox = (await tabBar.boundingBox())!;
+      const viewportSize = page.viewportSize()!;
+
+      // Fully inside the viewport.
+      expect(composerBox.y).toBeGreaterThanOrEqual(0);
+      expect(composerBox.y + composerBox.height).toBeLessThanOrEqual(viewportSize.height + 1);
+
+      // Does not overlap the fixed bottom tab bar.
+      expect(composerBox.y + composerBox.height).toBeLessThanOrEqual(tabBarBox.y + 1);
+
+      // The newest message ends above the composer's top.
+      const lastMessage = log.locator('p').last();
+      const lastMessageBox = (await lastMessage.boundingBox())!;
+      expect(lastMessageBox.y + lastMessageBox.height).toBeLessThanOrEqual(composerBox.y + 1);
+    });
+  }
+
+  test('a message starting with a document code stays right-to-left, and the assistant sits nearer the inline-start edge', async ({
+    page,
+  }) => {
+    await gotoHomeMocked(page, (route) => {
+      if (route.request().method() === 'GET') {
+        return jsonRoute(route, 200, { conversationId: 'c1', messages: eightMessages() });
+      }
+      return jsonRoute(route, 200, {});
+    });
+
+    const log = page.getByRole('log');
+    const codeMessage = log.getByText('PRJ-00012', { exact: false });
+    await expect(codeMessage).toBeVisible();
+    const direction = await codeMessage.evaluate((el) => getComputedStyle(el).direction);
+    expect(direction).toBe('rtl');
+
+    // messages[5] (the PRJ-00012 one) is an assistant turn; messages[4] right
+    // before it is the user's own turn — compare those two bubbles' distance
+    // from the inline-start edge. This UI is RTL, so inline-start is the
+    // viewport's RIGHT edge: distance-to-that-edge = viewportWidth - (x +
+    // width), and "nearer the inline-start edge" means the smaller distance.
+    const viewportSize = page.viewportSize()!;
+    const assistantBubble = log.getByText('PRJ-00012', { exact: false }).locator('..');
+    const userBubble = log.getByText('سؤال رقم 4', { exact: false }).locator('..');
+    const assistantBox = (await assistantBubble.boundingBox())!;
+    const userBox = (await userBubble.boundingBox())!;
+    const assistantDistanceFromStart = viewportSize.width - (assistantBox.x + assistantBox.width);
+    const userDistanceFromStart = viewportSize.width - (userBox.x + userBox.width);
+    expect(assistantDistanceFromStart).toBeLessThan(userDistanceFromStart);
+  });
 });

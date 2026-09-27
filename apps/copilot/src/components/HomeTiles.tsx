@@ -11,14 +11,19 @@ const TILE_ORDER: ReadonlyArray<{ key: TileKey; titleKey: ArKey; npiPath: string
 ];
 
 /** Four skeleton tiles — the `<Suspense>` fallback while `HomeTilesGrid`
- *  reads NPI, so the rest of the page (the chat) is usable immediately. */
+ *  reads NPI, so the rest of the page (the chat) is usable immediately.
+ *  Same surface and phones-are-lighter proportions as `SummaryTile` itself,
+ *  so the real tiles don't jump in size once they replace this. */
 export function HomeTilesSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {TILE_ORDER.map(({ key }) => (
-        <div key={key} className="rounded-xl bg-white p-4 shadow-card">
+        <div
+          key={key}
+          className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-card sm:block sm:p-5"
+        >
           <Skeleton className="h-3 w-20" />
-          <Skeleton className="mt-2 h-7 w-12" />
+          <Skeleton className="h-5 w-10 sm:mt-2 sm:h-7 sm:w-12" />
         </div>
       ))}
     </div>

@@ -3,8 +3,9 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Settings, Shield, BarChart3, BookUser, LogOut } from 'lucide-react';
+import { ExternalLink, Home, Settings, Shield, BarChart3, BookUser, LogOut } from 'lucide-react';
 import { t, type ArKey } from '@/i18n/ar';
+import { npiWebUrl } from '@/npi/web-url';
 
 interface NavItem {
   href: string;
@@ -44,7 +45,7 @@ export interface AppShellProps {
 export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProps) {
   const pathname = usePathname();
   const items = NAV_ITEMS.filter((item) => item.ready && (isAdmin || !item.adminOnly));
-  const npiUrl = process.env.NEXT_PUBLIC_NPI_WEB_URL ?? '/';
+  const npiHomeUrl = npiWebUrl('/');
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : (pathname ?? '').startsWith(href);
@@ -52,12 +53,16 @@ export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProp
   return (
     <div className="flex min-h-screen flex-col bg-[#f4f6f8]">
       <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-3 bg-ink-950 px-4 text-slate-100 md:h-16">
-        <span className="truncate text-sm font-bold text-white">{t('app.name')}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <img src="/copilot/brand/npi-icon.svg" alt="" className="h-7 w-7 shrink-0" />
+          <span className="truncate text-sm font-bold text-white">{t('app.name')}</span>
+        </div>
         <div className="flex items-center gap-2 sm:gap-4">
           <a
-            href={npiUrl}
-            className="hidden text-xs font-medium text-slate-300 underline-offset-4 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 sm:inline"
+            href={npiHomeUrl}
+            className="hidden min-h-11 items-center gap-1.5 text-xs font-semibold text-white underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 sm:flex"
           >
+            <ExternalLink className="h-4 w-4 shrink-0 rtl:-scale-x-100" aria-hidden="true" />
             {t('nav.back_to_npi')}
           </a>
           <span className="hidden max-w-[10rem] truncate text-xs text-slate-300 sm:inline">
@@ -66,6 +71,7 @@ export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProp
           <button
             type="button"
             onClick={onLogout}
+            aria-label={t('logout')}
             className="flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             <LogOut className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
@@ -77,7 +83,7 @@ export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProp
       <div className="flex flex-1 flex-col md:flex-row">
         <nav
           aria-label={t('nav.main')}
-          className="fixed inset-x-0 bottom-0 z-30 flex items-stretch justify-around border-t border-white/10 bg-ink-900 pb-[env(safe-area-inset-bottom)] text-slate-300 md:static md:inset-auto md:z-auto md:w-56 md:shrink-0 md:flex-col md:items-stretch md:justify-start md:gap-1 md:border-e md:border-t-0 md:p-3"
+          className="fixed inset-x-0 bottom-0 z-30 flex min-h-[var(--copilot-tabbar-h)] items-stretch justify-around border-t border-white/10 bg-ink-900 pb-[env(safe-area-inset-bottom)] text-slate-300 md:static md:inset-auto md:z-auto md:min-h-0 md:w-56 md:shrink-0 md:flex-col md:items-stretch md:justify-start md:gap-1 md:border-e md:border-t-0 md:p-3"
         >
           {items.map(({ href, key, Icon }) => {
             const active = isActive(href);
@@ -87,23 +93,38 @@ export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProp
                 href={href}
                 aria-current={active ? 'page' : undefined}
                 className={[
-                  'flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-xs font-medium transition',
+                  'relative flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-xs font-medium transition',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400',
                   'md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-lg md:px-3 md:py-2.5 md:text-sm',
                   active
-                    ? 'text-brand-300 md:bg-white/[0.06] md:text-brand-200'
+                    ? 'text-brand-300 md:bg-gradient-to-r md:from-brand-500/[0.16] md:to-brand-500/[0.05] md:font-semibold md:text-brand-200 md:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:rtl:bg-gradient-to-l'
                     : 'text-slate-400 hover:text-slate-100',
                 ].join(' ')}
               >
+                {active ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-y-2 start-0 hidden w-[3px] rounded-full bg-gradient-to-b from-brand-300 to-brand-500 shadow-[0_0_8px_rgba(45,212,191,0.6)] md:block"
+                  />
+                ) : null}
                 <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
                 <span className="truncate">{t(key)}</span>
               </Link>
             );
           })}
+          {/* Phones have no header "back to NPI" link (that one only shows
+              from `sm` up) — this is their way out to NPI's own app. */}
+          <a
+            href={npiHomeUrl}
+            className="flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-xs font-medium text-slate-400 transition hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 md:hidden"
+          >
+            <ExternalLink className="h-5 w-5 shrink-0 rtl:-scale-x-100" aria-hidden="true" />
+            <span className="truncate">{t('nav.back_to_npi')}</span>
+          </a>
         </nav>
 
         <main id="main" className="flex-1 px-4 pb-20 pt-4 md:pb-8 md:pt-6">
-          {children}
+          <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>
     </div>

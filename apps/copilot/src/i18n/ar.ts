@@ -102,6 +102,7 @@ export const ar = {
   'login.error.invalid': 'بيانات الدخول غير صحيحة',
   'login.error.rate_limited': 'محاولات كثيرة. حاول بعد قليل.',
   'login.error.npi_down': 'NPI غير متاح حالياً',
+  'login.error.required': 'أدخل البريد الإلكتروني وكلمة المرور.',
   logout: 'تسجيل الخروج',
 
   'nav.home': 'الرئيسية',
@@ -118,7 +119,6 @@ export const ar = {
   'home.error.npi': 'تعذر الوصول إلى NPI',
   'action.retry': 'أعد المحاولة',
   'home.tile.no_access': 'لا صلاحية للاطلاع',
-  'home.tile.error': 'تعذر التحميل',
 
   'chat.placeholder': 'اكتب رسالتك…',
   'chat.send': 'أرسل',
@@ -154,6 +154,12 @@ export const ar = {
   'chat.flow_pending.unknown':
     'إدخال المستندات بالمحادثة يُفعَّل في مرحلة لاحقة؛ أستطيع الآن الإجابة عن أسئلتك من بيانات NPI.',
   'chat.flow_unavailable': 'إدخال «{flow}» غير مفعّل لمنشأتك في إعدادات مَدار.',
+  'chat.later_hint': 'إرفاق المستندات والإدخال الصوتي يُفعَّلان في مرحلة لاحقة.',
+
+  'notfound.title': 'الصفحة غير موجودة',
+  'notfound.body': 'تحقق من العنوان أو عد إلى الرئيسية.',
+
+  'brand.npi_alt': 'شعار NPI',
 } as const;
 
 export type ArKey = keyof typeof ar;

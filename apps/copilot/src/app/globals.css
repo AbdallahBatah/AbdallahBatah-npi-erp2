@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Real rendered height of AppShell's mobile bottom tab bar (excluding the
+     safe-area inset, which is added on top via padding). Chat.tsx's sticky
+     composer wrapper reads this same variable so the two always agree —
+     see fix 1 of the design-critique pass. */
+  --copilot-tabbar-h: 3.5rem;
+}
+
 html {
   font-family: var(--font-sans), 'Segoe UI', Tahoma, system-ui, sans-serif;
 }

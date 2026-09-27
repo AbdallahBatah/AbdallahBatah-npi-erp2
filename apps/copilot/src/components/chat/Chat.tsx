@@ -10,7 +10,10 @@ import { Message } from './Message';
 import { WaitingIndicator } from './WaitingIndicator';
 
 const LOGIN_PATH = '/copilot/login';
-const SUGGESTION_KEYS = ['chat.suggest.1', 'chat.suggest.2', 'chat.suggest.3'] as const;
+// The question the assistant can already answer today (suggest.3) comes
+// first, ahead of the two document-intake suggestions that only produce
+// `chat.flow_pending` until a later milestone.
+const SUGGESTION_KEYS = ['chat.suggest.3', 'chat.suggest.1', 'chat.suggest.2'] as const;
 
 type Phase = 'loading' | 'error' | 'ready';
 
@@ -39,7 +42,14 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
         window.location.assign(LOGIN_PATH);
         return;
       }
-      setErrorMessage(result.messageAr || t('home.error.npi'));
+      // `npi_down` (503) carries a real message about NPI specifically, from
+      // the server or api.ts's own npi_down-flavoured fallback — worth
+      // keeping. Every other kind ('server', 'network') only ever gets a
+      // generic client-side fallback text (no message from the server at
+      // all), and this screen's own error state is specifically about
+      // reaching NPI, so it shows `home.error.npi` instead of that generic
+      // text.
+      setErrorMessage(result.kind === 'npi_down' ? result.messageAr : t('home.error.npi'));
       setPhase('error');
       return;
     }
@@ -135,12 +145,12 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
       <div
         role="log"
         aria-live="polite"
         aria-label={t('nav.chat')}
-        className="flex min-h-[16rem] flex-col gap-3 overflow-y-auto"
+        className="flex min-h-[16rem] flex-col gap-3"
       >
         {isEmpty ? (
           <EmptyState message={t('home.empty')}>
@@ -156,9 +166,25 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
           messages.map((message) => <Message key={message.id} message={message} />)
         )}
         {sending ? <WaitingIndicator /> : null}
-        <div ref={bottomRef} />
+        {/* scroll-mb-* is what actually keeps the newest message clear of the
+            sticky composer below: Element.scrollIntoView respects
+            scroll-margin, so a plain `block: 'end'` lands above the
+            composer/tab-bar stack instead of behind it. */}
+        <div ref={bottomRef} className="scroll-mb-56" />
       </div>
-      <Composer ref={textareaRef} value={draft} onChange={setDraft} onSend={handleSend} disabled={sending} />
+      {/* Sticky, not fixed: it scrolls with the page until it reaches the
+          bottom of the viewport, then holds there — above the fixed mobile
+          tab bar (whose real height is the same `--copilot-tabbar-h` this
+          reads, see globals.css), flush with the viewport bottom from `md`
+          up where AppShell's nav is a static side rail instead. The page
+          background here stops messages from showing through, and `z-10`
+          keeps it above content scrolling underneath. */}
+      <div
+        data-testid="composer-wrapper"
+        className="sticky bottom-[calc(var(--copilot-tabbar-h)+env(safe-area-inset-bottom))] z-10 bg-[#f4f6f8] pt-2 md:bottom-0"
+      >
+        <Composer ref={textareaRef} value={draft} onChange={setDraft} onSend={handleSend} disabled={sending} />
+      </div>
     </div>
   );
 }

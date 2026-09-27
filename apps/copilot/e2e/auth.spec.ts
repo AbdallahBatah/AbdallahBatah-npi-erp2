@@ -126,4 +126,46 @@ test.describe('login (T-05)', () => {
     );
     expect(hasHorizontalScroll).toBe(false);
   });
+
+  // Fix 6 (design-critique pass): an empty/incomplete form is caught
+  // client-side, before any request leaves the browser.
+  test('submitting the empty form shows login.error.required and sends no request', async ({ page }) => {
+    await page.goto('/copilot/login');
+
+    let authRequests = 0;
+    await page.route('**/copilot/api/auth', (route) => {
+      authRequests += 1;
+      return route.continue();
+    });
+
+    await page.getByRole('button', { name: t('login.submit') }).click();
+
+    await expect(page.locator('p[role="alert"]')).toHaveText(t('login.error.required'));
+    expect(authRequests).toBe(0);
+  });
+
+  test('the required-fields error disappears as soon as a field is edited', async ({ page }) => {
+    await page.goto('/copilot/login');
+
+    await page.getByRole('button', { name: t('login.submit') }).click();
+    await expect(page.locator('p[role="alert"]')).toHaveText(t('login.error.required'));
+
+    await page.getByLabel(t('login.email')).fill('a');
+    await expect(page.locator('p[role="alert"]')).toHaveCount(0);
+  });
+
+  // Fix 5 (design-critique pass): NPI's mark on the login card.
+  test('the NPI icon is visible on the login card', async ({ page }) => {
+    await page.goto('/copilot/login');
+
+    const icon = page.locator('img[src*="/brand/npi-icon.svg"]');
+    await expect(icon).toBeVisible();
+    // A broken/blocked image asset still occupies its box (and so still
+    // counts as "visible" to Playwright's own check above) — this extra
+    // assertion is what actually confirms the SVG itself decoded.
+    await expect(async () => {
+      const naturalWidth = await icon.evaluate((el: HTMLImageElement) => el.naturalWidth);
+      expect(naturalWidth).toBeGreaterThan(0);
+    }).toPass();
+  });
 });

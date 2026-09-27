@@ -2,10 +2,12 @@ import { ReactNode } from 'react';
 import { t } from '@/i18n/ar';
 import { Button, Spinner } from './Button';
 
-/** Empty-state placeholder: a message plus optional chips/actions below it. */
+/** Empty-state placeholder: a message plus optional chips/actions below it.
+ *  Uses the same card-like surface as the rest of the app (NPI does not use
+ *  a dashed-border placeholder pattern). */
 export function EmptyState({ message, children }: { message: string; children?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white/60 p-8 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-8 text-center shadow-card">
       <p className="text-sm text-slate-600">{message}</p>
       {children}
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useId, useRef, useState } from 'react';
+import { FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { t, type ArKey } from '@/i18n/ar';
 import { Button } from '@/components/ui/Button';
 
@@ -9,12 +9,16 @@ import { Button } from '@/components/ui/Button';
 const AUTH_API_PATH = '/copilot/api/auth';
 const HOME_PATH = '/copilot';
 
-type ErrorCode = 'invalid' | 'rate_limited' | 'npi_down' | 'unknown';
+type ErrorCode = 'invalid' | 'rate_limited' | 'npi_down' | 'required' | 'unknown';
 
 const ERROR_KEY: Record<ErrorCode, ArKey> = {
   invalid: 'login.error.invalid',
   rate_limited: 'login.error.rate_limited',
   npi_down: 'login.error.npi_down',
+  // An empty/incomplete submission and a 400 (the server's own validation
+  // failure — a malformed body, not a credentials problem) share one
+  // message: "NPI is unavailable" would be misleading for either.
+  required: 'login.error.required',
   // Falls back to the generic NPI-unreachable message for anything this
   // form was not specifically told about (network failure, unexpected
   // status, malformed response, …).
@@ -25,6 +29,7 @@ function errorCodeFor(status: number, bodyError: unknown): ErrorCode {
   if (bodyError === 'invalid') return 'invalid';
   if (bodyError === 'rate_limited') return 'rate_limited';
   if (bodyError === 'npi_down') return 'npi_down';
+  if (status === 400) return 'required';
   if (status === 401) return 'invalid';
   if (status === 429) return 'rate_limited';
   return 'unknown';
@@ -39,9 +44,23 @@ export function LoginForm() {
   const [submitting, setSubmitting] = useState(false);
   const alertRef = useRef<HTMLParagraphElement>(null);
 
+  // Focus moves to the alert once it exists in the DOM — driven by the
+  // error's own state change (an effect that runs after render), not by
+  // scheduling a microtask from inside the submit handler: a microtask can
+  // run before React has committed the DOM node the ref points at.
+  useEffect(() => {
+    if (error) alertRef.current?.focus();
+  }, [error]);
+
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (submitting) return;
+
+    if (email.trim().length === 0 || password.trim().length === 0) {
+      setError('required');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -66,12 +85,9 @@ export function LoginForm() {
       }
       setError(errorCodeFor(res.status, bodyError));
       setSubmitting(false);
-      // Focus moves to the alert region once it exists in the DOM.
-      queueMicrotask(() => alertRef.current?.focus());
     } catch {
       setError('unknown');
       setSubmitting(false);
-      queueMicrotask(() => alertRef.current?.focus());
     }
   }
 
@@ -85,12 +101,14 @@ export function LoginForm() {
           id={emailId}
           name="email"
           type="email"
-          dir="ltr"
           autoComplete="username"
           inputMode="email"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            if (error) setError(null);
+          }}
           className="block h-11 w-full rounded-lg border border-slate-300 px-3 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
         />
       </div>
@@ -103,11 +121,13 @@ export function LoginForm() {
           id={passwordId}
           name="password"
           type="password"
-          dir="ltr"
           autoComplete="current-password"
           required
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            if (error) setError(null);
+          }}
           className="block h-11 w-full rounded-lg border border-slate-300 px-3 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
         />
       </div>
