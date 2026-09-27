@@ -1,34 +1,9 @@
 // End-to-end coverage for T-05 (G-M1-3): real local NPI API + real copilot,
 // no mocks. Requires PostgreSQL running with NPI's seed already loaded (see
 // playwright.config.ts's webServer entries).
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { t } from '../src/i18n/ar';
-
-/**
- * Reads the seeded admin's e-mail, password, and Arabic name straight out of
- * `packages/db/prisma/seed.ts` at run time — this spec never hardcodes (or
- * prints) the demo password; see the file-top note in tests/helpers.
- */
-function readAdminCredentials(): { email: string; password: string; nameAr: string } {
-  const seedPath = path.resolve(__dirname, '..', '..', '..', 'packages', 'db', 'prisma', 'seed.ts');
-  const contents = readFileSync(seedPath, 'utf8');
-
-  // The second group excludes `'` so it doesn't swallow the closing quote of
-  // the console.log call the line lives in (`... / Admin@123');`).
-  const loginLine = contents.match(/Admin login\s*:\s*(\S+)\s*\/\s*([^'\s]+)/);
-  if (!loginLine) {
-    throw new Error('packages/db/prisma/seed.ts: could not find the "Admin login" summary line');
-  }
-
-  const nameMatch = contents.match(/create:\s*\{[^}]*?email:\s*'admin@npi\.sa'[^}]*?nameAr:\s*'([^']+)'/);
-  if (!nameMatch) {
-    throw new Error("packages/db/prisma/seed.ts: could not find the admin user's nameAr field");
-  }
-
-  return { email: loginLine[1], password: loginLine[2], nameAr: nameMatch[1] };
-}
+import { readAdminCredentials } from './fixtures/accounts';
 
 test.describe('login (T-05)', () => {
   test('the login page is Arabic, RTL, and both fields start empty', async ({ page }) => {

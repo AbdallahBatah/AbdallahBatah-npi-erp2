@@ -117,6 +117,8 @@ export const ar = {
   'home.empty': 'ابدأ: أرفق عقداً أو اكتب «طلب شراء…»',
   'home.error.npi': 'تعذر الوصول إلى NPI',
   'action.retry': 'أعد المحاولة',
+  'home.tile.no_access': 'لا صلاحية للاطلاع',
+  'home.tile.error': 'تعذر التحميل',
 
   'chat.placeholder': 'اكتب رسالتك…',
   'chat.send': 'أرسل',
@@ -140,6 +142,10 @@ export const ar = {
 
   'chat.error.generic': 'تعذر إكمال الطلب. حاول مرة أخرى.',
   'chat.error.too_long': 'الرسالة أطول من الحد المسموح. اختصرها وأعد الإرسال.',
+  // Attachments and voice input belong to later milestones (F-02/F-03's
+  // intake flows); the composer shows this as the tooltip on their disabled
+  // buttons rather than pretending they work.
+  'chat.later': 'يُفعَّل في مرحلة لاحقة',
   // Until the intake flows of milestone 3 are built, a message that asks for
   // one is answered with this fixed text instead of a promise the app
   // cannot keep.
