@@ -3,6 +3,22 @@
 // each line of output with the process name. `shell: true` is required so
 // `npm` resolves correctly on Windows (npm.cmd via cmd.exe).
 import { spawn, spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Ensure the repository-root .env has a COPILOT_SESSION_KEY before either
+// server starts — the copilot's auth route needs it on its very first
+// request. Synchronous and idempotent (see the script itself).
+const ensureKey = spawnSync(
+  process.execPath,
+  [path.join(__dirname, '..', 'apps', 'copilot', 'scripts', 'ensure-session-key.mjs')],
+  { stdio: 'inherit' },
+);
+if (ensureKey.status !== 0) {
+  process.exit(ensureKey.status ?? 1);
+}
 
 function run(name, args) {
   const child = spawn('npm', args, { shell: true, stdio: ['inherit', 'pipe', 'pipe'] });

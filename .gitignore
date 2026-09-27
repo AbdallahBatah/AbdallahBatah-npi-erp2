@@ -24,6 +24,10 @@ packages/db/prisma/migrations/dev.db*
 # Copilot's own Prisma client output (custom generator path, never committed)
 apps/copilot/src/generated/
 
+# Playwright output of the copilot e2e runs
+apps/copilot/test-results/
+apps/copilot/playwright-report/
+
 # Packed deploy artifacts
 *.tar.gz
 
