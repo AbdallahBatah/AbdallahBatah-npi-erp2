@@ -229,4 +229,6 @@ const ICON_PATHS: Record<string, string[]> = {
   hash: ['M4 9h16', 'M4 15h16', 'M10 3L8 21', 'M16 3l-2 18'],
   square: ['M4 4h16v16H4z'],
   'square-check': ['M4 4h16v16H4z', 'M8 12l3 3 5-6'],
+  // Madar copilot nav entry (T-08) — lucide-style "message-circle" path.
+  'message-circle': ['M7.9 20A9 9 0 1 0 4 16.1L2 22Z'],
 };

@@ -399,6 +399,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'nav.approvals': 'الاعتمادات',
     'nav.inbox': 'صندوق المهام',
     'nav.requisitions': 'طلبات الشراء',
+    // Madar copilot nav entry (T-08).
+    'nav.madar': 'مساعد مَدار',
 
     'inbox.title': 'صندوق المهام',
     'inbox.hint': 'كل ما ينتظر إجراءً منك — اعتمادات ومستندات — في مكان واحد، الأقدم أولاً.',
@@ -1329,6 +1331,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'nav.approvals': 'Approvals',
     'nav.inbox': 'Task box',
     'nav.requisitions': 'Requisitions',
+    // Madar copilot nav entry (T-08).
+    'nav.madar': 'Madar assistant',
 
     'inbox.title': 'Task box',
     'inbox.hint': 'Everything waiting on you — approvals and documents — in one place, oldest first.',
