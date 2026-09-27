@@ -13,8 +13,12 @@ export default function LoginPage() {
   const { login } = useAuth();
   const { t, toggle, locale } = useI18n();
   const router = useRouter();
-  const [email, setEmail] = useState('admin@npi.sa');
-  const [password, setPassword] = useState('Admin@123');
+  // Demo-credential prefill is opt-in via a build-time flag: production
+  // builds must start with empty fields. NEXT_PUBLIC_* vars are inlined at
+  // build time, so this check is static (no runtime env lookup happens).
+  const demoPrefill = process.env.NEXT_PUBLIC_DEMO_PREFILL === '1';
+  const [email, setEmail] = useState(demoPrefill ? 'admin@npi.sa' : '');
+  const [password, setPassword] = useState(demoPrefill ? 'Admin@123' : '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 

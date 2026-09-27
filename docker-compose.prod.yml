@@ -36,6 +36,9 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
       # M2 attachments live on this volume — they survive rebuilds.
       UPLOADS_DIR: /app/uploads
+      # Swagger/OpenAPI at /api/docs + /api/docs-json — off by default (see
+      # deploy/.env.example). The demo server's deploy/.env sets this to 1.
+      EXPOSE_API_DOCS: ${EXPOSE_API_DOCS:-0}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -54,6 +57,12 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        # Login-page demo-credential prefill — NEXT_PUBLIC_* is inlined at
+        # build time, so this must be a build arg, not a runtime env var.
+        # Off by default (see deploy/.env.example); the demo server's
+        # deploy/.env sets this to 1.
+        NEXT_PUBLIC_DEMO_PREFILL: ${NEXT_PUBLIC_DEMO_PREFILL:-0}
     image: npi-erp-web
     restart: unless-stopped
     depends_on:

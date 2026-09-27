@@ -11,6 +11,15 @@
 #     --env-file deploy/.env run --rm demo-reset
 #
 # Never install the nightly cron for this on a server holding real data.
+#
+# EXPOSE_API_DOCS / NEXT_PUBLIC_DEMO_PREFILL (T-00d): this file defines only
+# the one-off demo-reset job, not the api/web services — deploy.sh brings
+# those up from docker-compose.prod.yml alone, so an env override written
+# here would never reach the running containers. Both flags are wired in
+# docker-compose.prod.yml (api env / web build arg) and read from
+# deploy/.env, which is not committed. The demo server's deploy/.env sets
+# EXPOSE_API_DOCS=1 and NEXT_PUBLIC_DEMO_PREFILL=1; every other environment
+# leaves them unset/0 (see deploy/.env.example).
 name: npi-erp
 
 services:
