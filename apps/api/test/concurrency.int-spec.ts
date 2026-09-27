@@ -11,6 +11,7 @@
  *
  * Not part of `npm test` — see jest.integration.config.js.
  */
+import { InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { NumberingService } from '../src/common/numbering.service';
 import { AuditService } from '../src/common/audit.service';
@@ -235,5 +236,152 @@ describe('concurrent invoice issuing', () => {
     expect(retentions).toBeLessThanOrEqual(1);
 
     expect(await chainDefects()).toEqual([]);
+  });
+});
+
+describe('numbering across a fiscal-year boundary', () => {
+  const numbering = new NumberingService(prisma);
+  const currentYear = new Date().getUTCFullYear();
+  const createdTypes: string[] = [];
+
+  /** A throwaway documentType unique to this run, tracked for teardown. */
+  function freshType(label: string) {
+    const type = `ITEST_ROLLOVER_${label}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    createdTypes.push(type);
+    return type;
+  }
+
+  afterEach(async () => {
+    if (createdTypes.length === 0) return;
+    await prisma.numberingSequence.deleteMany({
+      where: { organizationId, documentType: { in: createdTypes } },
+    });
+    createdTypes.length = 0;
+  });
+
+  it('carries the previous year forward instead of restarting, under parallel default-isolation callers', async () => {
+    const type = freshType('parallel');
+    await prisma.numberingSequence.create({
+      data: {
+        organizationId,
+        documentType: type,
+        prefix: 'ITR',
+        padding: 5,
+        nextValue: 42,
+        fiscalYear: currentYear - 1,
+      },
+    });
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, () =>
+        prisma.$transaction((tx) => numbering.next(organizationId, type, tx)),
+      ),
+    );
+
+    const fulfilled = results.filter(
+      (r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled',
+    );
+    const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    if (rejected.length > 0) {
+      console.warn(
+        `${rejected.length} of 8 rollover calls were rejected: ` +
+          rejected.map((r) => (r.reason as Error)?.message).join(' | '),
+      );
+    }
+
+    expect(fulfilled.length).toBe(8);
+    const codes = fulfilled.map((r) => r.value).sort();
+    const expected = Array.from({ length: 8 }, (_, i) => `ITR-${String(42 + i).padStart(5, '0')}`);
+    expect(codes).toEqual(expected);
+
+    const currentRow = await prisma.numberingSequence.findUniqueOrThrow({
+      where: {
+        organizationId_documentType_fiscalYear: {
+          organizationId,
+          documentType: type,
+          fiscalYear: currentYear,
+        },
+      },
+    });
+    expect(currentRow.nextValue).toBe(50);
+
+    const previousRow = await prisma.numberingSequence.findUniqueOrThrow({
+      where: {
+        organizationId_documentType_fiscalYear: {
+          organizationId,
+          documentType: type,
+          fiscalYear: currentYear - 1,
+        },
+      },
+    });
+    // History untouched: the carried-forward row is never mutated.
+    expect(previousRow.nextValue).toBe(42);
+  });
+
+  it('rejects cleanly when no earlier year exists to carry forward, and creates no row', async () => {
+    const type = freshType('no-history');
+
+    await expect(
+      prisma.$transaction((tx) => numbering.next(organizationId, type, tx)),
+    ).rejects.toThrow(InternalServerErrorException);
+
+    const rows = await prisma.numberingSequence.findMany({
+      where: { organizationId, documentType: type },
+    });
+    expect(rows).toEqual([]);
+  });
+
+  it('never issues a duplicate or out-of-order number under Serializable callers', async () => {
+    const type = freshType('serializable');
+    await prisma.numberingSequence.create({
+      data: {
+        organizationId,
+        documentType: type,
+        prefix: 'ITS',
+        padding: 5,
+        nextValue: 200,
+        fiscalYear: currentYear - 1,
+      },
+    });
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 4 }, () =>
+        prisma.serializable((tx) => numbering.next(organizationId, type, tx)),
+      ),
+    );
+
+    const fulfilled = results.filter(
+      (r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled',
+    );
+    const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    if (rejected.length > 0) {
+      console.warn(
+        `${rejected.length} of 4 serializable rollover calls were rejected: ` +
+          rejected
+            .map((r) => {
+              const err = r.reason as { constructor?: { name?: string }; code?: unknown; message?: string };
+              return `${err?.constructor?.name ?? typeof err}${err?.code ? ` (code ${err.code})` : ''}: ${err?.message}`;
+            })
+            .join(' | '),
+      );
+    }
+
+    const codes = fulfilled.map((r) => r.value);
+    expect(new Set(codes).size).toBe(codes.length); // no duplicates among the fulfilled
+
+    const sortedValues = codes.map((c) => Number(c.split('-')[1])).sort((a, b) => a - b);
+    const expectedValues = Array.from({ length: sortedValues.length }, (_, i) => 200 + i);
+    expect(sortedValues).toEqual(expectedValues); // consecutive, starting at the carried value
+
+    const currentRow = await prisma.numberingSequence.findUniqueOrThrow({
+      where: {
+        organizationId_documentType_fiscalYear: {
+          organizationId,
+          documentType: type,
+          fiscalYear: currentYear,
+        },
+      },
+    });
+    expect(currentRow.nextValue).toBe(200 + fulfilled.length);
   });
 });
