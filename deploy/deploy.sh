@@ -72,11 +72,17 @@ swap() { # $1=service
 
 verify() {
   # Through Caddy, not directly: the user's path is the one that matters.
-  # -L because Caddy 308-redirects plain HTTP to HTTPS whenever SITE_ADDRESS
-  # is a real domain (production) — only the bare :80 of the local rehearsal
-  # answers on HTTP directly, and 2026-08-31 that difference failed a verify
-  # after a deploy that was in fact healthy.
-  code=$(curl -sL -o /dev/null -w '%{http_code}' http://localhost/api/health || echo 000)
+  # When SITE_ADDRESS is a real domain (production) Caddy 308-redirects plain
+  # HTTP to HTTPS and holds a certificate for that name only, so the probe asks
+  # for the domain itself, pinned to this host. Following the redirect from
+  # http://localhost ends on https://localhost, where the TLS handshake fails —
+  # that failed the verify of two healthy deploys (2026-08-31, 2026-09-27).
+  # Only the bare :80 of the local rehearsal answers on HTTP directly.
+  site=$(sed -n 's/^SITE_ADDRESS=//p' deploy/.env | tail -n 1 | tr -d '\r')
+  case "$site" in
+    '' | :*) code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost$site/api/health") || code=000 ;;
+    *) code=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$site:443:127.0.0.1" "https://$site/api/health") || code=000 ;;
+  esac
   [ "$code" = 200 ] || die "post-deploy verify: /api/health via Caddy returned $code"
   log "verify: /api/health via Caddy → 200"
 }
