@@ -11,8 +11,8 @@ if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Path $stage | Out-Null
 
 robocopy $root $stage /E `
-  /XD node_modules .next dist .git docs `
-  /XF npi-erp-deploy.tar.gz .env *.log *.tsbuildinfo | Out-Null
+  /XD node_modules .next dist .git .claude docs `
+  /XF npi-erp-deploy.tar.gz .env .deploy_history *.log *.tsbuildinfo | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
 
 if (Test-Path $tarball) { Remove-Item -Force $tarball }
