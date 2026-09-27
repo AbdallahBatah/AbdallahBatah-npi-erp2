@@ -1,0 +1,9 @@
+{
+  "verifiedAt": "2026-09-27",
+  "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "currency": "USD",
+  "models": {
+    "claude-haiku-4-5-20251001": { "inputPerMTok": 1, "outputPerMTok": 5 },
+    "claude-sonnet-5": { "inputPerMTok": 2, "outputPerMTok": 10 }
+  }
+}
