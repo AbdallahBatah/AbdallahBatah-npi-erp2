@@ -26,7 +26,11 @@ function unexpected(detail: string): never {
 export interface NpiMe {
   id: string;
   organizationId: string;
+  /** Arabic display name of the user (greeting, shell header). */
+  nameAr: string;
   roleKey: string;
+  /** Arabic display name of the role (position title). */
+  roleNameAr: string;
   /** Bilingual role permission keys, as stored on the role — NPI does not
    *  document the element type further than `string[]`. */
   permissions: string[];
@@ -35,7 +39,9 @@ export interface NpiMe {
 /**
  * Fields and their source:
  *  - id            apps/api/src/modules/auth/auth.service.ts:104 (`id: user.id,`)
+ *  - nameAr        apps/api/src/modules/auth/auth.service.ts:106 (`nameAr: user.nameAr,`)
  *  - roleKey       apps/api/src/modules/auth/auth.service.ts:109 (`roleKey: user.role.key,`)
+ *  - roleNameAr    apps/api/src/modules/auth/auth.service.ts:110 (`roleNameAr: user.role.nameAr,`)
  *  - permissions   apps/api/src/modules/auth/auth.service.ts:112 (`permissions: user.role.permissions,`)
  *  - organizationId apps/api/src/modules/auth/auth.service.ts:114 (`organization: { id: user.organization.id, ... }`)
  *
@@ -47,9 +53,11 @@ export interface NpiMe {
 export function readMe(body: unknown): NpiMe {
   if (!isRecord(body)) return unexpected('readMe: body is not an object');
 
-  const { id, roleKey, permissions, organization } = body;
+  const { id, nameAr, roleKey, roleNameAr, permissions, organization } = body;
   if (typeof id !== 'string') return unexpected('readMe: missing/invalid "id"');
+  if (typeof nameAr !== 'string') return unexpected('readMe: missing/invalid "nameAr"');
   if (typeof roleKey !== 'string') return unexpected('readMe: missing/invalid "roleKey"');
+  if (typeof roleNameAr !== 'string') return unexpected('readMe: missing/invalid "roleNameAr"');
   if (!Array.isArray(permissions) || !permissions.every((p) => typeof p === 'string')) {
     return unexpected('readMe: missing/invalid "permissions"');
   }
@@ -57,7 +65,7 @@ export function readMe(body: unknown): NpiMe {
     return unexpected('readMe: missing/invalid "organization.id"');
   }
 
-  return { id, roleKey, permissions, organizationId: organization.id };
+  return { id, nameAr, roleKey, roleNameAr, permissions, organizationId: organization.id };
 }
 
 // ─── /auth/login ────────────────────────────────────────────────────────────
@@ -72,7 +80,9 @@ export interface NpiLogin {
  * `login` method):
  *  - accessToken    line 57 (`accessToken: token,`)
  *  - user.id        line 59
+ *  - user.nameAr    line 61
  *  - user.roleKey   line 64 (`roleKey: user.role.key,`)
+ *  - user.roleNameAr line 65
  *  - user.permissions line 67
  *  - user.organizationId line 69 (`organization: { id: user.organization.id, ... }`)
  *

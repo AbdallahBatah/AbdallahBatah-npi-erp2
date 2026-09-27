@@ -200,7 +200,9 @@ describe('responses.ts readers', () => {
     };
     expect(readMe(body)).toEqual({
       id: 'user-1',
+      nameAr: 'مشتري',
       roleKey: 'PROCUREMENT_OFFICER',
+      roleNameAr: 'موظف مشتريات',
       permissions: ['procurement.read', 'procurement.write'],
       organizationId: 'org-1',
     });

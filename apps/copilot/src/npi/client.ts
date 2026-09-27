@@ -163,6 +163,12 @@ export function createNpiClient(options: CreateNpiClientOptions) {
       return request(ctx, 'GET', '/admin/departments');
     },
 
+    /** People picker behind NPI's department screen; carries each user's
+     *  `departmentId`. Needs `admin.department.manage`, like `listDepartments`. */
+    listDepartmentDirectory() {
+      return request(ctx, 'GET', '/admin/departments/directory');
+    },
+
     listRoles() {
       return request(ctx, 'GET', '/admin/roles');
     },
