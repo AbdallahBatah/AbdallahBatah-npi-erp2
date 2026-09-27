@@ -1,6 +1,7 @@
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 import reactHooks from 'eslint-plugin-react-hooks';
+import noLatinUiText from './apps/copilot/eslint-rules/no-latin-ui-text.cjs';
 
 /**
  * Pragmatic baseline: recommended TS rules minus the ones that would flood a
@@ -14,6 +15,7 @@ export default tseslint.config(
       '**/.next/**',
       '**/*.js',
       '**/*.mjs',
+      '**/*.cjs',
       'packages/db/prisma/migrations/**',
       'apps/copilot/src/generated/**',
       // Claude Code worktrees are full repo copies — outside the root tsconfig.
@@ -23,11 +25,26 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   prettier,
   {
-    files: ['apps/web/**/*.tsx', 'apps/web/**/*.ts'],
+    files: [
+      'apps/web/**/*.tsx',
+      'apps/web/**/*.ts',
+      'apps/copilot/**/*.tsx',
+      'apps/copilot/**/*.ts',
+    ],
     plugins: { 'react-hooks': reactHooks },
     rules: {
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+  {
+    // Every string a user can see in the copilot UI must come from
+    // src/i18n/ar.ts (spec/madar/08 §E.8) — enforced only for the app's own
+    // source, not generated/vendor code.
+    files: ['apps/copilot/src/**/*.tsx'],
+    plugins: { 'copilot-local': { rules: { 'no-latin-ui-text': noLatinUiText } } },
+    rules: {
+      'copilot-local/no-latin-ui-text': 'error',
     },
   },
   {

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Sans_Arabic } from 'next/font/google';
+import { t } from '@/i18n/ar';
 import './globals.css';
 
 // Self-hosted at build time by next/font — no runtime Google request.
@@ -11,7 +12,7 @@ const plex = IBM_Plex_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
-  title: 'مَدار — مساعد NPI',
+  title: t('app.name'),
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
