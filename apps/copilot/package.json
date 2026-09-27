@@ -3,15 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3100",
+    "dev": "dotenv -e ../../.env -- next dev -p 3100",
     "build": "next build",
-    "start": "next start -p 3100",
-    "typecheck": "tsc --noEmit"
+    "start": "dotenv -e ../../.env -- next start -p 3100",
+    "typecheck": "tsc --noEmit",
+    "generate": "prisma generate",
+    "migrate": "dotenv -e ../../.env -- prisma migrate deploy",
+    "test": "jest",
+    "prebuild": "prisma generate",
+    "pretypecheck": "prisma generate",
+    "pretest": "prisma generate"
   },
   "dependencies": {
     "next": "14.2.35",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "@prisma/client": "5.22.0"
   },
   "devDependencies": {
     "@types/node": "20.19.43",
@@ -20,6 +27,11 @@
     "autoprefixer": "10.5.4",
     "postcss": "8.5.23",
     "tailwindcss": "3.4.19",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "prisma": "5.22.0",
+    "jest": "30.4.2",
+    "ts-jest": "29.4.12",
+    "@types/jest": "30.0.0",
+    "dotenv-cli": "7.4.4"
   }
 }

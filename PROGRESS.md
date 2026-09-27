@@ -64,7 +64,7 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-00c | done | 5323df0 | unit 9/9, int 3/3 |
 | T-00d | done | `fix/phase0` | gates off on the demo server (owner decision) |
 | T-01 | done | (this commit) | M1 — copilot:build, typecheck, lint green; NPI unit 198/198. Font comes from next/font/google exactly as apps/web does (no font files exist in the repo to copy) |
-| T-02 | todo | | M1 |
+| T-02 | done | (this commit) | M1 — `npi_copilot` created by `prisma migrate deploy`, 0001_init applied, second run idempotent; db-guard 11/11. NPI database is named `npi_erp` (the spec says `npi`): the guard is an allow-list so both are refused. Client generated to `src/generated/prisma` so NPI's client is never overwritten. Added table `login_attempts` here for T-05's DB rate limit |
 | T-03 | todo | | M1 |
 | T-04 | todo | | M1 — needs the API started with `EXPOSE_API_DOCS=1` to fetch the spec |
 | T-05 | todo | | M1 |
@@ -141,6 +141,7 @@ Done and deployed. Two NPI defects fixed with regression tests; docs and login p
 | T-00b | no migration `0021_numbering_year` | the fix needed no schema or data change | 2026-09-27 |
 | T-00c | file path is `apps/api/src/modules/procurement/…`, not `apps/api/src/requisitions/…` | the plan's path does not exist | 2026-09-27 |
 | T-00d | docs and login prefill are OFF on the demo server too | owner decision 2026-09-27; `05` T-00d said the demo keeps both | 2026-09-27 |
+| T-02 | table `login_attempts` added to 0001_init; env is read from the repository-root `.env` (one file for the owner), `apps/copilot/.env.example` documents the variables | T-05 needs a DB-backed rate limit and names no migration; NPI already loads the root `.env` | 2026-09-27 |
 | STEP 2 | `PROGRESS.md` was copied and filled before STEP 5 | STEP 2 writes the inventory into it | 2026-09-27 |
 
 ## Suggestions (not implemented)

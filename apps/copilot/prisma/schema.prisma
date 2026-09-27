@@ -1,0 +1,138 @@
+// ─────────────────────────────────────────────────────────────────────────
+// Madar Copilot — Prisma schema
+//
+// This database (npi_copilot) belongs to the copilot ONLY. It never shares
+// a schema, a migration history, or a Prisma client output path with NPI's
+// own database (npi_erp, see packages/db). NPI data is reached exclusively
+// through NPI's HTTP API — never via a direct database connection or a
+// foreign key into NPI's tables. Every "npi*Id" field below is an opaque
+// string copied from that API response, with no relational integrity to
+// NPI's own schema enforced here.
+// ─────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("COPILOT_DATABASE_URL")
+}
+
+// ─── Session ────────────────────────────────────────────────────────────
+
+model CopilotSession {
+  id              String   @id @default(cuid())
+  npiUserId       String
+  npiOrgId        String
+  roleKey         String
+  departmentId    String?
+  tokenEncrypted  String
+  expiresAt       DateTime
+  lastSeenAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([npiUserId])
+  @@index([expiresAt])
+  @@map("copilot_sessions")
+}
+
+// ─── Positions & handover ───────────────────────────────────────────────
+
+model Position {
+  id           String   @id @default(cuid())
+  npiOrgId     String
+  roleKey      String
+  departmentId String?
+  titleAr      String
+  personaAr    String   @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignments  PositionAssignment[]
+  handoverDocs HandoverDoc[]
+
+  @@unique([npiOrgId, roleKey, departmentId])
+  @@map("positions")
+}
+
+model PositionAssignment {
+  id            String    @id @default(cuid())
+  positionId    String
+  npiUserId     String
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  handoverDocId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  position    Position     @relation(fields: [positionId], references: [id])
+  handoverDoc HandoverDoc? @relation(fields: [handoverDocId], references: [id])
+
+  @@index([positionId, endedAt])
+  @@index([npiUserId])
+  @@map("position_assignments")
+}
+
+model HandoverDoc {
+  id         String   @id @default(cuid())
+  positionId String
+  fromUserId String?
+  toUserId   String
+  bodyJson   Json
+  bodyAr     String   @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  position    Position             @relation(fields: [positionId], references: [id])
+  assignments PositionAssignment[]
+
+  @@map("handover_docs")
+}
+
+// ─── Firm setup ─────────────────────────────────────────────────────────
+
+model FirmConfig {
+  id                    String    @id @default(cuid())
+  npiOrgId              String    @unique
+  profileKey            String?
+  visibleModulesJson    Json
+  acceptedDocTypesJson  Json
+  terminologyJson       Json
+  npiApiGapsJson        Json
+  setupCompletedAt      DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("firm_config")
+}
+
+model OnboardingSession {
+  id            String    @id @default(cuid())
+  npiOrgId      String
+  npiUserId     String
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  stepsJson     Json
+  profileChosen String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([npiOrgId])
+  @@map("onboarding_sessions")
+}
+
+// ─── Auth guard ─────────────────────────────────────────────────────────
+
+model LoginAttempt {
+  id          String   @id @default(cuid())
+  key         String
+  attemptedAt DateTime @default(now())
+  succeeded   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([key, attemptedAt])
+  @@map("login_attempts")
+}

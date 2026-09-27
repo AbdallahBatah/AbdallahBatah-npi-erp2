@@ -21,6 +21,9 @@ out/
 packages/db/prisma/*.db
 packages/db/prisma/migrations/dev.db*
 
+# Copilot's own Prisma client output (custom generator path, never committed)
+apps/copilot/src/generated/
+
 # Packed deploy artifacts
 *.tar.gz
 

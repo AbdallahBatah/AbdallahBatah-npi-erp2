@@ -15,6 +15,7 @@ export default tseslint.config(
       '**/*.js',
       '**/*.mjs',
       'packages/db/prisma/migrations/**',
+      'apps/copilot/src/generated/**',
       // Claude Code worktrees are full repo copies — outside the root tsconfig.
       '.claude/**',
     ],
