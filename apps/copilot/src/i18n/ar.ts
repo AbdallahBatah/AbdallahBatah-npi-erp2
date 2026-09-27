@@ -137,6 +137,17 @@ export const ar = {
   'document.error.unreadable': 'تعذر قراءة المستند؛ جرّب صورة أوضح',
   'setup.loading': 'أفهم إجابتك…',
   'setup.error.apply': 'تعذر تطبيق الإعداد في NPI: {reason}',
+
+  'chat.error.generic': 'تعذر إكمال الطلب. حاول مرة أخرى.',
+  'chat.error.too_long': 'الرسالة أطول من الحد المسموح. اختصرها وأعد الإرسال.',
+  // Until the intake flows of milestone 3 are built, a message that asks for
+  // one is answered with this fixed text instead of a promise the app
+  // cannot keep.
+  'chat.flow_pending':
+    'فهمت أنك تريد إدخال «{flow}». الإدخال بالمحادثة يُفعَّل في مرحلة لاحقة؛ أستطيع الآن الإجابة عن أسئلتك من بيانات NPI.',
+  'chat.flow_pending.unknown':
+    'إدخال المستندات بالمحادثة يُفعَّل في مرحلة لاحقة؛ أستطيع الآن الإجابة عن أسئلتك من بيانات NPI.',
+  'chat.flow_unavailable': 'إدخال «{flow}» غير مفعّل لمنشأتك في إعدادات مَدار.',
 } as const;
 
 export type ArKey = keyof typeof ar;

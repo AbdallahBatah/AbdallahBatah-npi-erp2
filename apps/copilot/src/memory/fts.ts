@@ -63,8 +63,11 @@ interface FactSearchRow {
   score: number;
 }
 
+/** Only `$queryRaw` is used, so callers may pass a narrowed client. */
+export type FactSearchDb = Pick<PrismaClient, '$queryRaw'>;
+
 export async function searchFacts(
-  db: PrismaClient,
+  db: FactSearchDb,
   params: FactSearchParams,
 ): Promise<FactHit[]> {
   const q = normalizeArabic(params.query);
