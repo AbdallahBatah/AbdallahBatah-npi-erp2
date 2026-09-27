@@ -12,7 +12,8 @@
     "test": "jest",
     "prebuild": "prisma generate",
     "pretypecheck": "prisma generate",
-    "pretest": "prisma generate"
+    "pretest": "prisma generate",
+    "gen-types": "node scripts/gen-npi-types.mjs"
   },
   "dependencies": {
     "next": "14.2.35",
@@ -32,6 +33,7 @@
     "jest": "30.4.2",
     "ts-jest": "29.4.12",
     "@types/jest": "30.0.0",
-    "dotenv-cli": "7.4.4"
+    "dotenv-cli": "7.4.4",
+    "openapi-typescript": "7.13.0"
   }
 }

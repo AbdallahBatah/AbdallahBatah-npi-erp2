@@ -26,7 +26,8 @@
     "lint": "eslint .",
     "copilot:dev": "node scripts/copilot-dev.mjs",
     "copilot:build": "npm run build -w @npi/copilot",
-    "copilot:migrate": "npm run migrate -w @npi/copilot"
+    "copilot:migrate": "npm run migrate -w @npi/copilot",
+    "copilot:gen-types": "npm run gen-types -w @npi/copilot"
   },
   "engines": {
     "node": ">=20"

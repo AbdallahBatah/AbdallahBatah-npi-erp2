@@ -65,8 +65,8 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-00d | done | `fix/phase0` | gates off on the demo server (owner decision) |
 | T-01 | done | (this commit) | M1 — copilot:build, typecheck, lint green; NPI unit 198/198. Font comes from next/font/google exactly as apps/web does (no font files exist in the repo to copy) |
 | T-02 | done | (this commit) | M1 — `npi_copilot` created by `prisma migrate deploy`, 0001_init applied, second run idempotent; db-guard 11/11. NPI database is named `npi_erp` (the spec says `npi`): the guard is an allow-list so both are refused. Client generated to `src/generated/prisma` so NPI's client is never overwritten. Added table `login_attempts` here for T-05's DB rate limit |
-| T-03 | todo | | M1 |
-| T-04 | todo | | M1 — needs the API started with `EXPOSE_API_DOCS=1` to fetch the spec |
+| T-03 | blocked | | M1 — five of its tables are specified only as "as v2" and package 2.0 is not in the repository (decision D-7). Skipped for now; T-04 does not depend on it |
+| T-04 | done | (this commit) | M1 — npi-client 27/27, all copilot tests 38/38, copilot:build, typecheck, lint green, NPI unit 198/198. `openapi.json` fetched from NPI build `9db91d7` started with `EXPOSE_API_DOCS=1`. Open gap: 49 of 59 request schemas are empty in NPI's document (decision D-8), so six write calls are typed against empty bodies until it is resolved. `/auth/me` and `/auth/login` return no department id |
 | T-05 | todo | | M1 |
 | T-06 | todo | | M1 |
 | T-07 | todo | | M1 |
@@ -122,6 +122,10 @@ Done and deployed. Two NPI defects fixed with regression tests; docs and login p
 ## NPI API gaps found (from onboarding apply and execution)
 | Gap | Flow | Proposed NPI change (for the engineer) |
 |---|---|---|
+| Most response bodies are untyped in the OpenAPI document (71 of 177 operations declare a body, nearly all as a bare object) | all | response DTO classes or `@ApiOkResponse` on the endpoints the copilot reads; until then the copilot narrows responses with hand-written readers that cite the NPI source line |
+| `GET /auth/me` and `POST /auth/login` do not return the user's department | positions (T-06) | include `departmentId` in both; until then the department is resolved through `/admin/departments`, which a non-admin may not be allowed to read — to be checked at T-06 |
+| Query parameters `search`, `status`, `take`, `skip` are documented as required although the controllers treat them as optional | lists | mark them optional with `@ApiQuery({ required: false })` |
+| PO, receipt and vendor bill have no generic `/actions` endpoint (the package assumed one); they expose explicit endpoints (`…/approve`, `…/send`, `…/receive`, `…/inspect`, `…/accept`, `…/match`, `…/schedule`) | po, grn, vendor_bill | none — the execution plans in T-27 use the explicit endpoints, never the approve ones |
 | No call adds a milestone to an existing contract; milestones are accepted only inline at creation | customer_contract | none needed for the package — extraction must carry milestones before the create call |
 | `CreateBillDto` carries only `goodsReceiptId` and `vendorRef`; amounts and lines are derived by NPI from the receipt | vendor_bill | none for the package — extracted totals are used for comparison in the preview, not sent |
 
@@ -133,6 +137,8 @@ Done and deployed. Two NPI defects fixed with regression tests; docs and login p
 | D-3 | zod is new to the repo: 3.25.76 or 4.6.5? | 4.6.5 — accepted by the Anthropic SDK peer range, no existing major to match | P3 | open |
 | D-4 | Rasterizing scanned PDFs with `pdfjs-dist` in Node needs a canvas implementation, a package the spec does not name. | Decide at T-21 after reading the pdfjs docs; report the package and licence before installing | P2 | open |
 | D-5 | The 20 evaluation documents (F-20): owner-supplied with names removed, or synthetic? T-23 needs the 6 contracts. | Synthetic documents generated in the repo (Arabic, invented names, valid-format VAT numbers); owner-supplied ones are added later if provided | P2 | open |
+| D-7 | The package refers to package 2.0 for parts it does not restate: tables `conversations`, `messages`, `redaction_sessions`, `eval_runs`, `daily_usage` (`02` §3), memory / pseudonymizer / audit / cost / metrics (`02` §8, T-09), NFRs (`02` §10), the OWASP list (`06` §2), the base Arabic strings and the Settings / Trust / Metrics screens (`03`), ADR-04/05/13/14/15/18/19. Package 2.0 is not in the repository and was not found under `C:dev` or the user folders searched. | Owner places the 2.0 files in `spec/madar-2.0/`. If they are not available: the implementer derives these parts from what 3.0 does state (F-12, F-16…F-19, AT-09, AT-10, AT-13, `09` 4.1 token form ⟦عميل_1⟧) and lists every derived choice under Deviations | P1 | open — blocks T-03, T-09 and parts of T-07, T-32…T-35 |
+| D-8 | NPI's OpenAPI document has empty schemas for 49 of its 59 request DTOs (LoginDto, CreateCustomerDto, CreateContractDto, CreatePoDto, ReceiveDto, CreateBillDto among them). Cause, confirmed on a temporary build that was reverted: the `@nestjs/swagger` plugin only reads files ending in `.dto.ts`, and most NPI DTO files are named `dto.ts`. With `dtoFileNameSuffix` extended the document has 69 schemas and none empty. | One-line change in `apps/api/nest-cli.json` (plugin option `dtoFileNameSuffix: [".dto.ts", ".entity.ts", "dto.ts"]`), on its own commit, then `npm run copilot:gen-types -- --fetch`. It changes the generated documentation only: no endpoint, validation or business logic changes. It is a change inside `apps/api`, so it waits for the owner | P1 | open — blocks typed writes (T-05 login, T-23…T-27) |
 | D-6 | REJECT and RETURN on a requisition with an open signature chain still pass on the bare `scm.procurement.write` permission (`requisitions.service.ts` `act()`), leaving the chain PENDING and orphaned. Outside the Madar package; touches approval behaviour. | Separate branch `fix/pr-reject-return-chain` from `main`, own PR: REJECT with an open chain goes through `ApprovalService.decide(…,'REJECT')` (current step owner or delegate only); RETURN is allowed only to the current step owner and closes the chain so a resubmit opens a fresh one; the requester can do neither. Regression tests that fail before and pass after | P2 | open — waiting for the owner |
 
 ## Deviations from the package
@@ -142,6 +148,7 @@ Done and deployed. Two NPI defects fixed with regression tests; docs and login p
 | T-00c | file path is `apps/api/src/modules/procurement/…`, not `apps/api/src/requisitions/…` | the plan's path does not exist | 2026-09-27 |
 | T-00d | docs and login prefill are OFF on the demo server too | owner decision 2026-09-27; `05` T-00d said the demo keeps both | 2026-09-27 |
 | T-02 | table `login_attempts` added to 0001_init; env is read from the repository-root `.env` (one file for the owner), `apps/copilot/.env.example` documents the variables | T-05 needs a DB-backed rate limit and names no migration; NPI already loads the root `.env` | 2026-09-27 |
+| T-03 / T-04 | T-04 done before T-03 | T-03 is blocked on D-7 and T-04 does not depend on it | 2026-09-27 |
 | STEP 2 | `PROGRESS.md` was copied and filled before STEP 5 | STEP 2 writes the inventory into it | 2026-09-27 |
 
 ## Suggestions (not implemented)
@@ -152,4 +159,4 @@ Done and deployed. Two NPI defects fixed with regression tests; docs and login p
 - The demo server runs build `4756ba6`; `main` is ahead by deploy scripts and comments only.
 
 ## Owner-facing summary (Arabic)
-**2026-09-27 — التشغيل الأول، الخطوات 1–4.** قُرئت الحزمة كاملة وتقرير المرحلة صفر. خط الأساس على `main` أخضر: 198 اختبار وحدة و31 اختبار تكامل. أُنشئ الفرع `feat/copilot`. الخطة خمس مراحل بـ46 مهمة (13 · 7 · 11 · 6 · 9). المهام الأربع ذات النموذج الأعلى (T-11، T-16، T-23، T-27) ينفّذها النموذج الرئيسي نفسه، والباقي وكلاء Sonnet 5 بمراجعة النموذج الرئيسي. لم يبدأ التنفيذ: ينتظر «موافق». المفتاح `ANTHROPIC_API_KEY` ما زال غائباً عن `.env`. ست قرارات مفتوحة في جدول «Decisions needed».
+**2026-09-27 — بداية المرحلة ١.** بعد «موافق» نُفّذت T-01 (هيكل التطبيق) وT-02 (قاعدة `npi_copilot` وحارسها) وT-04 (عميل واجهة NPI). اختبارات الطبقة 38/38 واختبارات NPI 198/198. T-03 متوقفة على القرار D-7 (حزمة 2.0 غير موجودة في المستودع). القرار D-8: وثيقة واجهة NPI تصف 10 من 59 هيكل إدخال فقط، وإصلاحها سطر واحد في إعداد `apps/api` ينتظر إذنك. المفتاح `ANTHROPIC_API_KEY` ما زال غائباً.
