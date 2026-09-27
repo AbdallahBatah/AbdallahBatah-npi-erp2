@@ -71,9 +71,9 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-06 | done | a73f1bb | M1 — positions 41/41 (fakes; a type-level check proves the real Prisma client fits). Resolution order: own open assignment for the current role, then NPI directory when the user holds `admin.department.manage`, then role alone. Six persona files (five roles + `default`) |
 | T-07 | done | 5065584 | M1 — i18n 6/6, lint rule 14/14, `eslint .` clean for the whole repository, tsc clean, copilot build green. Screens that use the shell arrive with T-08/T-12; `design-critic` reviews them before the gate |
 | T-08 | todo | | M1 — the only allowed edit in `apps/web` (`src/lib/nav.ts`, file exists) |
-| T-09 | todo | | M1 |
-| T-10 | todo | | M1 |
-| T-11 | todo | | M1 [HIGHER MODEL] |
+| T-09 | done | 590fbc0 | M1 — aead 21, llm 40, llm-db 2 (real database), pseudonymizer 82. Prices re-verified on the official pricing page 2026-09-27 (Haiku 4.5 $1/$5, Sonnet 5 $2/$10 per MTok). Reviewer probed the gate with realistic sentences and sent it back once for leaks (bare organization name, parts of employee names, family name, names without a title); fixed and re-probed. No real model call was made: no API key |
+| T-10 | done | def9e46 | M1 — router 45, hr-guard 53, tokens 19. Reviewer replaced substring matching with whole-word matching (`src/text/tokens.ts`) after finding ordinary sentences refused or misrouted |
+| T-11 | in-progress | 2842783 | M1 [HIGHER MODEL] — done by the main model. Turn logic, tools, memory, dictionary and prompts committed: agents 30, agents-tools 23, memory 24 (real database). `src/app/api/chat/route.ts` is written and waits for T-05 (it needs the session). Not yet exercised against a real model: no API key (D-1) |
 | T-12 | todo | | M1 |
 | T-13 | todo | | M1 gate |
 | T-14 | todo | | M2 |
@@ -158,8 +158,16 @@ Done and deployed. Two NPI defects fixed with regression tests; docs and login p
 | T-06 | sixth persona file `default.md`; shared loader `src/prompts/load.ts`; readers in `src/npi/directory.ts` | NPI lets an admin create custom roles, and a role key from NPI data must never be turned into a file path; the loader is needed by every later prompt file | 2026-09-27 |
 | T-07 (D-7) | `src/i18n/ar.ts` holds a derived base set (login, navigation, generic states, screen titles) next to the verbatim strings of `03` §4 | the 2.0 base strings are not available | 2026-09-27 |
 | T-07 | the lint rule lives in `apps/copilot/eslint-rules/no-latin-ui-text.cjs` and is registered in the root `eslint.config.mjs`; `**/*.cjs` added to the lint ignores | the repository has one flat ESLint config at the root; CommonJS lets Jest load the rule with the standard `npm test` | 2026-09-27 |
+| T-09 (D-7) | the pseudonymizer is a new design, not a port: Arabic placeholders ⟦عميل_1⟧ keyed by surface form; dictionary, pattern and session-learned detection; given-name lexicon in `src/privacy/names-ar.ts`; shared AES-GCM helper `src/crypto/aead.ts` | the 2.0 specification it was to be ported from is not available | 2026-09-27 |
+| T-09 | a round trip is exact except that two spellings that normalize to the same text (شركه / شركة) share one placeholder and come back in the first spelling seen | one placeholder per surface keeps the model consistent; the difference is orthographic only | 2026-09-27 |
+| T-10 | whole-word matcher `src/text/tokens.ts` added; never-execute requests (approve, reject, return, delete, cancel) go to the chat even with an attachment | substring matching refused «أفضل عرض فني» and read «معقد» as «عقد»; «احذف العقد» with an attachment would have started a contract entry | 2026-09-27 |
+| T-11 | an entry request (contract, PR, PO, receipt, bill) is answered with a fixed text until the intake flows of M3 exist; extra files `src/agents/context.ts`, `src/privacy/dictionary.ts`, `prompts/memory-extract.md` | the assistant must not promise an entry it cannot perform yet; wiring and the name dictionary are kept apart from the turn logic so the turn is testable with fakes | 2026-09-27 |
 | T-04 | root script `copilot:gen-types` changed to forward its arguments | `npm run copilot:gen-types -- --fetch` silently ran without `--fetch` | 2026-09-27 |
 | STEP 2 | `PROGRESS.md` was copied and filled before STEP 5 | STEP 2 writes the inventory into it | 2026-09-27 |
+
+## Known limits (measured later)
+- Names the pseudonymizer cannot know and that carry no title, no legal form and no known given name (for example a foreign name written in Arabic letters) pass through. The 100-sentence evaluation of T-32 measures this against the 90% / 95% targets.
+- The assistant has not been run against a real model yet (D-1). Prompts `assistant.md`, `router.md` and `memory-extract.md` are untested in that sense.
 
 ## Suggestions (not implemented)
 - `06` still cites NPI's suites as 187 unit / 25 integration; the current baseline is 198 / 31.
