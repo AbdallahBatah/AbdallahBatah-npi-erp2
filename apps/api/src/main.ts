@@ -37,10 +37,10 @@ async function bootstrap() {
   // document can never drift from the controllers it describes.
   //
   // Registration is gated behind EXPOSE_API_DOCS=1: with the flag absent
-  // (the default — every production environment), /api/docs and
-  // /api/docs-json must not exist (404), since the schema exposes the full
-  // shape of every endpoint with no auth in front of it. The demo server
-  // sets EXPOSE_API_DOCS=1 to keep the docs available there.
+  // (the default — every deployed environment, the demo server included),
+  // /api/docs and /api/docs-json must not exist (404), since the schema
+  // exposes the full shape of every endpoint with no auth in front of it.
+  // Local development sets EXPOSE_API_DOCS=1 (see .env.example).
   if (process.env.EXPOSE_API_DOCS === '1') {
     const openApiConfig = new DocumentBuilder()
       .setTitle('NPI Solar ERP API')

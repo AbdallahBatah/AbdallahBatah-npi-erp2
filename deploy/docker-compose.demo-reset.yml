@@ -18,8 +18,9 @@
 # here would never reach the running containers. Both flags are wired in
 # docker-compose.prod.yml (api env / web build arg) and read from
 # deploy/.env, which is not committed. The demo server's deploy/.env sets
-# EXPOSE_API_DOCS=1 and NEXT_PUBLIC_DEMO_PREFILL=1; every other environment
-# leaves them unset/0 (see deploy/.env.example).
+# neither flag (owner decision, 2026-09-27), so both fall back to the
+# compose default of 0 there as in every other deployed environment (see
+# deploy/.env.example).
 name: npi-erp
 
 services:

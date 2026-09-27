@@ -18,8 +18,9 @@ ARG NEXT_PUBLIC_API_URL=""
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # Login-page demo-credential prefill. NEXT_PUBLIC_* vars are inlined into the
 # client bundle at build time, so this has to be a build arg (a runtime env
-# var on the container would have no effect). Defaults to off; only the demo
-# server's docker-compose.prod.yml sets it to 1 (see deploy/.env.example).
+# var on the container would have no effect). Defaults to off and stays off
+# on every deployed environment, the demo server included; set it to 1 for
+# local development only (see deploy/.env.example).
 ARG NEXT_PUBLIC_DEMO_PREFILL="0"
 ENV NEXT_PUBLIC_DEMO_PREFILL=$NEXT_PUBLIC_DEMO_PREFILL
 ENV NEXT_OUTPUT=standalone
