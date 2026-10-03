@@ -54,9 +54,11 @@ export function loadProfilePack(key: string): ProfilePack {
 
 /**
  * Which of the six `PROFILE_KEYS` currently have a catalog file on disk.
- * T-14 ships only three (`epc`, `om_provider`, `ppa_operator`); T-15 adds the
- * rest. Checked with `existsSync` rather than attempting-and-catching, so a
- * pack file that exists but fails to parse still throws loudly through
+ * T-14 shipped three (`epc`, `om_provider`, `ppa_operator`); T-15 added the
+ * remaining three (`general_contracting`, `equipment_trading`,
+ * `engineering_consulting`), so all six now have a file on disk. Checked
+ * with `existsSync` rather than attempting-and-catching, so a pack file that
+ * exists but fails to parse still throws loudly through
  * `loadProfilePack`/`loadAllProfilePacks` instead of being silently skipped.
  */
 export function listAvailableProfileKeys(): ProfileKey[] {
@@ -70,9 +72,9 @@ export function loadAllProfilePacks(): ProfilePack[] {
 
 /**
  * The overlay prompt file for `key`, relative to the prompts root (consumed
- * by `loadPrompt` from T-15 on, the same way `src/positions/persona.ts` does
- * for position personas). No overlay files exist yet — this only computes the
- * path and applies the same key check as `loadProfilePack`.
+ * by `loadPrompt`, the same way `src/positions/persona.ts` does for position
+ * personas). All six overlay files were added in T-15; this function only
+ * computes the path and applies the same key check as `loadProfilePack`.
  */
 export function overlayFileFor(key: string): string {
   if (!isProfileKey(key)) {

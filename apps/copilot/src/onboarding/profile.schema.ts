@@ -39,6 +39,19 @@ export const MODULE_KEYS = [
 ] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 
+/** Arabic display names of the NPI modules, used by the overlays (T-15) and
+ *  the setup screens (T-18). Not NPI's own menu labels — the copilot's. */
+export const MODULE_NAMES_AR: Record<ModuleKey, string> = {
+  crm: 'العملاء والفرص',
+  commercial: 'العروض والعقود',
+  projects: 'المشاريع',
+  procurement: 'المشتريات والمخزون',
+  fsm: 'أوامر العمل والصيانة',
+  finance: 'المالية',
+  ppa: 'اتفاقيات بيع الطاقة',
+  telemetry: 'المراقبة والقياس',
+};
+
 // Must equal the `FlowType` union in `src/agents/router.ts:23` exactly — the
 // five chat flows the copilot has (08 §E.10: "exactly five flows, no sixth").
 export const FLOW_TYPES = ['customer_contract', 'pr', 'po', 'grn', 'vendor_bill'] as const;

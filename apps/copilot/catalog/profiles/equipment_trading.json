@@ -1,0 +1,114 @@
+{
+  "key": "equipment_trading",
+  "titleAr": "تجارة معدات",
+  "revenueLines": ["بيع المعدات والأجهزة", "التوريد للمشاريع", "قطع الغيار والملحقات"],
+  "visibleModules": ["crm", "commercial", "procurement", "finance"],
+  "acceptedDocTypes": [
+    { "key": "vendor_quote", "labelAr": "عرض مورد", "flow": "po" },
+    { "key": "delivery_note", "labelAr": "إشعار تسليم", "flow": "grn" },
+    { "key": "vendor_bill", "labelAr": "فاتورة مورد", "flow": "vendor_bill" }
+  ],
+  "terminology": {
+    "purchase_order": "أمر الشراء",
+    "receipt": "إذن الاستلام"
+  },
+  "defaultDepartments": [
+    { "code": "SALES", "nameAr": "المبيعات", "nameEn": "Sales" },
+    { "code": "WH", "nameAr": "المستودع", "nameEn": "Warehouse" },
+    { "code": "FIN", "nameAr": "المالية", "nameEn": "Finance" }
+  ],
+  "rolePermissionSets": {
+    "admin": {
+      "nameAr": "مدير النظام",
+      "nameEn": "Administrator",
+      "permissions": [
+        "crm.customer.read", "crm.customer.write",
+        "crm.lead.read", "crm.lead.write",
+        "crm.opportunity.read", "crm.opportunity.write",
+        "commercial.item.read", "commercial.item.write",
+        "commercial.proposal.read", "commercial.proposal.write",
+        "commercial.contract.read", "commercial.contract.write",
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.payment.read", "finance.payment.write", "finance.period.manage",
+        "projects.project.read", "projects.project.write",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "admin.department.manage", "admin.delegation.manage", "admin.workflow.manage",
+        "assets.serialunit.read",
+        "fsm.workorder.read", "fsm.workorder.write",
+        "admin.org.manage", "admin.user.manage", "admin.audit.read", "admin.approval.manage",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "sales": {
+      "nameAr": "مندوب مبيعات",
+      "nameEn": "Sales Representative",
+      "permissions": [
+        "crm.customer.read", "crm.customer.write",
+        "crm.lead.read", "crm.lead.write",
+        "crm.opportunity.read", "crm.opportunity.write",
+        "commercial.item.read",
+        "commercial.proposal.read", "commercial.proposal.write",
+        "commercial.contract.read", "commercial.contract.write",
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "warehouse_keeper": {
+      "nameAr": "أمين المستودع",
+      "nameEn": "Warehouse Keeper",
+      "permissions": [
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "commercial.item.read",
+        "assets.serialunit.read",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "accountant": {
+      "nameAr": "محاسب",
+      "nameEn": "Accountant",
+      "permissions": [
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.payment.read", "finance.payment.write", "finance.period.manage",
+        "crm.customer.read",
+        "commercial.contract.read", "commercial.proposal.read", "commercial.item.read",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    }
+  },
+  "approvalRuleDefaults": [
+    { "docType": "PURCHASE_ORDER", "minAmount": 30000, "steps": ["accountant"] }
+  ],
+  "itemTemplates": [
+    { "sku": "TRD-MOD-550", "nameAr": "لوح شمسي 550 واط", "nameEn": "PV Module 550W", "itemCategory": "MODULE", "uom": "unit", "isSerialised": true },
+    { "sku": "TRD-INV-5K", "nameAr": "عاكس 5 كيلوواط", "nameEn": "Inverter 5kW", "itemCategory": "INVERTER", "uom": "unit", "isSerialised": true },
+    { "sku": "TRD-BAT-10", "nameAr": "بطارية تخزين 10 كيلوواط ساعة", "nameEn": "Storage Battery 10kWh", "itemCategory": "BOS", "uom": "unit", "isSerialised": true },
+    { "sku": "TRD-CAB-DC6", "nameAr": "كابل تيار مستمر 6مم", "nameEn": "DC Cable 6mm", "itemCategory": "CABLE", "uom": "متر" }
+  ],
+  "positions": [
+    {
+      "roleKey": "admin",
+      "departmentCode": null,
+      "titleAr": "مدير النظام",
+      "personaAr": "أنت الوكيل الذي يرافق مدير النظام في مَدار، الطبقة الحوارية فوق NPI. تساعده على متابعة إعداد المنشأة الأولي: مراجعة الأقسام والأدوار وسقوف الاعتماد المقترحة، وعرض ملخص واضح لما سيُضبط في NPI قبل أي تطبيق فعلي. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يملكه من صلاحية في NPI لا تملكه أنت نيابة عنه. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI حسب مصفوفته، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "sales",
+      "departmentCode": "SALES",
+      "titleAr": "مندوب مبيعات",
+      "personaAr": "أنت الوكيل الذي يرافق مندوب المبيعات في مَدار، الطبقة الحوارية فوق NPI. تساعده على متابعة عروض الأسعار والفرص التجارية للعملاء، والاطلاع على حالة التوريد والمخزون قبل الرد عليهم، وعرض أي تحديث في بطاقة معاينة قبل أي إدخال. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يستطيعه من شاشة NPI لا تستطيعه أنت من المحادثة. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "warehouse_keeper",
+      "departmentCode": "WH",
+      "titleAr": "أمين المستودع",
+      "personaAr": "أنت الوكيل الذي يرافق أمين المستودع في مَدار، الطبقة الحوارية فوق NPI. تساعده على استلام البضاعة مقابل أوامر الشراء من إشعار تسليم يرفقه، وتسجيل الأرقام التسلسلية للأصناف التي تتطلبها، وعرض كل ذلك في بطاقة معاينة قبل أي إدخال. عند وجود فرق بين الكمية المستلمة والمطلوبة، اعرض الفرق للمستخدم صراحة بدل تسويته بنفسك. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يستطيعه من شاشة NPI لا تستطيعه أنت من المحادثة. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "accountant",
+      "departmentCode": "FIN",
+      "titleAr": "محاسب",
+      "personaAr": "أنت الوكيل الذي يرافق المحاسب في مَدار، الطبقة الحوارية فوق NPI. مهمتك الأساسية استخراج فواتير الموردين من مستند أو صورة يرفقها، وربطها بأمر الشراء وإشعار التسليم المطابقين، وعرضها في بطاقة معاينة قبل أي إدخال. عند غياب مطابقة واضحة، اعرض الفرق للمستخدم صراحة بدل تسويته بنفسك. تعمل بصلاحيات هذا المستخدم في NPI حرفياً. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    }
+  ]
+}

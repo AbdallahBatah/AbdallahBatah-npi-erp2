@@ -1,0 +1,142 @@
+{
+  "key": "general_contracting",
+  "titleAr": "مقاولات عامة",
+  "revenueLines": ["عقود المقاولات العامة", "أعمال البناء والتشييد", "أعمال البنية التحتية"],
+  "visibleModules": ["crm", "commercial", "projects", "procurement", "finance"],
+  "acceptedDocTypes": [
+    { "key": "contracting_contract", "labelAr": "عقد مقاولة", "flow": "customer_contract" },
+    { "key": "progress_claim", "labelAr": "مستخلص", "flow": null },
+    { "key": "vendor_bill", "labelAr": "فاتورة مورد", "flow": "vendor_bill" },
+    { "key": "purchase_request", "labelAr": "طلب شراء", "flow": "pr" }
+  ],
+  "terminology": {
+    "contract": "عقد المقاولة",
+    "customer": "المالك",
+    "purchase_order": "أمر الشراء"
+  },
+  "defaultDepartments": [
+    { "code": "SALES", "nameAr": "المبيعات", "nameEn": "Sales" },
+    { "code": "PROJ", "nameAr": "المشاريع", "nameEn": "Projects" },
+    { "code": "PROC", "nameAr": "المشتريات", "nameEn": "Procurement" },
+    { "code": "FIN", "nameAr": "المالية", "nameEn": "Finance" },
+    { "code": "SITE", "nameAr": "الموقع", "nameEn": "Site" }
+  ],
+  "rolePermissionSets": {
+    "admin": {
+      "nameAr": "مدير النظام",
+      "nameEn": "Administrator",
+      "permissions": [
+        "crm.customer.read", "crm.customer.write",
+        "crm.lead.read", "crm.lead.write",
+        "crm.opportunity.read", "crm.opportunity.write",
+        "commercial.item.read", "commercial.item.write",
+        "commercial.proposal.read", "commercial.proposal.write",
+        "commercial.contract.read", "commercial.contract.write",
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.payment.read", "finance.payment.write", "finance.period.manage",
+        "projects.project.read", "projects.project.write",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "admin.department.manage", "admin.delegation.manage", "admin.workflow.manage",
+        "assets.serialunit.read",
+        "fsm.workorder.read", "fsm.workorder.write",
+        "admin.org.manage", "admin.user.manage", "admin.audit.read", "admin.approval.manage",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "sales": {
+      "nameAr": "مسؤول العقود والمبيعات",
+      "nameEn": "Contracts & Sales Officer",
+      "permissions": [
+        "crm.customer.read", "crm.customer.write",
+        "crm.lead.read", "crm.lead.write",
+        "crm.opportunity.read", "crm.opportunity.write",
+        "commercial.item.read",
+        "commercial.proposal.read", "commercial.proposal.write",
+        "commercial.contract.read", "commercial.contract.write",
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "pm": {
+      "nameAr": "مدير المشاريع",
+      "nameEn": "Project Manager",
+      "permissions": [
+        "projects.project.read", "projects.project.write",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "assets.serialunit.read",
+        "commercial.contract.read", "commercial.item.read",
+        "crm.customer.read",
+        "fsm.workorder.read",
+        "finance.invoice.read",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "accountant": {
+      "nameAr": "محاسب",
+      "nameEn": "Accountant",
+      "permissions": [
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.payment.read", "finance.payment.write", "finance.period.manage",
+        "crm.customer.read",
+        "commercial.contract.read", "commercial.proposal.read", "commercial.item.read",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "site_engineer": {
+      "nameAr": "مهندس الموقع",
+      "nameEn": "Site Engineer",
+      "permissions": [
+        "fsm.workorder.read", "fsm.workorder.write",
+        "assets.serialunit.read",
+        "scm.procurement.read", "scm.requisition.write",
+        "commercial.item.read",
+        "projects.project.read",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    }
+  },
+  "approvalRuleDefaults": [
+    { "docType": "PURCHASE_REQUISITION", "minAmount": 25000, "steps": ["pm"] },
+    { "docType": "PURCHASE_ORDER", "minAmount": 250000, "steps": ["pm", "accountant"] },
+    { "docType": "PROGRESS_CLAIM", "minAmount": 500000, "steps": ["pm", "accountant"] }
+  ],
+  "itemTemplates": [
+    { "sku": "CEM-50", "nameAr": "أسمنت بورتلاندي 50 كجم", "nameEn": "Portland Cement 50kg", "itemCategory": "BOS", "uom": "كيس" },
+    { "sku": "STL-REBAR", "nameAr": "حديد تسليح", "nameEn": "Steel Rebar", "itemCategory": "BOS", "uom": "طن" },
+    { "sku": "BLK-20", "nameAr": "بلوك خرساني 20 سم", "nameEn": "Concrete Block 20cm", "itemCategory": "BOS", "uom": "unit" },
+    { "sku": "AGG-SAND", "nameAr": "رمل", "nameEn": "Sand", "itemCategory": "BOS", "uom": "م3" }
+  ],
+  "positions": [
+    {
+      "roleKey": "admin",
+      "departmentCode": null,
+      "titleAr": "مدير النظام",
+      "personaAr": "أنت الوكيل الذي يرافق مدير النظام في مَدار، الطبقة الحوارية فوق NPI. تساعده على متابعة إعداد المنشأة الأولي: مراجعة الأقسام والأدوار وسقوف الاعتماد المقترحة، وعرض ملخص واضح لما سيُضبط في NPI قبل أي تطبيق فعلي. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يملكه من صلاحية في NPI لا تملكه أنت نيابة عنه. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI حسب مصفوفته، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "sales",
+      "departmentCode": "SALES",
+      "titleAr": "مسؤول العقود",
+      "personaAr": "أنت الوكيل الذي يرافق مسؤول العقود في مَدار، الطبقة الحوارية فوق NPI. مهمتك الأساسية مساعدته على إدخال عقود المقاولة الجديدة مع المالك من مستند يرفقه، والتحقق من وجود مطابقة لعميل قائم قبل اقتراح إنشاء عميل جديد، وعرض كل ذلك في بطاقة معاينة قبل أي إدخال. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يستطيعه من شاشة NPI لا تستطيعه أنت من المحادثة. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "pm",
+      "departmentCode": "PROJ",
+      "titleAr": "مدير المشاريع",
+      "personaAr": "أنت الوكيل الذي يرافق مدير المشاريع في مَدار، الطبقة الحوارية فوق NPI. تساعده على رفع طلبات شراء مواد البناء والتشييد لمشاريعه، ومتابعة أوامر الشراء والاستلامات المرتبطة بها، وعرض الفروق إن وُجدت صراحة بدل تسويتها بنفسك. المستخلص يُدخل ويُعتمد في شاشات NPI نفسها، ولا تُنشئه أنت من المحادثة أبداً. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يملكه من صلاحية في NPI لا تملكه أنت نيابة عنه. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI حسب مصفوفته، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "accountant",
+      "departmentCode": "FIN",
+      "titleAr": "محاسب",
+      "personaAr": "أنت الوكيل الذي يرافق المحاسب في مَدار، الطبقة الحوارية فوق NPI. مهمتك الأساسية استخراج فواتير الموردين من مستند أو صورة يرفقها، وربطها بأمر الشراء والاستلام المطابقين، وعرضها في بطاقة معاينة قبل أي إدخال. المستخلص يُدخل ويُعتمد في شاشات NPI نفسها، ولا تُنشئه أنت من المحادثة. عند غياب مطابقة واضحة، اعرض الفرق للمستخدم صراحة بدل تسويته بنفسك. تعمل بصلاحيات هذا المستخدم في NPI حرفياً. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "site_engineer",
+      "departmentCode": "SITE",
+      "titleAr": "مهندس الموقع",
+      "personaAr": "أنت الوكيل الذي يرافق مهندس الموقع في مَدار، الطبقة الحوارية فوق NPI. تساعده على رفع طلبات شراء مواد البناء اللازمة لعمله في الموقع، ومتابعة حالتها حتى تحويلها إلى أمر شراء من قسم المشتريات. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يستطيعه من شاشة NPI لا تستطيعه أنت من المحادثة. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI حسب مصفوفته، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    }
+  ]
+}

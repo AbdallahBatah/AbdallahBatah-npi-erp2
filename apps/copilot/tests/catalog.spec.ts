@@ -16,6 +16,7 @@ import {
   permissionGaps,
 } from '../src/onboarding/catalog';
 import {
+  PROFILE_KEYS,
   ProfilePackSchema,
   visibleFlowsOf,
   type ProfilePack,
@@ -83,8 +84,8 @@ describe('profile packs on disk', () => {
   const packs = loadAllProfilePacks();
   const keys = listAvailableProfileKeys();
 
-  it('ships exactly the three T-14 packs for now', () => {
-    expect(keys).toEqual(['epc', 'om_provider', 'ppa_operator']);
+  it('ships all six profile packs (T-14\'s three plus T-15\'s three)', () => {
+    expect(keys).toEqual([...PROFILE_KEYS]);
   });
 
   it.each(keys)('pack "%s" parses and its key matches its file name', (key) => {
@@ -108,9 +109,47 @@ describe('profile packs on disk', () => {
     }
   });
 
-  it('all three packs load together via loadAllProfilePacks() in PROFILE_KEYS order', () => {
-    expect(packs.map((p) => p.key)).toEqual(['epc', 'om_provider', 'ppa_operator']);
+  it('all six packs load together via loadAllProfilePacks() in PROFILE_KEYS order', () => {
+    expect(packs.map((p) => p.key)).toEqual([...PROFILE_KEYS]);
   });
+
+  it.each(keys)('pack "%s": admin role holds exactly NPI\'s 35 keys', (key) => {
+    const pack = loadProfilePack(key);
+    const adminPermissions = [...pack.rolePermissionSets.admin.permissions].sort();
+    const allKeys = [...PERMISSION_CATALOG.map((p) => p.key)].sort();
+    expect(adminPermissions).toEqual(allKeys);
+  });
+
+  type ExpectedApprovalRule = { docType: string; minAmount: number; steps: string[] };
+  const EXPECTED_APPROVAL_DEFAULTS: Record<string, ExpectedApprovalRule[]> = {
+    epc: [
+      { docType: 'PURCHASE_REQUISITION', minAmount: 10000, steps: ['pm'] },
+      { docType: 'PURCHASE_ORDER', minAmount: 100000, steps: ['pm', 'accountant'] },
+      { docType: 'PROGRESS_CLAIM', minAmount: 250000, steps: ['pm', 'accountant'] },
+    ],
+    om_provider: [
+      { docType: 'PURCHASE_REQUISITION', minAmount: 5000, steps: ['pm'] },
+      { docType: 'PURCHASE_ORDER', minAmount: 50000, steps: ['pm', 'accountant'] },
+    ],
+    ppa_operator: [{ docType: 'PURCHASE_ORDER', minAmount: 50000, steps: ['pm', 'accountant'] }],
+    general_contracting: [
+      { docType: 'PURCHASE_REQUISITION', minAmount: 25000, steps: ['pm'] },
+      { docType: 'PURCHASE_ORDER', minAmount: 250000, steps: ['pm', 'accountant'] },
+      { docType: 'PROGRESS_CLAIM', minAmount: 500000, steps: ['pm', 'accountant'] },
+    ],
+    equipment_trading: [{ docType: 'PURCHASE_ORDER', minAmount: 30000, steps: ['accountant'] }],
+    engineering_consulting: [{ docType: 'PURCHASE_ORDER', minAmount: 20000, steps: ['accountant'] }],
+  };
+
+  it.each(PROFILE_KEYS.map((key) => [key, EXPECTED_APPROVAL_DEFAULTS[key]] as const))(
+    'pack "%s" approval defaults match 03 §5',
+    (key, expected) => {
+      const pack = loadProfilePack(key);
+      expect(pack.approvalRuleDefaults.map((r) => ({ docType: r.docType, minAmount: r.minAmount, steps: r.steps }))).toEqual(
+        expected,
+      );
+    },
+  );
 });
 
 // ─── 2. G-M2-1: every permission a pack names is one NPI actually serves ───
@@ -222,8 +261,8 @@ describe('loadProfilePack', () => {
     expect(() => loadProfilePack(key)).toThrow();
   });
 
-  it('listAvailableProfileKeys() returns exactly the three T-14 packs', () => {
-    expect(listAvailableProfileKeys()).toEqual(['epc', 'om_provider', 'ppa_operator']);
+  it('listAvailableProfileKeys() returns all six profile packs', () => {
+    expect(listAvailableProfileKeys()).toEqual([...PROFILE_KEYS]);
   });
 
   it('overlayFileFor rejects an unknown key and builds the path for a known one', () => {
