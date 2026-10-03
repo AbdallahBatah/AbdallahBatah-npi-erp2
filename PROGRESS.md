@@ -76,7 +76,7 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-11 | done | 2842783, 597bf37 | M1 [HIGHER MODEL] — done by the main model. Turn logic, tools, memory, dictionary, prompts and the chat endpoint: agents 30, agents-tools 23, memory 24 (real database). Not yet exercised against a real model: no API key (D-1) |
 | T-12 | done | 0bfe771, bab4bd0 | M1 — chat-api 24; e2e chat-ui 9 scenarios on desktop and mobile with the chat endpoint intercepted. Tried by hand in the running app: HR refusal, fixed reply to an entry request, and the "provider not configured" message (no API key) |
 | T-13 | done | 2a12cd9, 3b0622f, 7e25af8, 45b0aab | M1 gate — smoke spec, security review, code review and design review done and their findings fixed; live calls with Haiku 4.5 on 2026-10-03; see "M1" under Milestone summaries. Owner decided D-9 (option 1) and wrote «موافق» on 2026-10-03; tag `copilot-v0.1.0` created locally |
-| T-14 | todo | | M2 |
+| T-14 | done | 82e44dc | M2 — `src/onboarding/profile.schema.ts` (zod 4, cross-checks: approval steps hold the approving permission, doc-type flows need their module and a role that holds the flow permission, positions reference declared roles/departments), `src/onboarding/catalog.ts` (loader keyed only by `PROFILE_KEYS`, `permissionGaps`), `src/npi/permissions.ts` (reader for `GET /admin/permissions`), packs `epc`, `om_provider`, `ppa_operator`, `tests/catalog.spec.ts` 40/40. Copilot suite 619/619, tsc and eslint clean. G-M2-1 (part): all 248 (role, permission) entries of the three packs ∈ the **live** `/admin/permissions` of the local NPI (35 keys, fetched 2026-10-03 as the seeded admin); epc role sets equal NPI's live role sets exactly |
 | T-15 | todo | | M2 |
 | T-16 | todo | | M2 [HIGHER MODEL] |
 | T-17 | todo | | M2 |
@@ -162,6 +162,9 @@ Process notes:
 - Three modules came back from agents with every test green and were wrong in ways their own tests could not see (pseudonymizer, HR guard, router). Each was probed with realistic sentences by the reviewer, sent back or fixed, and the sentences were added as tests.
 - A dev API started by an agent's e2e run at 23:15 stayed alive on port 4000 with the login throttle raised, and made the project smoke script report the throttle as broken. It was stopped; the check passes on a clean instance. The e2e run no longer reuses servers.
 ### M2
+Started 2026-10-03 (evening) after the owner's «موافق» on the M1 gate. Notion task «مَدار — المرحلة ٢» set to «قيد التنفيذ».
+- T-14 done (see Task status). Live check: the local NPI's `/admin/permissions` returns 35 keys (`02` §7's figure); the live seeded approval rules are PR ≥ 10,000 [pm], PO ≥ 100,000 [pm→accountant], PROGRESS_CLAIM ≥ 250,000 [pm→accountant], CHANGE_ORDER ≥ 100,000 [pm→admin] — the epc pack's three rules match the first three.
+- Next: T-15 (three remaining packs + six overlays, Sonnet agent; brief drafted), then T-16 (plan/apply/gaps — main model only, E.6).
 ### M3
 ### M4
 ### M5
@@ -177,6 +180,8 @@ Process notes:
 | No endpoint lists vendor bills, and an inbox task carries the workflow state's name (`stateEn`) but not its code | home tile «فواتير موردين بانتظار المطابقة» (T-08) | a list endpoint for vendor bills with a status filter, and `stateCode` on the inbox task. Until then the tile counts inbox tasks with `documentType === 'VendorBill'` and `stateEn === 'Recorded'`, which is scoped to the caller's role and breaks if the state is renamed in NPI's workflow data |
 | No call adds a milestone to an existing contract; milestones are accepted only inline at creation | customer_contract | none needed for the package — extraction must carry milestones before the create call |
 | `CreateBillDto` carries only `goodsReceiptId` and `vendorRef`; amounts and lines are derived by NPI from the receipt | vendor_bill | none for the package — extracted totals are used for comparison in the preview, not sent |
+
+| `ItemCategory` has only solar categories (MODULE, INVERTER, MOUNTING, CABLE, BOS, SPARE, SERVICE) | onboarding (T-14/T-15 item templates for general_contracting) | a generic category (e.g. `GENERAL`/`MATERIAL`); until then non-solar templates use `BOS` |
 
 ## Decisions needed (P1/P2/P3)
 | # | Question | Recommended default | Priority | Status |
@@ -219,6 +224,12 @@ Process notes:
 | T-13 | the name dictionary is cached per list, not per organization; tool results mask the fields they know to be names as whole values | finding of the security review: the first caller after each expiry fixed the dictionary for the whole organization | 2026-09-28 |
 | T-04 | root script `copilot:gen-types` changed to forward its arguments | `npm run copilot:gen-types -- --fetch` silently ran without `--fetch` | 2026-09-27 |
 | STEP 2 | `PROGRESS.md` was copied and filled before STEP 5 | STEP 2 writes the inventory into it | 2026-09-27 |
+
+| T-14 | `rolePermissionSets` values are `{ nameAr, nameEn?, permissions[] }`, not bare `permissions[]` | NPI's `CreateRoleDto` needs a display name to create a role the firm lacks (T-16) | 2026-10-03 |
+| T-14 | `ppa_operator` lists module `procurement` in addition to `03` §5's five | the same table gives it «فاتورة مورد» and a PO ≥ 50k rule, both of which live in NPI's procurement module (`scm.procurement.*`) | 2026-10-03 |
+| T-14 | `acceptedDocTypes[].flow` may be `null`; doc types without a flow are named only; the five flows stay the only flows (E.10) | «مستخلص» (T-15) exists in NPI's approval matrix but has no chat flow | 2026-10-03 |
+| T-14 | Latin check on pack strings allows `EPC` besides `NPI` | `profile.epc` in `ar.ts` and `03` §5's «عقد EPC» are canonical and carry it; `ar.ts` already documents EPC/PPA/CSV as allowed codes | 2026-10-03 |
+| T-14 | approval amounts in packs are whole SAR integers; `itemTemplates` carry no `unitCost`; extra file `src/onboarding/catalog.ts` and reader `src/npi/permissions.ts` | no decimals in reference data; prices belong to the firm; the loader needs the same key-only path safety as personas | 2026-10-03 |
 
 ## Known limits (measured later)
 - Names the pseudonymizer cannot know and that carry no title, no legal form and no known given name (for example a foreign name written in Arabic letters) pass through. The 100-sentence evaluation of T-32 measures this against the 90% / 95% targets.
