@@ -77,7 +77,7 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-12 | done | 0bfe771, bab4bd0 | M1 — chat-api 24; e2e chat-ui 9 scenarios on desktop and mobile with the chat endpoint intercepted. Tried by hand in the running app: HR refusal, fixed reply to an entry request, and the "provider not configured" message (no API key) |
 | T-13 | done | 2a12cd9, 3b0622f, 7e25af8, 45b0aab | M1 gate — smoke spec, security review, code review and design review done and their findings fixed; live calls with Haiku 4.5 on 2026-10-03; see "M1" under Milestone summaries. Owner decided D-9 (option 1) and wrote «موافق» on 2026-10-03; tag `copilot-v0.1.0` created locally |
 | T-14 | done | 82e44dc | M2 — `src/onboarding/profile.schema.ts` (zod 4, cross-checks: approval steps hold the approving permission, doc-type flows need their module and a role that holds the flow permission, positions reference declared roles/departments), `src/onboarding/catalog.ts` (loader keyed only by `PROFILE_KEYS`, `permissionGaps`), `src/npi/permissions.ts` (reader for `GET /admin/permissions`), packs `epc`, `om_provider`, `ppa_operator`, `tests/catalog.spec.ts` 40/40. Copilot suite 619/619, tsc and eslint clean. G-M2-1 (part): all 248 (role, permission) entries of the three packs ∈ the **live** `/admin/permissions` of the local NPI (35 keys, fetched 2026-10-03 as the seeded admin); epc role sets equal NPI's live role sets exactly |
-| T-15 | todo | | M2 |
+| T-15 | done | 8e2a83e | M2 — packs `general_contracting`, `equipment_trading`, `engineering_consulting` (roles `warehouse_keeper`, `engineer`; «مستخلص» as a null-flow doc type; building materials under `BOS`), six overlays `prompts/overlays/*.md` (Arabic prose 928–1211 chars, each names the pack's doc types, terminology, hidden modules and default thresholds, contains «اعتمد»), `MODULE_NAMES_AR` in `profile.schema.ts`. `tests/catalog.spec.ts` 67/67 (all six packs; admin role = NPI's 35 keys; approval defaults table per `03` §5), new `tests/overlays.spec.ts` 44/44. Copilot suite 690/690, tsc and eslint clean. G-M2-1 (complete): all 470 (role, permission) entries of the six packs ∈ the **live** `/admin/permissions` of the local NPI (35 keys, fetched 2026-10-03). Implemented by a Sonnet agent from a written brief; reviewer fixed two grammar slips and added the «الحاكم هو مصفوفة الاعتماد في NPI» clause to every overlay before committing |
 | T-16 | todo | | M2 [HIGHER MODEL] |
 | T-17 | todo | | M2 |
 | T-18 | todo | | M2 |
@@ -164,7 +164,8 @@ Process notes:
 ### M2
 Started 2026-10-03 (evening) after the owner's «موافق» on the M1 gate. Notion task «مَدار — المرحلة ٢» set to «قيد التنفيذ».
 - T-14 done (see Task status). Live check: the local NPI's `/admin/permissions` returns 35 keys (`02` §7's figure); the live seeded approval rules are PR ≥ 10,000 [pm], PO ≥ 100,000 [pm→accountant], PROGRESS_CLAIM ≥ 250,000 [pm→accountant], CHANGE_ORDER ≥ 100,000 [pm→admin] — the epc pack's three rules match the first three.
-- Next: T-15 (three remaining packs + six overlays, Sonnet agent; brief drafted), then T-16 (plan/apply/gaps — main model only, E.6).
+- T-15 done (see Task status). Review note: the overlays state each pack's default thresholds as background information only; the admin may change them in Q3 of setup, so every overlay now says the live NPI approval matrix governs. Suggestion for T-16/T-19: render the thresholds actually applied into the prompt (or drop them from the static overlay) once copilot config exists, so the static text can never contradict NPI.
+- Next: T-16 (plan/apply/gaps — main model only, E.6), then T-17…T-20.
 ### M3
 ### M4
 ### M5
@@ -182,6 +183,7 @@ Started 2026-10-03 (evening) after the owner's «موافق» on the M1 gate. No
 | `CreateBillDto` carries only `goodsReceiptId` and `vendorRef`; amounts and lines are derived by NPI from the receipt | vendor_bill | none for the package — extracted totals are used for comparison in the preview, not sent |
 
 | `ItemCategory` has only solar categories (MODULE, INVERTER, MOUNTING, CABLE, BOS, SPARE, SERVICE) | onboarding (T-14/T-15 item templates for general_contracting) | a generic category (e.g. `GENERAL`/`MATERIAL`); until then non-solar templates use `BOS` |
+| `scm.procurement.write` covers creating purchase orders **and** receiving goods (`procurement.controller.ts` `createPo`, `receive`, `createBill` all require it) | onboarding (T-15 `equipment_trading`: role `warehouse_keeper`) | a separate receiving permission (e.g. `scm.receipt.write`) so a warehouse keeper can receive without being able to raise purchase orders — a segregation-of-duties gap; until then the pack grants `scm.procurement.write` to `warehouse_keeper` and the overlay/persona limit it to receiving by instruction only |
 
 ## Decisions needed (P1/P2/P3)
 | # | Question | Recommended default | Priority | Status |
@@ -230,6 +232,10 @@ Started 2026-10-03 (evening) after the owner's «موافق» on the M1 gate. No
 | T-14 | `acceptedDocTypes[].flow` may be `null`; doc types without a flow are named only; the five flows stay the only flows (E.10) | «مستخلص» (T-15) exists in NPI's approval matrix but has no chat flow | 2026-10-03 |
 | T-14 | Latin check on pack strings allows `EPC` besides `NPI` | `profile.epc` in `ar.ts` and `03` §5's «عقد EPC» are canonical and carry it; `ar.ts` already documents EPC/PPA/CSV as allowed codes | 2026-10-03 |
 | T-14 | approval amounts in packs are whole SAR integers; `itemTemplates` carry no `unitCost`; extra file `src/onboarding/catalog.ts` and reader `src/npi/permissions.ts` | no decimals in reference data; prices belong to the firm; the loader needs the same key-only path safety as personas | 2026-10-03 |
+| T-14/T-15 | `epc` and `general_contracting` list «طلب شراء» (flow `pr`) beyond `03` §5's doc-type column | the same table row gives each a PR approval default, which presupposes requisitions, and `pr` is one of the five flows | 2026-10-03 |
+| T-15 | `engineering_consulting` lists module `procurement` in addition to `03` §5's four | same reason as `ppa_operator`: its «فاتورة مورد» flow and PO ≥ 20k rule live in NPI's procurement module | 2026-10-03 |
+| T-15 | `MODULE_NAMES_AR` (Arabic module names) added to `profile.schema.ts`; `rolePermissionSets` gains roles `warehouse_keeper` and `engineer` not among the five `01` §2 roles | the overlays and the T-18 setup screens need Arabic names for hidden/visible modules; `03` §5 gives `equipment_trading` a warehouse department and `engineering_consulting` an engineering department with no matching role among the five. Personas for the two new roles fall back to `positions/default.md`; their pack `personaAr` is the position-specific text | 2026-10-03 |
+| T-15 | overlays carry the pack's default approval thresholds | the brief asked for them as firm context; mitigated by the clause that the live NPI matrix governs (see M2 notes) | 2026-10-03 |
 
 ## Known limits (measured later)
 - Names the pseudonymizer cannot know and that carry no title, no legal form and no known given name (for example a foreign name written in Arabic letters) pass through. The 100-sentence evaluation of T-32 measures this against the 90% / 95% targets.
@@ -246,6 +252,8 @@ Started 2026-10-03 (evening) after the owner's «موافق» on the M1 gate. No
 - The demo server runs build `4756ba6`; `main` is ahead by deploy scripts and comments only.
 
 ## Owner-facing summary (Arabic)
+**2026-10-03 (ليلاً) — T-15 منجزة.** أُكملت حزم النشاط الست: أُضيفت حزم «مقاولات عامة» و«تجارة معدات» و«استشارات هندسية» بأدوارها (أمين المستودع، مهندس) وسقوفها الافتراضية من المواصفة، وستة تراكبات عربية تشرح للمساعد طبيعة كل منشأة ومستنداتها ومصطلحاتها والوحدات غير الظاهرة لها. الاختبارات 690/690، والفحص الحي يثبت أن كل صلاحية في الحزم الست موجودة في NPI المحلي. ملاحظتان للمهندس دُوّنتا في فجوات NPI: لا فئة أصناف عامة (مواد البناء تحت BOS)، وصلاحية المشتريات الواحدة تغطي إنشاء أمر الشراء والاستلام معاً (فصل مهام). التالي: T-16 (خطة التطبيق على NPI والفروق) للنموذج الرئيسي.
+
 **2026-10-03 (مساءً) — اعتماد المرحلة ١.** قرّر المالك D-9 بالخيار الأول (إبقاء ADR-26، وقراءة G-M1-6 على أنها «صفر تحذيرات أدخلتها حزم مَدار نفسها» بالمقارنة مع `main` في كل بوابة؛ ترقية حزم NPI قرار منفصل للمهندس) وكتب «موافق». أُنشئ الوسم `copilot-v0.1.0` محلياً على `feat/copilot` (بلا دفع). تبدأ المرحلة ٢ «التشكّل حسب النشاط» من T-14 في جلسة جديدة؛ T-16 للنموذج الرئيسي.
 
 **2026-10-03 — أول اتصال حقيقي بالنموذج.** أضاف المالك المفتاح وضبط المنفذ 3110، فجُرّبت الخطوات 1.1 إلى 1.5 من سيناريو `09` على التشغيل المحلي: الدخول والبطاقات الأربع، وسؤال المهام (أجاب من صندوق المهام بلا مهام مطابقاً لـ NPI)، وشروط سداد «مصنع الرياض للصناعات» (30 يوماً، صحيحة)، ورفض سؤال التقييم بلا أي اتصال. سجل التدقيق يثبت أن لا اسم ولا رقم ضريبي ولا هاتف ولا بريد خرج إلى المزوّد. عيب واحد وجد وأُصلح: الرد جاء بتنسيق Markdown والواجهة تعرض النص خاماً، فأُضيفت قاعدة «نص خام» إلى البرومبت وأُعيدت التجربة. ملاحظة: «ملاحظة من الذاكرة» في 1.4 تظهر فقط بعد أن يذكر الموظف حقيقة تُحفظ؛ قاعدة البيانات المحلية خالية منها. ينتظر: قرارك في D-9 ثم «موافق» (الخطوة 1.6 تعمل بعد T-40 كما هو مدوّن).
