@@ -683,6 +683,14 @@ function fakeDb() {
   let seq = 0;
   const db: OnboardingDb = {
     firmConfig: {
+      async findUnique({ where }) {
+        const existing = firmConfigs.get(where.npiOrgId);
+        if (!existing) return null;
+        return {
+          profileKey: (existing.profileKey as string | null | undefined) ?? null,
+          visibleModulesJson: existing.visibleModulesJson,
+        };
+      },
       async upsert({ where, create, update }) {
         const existing = firmConfigs.get(where.npiOrgId);
         firmConfigs.set(where.npiOrgId, existing ? { ...existing, ...update } : { ...create });
@@ -854,6 +862,44 @@ describe('persistCopilotConfig', () => {
     const out = await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, holders, now });
     expect(out.holdersSkipped).toEqual([{ roleKey: 'sales', departmentCode: 'SALES', npiUserId: 'u1', reason: 'position_missing' }]);
     expect(out.assignmentsWritten).toBe(0);
+  });
+
+  // ─── T-19: /settings' own module edit survives a same-profile re-apply ──
+
+  it('keeps an administrator-edited module list on a same-profile re-apply', async () => {
+    const npi = freshOrg();
+    const plan = await dryRun({ npi }, pack(), answersOnly(), adminCaller);
+    const result = await applyPlan({ npi }, plan);
+    const { db, firmConfigs } = fakeDb();
+
+    await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, holders: [], now });
+    // /settings (T-19) edits visibleModulesJson directly, never through this file.
+    firmConfigs.set('org1', { ...firmConfigs.get('org1'), visibleModulesJson: ['finance'] });
+
+    await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, holders: [], now });
+    expect(firmConfigs.get('org1')!.visibleModulesJson).toEqual(['finance']);
+  });
+
+  it('resets the module list on a re-apply of a DIFFERENT profile', async () => {
+    const npi = freshOrg();
+    const plan = await dryRun({ npi }, pack(), answersOnly(), adminCaller);
+    const result = await applyPlan({ npi }, plan);
+    const { db, firmConfigs } = fakeDb();
+
+    await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, holders: [], now });
+    firmConfigs.set('org1', { ...firmConfigs.get('org1'), visibleModulesJson: ['finance'] });
+
+    const npi2 = new FakeNpi();
+    const omPack = loadProfilePack('om_provider');
+    for (const [key, set] of Object.entries(omPack.rolePermissionSets)) {
+      npi2.addRole(key, set.nameAr, set.permissions);
+      npi2.addUser(key);
+    }
+    const plan2 = await dryRun({ npi: npi2 }, omPack, { profileKey: 'om_provider' }, adminCaller);
+    const result2 = await applyPlan({ npi: npi2 }, plan2);
+
+    await persistCopilotConfig(db, { npiOrgId: 'org1', plan: plan2, result: result2, holders: [], now });
+    expect(firmConfigs.get('org1')!.visibleModulesJson).toEqual(plan2.copilot.visibleModules);
   });
 });
 

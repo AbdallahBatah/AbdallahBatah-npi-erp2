@@ -26,6 +26,7 @@ import {
   applyAnswer,
   goTo,
   initialState,
+  MachineError,
   questionKey,
   SetupStateSchema,
   SetupStepSchema,
@@ -38,6 +39,7 @@ import {
   type StepDefaults,
   type StepDefaultsNpiUser,
 } from './machine';
+import type { RerunStep } from '../settings/types';
 import { parseAnswer, type ParseDeps } from './parse';
 import { buildPlan, describeStepAr, summarizePlanAr, type OnboardingPlan, type PlanSummaryAr } from './plan';
 import type { ProfilePack } from './profile.schema';
@@ -61,10 +63,14 @@ export interface OnboardingSessionRow {
  *  in-memory fake satisfies it in tests and the real client does too. */
 export interface SetupSessionDb {
   onboardingSession: {
-    findFirst(args: {
-      where: { npiOrgId: string; completedAt: null };
-      orderBy?: { startedAt: 'desc' };
-    }): Promise<OnboardingSessionRow | null>;
+    /** The real Prisma delegate accepts both shapes below (and more); this
+     *  file only ever asks for the one OPEN session (T-17) or, for
+     *  `reopenSetupAtStep` (T-19), the latest COMPLETED one. */
+    findFirst(
+      args:
+        | { where: { npiOrgId: string; completedAt: null }; orderBy?: { startedAt: 'desc' } }
+        | { where: { npiOrgId: string; completedAt: { not: null } }; orderBy: { completedAt: 'desc' } },
+    ): Promise<OnboardingSessionRow | null>;
     create(args: { data: { npiOrgId: string; npiUserId: string; stepsJson: unknown } }): Promise<OnboardingSessionRow>;
     update(args: {
       where: { id: string };
@@ -334,4 +340,67 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
     await saveState(deps, row.id, state, { completedAt: (deps.now ?? (() => new Date()))(), profileChosen: plan.profileKey });
   }
   return { result, summary: summarizePlanAr(plan, pack), persisted: mergedPersisted };
+}
+
+// ─── /settings: re-opening a step (T-19) ───────────────────────────────────
+
+export type RerunOutcome = 'open' | 'cloned' | 'fresh';
+
+/**
+ * Re-opens the organization's setup wizard at `step` (spec/madar/02 §7:
+ * "re-runnable per step from /settings"). Three outcomes:
+ *
+ *  - `'open'`    an unfinished session already exists; `goTo` is tried on it
+ *                (moving to an already-completed step, or back to the next
+ *                open one). A `goTo` the machine refuses (`MachineError`)
+ *                leaves the session exactly as it was — never cloned over,
+ *                since the administrator may be mid-setup right now.
+ *  - `'cloned'`  no open session, but the latest COMPLETED one has usable
+ *                answers (parses against `SetupStateSchema` and has chosen a
+ *                profile): a new open session is created at `step`, carrying
+ *                that session's answers verbatim and every other step
+ *                (1–6) marked complete, so saving the re-answered step alone
+ *                moves the wizard straight to step 7, the diff card.
+ *  - `'fresh'`   nothing to clone (no completed session, a stored state that
+ *                fails to parse, or one that never reached step 1). Nothing
+ *                is written; the wizard's own `GET /api/setup` creates a
+ *                fresh session on its own.
+ */
+export async function reopenSetupAtStep(deps: Pick<SetupDeps, 'db'>, caller: SetupCaller, step: RerunStep): Promise<RerunOutcome> {
+  requireAdmin(caller);
+
+  const open = await deps.db.onboardingSession.findFirst({
+    where: { npiOrgId: caller.npiOrgId, completedAt: null },
+    orderBy: { startedAt: 'desc' },
+  });
+  if (open) {
+    const state = parseStoredState(open.stepsJson);
+    try {
+      const next = goTo(state, step);
+      await deps.db.onboardingSession.update({ where: { id: open.id }, data: { stepsJson: next } });
+    } catch (err) {
+      if (!(err instanceof MachineError)) throw err;
+      // The move was refused — leave the open session untouched.
+    }
+    return 'open';
+  }
+
+  const completed = await deps.db.onboardingSession.findFirst({
+    where: { npiOrgId: caller.npiOrgId, completedAt: { not: null } },
+    orderBy: { completedAt: 'desc' },
+  });
+  if (!completed) return 'fresh';
+
+  const parsed = SetupStateSchema.safeParse(completed.stepsJson);
+  if (!parsed.success) return 'fresh';
+  if (parsed.data.answers.profileKey === undefined) return 'fresh';
+
+  await deps.db.onboardingSession.create({
+    data: {
+      npiOrgId: caller.npiOrgId,
+      npiUserId: caller.npiUserId,
+      stepsJson: { step, answers: parsed.data.answers, completedSteps: [1, 2, 3, 4, 5, 6] },
+    },
+  });
+  return 'cloned';
 }

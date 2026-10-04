@@ -673,8 +673,18 @@ function buildFakeSetupDb() {
 
   const db = {
     onboardingSession: {
-      async findFirst({ where }: { where: { npiOrgId: string; completedAt: null } }) {
-        return sessions.find((s) => s.npiOrgId === where.npiOrgId && s.completedAt === null) ?? null;
+      async findFirst({
+        where,
+      }: {
+        where: { npiOrgId: string; completedAt: null | { not: null } };
+      }) {
+        if (where.completedAt === null) {
+          return sessions.find((s) => s.npiOrgId === where.npiOrgId && s.completedAt === null) ?? null;
+        }
+        const matches = sessions
+          .filter((s) => s.npiOrgId === where.npiOrgId && s.completedAt !== null)
+          .sort((a, b) => (b.completedAt as Date).getTime() - (a.completedAt as Date).getTime());
+        return matches[0] ?? null;
       },
       async create({ data }: { data: { npiOrgId: string; npiUserId: string; stepsJson: unknown } }) {
         const row: OnboardingSessionRow = {
@@ -701,6 +711,14 @@ function buildFakeSetupDb() {
       },
     },
     firmConfig: {
+      async findUnique({ where }: { where: { npiOrgId: string } }) {
+        const existing = firmConfigs.get(where.npiOrgId);
+        if (!existing) return null;
+        return {
+          profileKey: (existing.profileKey as string | null | undefined) ?? null,
+          visibleModulesJson: existing.visibleModulesJson,
+        };
+      },
       async upsert({ where, create, update }: { where: { npiOrgId: string }; create: Record<string, unknown>; update: Record<string, unknown> }) {
         const existing = firmConfigs.get(where.npiOrgId);
         firmConfigs.set(where.npiOrgId, existing ? { ...existing, ...update } : { ...create });

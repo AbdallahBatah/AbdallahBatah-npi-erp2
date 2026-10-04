@@ -129,6 +129,24 @@ model OnboardingSession {
   @@map("onboarding_sessions")
 }
 
+// One manual baseline («الزمن اليدوي المرجعي») per (org, flow): the number
+// of minutes the owner measured with a stopwatch entering that flow's
+// document on NPI's own screens, entered once from /settings
+// (spec/madar/02 §5.9). T-19.
+model ManualBaseline {
+  id         String   @id @default(cuid())
+  npiOrgId   String
+  flowType   String
+  minutes    Int
+  measuredAt DateTime
+  npiUserId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([npiOrgId, flowType])
+  @@map("manual_baselines")
+}
+
 // ─── Auth guard ─────────────────────────────────────────────────────────
 
 model LoginAttempt {

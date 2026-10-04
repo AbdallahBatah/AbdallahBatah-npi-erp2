@@ -267,10 +267,11 @@ function ruleUpdateDto(step: ApprovalRuleStep, steps: { roleId: string }[]) {
  */
 export interface OnboardingDb {
   firmConfig: {
+    findUnique(args: { where: { npiOrgId: string } }): Promise<{ profileKey: string | null; visibleModulesJson: unknown } | null>;
     upsert(args: {
       where: { npiOrgId: string };
       create: FirmConfigWrite & { npiOrgId: string };
-      update: FirmConfigWrite;
+      update: FirmConfigUpdate;
     }): Promise<unknown>;
   };
   position: {
@@ -300,6 +301,14 @@ export interface FirmConfigWrite {
   npiApiGapsJson: NpiApiGapsJson;
   setupCompletedAt?: Date | null;
 }
+
+/** Same shape as `FirmConfigWrite`, but `visibleModulesJson` is optional —
+ *  the UPDATE branch of `persistCopilotConfig`'s upsert omits it on a
+ *  same-profile re-apply (see the comment there), so Prisma's own `update`
+ *  leaves that column exactly as `/settings` last set it. The CREATE branch
+ *  never omits it: a brand-new `firm_config` row has no module choice yet to
+ *  preserve. */
+export type FirmConfigUpdate = Omit<FirmConfigWrite, 'visibleModulesJson'> & { visibleModulesJson?: string[] };
 
 /** What `firm_config.npiApiGapsJson` holds: the gaps proper, plus the steps
  *  NPI refused or could not take in the last run, so `/settings` can offer
@@ -372,6 +381,11 @@ export function validateHolders(
   return { valid, skipped };
 }
 
+function withoutVisibleModules(write: FirmConfigWrite): FirmConfigUpdate {
+  const { visibleModulesJson: _visibleModulesJson, ...rest } = write;
+  return rest;
+}
+
 export async function persistCopilotConfig(
   db: OnboardingDb,
   args: { npiOrgId: string; plan: OnboardingPlan; result: ApplyResult; holders: PositionHolder[]; now?: () => Date },
@@ -394,11 +408,22 @@ export async function persistCopilotConfig(
     terminologyJson: { ...plan.copilot.terminology },
     npiApiGapsJson: gapsJson,
   };
+
+  // /settings (T-19) edits module visibility directly, never through the
+  // wizard. A re-run of the SAME profile from /settings ("rerun" a step,
+  // apply again) must not silently reset that choice back to the pack's own
+  // module list; a DIFFERENT profile has no promise to keep and resets it,
+  // same as every other wizard answer.
+  const existingConfig = await db.firmConfig.findUnique({ where: { npiOrgId } });
+  const keepModules =
+    existingConfig !== null && existingConfig.profileKey === plan.copilot.profileKey && Array.isArray(existingConfig.visibleModulesJson);
+  const updateWrite: FirmConfigUpdate = keepModules ? withoutVisibleModules(write) : write;
+
   await db.firmConfig.upsert({
     where: { npiOrgId },
     create: { npiOrgId, ...write, setupCompletedAt: result.completed ? now : null },
     // An incomplete re-run must not erase the completion of an earlier one.
-    update: result.completed ? { ...write, setupCompletedAt: now } : write,
+    update: result.completed ? { ...updateWrite, setupCompletedAt: now } : updateWrite,
   });
 
   let positionsWritten = 0;
