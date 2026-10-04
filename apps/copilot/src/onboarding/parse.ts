@@ -12,8 +12,8 @@ import { staticPrompt, type RedactedText } from '../privacy/pseudonymizer';
 import type { LlmContext } from '../llm/client';
 import type { ModelResponse, RedactedRequest } from '../llm/provider';
 import { normalizeArabic } from '../text/normalize';
-import { hasAnyPhrase, tokenIsWord, tokenize } from '../text/tokens';
-import { t } from '../i18n/ar';
+import { indicesOfPhrase, tokenIsWord, tokenize } from '../text/tokens';
+import { t, type ArKey } from '../i18n/ar';
 import { questionKey, stepDefaults, StepAnswerSchema, type SetupState, type SetupStep, type StepAnswer } from './machine';
 import type { ProfileKey, ProfilePack } from './profile.schema';
 
@@ -34,6 +34,8 @@ export type ParseOutcome =
   | { kind: 'unclear'; messageAr: string };
 
 const PROMPT_FILE = 'setup-parse.md';
+/** U+27E6, the opening bracket of every pseudonymizer token (`src/privacy/pseudonymizer.ts`). */
+const REDACTION_TOKEN_OPEN = '⟦';
 const DEPARTMENT_CODE_RE = /^[A-Z][A-Z0-9_-]{1,19}$/;
 
 // ─── Digit normalization (kept separate from normalizeArabic: that function
@@ -76,6 +78,9 @@ const ACCEPT_FILLER = norm(['كما', 'هو', 'هي', 'زي', 'مثل', 'ما', 
 /** Words that say "nothing to change" (steps 4 and 6). */
 const NOTHING_WORDS = norm(['لا', 'ما', 'مافي', 'بدون', 'ولا', 'ابدا', 'ليس', 'مو', 'مش']);
 const NOTHING_FILLER = norm(['في', 'فيه', 'عندنا', 'عندي', 'لدينا', 'شي', 'شيء', 'خاص', 'خاصة', 'مصطلحات', 'مصطلح', 'تغيير', 'تغييرات', 'نغير', 'اضافة', 'اضافات', 'ملاحظات', 'شكرا', 'حاليا', 'الان', 'مستندات', 'اخرى', 'ثاني', 'ثانية', 'زيادة', 'نفس', 'المعتادة', 'المعتاد', 'كما', 'هي', 'هو']);
+/** Words that turn several named profiles into an open question («بين»,
+ *  «أو», «محتار», «ما أدري»); with one of these present the model decides. */
+const HEDGE_WORDS = norm(['بين', 'او', 'ولا', 'يمكن', 'ممكن', 'محتار', 'محتارين', 'متاكد', 'متاكدين', 'ادري', 'اعرف', 'نعرف', 'ندري']);
 /** Negation words that can flip a named profile at step 1. */
 const NEGATION_WORDS = norm(['لا', 'ما', 'مو', 'مش', 'ليس', 'غير', 'ابدا', 'لسنا']);
 
@@ -106,13 +111,34 @@ const PROFILE_PHRASES: [ProfileKey, string[]][] = PROFILE_PHRASES_RAW.map(
   ([key, phrases]): [ProfileKey, string[]] => [key, phrases.map(normalizeArabic)],
 );
 
-/** The one profile the sentence names — `null` when none, when two are
- *  named, or when a negation word is present (the model decides then). */
-function matchProfileKey(tokens: readonly string[]): ProfileKey | null {
-  const named = PROFILE_PHRASES.filter(([, phrases]) => hasAnyPhrase(tokens, phrases)).map(([key]) => key);
-  if (named.length !== 1) return null;
-  if (tokens.some((token) => isOneOf(token, NEGATION_WORDS))) return null;
-  return named[0];
+/**
+ * The profiles the sentence names, in order of first mention — `[]` when
+ * none, or when a negation word is present (the model decides then: «لا نسوي
+ * EPC، إحنا استشارات» names two but means one).
+ *
+ * Several profiles without negation is the common «شركة طاقة شمسية تعمل EPC
+ * وتشغيل وصيانة» (09 §2.2): the first-named activity is taken as the
+ * profile and every named activity becomes a revenue line, so the sentence
+ * never has to reach the model — which matters because the pseudonymizer
+ * redacts a span that starts with a legal-form word («شركة …») wholesale,
+ * and the model would only see «⟦جهة_1⟧ وتشغيل وصيانة» (reviewer probe,
+ * T-18). The administrator can still change the pick on the step-1 card.
+ */
+function matchProfileKeys(tokens: readonly string[]): ProfileKey[] {
+  if (tokens.some((token) => isOneOf(token, NEGATION_WORDS))) return [];
+  // «إحنا بين EPC والمقاولات العامة», «EPC أو تشغيل وصيانة؟»: several names
+  // under a hedge is an open question, not a list of activities — the model
+  // reads it (T-17 reviewer probe, kept).
+  const hedged = tokens.some((token) => isOneOf(token, HEDGE_WORDS));
+  const firstIndex = (phrases: readonly string[]): number => {
+    const indices = phrases.flatMap((phrase) => indicesOfPhrase(tokens, phrase));
+    return indices.length === 0 ? -1 : Math.min(...indices);
+  };
+  const named = PROFILE_PHRASES.map(([key, phrases]) => [key, firstIndex(phrases)] as const)
+    .filter(([, index]) => index !== -1)
+    .sort((a, b) => a[1] - b[1])
+    .map(([key]) => key);
+  return named.length > 1 && hedged ? [] : named;
 }
 
 /** The "accept the proposed default" answer for a step that has a single
@@ -145,8 +171,11 @@ function defaultAnswerFor(step: SetupStep, pack: ProfilePack): StepAnswer | null
 
 function tryDeterministic(step: SetupStep, pack: ProfilePack | null, tokens: readonly string[]): StepAnswer | null {
   if (step === 1) {
-    const profileKey = matchProfileKey(tokens);
-    if (profileKey) return { step: 1, profileKey };
+    const named = matchProfileKeys(tokens);
+    if (named.length === 1) return { step: 1, profileKey: named[0] };
+    if (named.length > 1) {
+      return { step: 1, profileKey: named[0], revenueLines: named.map((key) => t(`profile.${key}` as ArKey)) };
+    }
   }
 
   if (pack === null) return null;
@@ -232,6 +261,12 @@ async function callModel(deps: ParseDeps, input: ParseInput, ctx: LlmContext, ou
 
   const parsedJson = tryParseJson(response.text);
   if (parsedJson === undefined) return { kind: 'unclear', messageAr: t('setup.unclear') };
+  // A redaction placeholder (⟦جهة_1⟧, ⟦موظف_2⟧ …) copied into a department
+  // name, a revenue line or a term would be stored as that literal text —
+  // the model saw a token, never the name, so it has nothing to say about
+  // it (reviewer probe, T-18: the model once answered step 1 with
+  // `revenueLines: ["⟦جهة_1⟧", …]`).
+  if (JSON.stringify(parsedJson).includes(REDACTION_TOKEN_OPEN)) return { kind: 'unclear', messageAr: t('setup.unclear') };
 
   const withStep =
     typeof parsedJson === 'object' && parsedJson !== null && !Array.isArray(parsedJson)

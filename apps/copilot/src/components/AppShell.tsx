@@ -3,7 +3,7 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ExternalLink, Home, Settings, Shield, BarChart3, BookUser, LogOut } from 'lucide-react';
+import { ExternalLink, Home, ClipboardList, Settings, Shield, BarChart3, BookUser, LogOut } from 'lucide-react';
 import { t, type ArKey } from '@/i18n/ar';
 import { npiWebUrl } from '@/npi/web-url';
 
@@ -20,8 +20,10 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/', key: 'nav.home', Icon: Home, adminOnly: false, ready: true },
-  // Settings arrives with T-19, handover with T-30, trust with T-33 and
-  // metrics with T-35: each flips its flag in the task that builds it.
+  // Setup arrived with T-18. Settings arrives with T-19, handover with T-30,
+  // trust with T-33 and metrics with T-35: each flips its flag in the task
+  // that builds it.
+  { href: '/setup', key: 'nav.setup', Icon: ClipboardList, adminOnly: true, ready: true },
   { href: '/settings', key: 'nav.settings', Icon: Settings, adminOnly: true, ready: false },
   { href: '/trust', key: 'nav.trust', Icon: Shield, adminOnly: true, ready: false },
   { href: '/metrics', key: 'nav.metrics', Icon: BarChart3, adminOnly: true, ready: false },

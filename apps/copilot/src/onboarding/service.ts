@@ -39,7 +39,7 @@ import {
   type StepDefaultsNpiUser,
 } from './machine';
 import { parseAnswer, type ParseDeps } from './parse';
-import { buildPlan, summarizePlanAr, type OnboardingPlan, type PlanSummaryAr } from './plan';
+import { buildPlan, describeStepAr, summarizePlanAr, type OnboardingPlan, type PlanSummaryAr } from './plan';
 import type { ProfilePack } from './profile.schema';
 import { t } from '../i18n/ar';
 import { readDirectoryUsers } from '../npi/admin';
@@ -152,6 +152,10 @@ export interface SetupPreviewResult {
    *  itself when the catalog could not be read. The screens render this
    *  instead of raw keys. */
   permissionLabels: Record<string, string>;
+  /** Arabic name of every plan step by its stable id (`describeStepAr`), so
+   *  the apply result — which reports outcomes per step id — can be shown in
+   *  Arabic without the screen rebuilding the plan's wording. */
+  stepTitlesAr: Record<string, string>;
 }
 
 export interface SetupApplyResult {
@@ -300,7 +304,15 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
 
   if (body.action === 'preview') {
     const plan = await dryRun({ npi: deps.npi }, pack, answers, planCaller);
-    return { plan: withoutPermissionLabel(plan), summary: summarizePlanAr(plan, pack), permissionLabels: buildPermissionLabels(plan) };
+    const roleNameAr = (key: string) => pack.rolePermissionSets[key]?.nameAr ?? key;
+    const stepTitlesAr: Record<string, string> = {};
+    for (const step of plan.steps) stepTitlesAr[step.id] = describeStepAr(step, roleNameAr);
+    return {
+      plan: withoutPermissionLabel(plan),
+      summary: summarizePlanAr(plan, pack),
+      permissionLabels: buildPermissionLabels(plan),
+      stepTitlesAr,
+    };
   }
 
   // 'apply': re-reads NPI and rebuilds the plan rather than trusting a plan

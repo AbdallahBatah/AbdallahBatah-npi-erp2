@@ -588,7 +588,10 @@ export interface PlanSummaryAr {
   gaps: string[];
 }
 
-function describeStepAr(step: PlanStep, roleNameAr: (key: string) => string): string {
+/** One Arabic line naming a plan step (what it is, not what happens to it).
+ *  Exported for the setup screens, which show the apply result per step id
+ *  (T-18) — the summary lines below are built from the same text. */
+export function describeStepAr(step: PlanStep, roleNameAr: (key: string) => string): string {
   switch (step.kind) {
     case 'department':
       return `القسم «${step.nameAr}» (${step.code})`;

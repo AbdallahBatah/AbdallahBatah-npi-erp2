@@ -1026,3 +1026,70 @@ describe('parseAnswer — a matching word inside a longer sentence is not enough
     expect(outcome).toMatchObject({ kind: 'answer', source: 'deterministic', answer: { step } });
   });
 });
+
+// ─── T-18 reviewer probes of the parser ─────────────────────────────────────
+// Real sentences from the owner's acceptance scenario (09 §2.2) and from the
+// live run of the setup screen against the local NPI.
+describe('parseAnswer — several profiles named, placeholders in model output (T-18 probe)', () => {
+  const ctx = { npiOrgId: 'org1', npiUserId: 'u1' } as unknown as Parameters<typeof parseAnswer>[2];
+  function deps(reply: string) {
+    const calls: string[] = [];
+    const llm: ParseDeps['llm'] = {
+      async complete(req) {
+        calls.push(String(req.messages[0].content));
+        return { text: reply, tokensIn: 1, tokensOut: 1 } as unknown as Awaited<ReturnType<ParseDeps['llm']['complete']>>;
+      },
+    };
+    return { calls, deps: { llm, pseudonymizer: { redact: (s: string) => s } } };
+  }
+  const fresh = (): SetupState => initialState();
+
+  it('09 §2.2: «شركة طاقة شمسية تعمل EPC وتشغيل وصيانة» → EPC first, both activities as revenue lines, no model call', async () => {
+    const { calls, deps: d } = deps('{}');
+    const out = await parseAnswer(d, { step: 1, text: 'شركة طاقة شمسية تعمل EPC وتشغيل وصيانة', pack: null, current: fresh() }, ctx);
+    expect(out).toEqual({
+      kind: 'answer',
+      source: 'deterministic',
+      answer: { step: 1, profileKey: 'epc', revenueLines: [t('profile.epc'), t('profile.om_provider')] },
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('the first-named activity wins: «إحنا تشغيل وصيانة وأحياناً نسوي EPC» → om_provider', async () => {
+    const { deps: d } = deps('{}');
+    const out = await parseAnswer(d, { step: 1, text: 'إحنا تشغيل وصيانة وأحياناً نسوي EPC', pack: null, current: fresh() }, ctx);
+    expect(out).toMatchObject({ kind: 'answer', source: 'deterministic', answer: { step: 1, profileKey: 'om_provider' } });
+  });
+
+  it('a negation still sends two named profiles to the model: «لا نسوي EPC، إحنا استشارات هندسية»', async () => {
+    const { calls, deps: d } = deps('{"step":1,"profileKey":"engineering_consulting"}');
+    const out = await parseAnswer(d, { step: 1, text: 'لا نسوي EPC، إحنا استشارات هندسية', pack: null, current: fresh() }, ctx);
+    expect(calls).toHaveLength(1);
+    expect(out).toMatchObject({ kind: 'answer', source: 'model', answer: { step: 1, profileKey: 'engineering_consulting' } });
+  });
+
+  it('model output that copies a redaction placeholder into a value is refused as unclear', async () => {
+    const { deps: d } = deps('```json\n{"step":1,"profileKey":"om_provider","revenueLines":["⟦جهة_1⟧","تشغيل وصيانة"]}\n```');
+    const out = await parseAnswer(d, { step: 1, text: 'كلام يحتاج النموذج هنا', pack: null, current: fresh() }, ctx);
+    expect(out).toEqual({ kind: 'unclear', messageAr: t('setup.unclear') });
+  });
+});
+
+describe('parseAnswer — hedged multi-profile sentences still reach the model (T-18 probe)', () => {
+  const ctx = { npiOrgId: 'org1', npiUserId: 'u1' } as unknown as Parameters<typeof parseAnswer>[2];
+  it.each(['EPC أو تشغيل وصيانة؟', 'محتارين بين تجارة المعدات والاستشارات الهندسية', 'ما أدري إذا نعتبر مقاولات عامة أو EPC'])(
+    '«%s» goes to the model',
+    async (text) => {
+      let calls = 0;
+      const llm: ParseDeps['llm'] = {
+        async complete() {
+          calls += 1;
+          return { text: '{"step":1,"profileKey":"epc"}', tokensIn: 1, tokensOut: 1 } as unknown as Awaited<ReturnType<ParseDeps['llm']['complete']>>;
+        },
+      };
+      const out = await parseAnswer({ llm, pseudonymizer: { redact: (s: string) => s } }, { step: 1, text, pack: null, current: initialState() }, ctx);
+      expect(calls).toBe(1);
+      expect(out).toMatchObject({ kind: 'answer', source: 'model' });
+    },
+  );
+});

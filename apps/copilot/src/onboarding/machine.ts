@@ -115,6 +115,9 @@ export interface Step2Defaults {
 export interface Step3Defaults {
   step: 3;
   approvalRules: ProfilePack['approvalRuleDefaults'];
+  /** Arabic display name of every role the pack declares, so the screen can
+   *  name a chain's roles instead of showing their keys (T-18). */
+  roleNamesAr: Record<string, string>;
 }
 export interface Step4Defaults {
   step: 4;
@@ -166,8 +169,11 @@ export function stepDefaults(step: SetupStep, pack: ProfilePack | null, context:
       }));
       return { step: 2, departments: pack.defaultDepartments, positions };
     }
-    case 3:
-      return { step: 3, approvalRules: pack.approvalRuleDefaults };
+    case 3: {
+      const roleNamesAr: Record<string, string> = {};
+      for (const [roleKey, roleSet] of Object.entries(pack.rolePermissionSets)) roleNamesAr[roleKey] = roleSet.nameAr;
+      return { step: 3, approvalRules: pack.approvalRuleDefaults, roleNamesAr };
+    }
     case 4:
       return { step: 4, acceptedDocTypes: pack.acceptedDocTypes };
     case 5:
