@@ -24,6 +24,9 @@ packages/db/prisma/migrations/dev.db*
 # Copilot's own Prisma client output (custom generator path, never committed)
 apps/copilot/src/generated/
 
+# Copilot document store (COPILOT_DOCS_DIR default, spec/madar/02 §11)
+apps/copilot/data/
+
 # Playwright output of the copilot e2e runs
 apps/copilot/test-results/
 apps/copilot/playwright-report/

@@ -137,6 +137,10 @@ export const ar = {
   'setup.title': 'لنهيّئ مَدار لمنشأتك',
 
   'document.error.unreadable': 'تعذر قراءة المستند؛ جرّب صورة أوضح',
+  'document.error.too_large': 'حجم الملف يتجاوز الحد المسموح (10 ميجابايت).',
+  'document.error.unsupported': 'صيغة الملف غير مدعومة؛ أرفق مستند «بي دي إف» أو صورة.',
+  'document.error.empty': 'الملف فارغ.',
+  'document.error.encrypted': 'المستند محمي بكلمة مرور؛ أزل الحماية ثم أعد الإرفاق.',
   'setup.loading': 'أفهم إجابتك…',
   'setup.error.apply': 'تعذر تطبيق الإعداد في NPI: {reason}',
   'setup.unclear': 'لم أفهم الإجابة؛ اكتبها بصيغة أخرى أو اختر من المقترح.',
