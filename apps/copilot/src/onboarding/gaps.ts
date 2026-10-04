@@ -6,10 +6,13 @@
 //
 //  - A **gap** is something a profile pack asks for that NPI's admin API has
 //    no way to accept today. It is recorded in `firm_config.npiApiGapsJson`
-//    and shown under «لا تتيحه واجهة NPI حالياً». The only computed gap so far
-//    is a permission key a pack names that NPI's live catalog does not serve;
-//    the role is still created with the keys NPI does serve, and the missing
-//    key is listed.
+//    and shown under «لا تتيحه واجهة NPI حالياً». Two kinds exist: a
+//    permission key a pack names that NPI's live catalog does not serve (the
+//    role is still created with the keys NPI does serve, and the missing key
+//    is listed), and the standing gap every plan carries — workflow
+//    definitions, which NPI accepts only from its seed (spec/madar/01 B-02,
+//    ADR-30 "workflow definitions remain seed-only", AT-11 expects the line
+//    «تعريفات التدفقات» in every setup's gaps list).
 //  - A **blocked** step is something NPI *can* do but will refuse right now
 //    for this caller or this organization's current data (the caller lacks the
 //    permission, a role in a chain has no active user, a band overlaps an
@@ -23,18 +26,35 @@ import type { NpiPermissionMeta } from '../npi/permissions';
 
 // ─── Gaps ───────────────────────────────────────────────────────────────────
 
-export type NpiApiGap = {
-  kind: 'permission_unknown';
-  roleKey: string;
-  permission: string;
-};
+export type NpiApiGap =
+  | {
+      kind: 'permission_unknown';
+      roleKey: string;
+      permission: string;
+    }
+  | {
+      /** Present in every plan: NPI's workflow definitions (states and
+       *  transitions behind the approval inbox) have no admin endpoint and
+       *  are loaded by NPI's seed only — the setup leaves them as they are. */
+      kind: 'workflow_definitions';
+    };
 
-/** Arabic line for one gap. Visible in the setup UI (T-18); no Latin except
- *  NPI itself and the raw permission key, which is a code. */
+/** The one gap every plan carries (see `NpiApiGap['workflow_definitions']`). */
+export const WORKFLOW_DEFINITIONS_GAP: NpiApiGap = { kind: 'workflow_definitions' };
+
+/** Arabic line of the standing gap; AT-11 looks for «تعريفات التدفقات». */
+export const WORKFLOW_DEFINITIONS_GAP_AR =
+  'تعريفات التدفقات (حالات الاعتماد وانتقالاتها) لا تتيحها واجهة NPI حالياً وتُضبط من بذرة NPI فقط؛ تبقى التدفقات القائمة كما هي.';
+
+/** Arabic line for one gap. Visible in the setup UI (T-18) and the settings
+ *  screen (T-19); no Latin except NPI itself and the raw permission key,
+ *  which is a code. `roleNameAr` is used by the permission gap only. */
 export function describeGapAr(gap: NpiApiGap, roleNameAr: string): string {
   switch (gap.kind) {
     case 'permission_unknown':
       return `الصلاحية «${gap.permission}» المطلوبة للدور «${roleNameAr}» لا تتيحها واجهة NPI حالياً، فلن تُمنح.`;
+    case 'workflow_definitions':
+      return WORKFLOW_DEFINITIONS_GAP_AR;
   }
 }
 

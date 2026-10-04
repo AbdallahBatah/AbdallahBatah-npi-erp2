@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import type { RerunStep, SettingsConfig, SettingsLastApply, SettingsLeftover } from '@/settings/types';
+import { describeGapAr } from '@/onboarding/gaps';
 import { FLOW_REQUIRED_MODULE, type ModuleKey, type TermKey } from '@/onboarding/profile.schema';
 
 // ─── Profile ────────────────────────────────────────────────────────────────
@@ -120,14 +121,18 @@ function GapsSection({ gaps }: { gaps: SettingsLastApply['gaps'] }) {
     <div className="flex flex-col gap-1">
       <h4 className="text-sm font-bold text-slate-900">{t('settings.last_apply.gaps')}</h4>
       <ul className="list-inside list-disc text-sm text-info-700">
-        {gaps.map((gap, i) => (
-          <li key={i}>
-            <code dir="ltr" className="text-xs text-slate-500">
-              {gap.permission}
-            </code>{' '}
-            — {gap.roleKey}
-          </li>
-        ))}
+        {gaps.map((gap, i) =>
+          gap.kind === 'workflow_definitions' ? (
+            <li key={i}>{describeGapAr(gap, '')}</li>
+          ) : (
+            <li key={i}>
+              <code dir="ltr" className="text-xs text-slate-500">
+                {gap.permission}
+              </code>{' '}
+              — {gap.roleKey}
+            </li>
+          ),
+        )}
       </ul>
     </div>
   );

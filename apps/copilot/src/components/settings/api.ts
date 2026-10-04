@@ -68,12 +68,9 @@ function isSettingsLeftover(value: unknown): value is SettingsLeftover {
 }
 
 function isNpiApiGap(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    value.kind === 'permission_unknown' &&
-    typeof value.roleKey === 'string' &&
-    typeof value.permission === 'string'
-  );
+  if (!isRecord(value)) return false;
+  if (value.kind === 'workflow_definitions') return true;
+  return value.kind === 'permission_unknown' && typeof value.roleKey === 'string' && typeof value.permission === 'string';
 }
 
 function isSettingsLastApply(value: unknown): value is SettingsLastApply {

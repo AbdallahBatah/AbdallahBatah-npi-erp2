@@ -39,6 +39,10 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: 'list',
+  // `e2e/setup-live.spec.ts` (T-20) writes real data into a live NPI
+  // organization and is never part of the default run — only
+  // `npm run e2e:live-setup` (COPILOT_LIVE=1) executes it.
+  grepInvert: process.env.COPILOT_LIVE ? undefined : /@live/,
   use: {
     baseURL: COPILOT_BASE,
   },

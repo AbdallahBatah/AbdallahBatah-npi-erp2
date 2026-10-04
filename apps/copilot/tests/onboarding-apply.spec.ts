@@ -12,7 +12,7 @@ import {
   type OnboardingDb,
   type OnboardingNpi,
 } from '../src/onboarding/apply';
-import { describeBlockedAr } from '../src/onboarding/gaps';
+import { describeBlockedAr, WORKFLOW_DEFINITIONS_GAP, WORKFLOW_DEFINITIONS_GAP_AR } from '../src/onboarding/gaps';
 import { buildPlan, effectivePack, PlanError, summarizePlanAr, type SetupAnswers } from '../src/onboarding/plan';
 import type { ProfilePack } from '../src/onboarding/profile.schema';
 import { readApprovalRules, readRoles, type NpiDirectoryUser } from '../src/npi/admin';
@@ -332,7 +332,8 @@ describe('buildPlan / dryRun — fresh organization', () => {
     expect(describeBlockedAr(pr.blocked!)).toContain('«مدير المشاريع» ليس له مستخدم نشط في NPI');
 
     expect(plan.counts).toEqual({ create: 13, update: 0, skip: 1, blocked: 3 });
-    expect(plan.gaps).toEqual([]);
+    // The standing gap is the only one on a pack whose keys NPI all serves.
+    expect(plan.gaps).toEqual([WORKFLOW_DEFINITIONS_GAP]);
     expect(npi.writeCalls()).toEqual([]);
   });
 
@@ -537,7 +538,7 @@ describe('gaps — a permission NPI does not serve', () => {
       },
     };
     const plan = await dryRun({ npi }, custom, answersOnly(), adminCaller);
-    expect(plan.gaps).toEqual([{ kind: 'permission_unknown', roleKey: 'pm', permission: 'projects.cost.approve' }]);
+    expect(plan.gaps).toEqual([WORKFLOW_DEFINITIONS_GAP, { kind: 'permission_unknown', roleKey: 'pm', permission: 'projects.cost.approve' }]);
     const step = byId(plan, 'role:pm');
     expect(step.kind === 'role' && step.permissions).not.toContain('projects.cost.approve');
 
@@ -545,7 +546,10 @@ describe('gaps — a permission NPI does not serve', () => {
     expect(result.steps.find((s) => s.stepId === 'role:pm')!.outcome).toBe('created');
     expect(result.gaps).toEqual(plan.gaps);
     const summary = summarizePlanAr(plan, custom);
-    expect(summary.gaps).toEqual(['الصلاحية «projects.cost.approve» المطلوبة للدور «مدير المشاريع» لا تتيحها واجهة NPI حالياً، فلن تُمنح.']);
+    expect(summary.gaps).toEqual([
+      WORKFLOW_DEFINITIONS_GAP_AR,
+      'الصلاحية «projects.cost.approve» المطلوبة للدور «مدير المشاريع» لا تتيحها واجهة NPI حالياً، فلن تُمنح.',
+    ]);
   });
 });
 
@@ -756,7 +760,7 @@ describe('persistCopilotConfig', () => {
     });
     expect((cfg.acceptedDocTypesJson as unknown[]).length).toBe(5);
     const gaps = cfg.npiApiGapsJson as { gaps: unknown[]; blocked: { stepId: string }[]; failed: unknown[]; appliedAt: string };
-    expect(gaps.gaps).toEqual([]);
+    expect(gaps.gaps).toEqual([WORKFLOW_DEFINITIONS_GAP]);
     expect(gaps.blocked.map((b) => b.stepId)).toEqual([
       'approval_rule:PURCHASE_REQUISITION:10000',
       'approval_rule:PURCHASE_ORDER:100000',
@@ -947,7 +951,9 @@ describe('summarizePlanAr', () => {
     );
     expect(s.copilot[0]).toBe('الوحدات الظاهرة: العملاء والفرص، العروض والعقود، المشاريع، المشتريات والمخزون، المالية');
     expect(s.copilot[1]).toContain('عقد EPC');
-    expect(s.gaps).toEqual([]);
+    // AT-11: the gaps list always names workflow definitions.
+    expect(s.gaps).toEqual([WORKFLOW_DEFINITIONS_GAP_AR]);
+    expect(s.gaps[0]).toContain('تعريفات التدفقات');
 
     // No Latin text beyond codes (department codes, SKUs) and the NPI/EPC tokens.
     const lines = [...s.npi, ...s.already, ...s.copilot, ...s.blocked];

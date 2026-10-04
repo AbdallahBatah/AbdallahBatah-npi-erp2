@@ -659,6 +659,30 @@ describe('prompts/setup-parse.md', () => {
     }
     expect(content).toContain('JSON');
     expect(content).toContain('لا تخترع');
+    // T-20: keys are taken verbatim from the closed lists in the hint.
+    expect(content).toContain('camelCase');
+    expect(content).toContain('ppa_operator');
+  });
+
+  it('the step-1 hint lists every profile key with its Arabic title, and the step-6 hint every term key', async () => {
+    const seen: string[] = [];
+    const llm = {
+      async complete(req: { system: unknown }) {
+        seen.push(String(req.system));
+        return { text: '{"profileKey":"om_provider"}', model: 'fake', inputTokens: 0, outputTokens: 0, latencyMs: 0 } as never;
+      },
+    };
+    const deps: ParseDeps = { llm: llm as never, pseudonymizer: { redact: (x) => x } };
+    await parseAnswer(deps, { step: 1, text: 'نبيع الكهرباء للعميل بعقد طويل', pack: null, current: initialState() }, { npiOrgId: 'o', npiUserId: 'u' } as never);
+    for (const key of ['epc', 'om_provider', 'ppa_operator', 'general_contracting', 'equipment_trading', 'engineering_consulting']) {
+      expect(seen[0]).toContain(`"${key}"`);
+      expect(seen[0]).toContain(t(`profile.${key}` as never));
+    }
+    // The parser reads only `pack` and the step's defaults for the hint, not the step order.
+    const state = applyAnswer(initialState(), 1, { step: 1, profileKey: 'epc' });
+    await parseAnswer(deps, { step: 6, text: 'نسمي أمر الشراء طلبية', pack: loadProfilePack('epc'), current: state }, { npiOrgId: 'o', npiUserId: 'u' } as never);
+    expect(seen[1]).toContain('"purchase_order"');
+    expect(seen[1]).toContain('"vendor_bill"');
   });
 });
 
@@ -1007,6 +1031,8 @@ describe('parseAnswer — a matching word inside a longer sentence is not enough
   it.each([
     [1, 'لا نسوي EPC أبداً، إحنا استشارات'],
     [1, 'إحنا بين EPC والمقاولات العامة'],
+    // A bare «غير» still negates.
+    [1, 'غير EPC، إحنا تشغيل وصيانة'],
     [2, 'موافق بس أضف قسم الجودة'],
     [3, 'نعمل بالافتراضي لكن ارفع سقف طلب الشراء'],
     [3, 'خلّ أمر الشراء من 50 ألف'],
@@ -1023,6 +1049,10 @@ describe('parseAnswer — a matching word inside a longer sentence is not enough
     [1, 'شركة تشغيل وصيانة لمحطات شمسية', 'om_provider'],
     [1, 'نبيع الطاقة باتفاقيات PPA ونؤجر الأنظمة', 'ppa_operator'],
     [1, 'مكتب استشارات هندسية', 'engineering_consulting'],
+    // T-20 live run: «للغير» ("for third parties") is the noun with its
+    // article, not the negation «غير» — the eval sample must stay deterministic.
+    [1, 'نشتغل تشغيل وصيانة لمحطات الطاقة الشمسية للغير', 'om_provider'],
+    [1, 'صيانة وتشغيل وصيانة محطات لصالح الغير', 'om_provider'],
   ] as const)('step 1 «%s» is read deterministically as %s', async (step, text, profileKey) => {
     const { outcome, modelCalls } = await run(step, text);
     expect(modelCalls).toBe(0);

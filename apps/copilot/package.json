@@ -12,6 +12,7 @@
     "migrate": "dotenv -e ../../.env -- prisma migrate deploy",
     "test": "jest",
     "e2e": "playwright test",
+    "e2e:live-setup": "dotenv -v COPILOT_LIVE=1 -- playwright test --grep @live-setup --project desktop",
     "prebuild": "prisma generate",
     "pretypecheck": "prisma generate",
     "pretest": "prisma generate",

@@ -15,7 +15,7 @@ import { normalizeArabic } from '../text/normalize';
 import { indicesOfPhrase, tokenIsWord, tokenize } from '../text/tokens';
 import { t, type ArKey } from '../i18n/ar';
 import { questionKey, stepDefaults, StepAnswerSchema, type SetupState, type SetupStep, type StepAnswer } from './machine';
-import type { ProfileKey, ProfilePack } from './profile.schema';
+import { PROFILE_KEYS, TERM_KEYS, type ProfileKey, type ProfilePack } from './profile.schema';
 
 export interface ParseDeps {
   llm: { complete(req: RedactedRequest, ctx: LlmContext): Promise<ModelResponse> };
@@ -124,8 +124,23 @@ const PROFILE_PHRASES: [ProfileKey, string[]][] = PROFILE_PHRASES_RAW.map(
  * and the model would only see «⟦جهة_1⟧ وتشغيل وصيانة» (reviewer probe,
  * T-18). The administrator can still change the pick on the step-1 card.
  */
+/**
+ * A negation word, as a whole word. «غير» negates only when bare («غير
+ * EPC»); with the definite article it is the noun "others" («للغير»,
+ * «لصالح الغير» — doing O&M *for third parties*), which the particle peeling
+ * would otherwise reduce to the negation «غير» (T-20 live run: the
+ * om_provider sample «… لمحطات الطاقة الشمسية للغير» went to the model).
+ */
+function isNegationToken(token: string): boolean {
+  // «الغير», and «للغير» where the article's alef is elided after the
+  // preposition ل (written لل‍, not لال‍).
+  if (DEFINITE_GHAYR_ENDINGS.some((ending) => token.endsWith(ending))) return false;
+  return isOneOf(token, NEGATION_WORDS);
+}
+const DEFINITE_GHAYR_ENDINGS = norm(['الغير', 'للغير']);
+
 function matchProfileKeys(tokens: readonly string[]): ProfileKey[] {
-  if (tokens.some((token) => isOneOf(token, NEGATION_WORDS))) return [];
+  if (tokens.some(isNegationToken)) return [];
   // «إحنا بين EPC والمقاولات العامة», «EPC أو تشغيل وصيانة؟»: several names
   // under a hedge is an open question, not a list of activities — the model
   // reads it (T-17 reviewer probe, kept).
@@ -195,10 +210,42 @@ function tryDeterministic(step: SetupStep, pack: ProfilePack | null, tokens: rea
 
 // ─── Model path ─────────────────────────────────────────────────────────────
 
+/**
+ * One Arabic line per profile for the model's step-1 hint: what the firm
+ * does, in words an owner uses — the title alone («مشغّل بيع طاقة/تأجير»)
+ * was not enough for the model to tell a PPA operator from an EPC
+ * contractor (T-20 live run: «نبني المحطة على حسابنا ونبيع الكهرباء
+ * للعميل بعقد طويل الأجل» came back `epc`).
+ */
+const PROFILE_GLOSS_AR: Record<ProfileKey, string> = {
+  epc: 'يصمم ويورد ويركب محطات يملكها العميل، ويُسلّمها له',
+  om_provider: 'يشغّل ويصون محطات يملكها غيره بعقود خدمة وقطع غيار',
+  ppa_operator: 'يملك المحطة على حسابه ويبيع الكهرباء أو يؤجّر النظام بعقود طويلة الأجل',
+  general_contracting: 'مقاولات بناء وتشييد وبنية تحتية ومستخلصات',
+  equipment_trading: 'يستورد المعدات والأصناف ويبيعها للمقاولين والموزعين دون تركيب',
+  engineering_consulting: 'تصاميم ودراسات وإشراف على التنفيذ بأجر، بلا توريد ولا تركيب',
+};
+
+/** `"key": العنوان — الوصف`, one line per profile, for the step-1 hint. */
+function profileKeyListAr(): string {
+  return PROFILE_KEYS.map((key) => `  "${key}": ${t(`profile.${key}` as ArKey)} — ${PROFILE_GLOSS_AR[key]}`).join('\n');
+}
+
+/**
+ * The JSON shape the model must return for `step`, plus — for the two steps
+ * whose keys the model invented on the T-20 live run (`profileKey:
+ * "solar_operations_maintenance"`, `terminology.purchaseOrder`) — the closed
+ * list of English keys it may use, so the shape can be validated strictly
+ * by `StepAnswerSchema` without the model ever having to guess a key.
+ */
 function schemaHintFor(step: SetupStep): string {
   switch (step) {
     case 1:
-      return '{"step":1,"profileKey":"epc","revenueLines":["..."]}';
+      return [
+        '{"step":1,"profileKey":"<one of the keys below>","revenueLines":["..."]}',
+        'قيم profileKey المسموحة (اختر مفتاحاً واحداً منها حرفياً، ولا تخترع غيرها):',
+        profileKeyListAr(),
+      ].join('\n');
     case 2:
       return '{"step":2,"departments":[{"code":"SALES","nameAr":"...","nameEn":"..."}],"positions":[{"roleKey":"sales","departmentCode":"SALES","titleAr":"...","personaAr":"..."}]}';
     case 3:
@@ -208,7 +255,10 @@ function schemaHintFor(step: SetupStep): string {
     case 5:
       return '{"step":5,"items":[{"sku":"MOD-600","nameAr":"...","nameEn":"...","itemCategory":"MODULE","uom":"unit","isSerialised":true}]}';
     case 6:
-      return '{"step":6,"terminology":{"vendor":"..."}}';
+      return [
+        '{"step":6,"terminology":{"vendor":"..."}}',
+        `مفاتيح terminology المسموحة (حرفياً، بهذه الصيغة، ولا تضف مفتاحاً لم يذكره المستخدم): ${TERM_KEYS.map((k) => `"${k}"`).join('، ')}`,
+      ].join('\n');
     case 7:
       return '{}';
   }

@@ -140,11 +140,14 @@ const SettingsDocTypeRowSchema = z.object({
   flow: z.enum(FLOW_TYPES).nullable(),
 });
 
-const NpiApiGapRowSchema = z.object({
-  kind: z.literal('permission_unknown'),
-  roleKey: z.string(),
-  permission: z.string(),
-});
+const NpiApiGapRowSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('permission_unknown'),
+    roleKey: z.string(),
+    permission: z.string(),
+  }),
+  z.object({ kind: z.literal('workflow_definitions') }),
+]);
 
 const NpiApiGapsJsonRowSchema = z.object({
   gaps: z.array(NpiApiGapRowSchema),

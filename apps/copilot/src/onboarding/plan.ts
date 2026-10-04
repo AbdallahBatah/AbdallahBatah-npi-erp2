@@ -28,6 +28,7 @@ import {
   permissionLabelResolver,
   SNAPSHOT_READ_PERMISSION,
   STEP_WRITE_PERMISSION,
+  WORKFLOW_DEFINITIONS_GAP,
   type BlockedReason,
   type NpiApiGap,
 } from './gaps';
@@ -315,7 +316,11 @@ export function buildPlan(
   caller: PlanCaller,
 ): OnboardingPlan {
   const eff = effectivePack(pack, answers);
-  const gaps: NpiApiGap[] = [];
+  // Every plan starts with the standing gap: workflow definitions are
+  // seed-only in NPI (01 B-02, ADR-30), so no pack can set them and the
+  // administrator is told so on every setup (AT-11, G-M2-3 "gaps list
+  // non-empty and shown").
+  const gaps: NpiApiGap[] = [WORKFLOW_DEFINITIONS_GAP];
   const steps: PlanStep[] = [];
 
   // ── departments ──────────────────────────────────────────────────────────
@@ -644,6 +649,6 @@ export function summarizePlanAr(plan: OnboardingPlan, pack: ProfilePack): PlanSu
   const holderUserCount = plan.copilot.holders.reduce((n, h) => n + h.npiUserIds.length, 0);
   if (holderUserCount > 0) copilot.push(`شاغلو المناصب المختارون: ${holderUserCount}`);
 
-  const gaps = plan.gaps.map((gap) => describeGapAr(gap, roleNameAr(gap.roleKey)));
+  const gaps = plan.gaps.map((gap) => describeGapAr(gap, gap.kind === 'permission_unknown' ? roleNameAr(gap.roleKey) : ''));
   return { npi, already, copilot, blocked, gaps };
 }

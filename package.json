@@ -11,6 +11,7 @@
     "db:generate": "npm run generate -w @npi/db",
     "db:migrate": "npm run migrate -w @npi/db",
     "db:seed": "npm run seed -w @npi/db",
+    "db:seed:madar-scratch": "npm run seed:madar-scratch -w @npi/db",
     "db:studio": "npm run studio -w @npi/db",
     "dev:api": "npm run dev -w @npi/api",
     "dev:web": "npm run dev -w @npi/web",
