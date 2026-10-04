@@ -169,7 +169,7 @@ function duplicateValues<T>(items: readonly T[], keyOf: (item: T) => string): st
 
 // ─── Field schemas ──────────────────────────────────────────────────────────
 
-const AcceptedDocTypeSchema = z.object({
+export const AcceptedDocTypeSchema = z.object({
   key: z.string().regex(DOC_TYPE_KEY_RE),
   labelAr: z.string().min(2),
   // null = the firm names this document but it is entered in NPI's own
@@ -178,13 +178,13 @@ const AcceptedDocTypeSchema = z.object({
   flow: z.enum(FLOW_TYPES).nullable(),
 });
 
-const DepartmentSchema = z.object({
+export const DepartmentSchema = z.object({
   code: z.string(), // format checked in superRefine, with the offending value in the message
   nameAr: z.string().min(2).max(120),
   nameEn: z.string().max(120).optional(),
 });
 
-const RolePermissionSetSchema = z.object({
+export const RolePermissionSetSchema = z.object({
   // `02` §7 sketches `{roleKey: permissions[]}`; `nameAr` is added here
   // because NPI's `CreateRoleDto` (apps/api/src/modules/admin/dto.ts:70-91)
   // requires a display name to create a role the firm does not already have —
@@ -194,14 +194,14 @@ const RolePermissionSetSchema = z.object({
   permissions: z.array(z.string().min(1)).min(1),
 });
 
-const ApprovalRuleDefaultSchema = z.object({
+export const ApprovalRuleDefaultSchema = z.object({
   docType: z.enum(APPROVAL_DOCUMENT_TYPES),
   minAmount: z.number(), // integer + >= 0 checked in superRefine, with the offending value
   maxAmount: z.number().nullable().optional(), // > minAmount checked in superRefine
   steps: z.array(z.string().regex(ROLE_KEY_RE)).min(1),
 });
 
-const ItemTemplateSchema = z.object({
+export const ItemTemplateSchema = z.object({
   sku: z.string(), // format checked in superRefine, with the offending value in the message
   nameAr: z.string().min(1),
   nameEn: z.string().min(1),
@@ -211,7 +211,7 @@ const ItemTemplateSchema = z.object({
   // unitCost deliberately absent — prices are the firm's, never the pack's.
 });
 
-const PositionSchema = z.object({
+export const PositionSchema = z.object({
   roleKey: z.string().regex(ROLE_KEY_RE),
   departmentCode: z.string().nullable(), // membership in defaultDepartments checked in superRefine
   titleAr: z.string().min(1).max(120),

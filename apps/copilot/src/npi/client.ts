@@ -6,10 +6,16 @@
 //
 // FORBIDDEN BY DESIGN — this file must never grow a call that decides an
 // approval request, or approves, rejects, or returns a workflow document, or
-// issues any DELETE request, or performs any admin write. Approving and
-// rejecting happen only in NPI's own inbox UI; the copilot has no delete
-// tools. `submitRequisition` below hard-codes its action code and does not
-// accept an arbitrary action string, on purpose.
+// issues any DELETE request, or creates/updates/deactivates a user or resets
+// a password. Approving and rejecting happen only in NPI's own inbox UI; the
+// copilot has no delete tools. `submitRequisition` below hard-codes its
+// action code and does not accept an arbitrary action string, on purpose.
+//
+// The admin *configuration* writes under "admin configuration" (departments,
+// roles' permission sets, approval-rule bands, catalog items) exist for one
+// caller only — the onboarding apply step (`src/onboarding/apply.ts`,
+// spec/madar/02 §7) — and run, like everything else here, as the logged-in
+// administrator with that user's own JWT, after the dry-run diff was shown.
 import type { components, paths } from './types';
 import { mapNpiError, networkError, timeoutError } from './errors';
 
@@ -222,7 +228,52 @@ export function createNpiClient(options: CreateNpiClientOptions) {
     createBill(dto: components['schemas']['CreateBillDto']) {
       return request(ctx, 'POST', '/procurement/bills', { body: dto });
     },
+
+    // ── admin configuration (onboarding apply only — see the file-top note) ──
+
+    /** `POST /admin/departments` — needs `admin.department.manage`. */
+    createDepartment(dto: components['schemas']['CreateDepartmentDto']) {
+      return request(ctx, 'POST', '/admin/departments', { body: dto });
+    },
+
+    /** `POST /admin/roles` — needs `admin.user.manage`. */
+    createRole(dto: components['schemas']['CreateRoleDto']) {
+      return request(ctx, 'POST', '/admin/roles', { body: dto });
+    },
+
+    /** `PATCH /admin/roles/:id` — needs `admin.user.manage`. Used only to set
+     *  a role's permission set; names are not changed by the onboarding. */
+    updateRole(id: string, dto: components['schemas']['UpdateRoleDto']) {
+      return request(ctx, 'PATCH', `/admin/roles/${encodeURIComponent(id)}`, { body: dto });
+    },
+
+    /** `POST /approvals/rules` — needs `admin.approval.manage`. */
+    createApprovalRule(dto: components['schemas']['CreateApprovalRuleDto']) {
+      return request(ctx, 'POST', '/approvals/rules', { body: dto });
+    },
+
+    /** `PATCH /approvals/rules/:id` — needs `admin.approval.manage`. */
+    updateApprovalRule(id: string, dto: components['schemas']['UpdateApprovalRuleDto']) {
+      return request(ctx, 'PATCH', `/approvals/rules/${encodeURIComponent(id)}`, { body: dto });
+    },
+
+    /** `POST /items` — needs `commercial.item.write`. */
+    createItem(dto: CreateItemDto) {
+      return request(ctx, 'POST', '/items', { body: dto });
+    },
   };
 }
+
+/**
+ * `CreateItemDto` as NPI actually validates it. The generated type
+ * (`components['schemas']['CreateItemDto']`) renders `itemCategory` as
+ * `Record<string, never>` because NPI's OpenAPI document does not carry the
+ * `@IsEnum(ITEM_CATEGORIES)` constraint; the real field is one of the seven
+ * `ItemCategory` values (apps/api/src/modules/commercial/dto.ts:14,23). Every
+ * other field is taken from the generated type unchanged.
+ */
+export type CreateItemDto = Omit<components['schemas']['CreateItemDto'], 'itemCategory'> & {
+  itemCategory: 'MODULE' | 'INVERTER' | 'MOUNTING' | 'CABLE' | 'BOS' | 'SPARE' | 'SERVICE';
+};
 
 export type NpiClient = ReturnType<typeof createNpiClient>;
