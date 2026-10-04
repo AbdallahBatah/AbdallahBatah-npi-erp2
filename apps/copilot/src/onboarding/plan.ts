@@ -36,6 +36,7 @@ import {
   DepartmentSchema,
   ItemTemplateSchema,
   MODULE_NAMES_AR,
+  PositionHolderSchema,
   PositionSchema,
   PROFILE_KEYS,
   ProfilePackSchema,
@@ -44,6 +45,7 @@ import {
   type ApprovalDocumentType,
   type ItemCategory,
   type ModuleKey,
+  type PositionHolder,
   type ProfileKey,
   type ProfilePack,
   type TermKey,
@@ -65,6 +67,8 @@ export const SetupAnswersSchema = z.object({
   /** Q2 */
   departments: z.array(DepartmentSchema).min(1).optional(),
   positions: z.array(PositionSchema).min(1).optional(),
+  /** Q2 — which NPI users hold each position, copilot-side only. */
+  holders: z.array(PositionHolderSchema).optional(),
   /** Q3 */
   approvalRules: z.array(ApprovalRuleDefaultSchema).optional(),
   /** Q4 — keys of the pack's `acceptedDocTypes` to keep. */
@@ -133,6 +137,29 @@ export function effectivePack(pack: ProfilePack, answers: SetupAnswers): Profile
   if (!parsed.success) {
     throw new PlanError('answers do not form a valid profile', issuesOf(parsed.error));
   }
+
+  // A holder is a convenience over the position list, not a contract of its
+  // own: it must name a position that actually exists in the final pack, and
+  // each (roleKey, departmentCode) may be named by at most one holder entry.
+  if (answers.holders) {
+    const positionKeys = new Set(parsed.data.positions.map((p) => `${p.roleKey}\u0000${p.departmentCode ?? ''}`));
+    const seen = new Set<string>();
+    const issues: { path: string; message: string }[] = [];
+    answers.holders.forEach((holder, index) => {
+      const key = `${holder.roleKey}\u0000${holder.departmentCode ?? ''}`;
+      const label = `("${holder.roleKey}", ${holder.departmentCode === null ? 'null' : `"${holder.departmentCode}"`})`;
+      if (!positionKeys.has(key)) {
+        issues.push({ path: `holders.${index}`, message: `no position (roleKey, departmentCode) = ${label} in the profile` });
+      } else if (seen.has(key)) {
+        issues.push({ path: `holders.${index}`, message: `duplicate (roleKey, departmentCode) in holders: ${label}` });
+      }
+      seen.add(key);
+    });
+    if (issues.length > 0) {
+      throw new PlanError('holders reference positions that are not in the profile', issues);
+    }
+  }
+
   return parsed.data;
 }
 
@@ -232,6 +259,7 @@ export interface CopilotConfigPlan {
   acceptedDocTypes: ProfilePack['acceptedDocTypes'];
   terminology: Partial<Record<TermKey, string>>;
   positions: ProfilePack['positions'];
+  holders: PositionHolder[];
 }
 
 export interface OnboardingPlan {
@@ -529,6 +557,7 @@ export function buildPlan(
       acceptedDocTypes: eff.acceptedDocTypes,
       terminology: eff.terminology,
       positions: eff.positions,
+      holders: answers.holders ?? [],
     },
     gaps,
     counts,
@@ -609,6 +638,8 @@ export function summarizePlanAr(plan: OnboardingPlan, pack: ProfilePack): PlanSu
   ];
   const terms = Object.values(plan.copilot.terminology);
   if (terms.length > 0) copilot.push(`المصطلحات: ${terms.join('، ')}`);
+  const holderUserCount = plan.copilot.holders.reduce((n, h) => n + h.npiUserIds.length, 0);
+  if (holderUserCount > 0) copilot.push(`شاغلو المناصب المختارون: ${holderUserCount}`);
 
   const gaps = plan.gaps.map((gap) => describeGapAr(gap, roleNameAr(gap.roleKey)));
   return { npi, already, copilot, blocked, gaps };

@@ -23,7 +23,7 @@ import {
   type StepAnswer,
 } from '../src/onboarding/machine';
 import { parseAnswer, type ParseDeps, type ParseOutcome } from '../src/onboarding/parse';
-import { buildPlan, type NpiSnapshot, type PlanCaller, type SetupAnswers } from '../src/onboarding/plan';
+import { buildPlan, effectivePack, PlanError, type NpiSnapshot, type PlanCaller, type SetupAnswers } from '../src/onboarding/plan';
 import type { OnboardingNpi } from '../src/onboarding/apply';
 import {
   getSetupState,
@@ -66,6 +66,7 @@ interface FakeUser {
   id: string;
   isActive: boolean;
   roleKey: string;
+  nameAr: string;
 }
 interface FakeRule {
   id: string;
@@ -115,7 +116,7 @@ class FakeNpi implements OnboardingNpi {
       };
       return {
         id: u.id,
-        nameAr: 'م',
+        nameAr: u.nameAr,
         nameEn: 'u',
         email: `${u.id}@x`,
         isActive: u.isActive,
@@ -193,8 +194,10 @@ class FakeNpi implements OnboardingNpi {
     return row;
   }
 
-  addUser(roleKey: string) {
-    this.users.push({ id: this.id('user'), isActive: true, roleKey });
+  addUser(roleKey: string, nameAr = 'م') {
+    const row: FakeUser = { id: this.id('user'), isActive: true, roleKey, nameAr };
+    this.users.push(row);
+    return row;
   }
 }
 
@@ -203,7 +206,7 @@ function emptySnapshot(npi: FakeNpi): NpiSnapshot {
     permissions: PERMISSION_CATALOG,
     roles: npi.roles.map((r) => ({ id: r.id, key: r.key, nameAr: r.nameAr, permissions: r.permissions })),
     departments: npi.departments.map((d) => ({ id: d.id, code: d.code, nameAr: d.nameAr, isActive: d.isActive })),
-    users: npi.users.map((u) => ({ id: u.id, isActive: u.isActive, roleKey: u.roleKey })),
+    users: npi.users.map((u) => ({ id: u.id, isActive: u.isActive, roleKey: u.roleKey, nameAr: u.nameAr })),
     approvalRules: npi.rules.map((r) => ({
       id: r.id,
       documentType: r.documentType,
@@ -338,6 +341,64 @@ describe('applyAnswer — step ordering and re-answering', () => {
     }
     // The refused edit never touched the stored state.
     expect(state.completedSteps).toEqual([1]);
+  });
+});
+
+// ─── T-18: position holders (step 2) ────────────────────────────────────────
+
+describe('applyAnswer — step 2 holders', () => {
+  it('a structured step-2 answer with holders is stored', () => {
+    const state = applyAnswer(initialState(), 1, { step: 1, profileKey: 'epc' });
+    const holders = [{ roleKey: 'pm', departmentCode: 'PROJ', npiUserIds: ['u1'] }];
+    const next = applyAnswer(state, 2, { step: 2, departments: pack().defaultDepartments, positions: pack().positions, holders });
+    expect(next.answers.holders).toEqual(holders);
+  });
+
+  it('a later step-2 answer without holders (as the text path produces) keeps them', () => {
+    let state = applyAnswer(initialState(), 1, { step: 1, profileKey: 'epc' });
+    const holders = [{ roleKey: 'pm', departmentCode: 'PROJ', npiUserIds: ['u1'] }];
+    state = applyAnswer(state, 2, { step: 2, departments: pack().defaultDepartments, positions: pack().positions, holders });
+    // No `holders` field at all — the shape `parseAnswer`'s free-text path produces.
+    const next = applyAnswer(state, 2, { step: 2, departments: pack().defaultDepartments, positions: pack().positions });
+    expect(next.answers.holders).toEqual(holders);
+  });
+
+  it('removing a position prunes its holders, silently', () => {
+    let state = applyAnswer(initialState(), 1, { step: 1, profileKey: 'epc' });
+    const holders = [
+      { roleKey: 'pm', departmentCode: 'PROJ', npiUserIds: ['u1'] },
+      { roleKey: 'accountant', departmentCode: 'FIN', npiUserIds: ['u2'] },
+    ];
+    state = applyAnswer(state, 2, { step: 2, departments: pack().defaultDepartments, positions: pack().positions, holders });
+    const positionsWithoutPm = pack().positions.filter((p) => p.roleKey !== 'pm');
+    const next = applyAnswer(state, 2, { step: 2, departments: pack().defaultDepartments, positions: positionsWithoutPm });
+    expect(next.answers.holders).toEqual([holders[1]]);
+  });
+
+  it('changing the profile at step 1 clears holders along with steps 2-6', () => {
+    let state = applyAnswer(initialState(), 1, { step: 1, profileKey: 'epc' });
+    const holders = [{ roleKey: 'pm', departmentCode: 'PROJ', npiUserIds: ['u1'] }];
+    state = applyAnswer(state, 2, { step: 2, departments: pack().defaultDepartments, positions: pack().positions, holders });
+    state = applyAnswer(state, 1, { step: 1, profileKey: 'om_provider' });
+    expect(state.answers.holders).toBeUndefined();
+    expect(state.completedSteps).toEqual([1]);
+  });
+});
+
+describe('effectivePack — dangling holder', () => {
+  it('throws PlanError naming holders.0 when a holder names a position that does not exist in the profile', () => {
+    const answers: SetupAnswers = {
+      profileKey: 'epc',
+      holders: [{ roleKey: 'pm', departmentCode: 'NOPE', npiUserIds: ['u1'] }],
+    };
+    try {
+      effectivePack(pack(), answers);
+      throw new Error('expected PlanError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PlanError);
+      const issues = (err as PlanError).issues;
+      expect(issues.some((i) => i.path === 'holders.0')).toBe(true);
+    }
   });
 });
 
@@ -607,6 +668,7 @@ function buildFakeSetupDb() {
   const sessions: OnboardingSessionRow[] = [];
   const firmConfigs = new Map<string, Record<string, unknown>>();
   const positions: { id: string; npiOrgId: string; roleKey: string; departmentId: string | null; titleAr: string; personaAr: string }[] = [];
+  const positionAssignments: { id: string; positionId: string; npiUserId: string; endedAt: Date | null }[] = [];
   let seq = 0;
 
   const db = {
@@ -652,16 +714,44 @@ function buildFakeSetupDb() {
         );
       },
       async create({ data }: { data: { npiOrgId: string; roleKey: string; departmentId: string | null; titleAr: string; personaAr: string } }) {
-        positions.push({ id: `pos_${++seq}`, ...data });
-        return null;
+        const row = { id: `pos_${++seq}`, ...data };
+        positions.push(row);
+        return { id: row.id };
       },
       async update({ where, data }: { where: { id: string }; data: { titleAr: string; personaAr: string } }) {
         Object.assign(positions.find((p) => p.id === where.id)!, data);
         return null;
       },
     },
+    positionAssignment: {
+      async findFirst({ where }: { where: { positionId: string; npiUserId: string; endedAt: null } }) {
+        return (
+          positionAssignments.find((a) => a.positionId === where.positionId && a.npiUserId === where.npiUserId && a.endedAt === null) ?? null
+        );
+      },
+      async create({ data }: { data: { positionId: string; npiUserId: string } }) {
+        const row = { id: `pa_${++seq}`, positionId: data.positionId, npiUserId: data.npiUserId, endedAt: null };
+        positionAssignments.push(row);
+        return row;
+      },
+      async updateMany({
+        where,
+        data,
+      }: {
+        where: { npiUserId: string; endedAt: null; positionId: { not: string }; position: { npiOrgId: string; roleKey: string } };
+        data: { endedAt: Date };
+      }) {
+        for (const a of positionAssignments) {
+          if (a.npiUserId !== where.npiUserId || a.endedAt !== null || a.positionId === where.positionId.not) continue;
+          const position = positions.find((p) => p.id === a.positionId);
+          if (!position || position.npiOrgId !== where.position.npiOrgId || position.roleKey !== where.position.roleKey) continue;
+          a.endedAt = data.endedAt;
+        }
+        return null;
+      },
+    },
   };
-  return { db, sessions, firmConfigs, positions };
+  return { db, sessions, firmConfigs, positions, positionAssignments };
 }
 
 function buildDeps(overrides: Partial<SetupDeps> = {}): { deps: SetupDeps; fake: ReturnType<typeof buildFakeSetupDb>; npi: FakeNpi } {
@@ -804,6 +894,81 @@ describe('handleSetupAction — preview and apply', () => {
   it('preview and apply refuse a session whose step 1 was never answered', async () => {
     const { deps } = buildDeps();
     await expect(handleSetupAction(deps, adminSetupCaller, { action: 'preview' })).rejects.toMatchObject({ code: 'step_out_of_order' });
+  });
+
+  it('preview carries a permissionLabels entry for every key named in a role step', async () => {
+    const { deps, npi } = buildDeps();
+    npi.addUser('pm');
+    npi.addUser('accountant');
+    await answerAllSteps(deps, adminSetupCaller);
+
+    const result = await handleSetupAction(deps, adminSetupCaller, { action: 'preview' });
+    expect('plan' in result && 'permissionLabels' in result).toBe(true);
+    if ('plan' in result && 'permissionLabels' in result) {
+      const keys = new Set<string>();
+      for (const step of result.plan.steps) {
+        if (step.kind !== 'role') continue;
+        for (const k of [...step.permissions, ...step.permissionsAdded, ...step.permissionsRemoved]) keys.add(k);
+      }
+      expect(keys.size).toBeGreaterThan(0);
+      expect(Object.keys(result.permissionLabels).sort()).toEqual([...keys].sort());
+      for (const k of keys) {
+        const expectedLabel = PERMISSION_CATALOG.find((p) => p.key === k)?.labelAr ?? k;
+        expect(result.permissionLabels[k]).toBe(expectedLabel);
+      }
+    }
+  });
+
+  it('apply writes an assignment for each valid holder and reports the skipped ones', async () => {
+    const { deps, fake, npi } = buildDeps();
+    const pmUser = npi.addUser('pm');
+    npi.addUser('accountant');
+    await handleSetupAction(deps, adminSetupCaller, { action: 'answer', step: 1, answer: { step: 1, profileKey: 'epc' } });
+    const holders = [{ roleKey: 'pm', departmentCode: 'PROJ', npiUserIds: [pmUser.id, 'unknown_user_id'] }];
+    await handleSetupAction(deps, adminSetupCaller, {
+      action: 'answer',
+      step: 2,
+      answer: { step: 2, departments: pack().defaultDepartments, positions: pack().positions, holders },
+    });
+    await handleSetupAction(deps, adminSetupCaller, { action: 'answer', step: 3, answer: { step: 3, approvalRules: pack().approvalRuleDefaults } });
+    await handleSetupAction(deps, adminSetupCaller, {
+      action: 'answer',
+      step: 4,
+      answer: { step: 4, acceptedDocTypeKeys: pack().acceptedDocTypes.map((d) => d.key) },
+    });
+    await handleSetupAction(deps, adminSetupCaller, { action: 'answer', step: 5, answer: { step: 5, items: pack().itemTemplates } });
+    await handleSetupAction(deps, adminSetupCaller, { action: 'answer', step: 6, answer: { step: 6, terminology: pack().terminology } });
+
+    const result = await handleSetupAction(deps, adminSetupCaller, { action: 'apply' });
+    expect('persisted' in result).toBe(true);
+    if ('persisted' in result) {
+      expect(result.persisted.assignmentsWritten).toBe(1);
+      expect(result.persisted.holdersSkipped).toEqual([
+        { roleKey: 'pm', departmentCode: 'PROJ', npiUserId: 'unknown_user_id', reason: 'unknown_user' },
+      ]);
+    }
+    const pmPosition = fake.positions.find((p) => p.roleKey === 'pm')!;
+    expect(
+      fake.positionAssignments.some((a) => a.positionId === pmPosition.id && a.npiUserId === pmUser.id && a.endedAt === null),
+    ).toBe(true);
+  });
+});
+
+describe('getSetupState — step 2 npiUsers', () => {
+  it('lists directory users with nameAr for a caller holding admin.department.manage, empty for one without', async () => {
+    const { deps, npi } = buildDeps();
+    const pmUser = npi.addUser('pm', 'أحمد');
+    await handleSetupAction(deps, adminSetupCaller, { action: 'answer', step: 1, answer: { step: 1, profileKey: 'epc' } });
+
+    const view = await getSetupState(deps, adminSetupCaller);
+    expect(view.state.step).toBe(2);
+    const positions = view.defaults && 'positions' in view.defaults ? view.defaults.positions : [];
+    expect(positions.find((p) => p.roleKey === 'pm')?.npiUsers).toEqual([{ id: pmUser.id, nameAr: 'أحمد', roleKey: 'pm', isActive: true }]);
+
+    const noDeptCaller: SetupCaller = { ...adminSetupCaller, permissions: ALL_PERMISSION_KEYS.filter((p) => p !== 'admin.department.manage') };
+    const view2 = await getSetupState(deps, noDeptCaller);
+    const positions2 = view2.defaults && 'positions' in view2.defaults ? view2.defaults.positions : [];
+    expect(positions2.find((p) => p.roleKey === 'pm')?.npiUsers).toEqual([]);
   });
 });
 

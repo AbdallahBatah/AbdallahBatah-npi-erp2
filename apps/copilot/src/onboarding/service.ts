@@ -12,13 +12,16 @@ import { z } from 'zod';
 import {
   applyPlan,
   dryRun,
+  loadNpiSnapshot,
   persistCopilotConfig,
+  validateHolders,
   type ApplyResult,
   type OnboardingDb,
   type OnboardingNpi,
   type PersistOutcome,
 } from './apply';
 import { loadProfilePack } from './catalog';
+import { SNAPSHOT_READ_PERMISSION } from './gaps';
 import {
   applyAnswer,
   goTo,
@@ -33,11 +36,14 @@ import {
   type SetupStep,
   type StepAnswer,
   type StepDefaults,
+  type StepDefaultsNpiUser,
 } from './machine';
 import { parseAnswer, type ParseDeps } from './parse';
-import { summarizePlanAr, type OnboardingPlan, type PlanSummaryAr } from './plan';
+import { buildPlan, summarizePlanAr, type OnboardingPlan, type PlanSummaryAr } from './plan';
 import type { ProfilePack } from './profile.schema';
 import { t } from '../i18n/ar';
+import { readDirectoryUsers } from '../npi/admin';
+import { NpiError } from '../npi/errors';
 
 // ─── Dependencies ───────────────────────────────────────────────────────────
 
@@ -140,6 +146,12 @@ export interface SetupUnclearResult {
 export interface SetupPreviewResult {
   plan: Omit<OnboardingPlan, 'permissionLabel'>;
   summary: PlanSummaryAr;
+  /** NPI's Arabic label (from its own permission catalog) for every
+   *  permission key that appears in a role step's `permissions`,
+   *  `permissionsAdded` or `permissionsRemoved` — falls back to the key
+   *  itself when the catalog could not be read. The screens render this
+   *  instead of raw keys. */
+  permissionLabels: Record<string, string>;
 }
 
 export interface SetupApplyResult {
@@ -177,14 +189,33 @@ async function saveState(
   await deps.db.onboardingSession.update({ where: { id }, data: { stepsJson: state, ...extra } });
 }
 
-function buildView(deps: SetupDeps, state: SetupState): SetupStateView {
+/**
+ * Step 2's defaults need NPI's directory (for the position-holder picker),
+ * which only `admin.department.manage` can read — the same guard the plan
+ * itself uses for that slot (`SNAPSHOT_READ_PERMISSION.directory`). A 403
+ * from NPI (`NpiError` with `kind === 'forbidden'`) is treated as "no users
+ * to show", same discipline as `loadNpiSnapshot`; any other `NpiError`
+ * propagates to the route, which maps it to an HTTP response.
+ */
+async function buildView(deps: SetupDeps, caller: SetupCaller, state: SetupState): Promise<SetupStateView> {
   const loadPack = deps.loadPack ?? loadProfilePack;
   const pack = state.answers.profileKey !== undefined ? loadPack(state.answers.profileKey) : null;
   const key = questionKey(state.step);
+
+  let npiUsers: StepDefaultsNpiUser[] = [];
+  if (state.step === 2 && caller.permissions.includes(SNAPSHOT_READ_PERMISSION.directory)) {
+    try {
+      const users = readDirectoryUsers(await deps.npi.listDepartmentDirectory());
+      npiUsers = users.map((u) => ({ id: u.id, nameAr: u.nameAr, roleKey: u.roleKey, isActive: u.isActive }));
+    } catch (err) {
+      if (!(err instanceof NpiError && err.kind === 'forbidden')) throw err;
+    }
+  }
+
   return {
     state,
     question: { step: state.step, key, textAr: t(key) },
-    defaults: stepDefaults(state.step, pack, {}),
+    defaults: stepDefaults(state.step, pack, { npiUsers }),
     profileTitleAr: pack ? pack.titleAr : null,
   };
 }
@@ -194,13 +225,27 @@ function withoutPermissionLabel(plan: OnboardingPlan): Omit<OnboardingPlan, 'per
   return rest;
 }
 
+/** Every permission key named in a role step, mapped to NPI's Arabic label. */
+function buildPermissionLabels(plan: OnboardingPlan): Record<string, string> {
+  const keys = new Set<string>();
+  for (const step of plan.steps) {
+    if (step.kind !== 'role') continue;
+    for (const key of step.permissions) keys.add(key);
+    for (const key of step.permissionsAdded) keys.add(key);
+    for (const key of step.permissionsRemoved) keys.add(key);
+  }
+  const labels: Record<string, string> = {};
+  for (const key of keys) labels[key] = plan.permissionLabel(key);
+  return labels;
+}
+
 // ─── Entry points ───────────────────────────────────────────────────────────
 
 export async function getSetupState(deps: SetupDeps, caller: SetupCaller): Promise<SetupStateView> {
   requireAdmin(caller);
   const row = await loadOrCreateSession(deps, caller);
   const state = parseStoredState(row.stepsJson);
-  return buildView(deps, state);
+  return buildView(deps, caller, state);
 }
 
 /**
@@ -219,7 +264,7 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
   if (body.action === 'goto') {
     const next = goTo(state, body.step);
     await saveState(deps, row.id, next);
-    return buildView(deps, next);
+    return buildView(deps, caller, next);
   }
 
   if (body.action === 'answer') {
@@ -243,7 +288,7 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
 
     const next = applyAnswer(state, body.step, answer, { loadPack });
     await saveState(deps, row.id, next);
-    return { ...buildView(deps, next), parsed: answer, source };
+    return { ...(await buildView(deps, caller, next)), parsed: answer, source };
   }
 
   // 'preview' and 'apply' both need a complete-enough set of answers to
@@ -255,17 +300,26 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
 
   if (body.action === 'preview') {
     const plan = await dryRun({ npi: deps.npi }, pack, answers, planCaller);
-    return { plan: withoutPermissionLabel(plan), summary: summarizePlanAr(plan, pack) };
+    return { plan: withoutPermissionLabel(plan), summary: summarizePlanAr(plan, pack), permissionLabels: buildPermissionLabels(plan) };
   }
 
   // 'apply': re-reads NPI and rebuilds the plan rather than trusting a plan
   // the client may have cached from an earlier preview (spec/madar/02 §7:
   // "dry-run diff shown first" — apply never trusts a stale one).
-  const plan = await dryRun({ npi: deps.npi }, pack, answers, planCaller);
+  const snapshot = await loadNpiSnapshot(deps.npi, planCaller);
+  const plan = buildPlan(pack, answers, snapshot, planCaller);
   const result = await applyPlan({ npi: deps.npi }, plan);
-  const persisted = await persistCopilotConfig(deps.db, { npiOrgId: caller.npiOrgId, plan, result, now: deps.now });
+  const { valid: validHolders, skipped: holderValidationSkips } = validateHolders(plan.copilot.holders, plan.copilot.positions, snapshot.users);
+  const persisted = await persistCopilotConfig(deps.db, {
+    npiOrgId: caller.npiOrgId,
+    plan,
+    result,
+    holders: validHolders,
+    now: deps.now,
+  });
+  const mergedPersisted: PersistOutcome = { ...persisted, holdersSkipped: [...persisted.holdersSkipped, ...holderValidationSkips] };
   if (result.completed) {
     await saveState(deps, row.id, state, { completedAt: (deps.now ?? (() => new Date()))(), profileChosen: plan.profileKey });
   }
-  return { result, summary: summarizePlanAr(plan, pack), persisted };
+  return { result, summary: summarizePlanAr(plan, pack), persisted: mergedPersisted };
 }

@@ -27,6 +27,7 @@ import {
   ApprovalRuleDefaultSchema,
   DepartmentSchema,
   ItemTemplateSchema,
+  PositionHolderSchema,
   PositionSchema,
   PROFILE_KEYS,
   TERM_KEYS,
@@ -200,6 +201,7 @@ export const StepAnswerSchema = z.discriminatedUnion('step', [
     step: z.literal(2),
     departments: z.array(DepartmentSchema).min(1),
     positions: z.array(PositionSchema).min(1),
+    holders: z.array(PositionHolderSchema).optional(),
   }),
   z.object({
     step: z.literal(3),
@@ -294,6 +296,17 @@ export function applyAnswer(state: SetupState, step: SetupStep, answer: StepAnsw
   } else if (answer.step === 2) {
     answers.departments = answer.departments;
     answers.positions = answer.positions;
+    // A free-text re-answer (parsed by the model) never carries `holders`
+    // and must not wipe a choice already made in the picker; a structured
+    // answer that *does* carry `holders` (even `[]`) replaces it outright.
+    if (answer.holders !== undefined) answers.holders = answer.holders;
+    // Holders are a convenience over positions, not a contract of their own:
+    // prune any entry whose (roleKey, departmentCode) no longer names a
+    // position in the list just answered, dropping the rest silently.
+    if (answers.holders !== undefined) {
+      const positionKeys = new Set(answer.positions.map((p) => `${p.roleKey}\u0000${p.departmentCode ?? ''}`));
+      answers.holders = answers.holders.filter((h) => positionKeys.has(`${h.roleKey}\u0000${h.departmentCode ?? ''}`));
+    }
   } else if (answer.step === 3) {
     answers.approvalRules = answer.approvalRules;
   } else if (answer.step === 4) {

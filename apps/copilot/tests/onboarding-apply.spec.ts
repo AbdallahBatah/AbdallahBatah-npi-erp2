@@ -8,13 +8,14 @@ import {
   dryRun,
   loadNpiSnapshot,
   persistCopilotConfig,
+  validateHolders,
   type OnboardingDb,
   type OnboardingNpi,
 } from '../src/onboarding/apply';
 import { describeBlockedAr } from '../src/onboarding/gaps';
 import { buildPlan, effectivePack, PlanError, summarizePlanAr, type SetupAnswers } from '../src/onboarding/plan';
 import type { ProfilePack } from '../src/onboarding/profile.schema';
-import { readApprovalRules, readRoles } from '../src/npi/admin';
+import { readApprovalRules, readRoles, type NpiDirectoryUser } from '../src/npi/admin';
 import { mapNpiError, NpiError } from '../src/npi/errors';
 // Same relative import `tests/catalog.spec.ts` uses: the file has no imports
 // of its own, so ts-jest compiles it without extra project wiring.
@@ -673,10 +674,12 @@ describe('applyPlan — failures', () => {
 // ─── Copilot-side persistence ───────────────────────────────────────────────
 
 interface FakePositionRow { id: string; npiOrgId: string; roleKey: string; departmentId: string | null; titleAr: string; personaAr: string }
+interface FakeAssignmentRow { id: string; positionId: string; npiUserId: string; endedAt: Date | null }
 
 function fakeDb() {
   const firmConfigs = new Map<string, Record<string, unknown>>();
   const positions: FakePositionRow[] = [];
+  const assignments: FakeAssignmentRow[] = [];
   let seq = 0;
   const db: OnboardingDb = {
     firmConfig: {
@@ -691,16 +694,36 @@ function fakeDb() {
         return positions.find((p) => p.npiOrgId === where.npiOrgId && p.roleKey === where.roleKey && p.departmentId === where.departmentId) ?? null;
       },
       async create({ data }) {
-        positions.push({ id: `pos_${++seq}`, ...data });
-        return null;
+        const row: FakePositionRow = { id: `pos_${++seq}`, ...data };
+        positions.push(row);
+        return { id: row.id };
       },
       async update({ where, data }) {
         Object.assign(positions.find((p) => p.id === where.id)!, data);
         return null;
       },
     },
+    positionAssignment: {
+      async findFirst({ where }) {
+        return assignments.find((a) => a.positionId === where.positionId && a.npiUserId === where.npiUserId && a.endedAt === null) ?? null;
+      },
+      async create({ data }) {
+        const row: FakeAssignmentRow = { id: `pa_${++seq}`, positionId: data.positionId, npiUserId: data.npiUserId, endedAt: null };
+        assignments.push(row);
+        return row;
+      },
+      async updateMany({ where, data }) {
+        for (const a of assignments) {
+          if (a.npiUserId !== where.npiUserId || a.endedAt !== null || a.positionId === where.positionId.not) continue;
+          const position = positions.find((p) => p.id === a.positionId);
+          if (!position || position.npiOrgId !== where.position.npiOrgId || position.roleKey !== where.position.roleKey) continue;
+          a.endedAt = data.endedAt;
+        }
+        return null;
+      },
+    },
   };
-  return { db, firmConfigs, positions };
+  return { db, firmConfigs, positions, assignments };
 }
 
 describe('persistCopilotConfig', () => {
@@ -712,8 +735,8 @@ describe('persistCopilotConfig', () => {
     const result = await applyPlan({ npi }, plan);
     const { db, firmConfigs, positions } = fakeDb();
 
-    const out = await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, now });
-    expect(out).toEqual({ positionsWritten: 5, positionsSkipped: [] });
+    const out = await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, holders: [], now });
+    expect(out).toEqual({ positionsWritten: 5, positionsSkipped: [], assignmentsWritten: 0, holdersSkipped: [] });
 
     const cfg = firmConfigs.get('org1')!;
     expect(cfg).toMatchObject({
@@ -741,7 +764,7 @@ describe('persistCopilotConfig', () => {
     expect(pm.titleAr).toBe('مدير المشاريع');
 
     // Second run: same rows, updated in place — no duplicates.
-    const again = await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, now });
+    const again = await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, holders: [], now });
     expect(again.positionsWritten).toBe(5);
     expect(positions).toHaveLength(5);
   });
@@ -751,7 +774,7 @@ describe('persistCopilotConfig', () => {
     const okPlan = await dryRun({ npi }, pack(), answersOnly(), adminCaller);
     const okResult = await applyPlan({ npi }, okPlan);
     const { db, firmConfigs, positions } = fakeDb();
-    await persistCopilotConfig(db, { npiOrgId: 'org1', plan: okPlan, result: okResult, now });
+    await persistCopilotConfig(db, { npiOrgId: 'org1', plan: okPlan, result: okResult, holders: [], now });
 
     const npi2 = freshOrg();
     npi2.failOn = { call: 'createDepartment', error: mapNpiError(500, { statusCode: 500, message: 'Internal server error' }) };
@@ -759,7 +782,7 @@ describe('persistCopilotConfig', () => {
     const result2 = await applyPlan({ npi: npi2 }, plan2); // SALES fails, the rest is created
     expect(result2.completed).toBe(false);
     const later = () => new Date('2026-10-05T10:00:00.000Z');
-    const out = await persistCopilotConfig(db, { npiOrgId: 'org1', plan: plan2, result: result2, now: later });
+    const out = await persistCopilotConfig(db, { npiOrgId: 'org1', plan: plan2, result: result2, holders: [], now: later });
     expect(out.positionsSkipped).toEqual([{ roleKey: 'sales', departmentCode: 'SALES' }]);
     expect(firmConfigs.get('org1')!.setupCompletedAt).toEqual(now()); // unchanged
     const failed = (firmConfigs.get('org1')!.npiApiGapsJson as { failed: { stepId: string; npiMessage: string }[] }).failed;
@@ -770,6 +793,94 @@ describe('persistCopilotConfig', () => {
     expect(positions.filter((p) => p.roleKey === 'sales')).toHaveLength(1);
     const keys = positions.map((p) => `${p.roleKey}/${p.departmentId}`);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  // ─── T-18: position holders ────────────────────────────────────────────
+
+  it('writes one open assignment per (position, user) from holders, idempotently', async () => {
+    const npi = freshOrg();
+    const plan = await dryRun({ npi }, pack(), answersOnly(), adminCaller);
+    const result = await applyPlan({ npi }, plan);
+    const { db, assignments } = fakeDb();
+
+    const holders = [{ roleKey: 'pm', departmentCode: 'PROJ', npiUserIds: ['u1', 'u2'] }];
+    const out = await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, holders, now });
+    expect(out.assignmentsWritten).toBe(2);
+    expect(out.holdersSkipped).toEqual([]);
+    expect(assignments).toHaveLength(2);
+    expect(assignments.every((a) => a.endedAt === null)).toBe(true);
+
+    // Re-run with the same holders: no new rows, nothing to end.
+    const again = await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, holders, now });
+    expect(again.assignmentsWritten).toBe(0);
+    expect(assignments).toHaveLength(2);
+  });
+
+  it('ends a stale role-only assignment of the same role once the setup assigns a department position, leaving a different role untouched', async () => {
+    const npi = freshOrg();
+    const plan = await dryRun({ npi }, pack(), answersOnly(), adminCaller);
+    const result = await applyPlan({ npi }, plan);
+    const { db, positions, assignments } = fakeDb();
+
+    // A role-only 'pm' position already exists, as `resolvePosition` would
+    // have created at login, with an open assignment for 'u1'.
+    const roleOnlyPm = await db.position.create({
+      data: { npiOrgId: 'org1', roleKey: 'pm', departmentId: null, titleAr: 'مدير المشاريع', personaAr: 'x'.repeat(80) },
+    });
+    await db.positionAssignment.create({ data: { positionId: roleOnlyPm.id, npiUserId: 'u1' } });
+    // An unrelated assignment of a different role for the same user.
+    const accountantPosition = await db.position.create({
+      data: { npiOrgId: 'org1', roleKey: 'accountant', departmentId: null, titleAr: 'محاسب', personaAr: 'y'.repeat(80) },
+    });
+    await db.positionAssignment.create({ data: { positionId: accountantPosition.id, npiUserId: 'u1' } });
+
+    const holders = [{ roleKey: 'pm', departmentCode: 'PROJ', npiUserIds: ['u1'] }];
+    await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, holders, now });
+
+    const deptPm = positions.find((p) => p.roleKey === 'pm' && p.departmentId === result.departmentIdByCode.PROJ)!;
+    expect(assignments.find((a) => a.positionId === deptPm.id && a.npiUserId === 'u1')?.endedAt).toBeNull();
+    expect(assignments.find((a) => a.positionId === roleOnlyPm.id)?.endedAt).toEqual(now());
+    expect(assignments.find((a) => a.positionId === accountantPosition.id)?.endedAt).toBeNull();
+  });
+
+  it('reports a holder whose position was not created this run as position_missing', async () => {
+    const npi = freshOrg();
+    npi.failOn = { call: 'createDepartment', error: mapNpiError(500, { statusCode: 500, message: 'Internal server error' }) };
+    const plan = await dryRun({ npi }, pack(), answersOnly(), adminCaller);
+    const result = await applyPlan({ npi }, plan); // SALES department fails to be created
+    const { db } = fakeDb();
+
+    const holders = [{ roleKey: 'sales', departmentCode: 'SALES', npiUserIds: ['u1'] }];
+    const out = await persistCopilotConfig(db, { npiOrgId: 'org1', plan, result, holders, now });
+    expect(out.holdersSkipped).toEqual([{ roleKey: 'sales', departmentCode: 'SALES', npiUserId: 'u1', reason: 'position_missing' }]);
+    expect(out.assignmentsWritten).toBe(0);
+  });
+});
+
+describe('validateHolders', () => {
+  const positions = pack().positions;
+
+  it('reports unknown, inactive and role-mismatched users, and passes the valid one through', () => {
+    const users: NpiDirectoryUser[] = [
+      { id: 'u1', isActive: true, roleKey: 'pm', nameAr: 'أحمد' },
+      { id: 'u2', isActive: false, roleKey: 'pm', nameAr: 'سالم' },
+      { id: 'u3', isActive: true, roleKey: 'accountant', nameAr: 'خالد' },
+    ];
+    const holders = [{ roleKey: 'pm', departmentCode: 'PROJ', npiUserIds: ['u1', 'u2', 'u3', 'unknown'] }];
+    const { valid, skipped } = validateHolders(holders, positions, users);
+    expect(valid).toEqual([{ roleKey: 'pm', departmentCode: 'PROJ', npiUserIds: ['u1'] }]);
+    expect(skipped).toEqual([
+      { roleKey: 'pm', departmentCode: 'PROJ', npiUserId: 'u2', reason: 'inactive' },
+      { roleKey: 'pm', departmentCode: 'PROJ', npiUserId: 'u3', reason: 'role_mismatch' },
+      { roleKey: 'pm', departmentCode: 'PROJ', npiUserId: 'unknown', reason: 'unknown_user' },
+    ]);
+  });
+
+  it('reports every user as directory_unreadable when the snapshot could not read the directory', () => {
+    const holders = [{ roleKey: 'pm', departmentCode: 'PROJ', npiUserIds: ['u1'] }];
+    const { valid, skipped } = validateHolders(holders, positions, null);
+    expect(valid).toEqual([]);
+    expect(skipped).toEqual([{ roleKey: 'pm', departmentCode: 'PROJ', npiUserId: 'u1', reason: 'directory_unreadable' }]);
   });
 });
 

@@ -10,18 +10,21 @@
 //    re-running the same plan afterwards is a no-op for everything that
 //    succeeded (the plan builder marks it `skip`).
 //  - `persistCopilotConfig` — write `firm_config` and the copilot `positions`
-//    rows from the plan and the apply result.
+//    rows from the plan and the apply result, plus (T-18) the
+//    `position_assignments` for the holders the caller already validated
+//    with `validateHolders` — never NPI itself (08 §E.10: the copilot never
+//    mutates NPI users).
 //
 // Gaps and blocked steps are reported, never worked around. No step here
 // ever deletes anything, decides an approval, or touches a user account.
 import type { NpiClient } from '../npi/client';
-import { readApprovalRules, readDirectoryUsers, readItems, readRoles } from '../npi/admin';
+import { readApprovalRules, readDirectoryUsers, readItems, readRoles, type NpiDirectoryUser } from '../npi/admin';
 import { readDepartments } from '../npi/directory';
 import { NpiError } from '../npi/errors';
 import { readPermissionCatalog } from '../npi/permissions';
 import { readEntityRef } from '../npi/responses';
 import { describeBlockedAr, SNAPSHOT_READ_PERMISSION, type BlockedReason, type NpiApiGap } from './gaps';
-import type { ProfilePack } from './profile.schema';
+import type { PositionHolder, ProfilePack } from './profile.schema';
 import {
   buildPlan,
   type ApprovalRuleStep,
@@ -274,8 +277,18 @@ export interface OnboardingDb {
     findFirst(args: { where: { npiOrgId: string; roleKey: string; departmentId: string | null } }): Promise<{ id: string } | null>;
     create(args: {
       data: { npiOrgId: string; roleKey: string; departmentId: string | null; titleAr: string; personaAr: string };
-    }): Promise<unknown>;
+    }): Promise<{ id: string }>;
     update(args: { where: { id: string }; data: { titleAr: string; personaAr: string } }): Promise<unknown>;
+  };
+  positionAssignment: {
+    findFirst(args: { where: { positionId: string; npiUserId: string; endedAt: null } }): Promise<{ id: string } | null>;
+    create(args: { data: { positionId: string; npiUserId: string } }): Promise<unknown>;
+    /** Ends the user's other open assignments on positions of the same org and role —
+     *  the explicit setup choice supersedes the role-only position `resolvePosition` auto-creates at login. */
+    updateMany(args: {
+      where: { npiUserId: string; endedAt: null; positionId: { not: string }; position: { npiOrgId: string; roleKey: string } };
+      data: { endedAt: Date };
+    }): Promise<unknown>;
   };
 }
 
@@ -302,13 +315,68 @@ export interface PersistOutcome {
   positionsWritten: number;
   /** Positions whose department does not exist in NPI after the run. */
   positionsSkipped: { roleKey: string; departmentCode: string }[];
+  /** Position-holder assignments created this run (re-running an already
+   *  satisfied choice writes nothing new and does not count here). */
+  assignmentsWritten: number;
+  /** A holder's user that was not written, with the reason. `position_missing`
+   *  is reported here (the position row was never written this run); the
+   *  other four reasons are `validateHolders`'s and are merged in by the
+   *  caller before this outcome reaches the administrator. */
+  holdersSkipped: {
+    roleKey: string;
+    departmentCode: string | null;
+    npiUserId: string;
+    reason: 'position_missing' | 'unknown_user' | 'inactive' | 'role_mismatch' | 'directory_unreadable';
+  }[];
+}
+
+/**
+ * Pure check of `holders` against NPI's directory snapshot (`users`, `null`
+ * when it could not be read) and the profile's own positions — no I/O, so it
+ * is unit-testable on its own and reusable outside `persistCopilotConfig`.
+ * Does not know which position rows were actually written this run; a holder
+ * whose position was never created/updated is reported by
+ * `persistCopilotConfig` itself (`'position_missing'`), not here.
+ */
+export function validateHolders(
+  holders: PositionHolder[],
+  positions: ProfilePack['positions'],
+  users: NpiDirectoryUser[] | null,
+): { valid: PositionHolder[]; skipped: PersistOutcome['holdersSkipped'] } {
+  const skipped: PersistOutcome['holdersSkipped'] = [];
+  const valid: PositionHolder[] = [];
+
+  for (const holder of holders) {
+    const position = positions.find((p) => p.roleKey === holder.roleKey && p.departmentCode === holder.departmentCode);
+    const requiredRoleKey = position?.roleKey ?? holder.roleKey;
+    const okUserIds: string[] = [];
+    for (const npiUserId of holder.npiUserIds) {
+      if (users === null) {
+        skipped.push({ roleKey: holder.roleKey, departmentCode: holder.departmentCode, npiUserId, reason: 'directory_unreadable' });
+        continue;
+      }
+      const user = users.find((u) => u.id === npiUserId);
+      if (!user) {
+        skipped.push({ roleKey: holder.roleKey, departmentCode: holder.departmentCode, npiUserId, reason: 'unknown_user' });
+      } else if (!user.isActive) {
+        skipped.push({ roleKey: holder.roleKey, departmentCode: holder.departmentCode, npiUserId, reason: 'inactive' });
+      } else if (user.roleKey !== requiredRoleKey) {
+        skipped.push({ roleKey: holder.roleKey, departmentCode: holder.departmentCode, npiUserId, reason: 'role_mismatch' });
+      } else {
+        okUserIds.push(npiUserId);
+      }
+    }
+    if (okUserIds.length > 0) valid.push({ ...holder, npiUserIds: okUserIds });
+  }
+
+  return { valid, skipped };
 }
 
 export async function persistCopilotConfig(
   db: OnboardingDb,
-  args: { npiOrgId: string; plan: OnboardingPlan; result: ApplyResult; now?: () => Date },
+  args: { npiOrgId: string; plan: OnboardingPlan; result: ApplyResult; holders: PositionHolder[]; now?: () => Date },
 ): Promise<PersistOutcome> {
-  const { npiOrgId, plan, result } = args;
+  const { npiOrgId, plan, result, holders } = args;
   const now = (args.now ?? (() => new Date()))();
 
   const gapsJson: NpiApiGapsJson = {
@@ -335,6 +403,10 @@ export async function persistCopilotConfig(
 
   let positionsWritten = 0;
   const positionsSkipped: PersistOutcome['positionsSkipped'] = [];
+  // Keyed exactly as the loop below matches a holder to the position it
+  // names: (roleKey, departmentCode) -> the row's id, present only for a
+  // position actually written this run (not skipped for a missing department).
+  const positionIdByKey = new Map<string, string>();
   for (const position of plan.copilot.positions) {
     let departmentId: string | null = null;
     if (position.departmentCode !== null) {
@@ -347,13 +419,48 @@ export async function persistCopilotConfig(
     }
     const key = { npiOrgId, roleKey: position.roleKey, departmentId };
     const existing = await db.position.findFirst({ where: key });
+    let positionId: string;
     if (existing) {
       await db.position.update({ where: { id: existing.id }, data: { titleAr: position.titleAr, personaAr: position.personaAr } });
+      positionId = existing.id;
     } else {
-      await db.position.create({ data: { ...key, titleAr: position.titleAr, personaAr: position.personaAr } });
+      const created = await db.position.create({ data: { ...key, titleAr: position.titleAr, personaAr: position.personaAr } });
+      positionId = created.id;
     }
     positionsWritten += 1;
+    positionIdByKey.set(`${position.roleKey}\u0000${position.departmentCode ?? ''}`, positionId);
   }
 
-  return { positionsWritten, positionsSkipped };
+  // The holders passed in are the already-validated list (unknown/inactive/
+  // role-mismatched/unreadable users were filtered out by `validateHolders`
+  // before this call) — only "the position itself was never written this
+  // run" is decided here.
+  let assignmentsWritten = 0;
+  const holdersSkipped: PersistOutcome['holdersSkipped'] = [];
+  for (const holder of holders) {
+    const positionId = positionIdByKey.get(`${holder.roleKey}\u0000${holder.departmentCode ?? ''}`);
+    if (positionId === undefined) {
+      for (const npiUserId of holder.npiUserIds) {
+        holdersSkipped.push({ roleKey: holder.roleKey, departmentCode: holder.departmentCode, npiUserId, reason: 'position_missing' });
+      }
+      continue;
+    }
+    for (const npiUserId of holder.npiUserIds) {
+      const existingAssignment = await db.positionAssignment.findFirst({ where: { positionId, npiUserId, endedAt: null } });
+      if (!existingAssignment) {
+        await db.positionAssignment.create({ data: { positionId, npiUserId } });
+        assignmentsWritten += 1;
+      }
+      // Idempotent and defensive even when the assignment above already
+      // existed: a stale role-only assignment (or an earlier department
+      // position of the same role) must not linger once the setup makes an
+      // explicit choice.
+      await db.positionAssignment.updateMany({
+        where: { npiUserId, endedAt: null, positionId: { not: positionId }, position: { npiOrgId, roleKey: holder.roleKey } },
+        data: { endedAt: now },
+      });
+    }
+  }
+
+  return { positionsWritten, positionsSkipped, assignmentsWritten, holdersSkipped };
 }

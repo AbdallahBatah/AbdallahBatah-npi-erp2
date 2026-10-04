@@ -218,6 +218,15 @@ export const PositionSchema = z.object({
   personaAr: z.string().min(80),
 });
 
+/** Which NPI users hold a copilot position (setup Q2). Copilot-side only:
+ *  written to `position_assignments`, never to NPI (08 §E.10). */
+export const PositionHolderSchema = z.object({
+  roleKey: z.string().regex(ROLE_KEY_RE),
+  departmentCode: z.string().nullable(),
+  npiUserIds: z.array(z.string().min(1)),
+});
+export type PositionHolder = z.infer<typeof PositionHolderSchema>;
+
 // ─── The pack ───────────────────────────────────────────────────────────────
 
 export const ProfilePackSchema = z

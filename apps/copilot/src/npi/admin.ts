@@ -178,31 +178,35 @@ export interface NpiDirectoryUser {
   id: string;
   isActive: boolean;
   roleKey: string;
+  nameAr: string;
 }
 
 /**
  * Same endpoint `readDirectory` (directory.ts) narrows for position
- * resolution; this reader takes the two other columns the onboarding needs.
+ * resolution; this reader takes the other columns the onboarding needs.
  * `DIRECTORY_SELECT` (apps/api/src/modules/admin/departments.service.ts:12-20)
  * is the exact projection:
  *  - id        line 13 (`id: true,`)
+ *  - nameAr    line 14 (`nameAr: true,`)
  *  - isActive  line 17 (`isActive: true,`)
  *  - role.key  line 19 (`role: { select: { id: true, key: true, nameAr: true, nameEn: true } }`)
  * NPI's own approval-rule guard (`ApprovalRulesService.validateSteps`) refuses
  * a chain through a role with no *active* user, which is why `isActive` is
- * read and not just the role key.
+ * read and not just the role key. `nameAr` is read for T-18's position-holder
+ * picker, which shows the administrator each NPI user's Arabic name.
  */
 export function readDirectoryUsers(body: unknown): NpiDirectoryUser[] {
   if (!Array.isArray(body)) return unexpected('readDirectoryUsers: body is not an array');
   return body.map((row, index) => {
     const where = `readDirectoryUsers[${index}]`;
     if (!isRecord(row)) return unexpected(`${where}: element is not an object`);
-    const { id, isActive, role } = row;
+    const { id, isActive, role, nameAr } = row;
     if (typeof id !== 'string') return unexpected(`${where}: missing/invalid "id"`);
     if (typeof isActive !== 'boolean') return unexpected(`${where}: missing/invalid "isActive"`);
+    if (typeof nameAr !== 'string') return unexpected(`${where}: missing/invalid "nameAr"`);
     if (!isRecord(role) || typeof role.key !== 'string') {
       return unexpected(`${where}: missing/invalid "role.key"`);
     }
-    return { id, isActive, roleKey: role.key };
+    return { id, isActive, roleKey: role.key, nameAr };
   });
 }
