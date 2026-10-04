@@ -139,6 +139,9 @@ export const ar = {
   'document.error.unreadable': 'تعذر قراءة المستند؛ جرّب صورة أوضح',
   'setup.loading': 'أفهم إجابتك…',
   'setup.error.apply': 'تعذر تطبيق الإعداد في NPI: {reason}',
+  'setup.unclear': 'لم أفهم الإجابة؛ اكتبها بصيغة أخرى أو اختر من المقترح.',
+  'setup.forbidden': 'الإعداد متاح لمدير النظام فقط.',
+  'setup.invalid_answer': 'الإجابة لا تتفق مع بقية الإعداد: {detail}',
 
   'chat.error.generic': 'تعذر إكمال الطلب. حاول مرة أخرى.',
   'chat.error.too_long': 'الرسالة أطول من الحد المسموح. اختصرها وأعد الإرسال.',
