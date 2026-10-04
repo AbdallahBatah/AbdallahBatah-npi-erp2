@@ -1,7 +1,15 @@
 // Unit tests for src/components/chat/api.ts — the browser-side calls to
 // /copilot/api/chat. `fetch` is mocked throughout; no network, no server.
 import { t } from '../src/i18n/ar';
-import { loadConversation, sendMessage, MAX_MESSAGE_LENGTH } from '../src/components/chat/api';
+import {
+  loadConversation,
+  sendMessage,
+  uploadDocument,
+  recordConsent,
+  consentNeeded,
+  MAX_MESSAGE_LENGTH,
+  type DocumentSummary,
+} from '../src/components/chat/api';
 
 function fakeResponse(status: number, body?: unknown, ok = status >= 200 && status < 300): Response {
   return {
@@ -291,5 +299,242 @@ describe('loadConversation — reply kind on history rows', () => {
   it('treats an unknown kind as a malformed body', async () => {
     respondWith([row({ kind: 'approved' })]);
     await expect(loadConversation()).resolves.toMatchObject({ ok: false, kind: 'server' });
+  });
+});
+
+// T-22: uploadDocument / recordConsent / consentNeeded.
+describe('uploadDocument', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const document: DocumentSummary = {
+    id: 'doc-1',
+    fileName: 'فاتورة.pdf',
+    mime: 'application/pdf',
+    sizeBytes: 1024,
+    kind: 'pdf_text',
+    pageCount: 2,
+    textChars: 500,
+    createdAt: '2026-10-04T00:00:00.000Z',
+  };
+
+  it('returns the document on a 201 (created)', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(201, { document })));
+
+    const result = await uploadDocument(new File(['x'], 'فاتورة.pdf'));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document).toEqual(document);
+      expect(result.deduplicated).toBe(false);
+    }
+  });
+
+  it('returns deduplicated: true on a 200 (existing document)', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(200, { document, deduplicated: true })));
+
+    const result = await uploadDocument(new File(['x'], 'فاتورة.pdf'));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.deduplicated).toBe(true);
+  });
+
+  it('maps 422 to kind "refused" carrying the server messageAr', async () => {
+    mockFetch(
+      jest.fn(async () =>
+        fakeResponse(422, { error: 'refused_confidential', messageAr: t('intake.refused_confidential') }),
+      ),
+    );
+
+    const result = await uploadDocument(new File(['x'], 'عقد-سري.pdf'));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('refused');
+      expect(result.messageAr).toBe(t('intake.refused_confidential'));
+    }
+  });
+
+  it('maps 413 to kind "too_large", falling back to ar.ts when the server sends no messageAr', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(413, { error: 'too_large' })));
+
+    const result = await uploadDocument(new File(['x'], 'big.pdf'));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('too_large');
+      expect(result.messageAr).toBe(t('document.error.too_large'));
+    }
+  });
+
+  it('maps 415 to kind "unsupported" using the server message', async () => {
+    const serverMessage = 'صيغة غير مدعومة';
+    mockFetch(jest.fn(async () => fakeResponse(415, { error: 'unsupported_type', messageAr: serverMessage })));
+
+    const result = await uploadDocument(new File(['x'], 'file.exe'));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('unsupported');
+      expect(result.messageAr).toBe(serverMessage);
+    }
+  });
+
+  it('maps 401 to kind "unauthenticated"', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(401, { error: 'unauthenticated' })));
+
+    const result = await uploadDocument(new File(['x'], 'file.pdf'));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.kind).toBe('unauthenticated');
+  });
+
+  it('maps 503 to kind "npi_down" using the server message', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(503, { error: 'npi_down', messageAr: 'NPI متعطل' })));
+
+    const result = await uploadDocument(new File(['x'], 'file.pdf'));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('npi_down');
+      expect(result.messageAr).toBe('NPI متعطل');
+    }
+  });
+
+  it('treats a malformed 200 body as kind "server"', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(200, { nope: true })));
+
+    const result = await uploadDocument(new File(['x'], 'file.pdf'));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('server');
+      expect(result.messageAr).toBe(t('chat.error.generic'));
+    }
+  });
+
+  it('reports a network failure as kind "network"', async () => {
+    mockFetch(jest.fn(async () => { throw new TypeError('fetch failed'); }));
+
+    const result = await uploadDocument(new File(['x'], 'file.pdf'));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.kind).toBe('network');
+  });
+
+  it('sends a multipart POST with field "file" and no explicit Content-Type header', async () => {
+    const fetchImpl = jest.fn(async (_url: string, _init?: RequestInit) => fakeResponse(201, { document }));
+    mockFetch(fetchImpl);
+
+    const file = new File(['content'], 'فاتورة.pdf', { type: 'application/pdf' });
+    await uploadDocument(file);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/copilot/api/documents');
+    expect(init?.method).toBe('POST');
+    expect(init?.credentials).toBe('same-origin');
+    // No explicit Content-Type: the browser must set the multipart boundary itself.
+    expect((init?.headers as Record<string, string> | undefined)?.['Content-Type']).toBeUndefined();
+    expect(init?.body).toBeInstanceOf(FormData);
+    const form = init?.body as FormData;
+    expect(form.get('file')).toBe(file);
+  });
+});
+
+describe('recordConsent', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('returns the consentEventId on a normal 200', async () => {
+    mockFetch(
+      jest.fn(async () =>
+        fakeResponse(200, { consentEventId: 'ce-1', documentId: 'doc-1', decision: 'approved', policyLine: '…' }),
+      ),
+    );
+
+    const result = await recordConsent('doc-1', 'approved');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.consentEventId).toBe('ce-1');
+  });
+
+  it('maps 404 to kind "refused" with the server messageAr', async () => {
+    const serverMessage = t('document.error.not_found');
+    mockFetch(jest.fn(async () => fakeResponse(404, { error: 'not_found', messageAr: serverMessage })));
+
+    const result = await recordConsent('missing-doc', 'approved');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('refused');
+      expect(result.messageAr).toBe(serverMessage);
+    }
+  });
+
+  it('maps 409 to kind "refused" with the server messageAr', async () => {
+    const serverMessage = t('document.error.consent_not_needed');
+    mockFetch(jest.fn(async () => fakeResponse(409, { error: 'consent_not_needed', messageAr: serverMessage })));
+
+    const result = await recordConsent('doc-1', 'approved');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('refused');
+      expect(result.messageAr).toBe(serverMessage);
+    }
+  });
+
+  it('maps 422 to kind "refused" with the server messageAr', async () => {
+    const serverMessage = t('intake.refused_confidential');
+    mockFetch(jest.fn(async () => fakeResponse(422, { error: 'refused_confidential', messageAr: serverMessage })));
+
+    const result = await recordConsent('doc-1', 'approved');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('refused');
+      expect(result.messageAr).toBe(serverMessage);
+    }
+  });
+
+  it('maps 401 to kind "unauthenticated"', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(401, { error: 'unauthenticated' })));
+
+    const result = await recordConsent('doc-1', 'cancelled');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.kind).toBe('unauthenticated');
+  });
+
+  it('maps 500 to kind "server" using the server message', async () => {
+    const serverMessage = 'خطأ في الخادم';
+    mockFetch(jest.fn(async () => fakeResponse(500, { error: 'server', messageAr: serverMessage })));
+
+    const result = await recordConsent('doc-1', 'approved');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.kind).toBe('server');
+      expect(result.messageAr).toBe(serverMessage);
+    }
+  });
+
+  it('reports a network failure as kind "network"', async () => {
+    mockFetch(jest.fn(async () => { throw new TypeError('fetch failed'); }));
+
+    const result = await recordConsent('doc-1', 'approved');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.kind).toBe('network');
+  });
+
+  it('sends a JSON POST with documentId and decision', async () => {
+    const fetchImpl = jest.fn(async (_url: string, _init?: RequestInit) =>
+      fakeResponse(200, { consentEventId: 'ce-1', documentId: 'doc-1', decision: 'approved', policyLine: '…' }),
+    );
+    mockFetch(fetchImpl);
+
+    await recordConsent('doc-1', 'approved');
+
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/copilot/api/documents/consent');
+    expect(init?.method).toBe('POST');
+    expect(init?.credentials).toBe('same-origin');
+    expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(JSON.parse(init?.body as string)).toEqual({ documentId: 'doc-1', decision: 'approved' });
+  });
+});
+
+describe('consentNeeded', () => {
+  it('is true for image and pdf_scanned', () => {
+    expect(consentNeeded('image')).toBe(true);
+    expect(consentNeeded('pdf_scanned')).toBe(true);
+  });
+
+  it('is false for pdf_text', () => {
+    expect(consentNeeded('pdf_text')).toBe(false);
   });
 });

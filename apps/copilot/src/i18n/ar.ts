@@ -43,6 +43,26 @@ export const ar = {
   'consent.approve': 'اعتمد الإرسال',
   'consent.cancel': 'ألغِ',
   'consent.policy_unverified': '(سياسة المزوّد قيد التحقق)',
+  // ── T-22 additions (not in 03 §4; app-authored, logged in PROGRESS.md) ──
+  // The provider policy line shown on the consent card and stored verbatim
+  // in `consent_events.policyLine`. Verified in Phase 0
+  // (docs/COPILOT_PHASE0_AR.md §7, privacy.claude.com, 2026-09-21).
+  'consent.policy_line':
+    'سياسة المزوّد: لا تُستخدم المدخلات والمخرجات لتدريب النماذج افتراضياً (تم التحقق منها بتاريخ 2026-09-21).',
+  'consent.pages': 'ما سيُرسل: {n} من الصفحات كصور',
+  'consent.page_one': 'ما سيُرسل: صورة واحدة',
+  'consent.busy': 'أسجّل قرارك…',
+  'consent.error': 'تعذر تسجيل القرار. حاول مرة أخرى.',
+  'chat.attached': 'أرفقتَ المستند: {name}',
+  'chat.attaching': 'أرفع المستند…',
+  'chat.document_duplicate': 'هذا المستند مرفوع من قبل؛ استُخدمت النسخة المحفوظة.',
+  'chat.document_text_ready':
+    'المستند نصي؛ يُستخرج نصه محلياً وتُخفى الأسماء قبل أي إرسال. الإدخال بالمحادثة يُفعَّل في المرحلة التالية.',
+  'chat.consent_recorded':
+    'تم اعتماد الإرسال وتسجيله في سجل الثقة. قراءة المستند وإدخاله يُفعَّلان في المرحلة التالية.',
+  'chat.consent_cancelled': 'أُلغي الإرسال؛ لم يُرسل المستند إلى أي نموذج.',
+  'document.error.not_found': 'المستند غير موجود.',
+  'document.error.consent_not_needed': 'هذا المستند نصي ولا يحتاج اعتماد إرسال.',
 
   'flow.customer_contract': 'عميل وعقد',
   'flow.pr': 'طلب شراء',
@@ -161,7 +181,7 @@ export const ar = {
   'chat.flow_pending.unknown':
     'إدخال المستندات بالمحادثة يُفعَّل في مرحلة لاحقة؛ أستطيع الآن الإجابة عن أسئلتك من بيانات NPI.',
   'chat.flow_unavailable': 'إدخال «{flow}» غير مفعّل لمنشأتك في إعدادات مَدار.',
-  'chat.later_hint': 'إرفاق المستندات والإدخال الصوتي يُفعَّلان في مرحلة لاحقة.',
+  'chat.later_hint': 'الإدخال الصوتي يُفعَّل في مرحلة لاحقة.',
 
   'notfound.title': 'الصفحة غير موجودة',
   'notfound.body': 'تحقق من العنوان أو عد إلى الرئيسية.',

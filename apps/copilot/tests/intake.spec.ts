@@ -40,6 +40,7 @@ import {
   type DocumentStorage,
   type IntakeDb,
 } from '../src/intake/upload';
+import type { LlmAuditData } from '../src/audit/log';
 import { garbageBytes, scannedPdf, textPdf } from './helpers/pdf-fixtures';
 
 // ─── sensitivity ────────────────────────────────────────────────────────────
@@ -338,9 +339,10 @@ function createFakeStorage() {
 
 function createFakeDb() {
   const rows: DocumentRow[] = [];
+  const auditRows: LlmAuditData[] = [];
   let seq = 0;
   let createCalls = 0;
-  const db: IntakeDb = {
+  const intakeDb: IntakeDb = {
     document: {
       async findUnique({ where }) {
         const key = where.npiOrgId_sha256;
@@ -378,7 +380,11 @@ function createFakeDb() {
       },
     },
   };
-  return { db, rows, getCreateCalls: () => createCalls };
+  // Not part of `IntakeDb` — this extra property lets the same fake object,
+  // once returned by the mocked `getDb()`, also satisfy `AuditDb` for the
+  // route's `writeAuditEvent` call on a confidential refusal (T-22, AT-06).
+  const db = { ...intakeDb, llmAudit: { create: async (args: { data: LlmAuditData }) => { auditRows.push(args.data); return args.data; } } };
+  return { db, rows, auditRows, getCreateCalls: () => createCalls };
 }
 
 const CALLER = { npiOrgId: 'org1', npiUserId: 'user1' };
@@ -669,8 +675,8 @@ describe('IntakeDb structural type', () => {
 // ─── source guard ───────────────────────────────────────────────────────────
 
 describe('intake source guard', () => {
-  it('src/intake/{upload,pdf,sensitivity}.ts never import llm, privacy or npi modules', () => {
-    const files = ['upload.ts', 'pdf.ts', 'sensitivity.ts'].map((name) =>
+  it('src/intake/{upload,pdf,sensitivity,consent}.ts never import llm, privacy or npi modules', () => {
+    const files = ['upload.ts', 'pdf.ts', 'sensitivity.ts', 'consent.ts'].map((name) =>
       fsSync.readFileSync(path.join(__dirname, '..', 'src', 'intake', name), 'utf8'),
     );
     for (const content of files) {
@@ -716,19 +722,19 @@ describe('POST /copilot/api/documents and GET /copilot/api/documents', () => {
   }
 
   function mockDb() {
-    const { db, rows } = createFakeDb();
+    const { db, rows, auditRows } = createFakeDb();
     const dbModule = require('../src/db');
     dbModule.getDb.mockReturnValue(db);
-    return { db, rows };
+    return { db, rows, auditRows };
   }
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('POST returns 201 and the document summary for a new upload', async () => {
+  it('POST returns 201 and the document summary for a new upload, writing no audit row', async () => {
     mockSession({ npiOrgId: 'org1', npiUserId: 'user1' });
-    mockDb();
+    const { auditRows } = mockDb();
     const { POST } = require('../src/app/api/documents/route');
     const { NextRequest } = require('next/server');
 
@@ -741,11 +747,12 @@ describe('POST /copilot/api/documents and GET /copilot/api/documents', () => {
 
     expect(res.status).toBe(201);
     expect(body.document.kind).toBe('image');
+    expect(auditRows).toHaveLength(0);
   });
 
-  it('POST returns 422 refused_confidential for a confidential file name', async () => {
+  it('POST returns 422 refused_confidential for a confidential file name and writes exactly one refused_confidential audit row', async () => {
     mockSession({ npiOrgId: 'org1', npiUserId: 'user1' });
-    mockDb();
+    const { auditRows } = mockDb();
     const { POST } = require('../src/app/api/documents/route');
     const { NextRequest } = require('next/server');
 
@@ -758,6 +765,8 @@ describe('POST /copilot/api/documents and GET /copilot/api/documents', () => {
 
     expect(res.status).toBe(422);
     expect(body.error).toBe('refused_confidential');
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0].event).toBe('refused_confidential');
   });
 
   it('POST returns 401 when there is no session', async () => {

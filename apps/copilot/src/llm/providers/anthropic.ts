@@ -4,7 +4,14 @@
 // `claude-api` skill's TypeScript README/tool-use docs for the verified
 // shapes this file follows (no sampling parameters, no `thinking`,
 // `output_config.effort` only on the advanced tier, structured output via
-// `output_config.format`, per-request timeout in milliseconds).
+// `output_config.format`, per-request timeout in milliseconds). T-22 adds
+// the verified image/PDF request shapes (platform.claude.com docs, fetched
+// 2026-10-04): an image block maps to
+// `{ type: 'image', source: { type: 'base64', media_type, data } }` and a
+// PDF block to
+// `{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data }, title? }`.
+// `consentEventId` and `sizeBytes` are audit-only fields on `RedactedBlock`
+// and must NEVER appear in the params sent to the provider.
 import Anthropic from '@anthropic-ai/sdk';
 import type {
   ModelProvider,
@@ -85,12 +92,26 @@ function mapContentBlock(block: RedactedBlock): Record<string, unknown> {
   if (block.type === 'tool_use') {
     return { type: 'tool_use', id: block.id, name: block.name, input: block.input };
   }
-  // tool_result
+  if (block.type === 'tool_result') {
+    return {
+      type: 'tool_result',
+      tool_use_id: block.toolUseId,
+      content: block.content as unknown as string,
+      ...(block.isError ? { is_error: true } : {}),
+    };
+  }
+  if (block.type === 'image') {
+    // consentEventId/sizeBytes are audit-only and intentionally omitted.
+    return {
+      type: 'image',
+      source: { type: 'base64', media_type: block.mediaType, data: block.data as unknown as string },
+    };
+  }
+  // document (PDF)
   return {
-    type: 'tool_result',
-    tool_use_id: block.toolUseId,
-    content: block.content as unknown as string,
-    ...(block.isError ? { is_error: true } : {}),
+    type: 'document',
+    source: { type: 'base64', media_type: block.mediaType, data: block.data as unknown as string },
+    ...(block.title !== undefined ? { title: block.title } : {}),
   };
 }
 

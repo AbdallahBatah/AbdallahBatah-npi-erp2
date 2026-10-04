@@ -4,7 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '@/i18n/ar';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States';
 import { Button } from '@/components/ui/Button';
-import { loadConversation, sendMessage, type ChatMessage } from './api';
+import { ConsentCard } from '@/components/ConsentCard';
+import {
+  consentNeeded,
+  loadConversation,
+  recordConsent,
+  sendMessage,
+  uploadDocument,
+  type ChatMessage,
+  type ConsentDecision,
+  type DocumentSummary,
+} from './api';
 import { Composer } from './Composer';
 import { Message } from './Message';
 import { WaitingIndicator } from './WaitingIndicator';
@@ -22,6 +32,12 @@ type Phase = 'loading' | 'error' | 'ready';
  * on mount, then lets them send more. `userName` is accepted for the page to
  * pass through (spec/madar/03 §3) but this component has nothing of its own
  * to show with it today — the greeting lives on the page, not in here.
+ *
+ * T-22 adds the attach + consent flow on top of that: attaching a file
+ * uploads it, shows it as a user bubble, and then either asks for consent
+ * (image / scanned PDF) via `ConsentCard` or announces the document is text
+ * and ready. None of this is persisted server-side as chat messages yet —
+ * that is T-26's job; here it is all local component state.
  */
 export function Chat({ userName: _userName }: { userName?: string } = {}) {
   const [phase, setPhase] = useState<Phase>('loading');
@@ -30,6 +46,10 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+  const [pendingConsent, setPendingConsent] = useState<{ document: DocumentSummary } | null>(null);
+  const [consentBusy, setConsentBusy] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -64,11 +84,86 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages, sending]);
+  }, [messages, sending, attaching, pendingConsent]);
 
   function fillComposer(text: string) {
     setDraft(text);
     textareaRef.current?.focus();
+  }
+
+  function appendNotice(textAr: string, kind: ChatMessage['kind'] = 'answer') {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        role: 'assistant',
+        textAr,
+        badges: [],
+        memoryNotes: [],
+        createdAt: new Date().toISOString(),
+        kind,
+      },
+    ]);
+  }
+
+  async function handleAttach(file: File) {
+    if (attaching || pendingConsent) return;
+    setAttaching(true);
+    const result = await uploadDocument(file);
+    setAttaching(false);
+
+    if (!result.ok) {
+      if (result.kind === 'unauthenticated') {
+        window.location.assign(LOGIN_PATH);
+        return;
+      }
+      appendNotice(result.messageAr, 'error');
+      return;
+    }
+
+    const { document, deduplicated } = result;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        role: 'user',
+        textAr: t('chat.attached', { name: document.fileName }),
+        badges: [],
+        memoryNotes: [],
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    if (deduplicated) appendNotice(t('chat.document_duplicate'));
+
+    if (consentNeeded(document.kind)) {
+      setConsentError(null);
+      setPendingConsent({ document });
+    } else {
+      appendNotice(t('chat.document_text_ready'));
+    }
+  }
+
+  async function handleConsent(decision: ConsentDecision) {
+    if (!pendingConsent || consentBusy) return;
+    setConsentBusy(true);
+    const result = await recordConsent(pendingConsent.document.id, decision);
+    setConsentBusy(false);
+
+    if (!result.ok) {
+      if (result.kind === 'unauthenticated') {
+        window.location.assign(LOGIN_PATH);
+        return;
+      }
+      // The card stays up — nothing is lost, the user can retry the same
+      // decision (or pick the other one).
+      setConsentError(result.messageAr || t('consent.error'));
+      return;
+    }
+
+    setPendingConsent(null);
+    setConsentError(null);
+    appendNotice(t(decision === 'approved' ? 'chat.consent_recorded' : 'chat.consent_cancelled'));
   }
 
   async function handleSend() {
@@ -167,6 +262,17 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
         ) : (
           messages.map((message) => <Message key={message.id} message={message} />)
         )}
+        {attaching ? <WaitingIndicator label={t('chat.attaching')} /> : null}
+        {pendingConsent ? (
+          <ConsentCard
+            document={pendingConsent.document}
+            policyLine={t('consent.policy_line')}
+            busy={consentBusy}
+            errorMessage={consentError}
+            onApprove={() => handleConsent('approved')}
+            onCancel={() => handleConsent('cancelled')}
+          />
+        ) : null}
         {sending ? <WaitingIndicator /> : null}
         {/* scroll-mb-* is what actually keeps the newest message clear of the
             sticky composer below: Element.scrollIntoView respects
@@ -185,7 +291,15 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
         data-testid="composer-wrapper"
         className="sticky bottom-[calc(var(--copilot-tabbar-h)+env(safe-area-inset-bottom))] z-10 bg-[#f4f6f8] pt-2 md:bottom-0"
       >
-        <Composer ref={textareaRef} value={draft} onChange={setDraft} onSend={handleSend} disabled={sending} />
+        <Composer
+          ref={textareaRef}
+          value={draft}
+          onChange={setDraft}
+          onSend={handleSend}
+          onAttach={handleAttach}
+          disabled={sending}
+          attachDisabled={attaching || pendingConsent !== null}
+        />
       </div>
     </div>
   );

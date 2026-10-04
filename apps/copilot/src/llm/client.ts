@@ -2,9 +2,19 @@
 // Enforces: provider allow-list, per-tier model/timeout selection, the
 // per-user daily token cap, and — unconditionally — one llm_audit row per
 // attempt (a failure to write that row fails the call; there is no
-// un-audited model traffic).
-import type { ModelProvider, ModelResponse, RedactedRequest } from './provider';
+// un-audited model traffic). T-22 adds vision input: every image/document
+// block in a request must share one consent event and go out only on the
+// advanced tier (spec/madar/02 §5.3); `outboundRedactedText` is built from
+// an audit-safe view of the messages that never carries base64 image data,
+// and every audit row is written through `writeLlmAudit` so invariant I4
+// (an image never leaves without a recorded consent id) is enforced before
+// any row reaches the database.
+import type { ModelProvider, ModelResponse, RedactedMessage, RedactedRequest } from './provider';
 import { costUsdMicro, isPriced } from './pricing';
+import { writeLlmAudit, type LlmAuditData } from '../audit/log';
+import { auditViewOfMessages } from './vision';
+
+export type { LlmAuditData } from '../audit/log';
 
 export type LlmErrorKind =
   | 'not_configured'
@@ -45,24 +55,6 @@ export interface LlmContext {
   conversationId?: string;
   intakeJobId?: string;
   documentId?: string;
-}
-
-export interface LlmAuditData {
-  npiOrgId: string;
-  npiUserId: string;
-  conversationId: string | null;
-  intakeJobId: string | null;
-  documentId: string | null;
-  event: string;
-  modelTier: string | null;
-  modelId: string | null;
-  tokensIn: number;
-  tokensOut: number;
-  costUsdMicro: bigint;
-  outboundRedactedText: string | null;
-  imageSent: boolean;
-  latencyMs: number | null;
-  error: string | null;
 }
 
 interface UsageKey {
@@ -130,6 +122,33 @@ function dailyCap(env: NodeJS.ProcessEnv): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DAILY_TOKEN_CAP;
 }
 
+/** Scans every message for image/document ("vision") blocks. Used to
+ *  enforce that a request carries at most one consent event and only ever
+ *  targets the advanced tier (spec/madar/02 §5.3) — both checked before
+ *  anything is sent. `totalRawBytes` is informational here; the per-block
+ *  and per-request byte limits are already enforced where blocks are built
+ *  (src/llm/vision.ts), before they ever reach this client. */
+function scanVisionBlocks(messages: RedactedMessage[]): {
+  visionCount: number;
+  consentEventIds: Set<string>;
+  totalRawBytes: number;
+} {
+  let visionCount = 0;
+  const consentEventIds = new Set<string>();
+  let totalRawBytes = 0;
+  for (const message of messages) {
+    if (typeof message.content === 'string') continue;
+    for (const block of message.content) {
+      if (block.type === 'image' || block.type === 'document') {
+        visionCount += 1;
+        consentEventIds.add(block.consentEventId);
+        totalRawBytes += block.sizeBytes;
+      }
+    }
+  }
+  return { visionCount, consentEventIds, totalRawBytes };
+}
+
 export function createLlmClient(deps: {
   provider: ModelProvider;
   db: LlmDb;
@@ -151,6 +170,22 @@ export function createLlmClient(deps: {
     if (!isPriced(modelId)) {
       throw new LlmError('not_configured', `No price configured for model "${modelId}"`);
     }
+
+    // Vision pre-flight (02 §5.3): both are programming errors caught before
+    // anything is sent, so — like `not_configured` — neither writes an audit
+    // row. A request may carry blocks covered by at most one consent event,
+    // and vision input only ever travels on the advanced tier.
+    const { visionCount, consentEventIds } = scanVisionBlocks(req.messages);
+    if (visionCount > 0) {
+      if (consentEventIds.size !== 1) {
+        throw new LlmError('bad_request', 'vision blocks must share one consent event');
+      }
+      if (req.tier !== 'advanced') {
+        throw new LlmError('bad_request', 'vision input requires the advanced tier (02 §5.3)');
+      }
+    }
+    const singleConsentEventId = consentEventIds.size === 1 ? [...consentEventIds][0] : null;
+
     const timeoutMs = timeoutForTier(req.tier);
     const day = riyadhDateOnly(now());
     const cap = dailyCap(env);
@@ -161,31 +196,34 @@ export function createLlmClient(deps: {
     const existingTotal = existing ? existing.tokensIn + existing.tokensOut : 0;
 
     if (existingTotal >= cap) {
-      await deps.db.llmAudit.create({
-        data: {
-          npiOrgId: ctx.npiOrgId,
-          npiUserId: ctx.npiUserId,
-          conversationId: ctx.conversationId ?? null,
-          intakeJobId: ctx.intakeJobId ?? null,
-          documentId: ctx.documentId ?? null,
-          event: 'cap_reached',
-          modelTier: null,
-          modelId: null,
-          tokensIn: 0,
-          tokensOut: 0,
-          costUsdMicro: 0n,
-          outboundRedactedText: null,
-          imageSent: false,
-          latencyMs: null,
-          error: null,
-        },
+      await writeLlmAudit(deps.db, {
+        npiOrgId: ctx.npiOrgId,
+        npiUserId: ctx.npiUserId,
+        conversationId: ctx.conversationId ?? null,
+        intakeJobId: ctx.intakeJobId ?? null,
+        documentId: ctx.documentId ?? null,
+        event: 'cap_reached',
+        modelTier: null,
+        modelId: null,
+        tokensIn: 0,
+        tokensOut: 0,
+        costUsdMicro: 0n,
+        outboundRedactedText: null,
+        imageSent: false,
+        consentEventId: null,
+        latencyMs: null,
+        error: null,
       });
       throw new LlmError('cap_reached');
     }
 
     // Built before the call: the trust log must show what left the building
-    // even when the provider then fails or times out.
-    const outboundRedactedText = JSON.stringify({ system: req.system, messages: req.messages });
+    // even when the provider then fails or times out. The audit view never
+    // carries base64 image/document data (src/llm/vision.ts auditView).
+    const outboundRedactedText = JSON.stringify({
+      system: req.system,
+      messages: auditViewOfMessages(req.messages),
+    });
 
     const startedAt = Date.now();
     let response: ModelResponse;
@@ -196,33 +234,9 @@ export function createLlmClient(deps: {
       const llmErr = err instanceof LlmError ? err : new LlmError('bad_request', describe(err));
       // `not_configured` is raised before anything is sent.
       const sent = llmErr.kind !== 'not_configured';
-      await deps.db.llmAudit.create({
-        data: {
-          npiOrgId: ctx.npiOrgId,
-          npiUserId: ctx.npiUserId,
-          conversationId: ctx.conversationId ?? null,
-          intakeJobId: ctx.intakeJobId ?? null,
-          documentId: ctx.documentId ?? null,
-          event: req.purpose,
-          modelTier: req.tier,
-          modelId,
-          tokensIn: 0,
-          tokensOut: 0,
-          costUsdMicro: 0n,
-          outboundRedactedText: sent ? outboundRedactedText : null,
-          imageSent: false,
-          latencyMs,
-          error: llmErr.kind,
-        },
-      });
-      throw llmErr;
-    }
-    const latencyMs = Date.now() - startedAt;
-
-    const cost = costUsdMicro(modelId, response.tokensIn, response.tokensOut);
-
-    await deps.db.llmAudit.create({
-      data: {
+      // The image DID leave when the provider failed after sending.
+      const imageSent = sent && visionCount > 0;
+      await writeLlmAudit(deps.db, {
         npiOrgId: ctx.npiOrgId,
         npiUserId: ctx.npiUserId,
         conversationId: ctx.conversationId ?? null,
@@ -231,14 +245,39 @@ export function createLlmClient(deps: {
         event: req.purpose,
         modelTier: req.tier,
         modelId,
-        tokensIn: response.tokensIn,
-        tokensOut: response.tokensOut,
-        costUsdMicro: cost,
-        outboundRedactedText,
-        imageSent: false,
+        tokensIn: 0,
+        tokensOut: 0,
+        costUsdMicro: 0n,
+        outboundRedactedText: sent ? outboundRedactedText : null,
+        imageSent,
+        consentEventId: imageSent ? singleConsentEventId : null,
         latencyMs,
-        error: null,
-      },
+        error: llmErr.kind,
+      });
+      throw llmErr;
+    }
+    const latencyMs = Date.now() - startedAt;
+
+    const cost = costUsdMicro(modelId, response.tokensIn, response.tokensOut);
+    const imageSent = visionCount > 0;
+
+    await writeLlmAudit(deps.db, {
+      npiOrgId: ctx.npiOrgId,
+      npiUserId: ctx.npiUserId,
+      conversationId: ctx.conversationId ?? null,
+      intakeJobId: ctx.intakeJobId ?? null,
+      documentId: ctx.documentId ?? null,
+      event: req.purpose,
+      modelTier: req.tier,
+      modelId,
+      tokensIn: response.tokensIn,
+      tokensOut: response.tokensOut,
+      costUsdMicro: cost,
+      outboundRedactedText,
+      imageSent,
+      consentEventId: imageSent ? singleConsentEventId : null,
+      latencyMs,
+      error: null,
     });
 
     await deps.db.dailyUsage.upsert({

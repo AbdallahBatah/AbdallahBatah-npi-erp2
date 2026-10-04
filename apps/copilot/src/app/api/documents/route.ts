@@ -6,9 +6,12 @@
 // `json()` helper with Cache-Control: no-store, `crossSite()`, `sessionOrNull()`,
 // 503 on npiDown, 401 unauthenticated, error -> status mapping,
 // `console.error('[copilot] …')` with no secrets. The orchestration itself
-// lives in `src/intake/upload.ts`.
+// lives in `src/intake/upload.ts`. T-22 adds: a confidential refusal (AT-06)
+// writes one `refused_confidential` audit event — best-effort, since the
+// refusal itself must never depend on the audit write succeeding.
 import { NextResponse, type NextRequest } from 'next/server';
 import { getServerSession } from '@/auth/session';
+import { writeAuditEvent, type AuditDb } from '@/audit/log';
 import { getDb } from '@/db';
 import { t } from '@/i18n/ar';
 import {
@@ -123,6 +126,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (outcome.status === 'created') return json({ document: outcome.document }, 201);
     if (outcome.status === 'existing') return json({ document: outcome.document, deduplicated: true }, 200);
+
+    if (outcome.reason === 'confidential') {
+      try {
+        const auditDb: AuditDb = getDb();
+        await writeAuditEvent(
+          auditDb,
+          { npiOrgId: session.user.npiOrgId, npiUserId: session.user.npiUserId },
+          'refused_confidential',
+        );
+      } catch (auditErr) {
+        // The refusal must never depend on the audit write succeeding.
+        console.error('[copilot] refused_confidential audit write failed', auditErr instanceof Error ? auditErr.message : auditErr);
+      }
+    }
     return refusalResponse(outcome.reason);
   } catch (err) {
     console.error('[copilot] document upload failed', err instanceof Error ? err.message : err);
