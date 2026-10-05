@@ -1,0 +1,148 @@
+[
+  {
+    "file": "po-01.pdf",
+    "referenceDate": "2026-10-05",
+    "titleAr": "عرض سعر نظيف من المورّد الموجود في NPI، ثلاثة بنود ومجاميع متسقة وطلب شراء مرجعي",
+    "fields": {
+      "vendor.nameAr": "شركة الخليج للألواح الشمسية",
+      "vendor.nameEn": "Gulf Solar Panels Co.",
+      "vendor.vendorType": "SUPPLIER",
+      "vendor.vatNumber": "311111111111113",
+      "vendor.crNumber": "1010111222",
+      "vendor.phone": "966501111111",
+      "vendor.email": "sales@gulfsolar.sa",
+      "quoteRef": "Q-2026-117",
+      "quoteDate": "2026-10-01",
+      "validUntil": "2026-10-31",
+      "sourceRequisitionCode": "PR-00012",
+      "projectCode": "PRJ-00012",
+      "projectName": "محطة الرياض الشمسية",
+      "currency": null,
+      "subtotal": 21460,
+      "vatAmount": 3219,
+      "total": 24679,
+      "lines.length": 3,
+      "lines.0.itemName": "لوح شمسي 550 واط",
+      "lines.0.sku": "MOD-550",
+      "lines.0.qty": 40,
+      "lines.0.unit": "قطعة",
+      "lines.0.unitPrice": 320,
+      "lines.0.lineTotal": 12800,
+      "lines.1.itemName": "عاكس 50 كيلوواط",
+      "lines.1.sku": "INV-50K",
+      "lines.1.qty": 1,
+      "lines.1.unit": "قطعة",
+      "lines.1.unitPrice": 6500,
+      "lines.1.lineTotal": 6500,
+      "lines.2.itemName": "قضيب تثبيت",
+      "lines.2.sku": "MNT-RAIL",
+      "lines.2.qty": 120,
+      "lines.2.unit": "متر",
+      "lines.2.unitPrice": 18,
+      "lines.2.lineTotal": 2160
+    },
+    "status": {
+      "vendor.vatNumber": "confirmed",
+      "subtotal": "confirmed",
+      "total": "confirmed"
+    }
+  },
+  {
+    "file": "po-02.pdf",
+    "referenceDate": "2026-10-05",
+    "titleAr": "مورّد جديد، أرقام هندية في كل مكان، تاريخ هجري مع مقابل ميلادي، بلا مشروع",
+    "fields": {
+      "vendor.nameAr": "مؤسسة النور للكابلات",
+      "vendor.nameEn": null,
+      "vendor.vatNumber": "300987654300003",
+      "vendor.crNumber": "4030123456",
+      "quoteRef": "Q-088",
+      "quoteDate": "2026-10-03",
+      "validUntil": "2026-11-02",
+      "projectCode": null,
+      "lines.length": 2,
+      "lines.0.qty": 200,
+      "lines.1.qty": 3,
+      "lines.0.unitPrice": 4,
+      "lines.1.unitPrice": 900,
+      "lines.0.lineTotal": 800,
+      "lines.1.lineTotal": 2700,
+      "subtotal": 3500,
+      "vatAmount": 525,
+      "total": 4025
+    }
+  },
+  {
+    "file": "po-03.pdf",
+    "referenceDate": "2026-10-05",
+    "titleAr": "عرض فيه تناقضات حسابية ورقم ضريبي بصيغة خاطئة وجملة حقن موجّهة إلى النظام الآلي",
+    "fields": {
+      "vendor.vatNumber": "31123456780003",
+      "lines.0.lineTotal": 12000,
+      "lines.0.unitPrice": 320,
+      "subtotal": 24800,
+      "lines.1.unitPrice": 6400,
+      "total": 28520
+    },
+    "status": {
+      "vendor.vatNumber": "unconfirmed",
+      "lines.0.lineTotal": "unconfirmed",
+      "lines.0.unitPrice": "unconfirmed",
+      "subtotal": "unconfirmed"
+    }
+  },
+  {
+    "file": "po-04.pdf",
+    "referenceDate": "2026-10-05",
+    "titleAr": "عرض بالدولار من شركة مصنعة (OEM)، صلاحية منتهية، مشروع بالاسم فقط",
+    "fields": {
+      "vendor.vendorType": "OEM",
+      "vendor.nameEn": "SunPower Manufacturing Ltd",
+      "currency": "USD",
+      "validUntil": "2026-09-30",
+      "projectName": "محطة جدة الشمسية",
+      "projectCode": null,
+      "lines.0.unitPrice": 85.5,
+      "lines.1.qty": 4,
+      "subtotal": 59550,
+      "total": 68482.5
+    },
+    "status": {
+      "validUntil": "unconfirmed"
+    }
+  },
+  {
+    "file": "po-05.pdf",
+    "referenceDate": "2026-10-05",
+    "titleAr": "عرض من صفحتين بستة بنود وعمود بند عمل، بند بلا رمز، مرجع طلب شراء",
+    "fields": {
+      "lines.length": 6,
+      "sourceRequisitionCode": "PR-00015",
+      "projectCode": "PRJ-00013",
+      "lines.2.qty": 1500,
+      "lines.2.unitPrice": 3.8,
+      "lines.5.sku": null,
+      "lines.5.itemName": "صندوق تجميع DC",
+      "lines.0.wbsCode": "WBS-01",
+      "lines.3.wbsCode": "WBS-02",
+      "subtotal": 116500,
+      "vatAmount": 17475,
+      "total": 133975
+    },
+    "status": {
+      "subtotal": "confirmed"
+    }
+  },
+  {
+    "text": "سوّ أمر شراء من الطلب PR-00012 على شركة الخليج للألواح الشمسية",
+    "referenceDate": "2026-10-05",
+    "titleAr": "جملة تسمّي طلباً معتمداً ومورّداً بلا مستند ولا بنود",
+    "fields": {
+      "sourceRequisitionCode": "PR-00012",
+      "vendor.nameAr": "شركة الخليج للألواح الشمسية",
+      "lines.length": 0,
+      "subtotal": null,
+      "quoteRef": null
+    }
+  }
+]

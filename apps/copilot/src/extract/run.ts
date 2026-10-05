@@ -1,8 +1,8 @@
 // Generic extraction runner (T-23, spec 02 §5.5, ADR-28): prompt → model →
 // strict JSON → zod → server-side validation → per-field confidence.
 //
-// One flow is registered here (customer_contract); T-24/T-25 add the other
-// four by adding a `FlowSpec` to `FLOWS` — nothing else in this file is
+// Three flows are registered here (customer_contract, pr, po); T-25 adds the
+// other two by adding a `FlowSpec` to `FLOWS` — nothing else in this file is
 // flow-specific. The runner never talks to NPI and never writes anything:
 // it turns a document into an `ExtractionResult` that the preview card
 // (T-26) shows and the execution plan (T-27) consumes.
@@ -27,6 +27,8 @@ import {
   type CustomerContractOutput,
   type CustomerContractValues,
 } from './schemas/customer_contract';
+import { assessPr, PrOutputSchema, type AssessedPr, type PrOutput, type PrValues } from './schemas/pr';
+import { assessPo, PoOutputSchema, type AssessedPo, type PoOutput, type PoValues } from './schemas/po';
 
 // ─── Model-facing JSON schema ───────────────────────────────────────────────
 
@@ -121,6 +123,9 @@ export interface SourceFlags {
   /** The text layer showed the reversed lam-alef ligature at least once, so
    *  a word-internal «ال» anywhere on the page may really be «لا». */
   ligatureSuspect: boolean;
+  /** YYYY-MM-DD: «today» for the model (relative dates) and for the
+   *  assessment (a date before it is in the past). */
+  referenceDate: string;
 }
 
 export interface FlowSpec<TOut, TAssessed, TValues> {
@@ -153,6 +158,32 @@ export const FLOWS = {
     jsonSchema: modelJsonSchema(CustomerContractOutputSchema),
     assess: assessCustomerContract,
   }),
+  pr: specOf<PrOutput, AssessedPr, PrValues>({
+    flow: 'pr',
+    promptFile: 'extract/pr.md',
+    purpose: 'extract_pr',
+    parse(raw) {
+      const parsed = PrOutputSchema.safeParse(raw);
+      return parsed.success
+        ? { success: true, data: parsed.data }
+        : { success: false, detail: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+    },
+    jsonSchema: modelJsonSchema(PrOutputSchema),
+    assess: assessPr,
+  }),
+  po: specOf<PoOutput, AssessedPo, PoValues>({
+    flow: 'po',
+    promptFile: 'extract/po.md',
+    purpose: 'extract_po',
+    parse(raw) {
+      const parsed = PoOutputSchema.safeParse(raw);
+      return parsed.success
+        ? { success: true, data: parsed.data }
+        : { success: false, detail: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+    },
+    jsonSchema: modelJsonSchema(PoOutputSchema),
+    assess: assessPo,
+  }),
 } as const;
 
 export type RegisteredFlow = keyof typeof FLOWS;
@@ -171,7 +202,9 @@ export interface ExtractDeps {
 }
 
 export type ExtractSource =
-  /** `pdf_text`: page texts from the intake sidecar (src/intake/pdf.ts). */
+  /** `pdf_text`: page texts from the intake sidecar (src/intake/pdf.ts).
+   *  A sentence-only input (a PR typed in the chat) is this kind with no
+   *  pages and the sentence in `ExtractInput.userHint`. */
   | { kind: 'text'; pages: { num: number; text: string }[] }
   /** `image` / `pdf_scanned`: blocks built by src/llm/vision.ts under one
    *  consent event — the client refuses anything else before sending. */
@@ -184,6 +217,9 @@ export interface ExtractInput {
   userHint?: string;
   /** The firm's own name, so the model does not take it for the customer. */
   ourPartyNameAr?: string;
+  /** YYYY-MM-DD the model resolves relative dates against («قبل الخميس»);
+   *  defaults to today (local). The eval pins it so expected dates hold. */
+  referenceDate?: string;
 }
 
 export type ExtractFailureReason =
@@ -192,7 +228,8 @@ export type ExtractFailureReason =
   | 'refused'
   | 'truncated'
   | 'invalid_json'
-  | 'schema_mismatch';
+  | 'schema_mismatch'
+  | 'empty_input';
 
 export interface ExtractUsage {
   tokensIn: number;
@@ -235,17 +272,22 @@ const LIGATURE_ARTIFACT_RE = /ا[أإآ]ل|اال/;
  *  - a date split across runs «2026 - 11 - 01» → «2026-11-01»,
  *  - the lam-alef ligature read back reversed: «األول» → «الأول» (alef +
  *    hamza-alef never occur together in Arabic, so this is safe) and
- *    «االنتهاء» → «الانتهاء» (same reasoning for a doubled alef). The
- *    word-internal case («للمقاوالت» for «للمقاولات») cannot be told apart
- *    from a genuine «ال» without a lexicon and is left to the model — the
- *    prompt names it, and `flags.ligatureSuspect` lets the assessment keep
- *    such a name unconfirmed.
+ *    «االنتهاء» → «الانتهاء» (same reasoning for a doubled alef), and — only
+ *    on a page that showed the artifact — «لأللواح» → «للألواح»,
+ *    «لالستشارات» → «للاستشارات» (T-24, po-01 of the eval): a lam followed
+ *    by a reversed ligature. Lam always ligates with a following alef, so on
+ *    such a page a literal «لأل»/«لال» can only be «لل» + the ligature; on a
+ *    clean page the same letters may be genuine («لألف ريال»), hence the
+ *    gate. The word-internal case («للمقاوالت» for «للمقاولات») cannot be
+ *    told apart from a genuine «ال» without a lexicon and is left to the
+ *    model — the prompt names it, and `flags.ligatureSuspect` lets the
+ *    assessment keep such a name unconfirmed.
  * Digits are left as written: the model reads Arabic-Indic digits and the
  * assessment normalizes identifiers.
  */
-export function repairPdfTextWithFlags(text: string): { text: string; flags: SourceFlags } {
+export function repairPdfTextWithFlags(text: string): { text: string; flags: Pick<SourceFlags, 'ligatureSuspect'> } {
   const ligatureSuspect = LIGATURE_ARTIFACT_RE.test(text);
-  const repaired = text
+  const repaired = (ligatureSuspect ? text.replace(/ل([اأإآ])ل/g, 'لل$1') : text)
     .replace(/\r\n?/g, '\n')
     .replace(/\t+/g, ' ')
     .replace(/(\d{4}) - (\d{1,2}) - (\d{1,2})/g, '$1-$2-$3')
@@ -266,15 +308,25 @@ const PAGE_HEADER = (num: number) => `\n=== صفحة ${num} ===\n`;
 const HINT_HEADER = 'تلميح المستخدم: ';
 const VISION_NOTE = 'المستند مرفق صوراً بالترتيب؛ رقم الصفحة هو ترتيب الصورة.';
 
-function systemFor(spec: FlowSpec<unknown, unknown, unknown>, input: ExtractInput): RedactedText {
+/** Today's local date as YYYY-MM-DD (the firm's calendar, not UTC). */
+export function todayIso(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function systemFor(spec: FlowSpec<unknown, unknown, unknown>, input: ExtractInput, referenceDate: string): RedactedText {
   const hint = input.ourPartyNameAr?.trim()
     ? `اسم شركتنا في هذا النظام: «${input.ourPartyNameAr.trim()}»؛ إن ورد في العقد فهو ليس العميل.`
     : '';
-  return staticPrompt(loadPrompt(spec.promptFile).replace(/\{\{our_party_hint\}\}/g, hint));
+  return staticPrompt(
+    loadPrompt(spec.promptFile)
+      .replace(/\{\{our_party_hint\}\}/g, hint)
+      .replace(/\{\{today\}\}/g, referenceDate),
+  );
 }
 
 function userContentFor(deps: ExtractDeps, input: ExtractInput): { content: RedactedText | RedactedBlock[]; flags: SourceFlags } {
-  const flags: SourceFlags = { ligatureSuspect: false };
+  const flags: SourceFlags = { ligatureSuspect: false, referenceDate: input.referenceDate ?? todayIso() };
   const hintLine: RedactedText | null = input.userHint?.trim()
     ? joinRedacted([staticPrompt(HINT_HEADER), deps.pseudonymizer.redact(input.userHint.trim()), staticPrompt('\n')])
     : null;
@@ -385,11 +437,16 @@ export async function runExtraction(
   if (!isRegisteredFlow(input.flow)) return failure(input.flow, 'unsupported_flow', null, null);
   const spec = FLOWS[input.flow] as FlowSpec<unknown, unknown, unknown>;
 
+  // Nothing to read — no sentence and no page — is the caller's mistake, and
+  // not worth a model call (or an audit row) to discover.
+  if (input.source.kind === 'text' && input.source.pages.length === 0 && !input.userHint?.trim()) {
+    return failure(input.flow, 'empty_input', null, null);
+  }
   const { content, flags } = userContentFor(deps, input);
   const request: RedactedRequest = {
     tier: 'advanced',
     purpose: spec.purpose,
-    system: systemFor(spec, input),
+    system: systemFor(spec, input, flags.referenceDate),
     messages: [{ role: 'user', content }],
     jsonSchema: spec.jsonSchema,
     maxTokens: MAX_OUTPUT_TOKENS,

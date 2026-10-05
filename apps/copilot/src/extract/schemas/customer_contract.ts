@@ -19,7 +19,32 @@
 //   vatNumber      /^(3\d{13}3)?$/                             packages/shared/src/vat.ts
 import { z } from 'zod';
 import type { components } from '../../npi/types';
-import { assessField, fromWire, WireFieldSchema, type AssessedField, type FieldWarning, type WireField } from './field';
+import { assessField, type AssessedField } from './field';
+import {
+  amountField,
+  amountTolerance,
+  asciiDigits,
+  dateField,
+  defined,
+  EMAIL_RE,
+  enumField,
+  identifierField,
+  integerField,
+  ISO_DATE_RE,
+  nameField,
+  parseNumber,
+  percentField,
+  SAUDI_CR_RE,
+  SAUDI_VAT_RE,
+  textField,
+  withWarning,
+  wire,
+  type AssessFlags,
+} from './common';
+
+// Tests (and the eval) import these from here; the definitions live in ./common.
+export { asciiDigits, parseNumber, ISO_DATE_RE, SAUDI_CR_RE, SAUDI_VAT_RE };
+export type { AssessFlags };
 
 export const CONTRACT_TYPES = ['EPC', 'PPA', 'OM', 'LEASE'] as const;
 export const MILESTONE_TRIGGER_TYPES = ['DATE', 'PROGRESS', 'EVENT'] as const;
@@ -28,18 +53,6 @@ export const CUSTOMER_TYPES = ['RESIDENTIAL', 'CI', 'UTILITY', 'GOVERNMENT'] as 
 export type ContractType = (typeof CONTRACT_TYPES)[number];
 export type MilestoneTriggerType = (typeof MILESTONE_TRIGGER_TYPES)[number];
 export type CustomerType = (typeof CUSTOMER_TYPES)[number];
-
-/** Saudi VAT registration number as NPI validates it (packages/shared/src/vat.ts). */
-export const SAUDI_VAT_RE = /^3\d{13}3$/;
-/** Commercial registration numbers are 10 digits (the seed's `1010…`). */
-export const SAUDI_CR_RE = /^\d{10}$/;
-export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-// Formats and enums are described, not enforced, in the model-facing
-// schema: structured output drops `pattern`/`enum` constraints anyway, and
-// a single off-format value must become one unconfirmed field (assessment
-// below), not a rejected document.
-const wire = (description: string) => WireFieldSchema.describe(description);
 
 export const MilestoneOutputSchema = z.object({
   sequence: wire('ترتيب الدفعة، رقم يبدأ من 1'),
@@ -114,13 +127,6 @@ export interface CustomerContractValues {
 export type CreateCustomerDto = components['schemas']['CreateCustomerDto'];
 export type CreateContractDto = components['schemas']['CreateContractDto'];
 export type MilestoneInputDto = components['schemas']['MilestoneInputDto'];
-
-/** Drops `undefined` members so an optional DTO field is absent on the wire
- *  rather than sent as `null` (class-validator's `@IsOptional` skips only
- *  `undefined`/`null`, but NPI's JSON parsing is stricter for enums). */
-function defined<T extends object>(obj: T): T {
-  return Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined)) as T;
-}
 
 /**
  * `POST /customers` body for a customer the document names and NPI does not
@@ -215,108 +221,6 @@ export interface AssessedCustomerContract {
   milestones: AssessedMilestone[];
 }
 
-/** U+27E6, the opening bracket of every pseudonymizer placeholder. A value
- *  still carrying one after rehydration is a placeholder the model altered
- *  or invented — never a name to store. */
-const PLACEHOLDER_OPEN = '⟦';
-const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩';
-const PERSIAN = '۰۱۲۳۴۵۶۷۸۹';
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-/** Tolerance for amount checks: 1 SAR or 0.5 %, whichever is larger. */
-const amountTolerance = (base: number) => Math.max(1, Math.abs(base) * 0.005);
-
-export function asciiDigits(text: string): string {
-  let out = '';
-  for (const ch of text) {
-    const a = ARABIC_INDIC.indexOf(ch);
-    const p = PERSIAN.indexOf(ch);
-    out += a !== -1 ? String(a) : p !== -1 ? String(p) : ch;
-  }
-  return out;
-}
-
-/**
- * «850,000», «٤٨٠٬٠٠٠ ريال», «1.150.000», «30%», «0.19» → a number, or
- * `null` when no number can be read. Thousands separators (`,` `٬` space)
- * are dropped; `٫` is the Arabic decimal mark; dots in groups of three
- * («1.150.000») are thousands separators too.
- */
-export function parseNumber(text: string): number | null {
-  let s = asciiDigits(text).replace(/[٬\s,]/g, '').replace(/٫/g, '.').replace(/[^\d.\-]/g, '');
-  if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
-  if (!/\d/.test(s)) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** Digits only, for identifiers the document may print with spaces/dashes. */
-function identifierDigits(text: string): string {
-  return asciiDigits(text).replace(/[\s\-–.]/g, '');
-}
-
-const keepText = (s: string): string => s;
-const parseEnum =
-  <T extends string>(allowed: readonly T[]) =>
-  (s: string): T | null => {
-    const upper = s.toUpperCase().replace(/[^A-Z]/g, '');
-    return allowed.find((a) => a === upper) ?? null;
-  };
-const parseIsoDate = (s: string): string | null => {
-  const value = asciiDigits(s).replace(/\//g, '-').replace(/\s+/g, '');
-  if (!ISO_DATE_RE.test(value)) return null;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return Number.isNaN(parsed.getTime()) || !parsed.toISOString().startsWith(value) ? null : value;
-};
-
-function placeholderWarning(value: string | null): FieldWarning[] {
-  return value !== null && value.includes(PLACEHOLDER_OPEN) ? ['extract.warn.placeholder'] : [];
-}
-
-function textField(w: WireField, extra: (value: string) => FieldWarning[] = () => []): AssessedField<string> {
-  const { field } = fromWire(w, keepText);
-  return assessField(field, field.value === null ? [] : [...placeholderWarning(field.value), ...extra(field.value)]);
-}
-
-function identifierField(w: WireField, valid: RegExp, warning: FieldWarning): AssessedField<string> {
-  const { field } = fromWire(w, (s) => identifierDigits(s));
-  return assessField(field, field.value === null ? [] : [...placeholderWarning(field.value), ...(valid.test(field.value) ? [] : [warning])]);
-}
-
-function enumField<T extends string>(w: WireField, allowed: readonly T[]): AssessedField<T> {
-  const { field, unreadable } = fromWire(w, parseEnum(allowed));
-  // Unknown to NPI: the value is dropped and the card says so — not «missing».
-  return assessField(field, unreadable ? ['extract.warn.enum'] : []);
-}
-
-function dateField(w: WireField): AssessedField<string> {
-  const { field, unreadable } = fromWire(w, parseIsoDate);
-  return assessField(field, unreadable ? ['extract.warn.date_format'] : []);
-}
-
-function percentField(w: WireField): AssessedField<number> {
-  const { field, unreadable } = fromWire(w, parseNumber);
-  const outOfRange = field.value !== null && (field.value < 0 || field.value > 100);
-  return assessField(field, unreadable || outOfRange ? ['extract.warn.percent'] : []);
-}
-
-function amountField(w: WireField): AssessedField<number> {
-  const { field, unreadable } = fromWire(w, parseNumber);
-  const negative = field.value !== null && field.value < 0;
-  return assessField(field, unreadable || negative ? ['extract.warn.amount'] : []);
-}
-
-function integerField(w: WireField): AssessedField<number> {
-  const { field, unreadable } = fromWire(w, (s) => {
-    const n = parseNumber(s);
-    return n !== null && Number.isInteger(n) ? n : null;
-  });
-  return assessField(field, unreadable ? ['extract.warn.milestones_sequence'] : []);
-}
-
-function withWarning<T>(f: AssessedField<T>, warning: FieldWarning): AssessedField<T> {
-  return assessField({ value: f.value, confidence: f.confidence, evidence: f.evidence, page: f.page }, [...f.warnings, warning]);
-}
-
 /**
  * Turns the model's output into assessed fields and plain values:
  *  - identifiers normalized to ASCII digits; VAT must match NPI's format,
@@ -331,15 +235,6 @@ function withWarning<T>(f: AssessedField<T>, warning: FieldWarning): AssessedFie
  *    otherwise the total and every amount are unconfirmed;
  *  - sequences must run 1..n.
  */
-export interface AssessFlags {
-  ligatureSuspect: boolean;
-}
-
-/** A word-internal «ال» («للمقاوالت»): on a page whose text layer showed
- *  the reversed lam-alef ligature it may really be «لا», and a lexicon-free
- *  repair cannot tell — so the name is left for the user to check. */
-const WORD_INTERNAL_AL_RE = /[ء-ي]ال/;
-
 export function assessCustomerContract(
   out: CustomerContractOutput,
   flags: AssessFlags = { ligatureSuspect: false },
@@ -349,7 +244,7 @@ export function assessCustomerContract(
 } {
   const c = out.customer;
   const customer: AssessedCustomer = {
-    nameAr: textField(c.nameAr, (value) => (flags.ligatureSuspect && WORD_INTERNAL_AL_RE.test(value) ? ['extract.warn.ligature'] : [])),
+    nameAr: nameField(c.nameAr, flags),
     nameEn: textField(c.nameEn),
     customerType: enumField(c.customerType, CUSTOMER_TYPES),
     vatNumber: identifierField(c.vatNumber, SAUDI_VAT_RE, 'extract.warn.vat_format'),

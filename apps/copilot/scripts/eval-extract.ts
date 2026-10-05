@@ -1,11 +1,15 @@
 // `npm run eval:extract -- [flow ...]` — field-accuracy evaluation of the
 // extraction pipeline against the documents under `eval/extract/<flow>/`
-// (T-23 for customer_contract; T-24/T-25 add pr, po, grn, vendor_bill;
-// T-36 runs the full set). Real model, real audit: every call goes through
+// (T-23 for customer_contract; T-24 adds pr and po; T-25 adds grn and
+// vendor_bill; T-36 runs the full set). Real model, real audit: every call goes through
 // `createLlmClient` with the copilot database, so each run leaves its
 // `llm_audit` rows and one `eval_runs` row like any other model traffic.
 //
-// Each `expected.json` entry names a PDF, the plain values expected per
+// Each `expected.json` entry names a PDF — or, for the sentence-driven flows
+// (pr, po), carries the employee's `text` and no document (`pages: []`, the
+// sentence goes in as the user hint). `referenceDate` pins «today» so relative
+// dates in a sentence («قبل الخميس», «خلال أسبوعين») resolve deterministically.
+// An entry holds the plain values expected per
 // dotted field path (`src/extract/run.ts flattenFields`), and optionally the
 // status («confirmed»/«unconfirmed») a few fields must end up with. The
 // score is correct fields / expected fields across the flow's documents;
@@ -34,7 +38,12 @@ const EVAL_USER = 'eval:extract';
 const OUR_PARTY_AR = 'شركة NPI للطاقة الشمسية';
 
 interface ExpectedDoc {
-  file: string;
+  /** PDF under the flow directory. Exactly one of `file` / `text` is present. */
+  file?: string;
+  /** A sentence input (no document). */
+  text?: string;
+  /** YYYY-MM-DD pinned as «today» for relative dates; the runner defaults to the real date. */
+  referenceDate?: string;
   titleAr: string;
   fields: Record<string, string | number | null>;
   status?: Record<string, 'confirmed' | 'unconfirmed'>;
@@ -63,10 +72,17 @@ interface DocOutcome {
   usage: { tokensIn: number; tokensOut: number; latencyMs: number; modelId: string } | null;
 }
 
+/** Letter folding plus whitespace removed: a Word PDF's text layer splits
+ *  «6مم» into «6 مم» and the model copies what it sees (T-24, pr-08); the
+ *  item is the same and so is the resolution. */
+function textKey(s: string): string {
+  return normalizeArabic(s).replace(/\s+/g, '');
+}
+
 function sameValue(expected: unknown, got: unknown): boolean {
   if (expected === null || expected === undefined) return got === null || got === undefined;
   if (typeof expected === 'number') return typeof got === 'number' && Math.abs(got - expected) <= 0.5;
-  if (typeof expected === 'string') return typeof got === 'string' && normalizeArabic(got) === normalizeArabic(expected);
+  if (typeof expected === 'string') return typeof got === 'string' && textKey(got) === textKey(expected);
   return false;
 }
 
@@ -92,26 +108,36 @@ async function evaluateFlow(flow: FlowType): Promise<{ flow: FlowType; score: nu
   const llm = createLlmClient({ provider: createAnthropicProvider(), db });
   const docs: DocOutcome[] = [];
 
-  for (const doc of expected) {
-    const outcome: DocOutcome = { file: doc.file, titleAr: doc.titleAr, ok: false, pages: 0, textChars: 0, fields: [], correct: 0, total: Object.keys(doc.fields).length, confirmedWrong: 0, statusMismatches: [], usage: null };
+  for (const [index, doc] of expected.entries()) {
+    if ((doc.file === undefined) === (doc.text === undefined)) throw new Error(`expected.json entry ${index + 1} of ${flow}: exactly one of "file" or "text" is required`);
+    const outcome: DocOutcome = { file: doc.file ?? `sentence-${index + 1}`, titleAr: doc.titleAr, ok: false, pages: 0, textChars: 0, fields: [], correct: 0, total: Object.keys(doc.fields).length, confirmedWrong: 0, statusMismatches: [], usage: null };
     docs.push(outcome);
-    if (!present.has(doc.file)) {
-      outcome.failure = { reason: 'missing_file', detail: `${doc.file} is not in ${dir} — run scripts/eval-extract-docs.ps1` };
-      continue;
+    let pages: { num: number; text: string }[] = [];
+    let userHint: string | undefined;
+    if (doc.text !== undefined) {
+      userHint = doc.text;
+      outcome.textChars = doc.text.length;
+    } else {
+      const file = doc.file as string;
+      if (!present.has(file)) {
+        outcome.failure = { reason: 'missing_file', detail: `${file} is not in ${dir} — run scripts/eval-extract-docs.ps1` };
+        continue;
+      }
+      const bytes = new Uint8Array(readFileSync(path.join(dir, file)));
+      const analysis = await analyzePdf(bytes);
+      outcome.pages = analysis.pageCount;
+      if (analysis.kind !== 'pdf_text') {
+        outcome.failure = { reason: 'not_text', detail: 'scanned document — needs a consent event (T-31 live scenarios)' };
+        continue;
+      }
+      outcome.textChars = analysis.textChars;
+      pages = analysis.pages;
     }
-    const bytes = new Uint8Array(readFileSync(path.join(dir, doc.file)));
-    const analysis = await analyzePdf(bytes);
-    outcome.pages = analysis.pageCount;
-    if (analysis.kind !== 'pdf_text') {
-      outcome.failure = { reason: 'not_text', detail: 'scanned document — needs a consent event (T-31 live scenarios)' };
-      continue;
-    }
-    outcome.textChars = analysis.textChars;
 
     const pseudonymizer = new Pseudonymizer([]);
     const result = await runExtraction(
       { llm, pseudonymizer },
-      { flow, source: { kind: 'text', pages: analysis.pages }, ourPartyNameAr: OUR_PARTY_AR },
+      { flow, source: { kind: 'text', pages }, userHint, ourPartyNameAr: OUR_PARTY_AR, referenceDate: doc.referenceDate },
       { npiOrgId: EVAL_ORG, npiUserId: EVAL_USER },
     );
     if (!result.ok) {

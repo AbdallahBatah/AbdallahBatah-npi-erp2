@@ -337,6 +337,19 @@ describe('repairPdfText', () => {
   it('leaves genuine «ال» and «ألف» alone', () => {
     expect(repairPdfText('ثمانمائة وخمسون ألف ريال للمالك')).toBe('ثمانمائة وخمسون ألف ريال للمالك');
   });
+  it('repairs a lam before a reversed ligature only on a page that showed the artifact (T-24, po-01)', () => {
+    // «للألواح» and «للاستشارات» come back as «لأللواح» and «لالستشارات»;
+    // the page also shows «األسعار», which is what flags it.
+    const raw = 'من: شركة الخليج لأللواح الشمسية ومكتب النور لالستشارات. األسعار بالريال.';
+    const fixed = repairPdfText(raw);
+    expect(fixed).toContain('شركة الخليج للألواح الشمسية');
+    expect(fixed).toContain('مكتب النور للاستشارات');
+    expect(fixed).toContain('الأسعار بالريال');
+    // Genuine «لألف» on a clean page is not touched.
+    expect(repairPdfText('غرامة لألف ريال عن كل يوم')).toBe('غرامة لألف ريال عن كل يوم');
+    // A genuine «الألواح» on an artifact page survives both rules.
+    expect(repairPdfText('توريد األلواح الشمسية')).toBe('توريد الألواح الشمسية');
+  });
 });
 
 describe('parseNumber', () => {
@@ -451,9 +464,9 @@ describe('runExtraction (customer_contract)', () => {
   });
 
   it('maps a refusal and other client errors', async () => {
-    const refused = await runExtraction(depsWith(new FakeLlm(() => { throw new LlmError('refused'); })), { flow: 'customer_contract', source: { kind: 'text', pages: [] } }, ctx);
+    const refused = await runExtraction(depsWith(new FakeLlm(() => { throw new LlmError('refused'); })), { flow: 'customer_contract', source: { kind: 'text', pages: [{ num: 1, text: 'عقد' }] } }, ctx);
     expect((refused as ExtractFailure).reason).toBe('refused');
-    const down = await runExtraction(depsWith(new FakeLlm(() => { throw new LlmError('timeout'); })), { flow: 'customer_contract', source: { kind: 'text', pages: [] } }, ctx);
+    const down = await runExtraction(depsWith(new FakeLlm(() => { throw new LlmError('timeout'); })), { flow: 'customer_contract', source: { kind: 'text', pages: [{ num: 1, text: 'عقد' }] } }, ctx);
     expect((down as ExtractFailure).reason).toBe('model_error');
     expect((down as ExtractFailure).detail).toMatch(/^timeout/);
     expect((down as ExtractFailure).usage).toBeNull();
@@ -461,7 +474,7 @@ describe('runExtraction (customer_contract)', () => {
 
   it('refuses a flow with no registered spec before calling the model', async () => {
     const llm = new FakeLlm(() => reply('{}'));
-    const result = await runExtraction(depsWith(llm), { flow: 'pr', source: { kind: 'text', pages: [] } }, ctx);
+    const result = await runExtraction(depsWith(llm), { flow: 'grn', source: { kind: 'text', pages: [] } }, ctx);
     expect((result as ExtractFailure).reason).toBe('unsupported_flow');
     expect(llm.requests).toHaveLength(0);
   });

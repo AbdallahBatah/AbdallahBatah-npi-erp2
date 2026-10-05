@@ -10,6 +10,11 @@
 //   project          code exact → normalized name exact → partial → none
 //   purchase order   code exact (digits compared numerically, «PO-12» finds
 //                    PO-00012) → none
+//   department       code exact → normalized name exact (a leading «قسم»
+//                    is dropped) → partial → none
+//   requisition      code exact, digits compared numerically → none
+//   WBS element      code exact → normalized name exact → partial → none
+//                    (read off a project record — NPI has no WBS list)
 //   item             SKU exact → name trigram similarity ≥ 0.85 → partial
 //                    → «صنف جديد؟»
 // Trigram similarity follows pg_trgm (02 §5.6 names the ≥ 0.85 threshold
@@ -163,6 +168,18 @@ export interface ItemRef {
   sku: string;
   nameAr: string;
   nameEn: string | null;
+  /** The item's standard cost; NPI uses it as a requisition line's
+   *  estimated price when none is given. */
+  unitCost: number | null;
+}
+
+function num(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 export function itemsFromNpi(body: unknown): ItemRef[] {
@@ -173,7 +190,67 @@ export function itemsFromNpi(body: unknown): ItemRef[] {
     const sku = str(row.sku);
     const nameAr = str(row.nameAr) ?? str(row.nameEn);
     if (id === null || sku === null || nameAr === null) continue;
-    out.push({ id, sku, nameAr, nameEn: str(row.nameEn) });
+    out.push({ id, sku, nameAr, nameEn: str(row.nameEn), unitCost: num(row.unitCost) });
+  }
+  return out;
+}
+
+export interface DepartmentRef {
+  id: string;
+  code: string | null;
+  nameAr: string;
+  nameEn: string | null;
+}
+
+export function departmentsFromNpi(body: unknown): DepartmentRef[] {
+  const out: DepartmentRef[] = [];
+  for (const row of readList(body)) {
+    if (!isRecord(row)) continue;
+    const id = str(row.id);
+    const nameAr = str(row.nameAr) ?? str(row.nameEn);
+    if (id === null || nameAr === null) continue;
+    out.push({ id, code: str(row.code), nameAr, nameEn: str(row.nameEn) });
+  }
+  return out;
+}
+
+export interface RequisitionRef {
+  id: string;
+  code: string;
+  status: string | null;
+}
+
+export function requisitionsFromNpi(body: unknown): RequisitionRef[] {
+  const out: RequisitionRef[] = [];
+  for (const row of readList(body)) {
+    if (!isRecord(row)) continue;
+    const id = str(row.id);
+    const code = str(row.code);
+    if (id === null || code === null) continue;
+    out.push({ id, code, status: str(row.status) });
+  }
+  return out;
+}
+
+export interface WbsRef {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string | null;
+}
+
+/** The `wbsElements` array of one project record (`GET /projects/{id}`);
+ *  `[]` when the record carries none. */
+export function wbsFromProject(projectBody: unknown): WbsRef[] {
+  if (!isRecord(projectBody) || !Array.isArray(projectBody.wbsElements)) return [];
+  const out: WbsRef[] = [];
+  for (const row of projectBody.wbsElements) {
+    if (!isRecord(row)) continue;
+    const id = str(row.id);
+    const code = str(row.code);
+    const nameAr = str(row.nameAr) ?? str(row.nameEn);
+    if (id === null || code === null || nameAr === null) continue;
+    out.push({ id, code, nameAr, nameEn: str(row.nameEn) });
   }
   return out;
 }
@@ -267,6 +344,56 @@ export function resolveProject(query: { code?: string | null; name?: string | nu
   const byName = projects.find((p) => [p.nameAr, p.nameEn].some((n) => n !== null && nameKey(n) === key));
   if (byName) return { kind: 'matched', by: 'name', project: byName };
   const candidates = topCandidates(projects, (p) => bestNameSimilarity([p.nameAr, p.nameEn], [name]), PARTY_CANDIDATE_MIN);
+  return candidates.length > 0 ? { kind: 'candidates', candidates } : { kind: 'none' };
+}
+
+export type DepartmentResolution =
+  | { kind: 'matched'; by: 'code' | 'name'; department: DepartmentRef }
+  | { kind: 'candidates'; candidates: Candidate<DepartmentRef>[] }
+  | { kind: 'none' };
+
+/** «قسم التنفيذ» on a request is the department «التنفيذ». */
+const DEPARTMENT_WORD_RE = /^قسم\s+/;
+
+export function resolveDepartment(query: { code?: string | null; name?: string | null }, departments: readonly DepartmentRef[]): DepartmentResolution {
+  if (query.code && query.code.trim().length > 0) {
+    const byCode = departments.find((d) => d.code !== null && sameCode(d.code, query.code as string));
+    if (byCode) return { kind: 'matched', by: 'code', department: byCode };
+  }
+  const name = query.name?.trim() ?? '';
+  if (name.length === 0) return { kind: 'none' };
+  const bare = name.replace(DEPARTMENT_WORD_RE, '');
+  const keys = [nameKey(name), nameKey(bare)].filter((k) => k.length > 0);
+  const byName = departments.find((d) => [d.nameAr, d.nameEn].some((n) => n !== null && keys.includes(nameKey(n))));
+  if (byName) return { kind: 'matched', by: 'name', department: byName };
+  const candidates = topCandidates(departments, (d) => bestNameSimilarity([d.nameAr, d.nameEn], [bare.length > 0 ? bare : name]), PARTY_CANDIDATE_MIN);
+  return candidates.length > 0 ? { kind: 'candidates', candidates } : { kind: 'none' };
+}
+
+export type RequisitionResolution = { kind: 'matched'; requisition: RequisitionRef } | { kind: 'none' };
+
+export function resolveRequisition(code: string | null | undefined, requisitions: readonly RequisitionRef[]): RequisitionResolution {
+  if (!code || code.trim().length === 0) return { kind: 'none' };
+  const hit = requisitions.find((r) => sameCode(r.code, code));
+  return hit ? { kind: 'matched', requisition: hit } : { kind: 'none' };
+}
+
+export type WbsResolution =
+  | { kind: 'matched'; by: 'code' | 'name'; wbs: WbsRef }
+  | { kind: 'candidates'; candidates: Candidate<WbsRef>[] }
+  | { kind: 'none' };
+
+export function resolveWbs(query: { code?: string | null; name?: string | null }, wbs: readonly WbsRef[]): WbsResolution {
+  if (query.code && query.code.trim().length > 0) {
+    const byCode = wbs.find((w) => sameCode(w.code, query.code as string));
+    if (byCode) return { kind: 'matched', by: 'code', wbs: byCode };
+  }
+  const name = query.name?.trim() ?? '';
+  if (name.length === 0) return { kind: 'none' };
+  const key = nameKey(name);
+  const byName = wbs.find((w) => [w.nameAr, w.nameEn].some((n) => n !== null && nameKey(n) === key));
+  if (byName) return { kind: 'matched', by: 'name', wbs: byName };
+  const candidates = topCandidates(wbs, (w) => bestNameSimilarity([w.nameAr, w.nameEn], [name]), PARTY_CANDIDATE_MIN);
   return candidates.length > 0 ? { kind: 'candidates', candidates } : { kind: 'none' };
 }
 

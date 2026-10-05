@@ -53,7 +53,14 @@ export type FieldWarning =
   | 'extract.warn.derived'
   | 'extract.warn.enum'
   | 'extract.warn.email_format'
-  | 'extract.warn.ligature';
+  | 'extract.warn.ligature'
+  | 'extract.warn.quantity'
+  | 'extract.warn.currency'
+  | 'extract.warn.code_format'
+  | 'extract.warn.line_total'
+  | 'extract.warn.lines_sum'
+  | 'extract.warn.vat_total'
+  | 'extract.warn.date_past';
 
 export interface AssessedField<T> extends Field<T> {
   status: 'confirmed' | 'unconfirmed';
