@@ -2,62 +2,18 @@
 // (via getDb()) and the AEAD key parsing, neither of which run on the edge.
 export const runtime = 'nodejs';
 
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { parseKey } from '@/crypto/aead';
-import { getDb } from '@/db';
 import { createNpiClient } from '@/npi/client';
 import { NpiError } from '@/npi/errors';
 import { readLogin, type NpiLogin } from '@/npi/responses';
-import { createSession, destroySession, readSession, type SessionDeps } from '@/auth/session';
-import { isBlocked, rateLimitKey, recordAttempt, type RateLimitDb } from '@/auth/ratelimit';
+import { createSession, destroySession, readSession } from '@/auth/session';
+import { isBlocked, rateLimitKey, recordAttempt } from '@/auth/ratelimit';
 import { clearedSessionCookieAttributes, sessionCookieAttributes, SESSION_COOKIE_NAME } from '@/auth/cookie';
+import { buildDeps, json, NO_STORE_HEADERS, originMismatch } from './shared';
 
 const MAX_EMAIL_LENGTH = 254;
 const MAX_PASSWORD_LENGTH = 200;
-
-/** Every response from this route: never cached by a browser or a proxy —
- *  it always carries session-dependent, security-sensitive state. */
-const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
-
-function json(body: unknown, status: number): NextResponse {
-  return NextResponse.json(body, { status, headers: NO_STORE_HEADERS });
-}
-
-/**
- * `getDb()`'s real `PrismaClient` return value satisfies both `SessionDb`
- * (used for `SessionDeps.db`) and `RateLimitDb` (used directly for
- * `isBlocked`/`recordAttempt`) — one connection, two narrower structural
- * views of it, cast explicitly since the two view types are unrelated to
- * each other.
- */
-function buildDeps(): SessionDeps & { rateLimitDb: RateLimitDb } {
-  const db = getDb();
-  return {
-    db,
-    key: parseKey(process.env.COPILOT_SESSION_KEY),
-    npiFor: (token: string) => createNpiClient({ token }),
-    rateLimitDb: db as unknown as RateLimitDb,
-  };
-}
-
-/**
- * Rejects a cross-origin write: `Origin`, when the browser sends one (every
- * modern browser does on a POST/DELETE fetch), must match the request's own
- * `Host`. A same-origin request from this app's own login form never sends
- * a mismatched Origin; a form or script hosted elsewhere would.
- */
-function originMismatch(): boolean {
-  const h = headers();
-  const origin = h.get('origin');
-  if (!origin) return false;
-  const host = h.get('host');
-  try {
-    return new URL(origin).host !== host;
-  } catch {
-    return true; // an unparsable Origin header is treated as a mismatch
-  }
-}
 
 interface LoginBody {
   email: string;
