@@ -8,6 +8,7 @@ import { docsRoot, createFsStorage } from '../intake/upload';
 import { startIntake } from '../intake/job';
 import type { EditDeps } from '../intake/edit';
 import { createLlmClient } from '../llm/client';
+import { latestNpiFactAt, refreshNpiMemory, shouldRefreshNpiMemory, SOURCES_OF_FLOW } from '../memory/extract-npi';
 import { createAnthropicProvider } from '../llm/providers/anthropic';
 import { createNpiClient } from '../npi/client';
 import { FLOW_REQUIRED_MODULE, FLOW_TYPES } from '../onboarding/profile.schema';
@@ -32,6 +33,61 @@ export interface TurnSession {
 
 // One provider per process: it holds the SDK client.
 const provider = createAnthropicProvider();
+
+// ─── Memory from NPI data (T-29, F-12, D-T29-3) ─────────────────────────────
+// Facts derived from NPI (payment terms, lead times, recurring items, active
+// projects) are refreshed at most once a day per organization, by the first
+// chat turn that finds them stale, as that turn's user — sources the user
+// cannot read are skipped and the next eligible user retries an hour later.
+// Best effort: a failure here never fails the turn.
+
+/** Last refresh attempt per organization in this process (ms since epoch). */
+const npiMemoryAttempts = new Map<string, number>();
+
+type MemoryDb = Parameters<typeof refreshNpiMemory>[0]['db'];
+type MemoryNpi = Parameters<typeof refreshNpiMemory>[0]['npi'];
+
+async function refreshNpiMemoryIfStale(
+  db: MemoryDb,
+  npi: MemoryNpi,
+  user: { npiOrgId: string; permissions: readonly string[] },
+): Promise<void> {
+  const now = new Date();
+  let lastNpiFactAt: Date | null;
+  try {
+    lastNpiFactAt = await latestNpiFactAt(db, user.npiOrgId);
+  } catch (err) {
+    console.warn('[copilot] npi memory: could not read the last refresh time', err instanceof Error ? err.message : err);
+    return;
+  }
+  const attempt = npiMemoryAttempts.get(user.npiOrgId);
+  const lastAttemptAt = attempt === undefined ? null : new Date(attempt);
+  if (!shouldRefreshNpiMemory({ lastNpiFactAt, lastAttemptAt, now })) return;
+  npiMemoryAttempts.set(user.npiOrgId, now.getTime());
+  try {
+    await refreshNpiMemory({ db, npi }, { npiOrgId: user.npiOrgId, permissions: user.permissions });
+  } catch (err) {
+    console.warn('[copilot] npi memory refresh failed', err instanceof Error ? err.message : err);
+  }
+}
+
+/** After a successful execution (T-27), the sources that flow wrote to are
+ *  re-read so the new contract's terms or the new receipt's lead time are in
+ *  memory at once (02 §5.8 item 8). Best effort: never changes the outcome. */
+async function refreshNpiMemoryAfterExecution(
+  db: MemoryDb,
+  npi: MemoryNpi,
+  user: { npiOrgId: string; permissions: readonly string[] },
+  flow: keyof typeof SOURCES_OF_FLOW,
+): Promise<void> {
+  const only = SOURCES_OF_FLOW[flow];
+  if (only.length === 0) return;
+  try {
+    await refreshNpiMemory({ db, npi }, { npiOrgId: user.npiOrgId, permissions: user.permissions }, { only });
+  } catch (err) {
+    console.warn('[copilot] npi memory refresh after execution failed', err instanceof Error ? err.message : err);
+  }
+}
 
 /** The flows this firm switched on (D-T26-9): a flow is offered when the module
  *  it belongs to is among the firm's visible modules. A firm that has not run
@@ -85,6 +141,8 @@ export async function buildTurn(session: TurnSession): Promise<{ deps: TurnDeps;
       start: (caller, input) => startIntake({ db, llm, npi, storage: createFsStorage(docsRoot()), dictionary }, caller, input),
     },
   };
+  // Before the turn, so its retrieval already sees today's facts (D-T29-3a).
+  await refreshNpiMemoryIfStale(db, npi, { npiOrgId: user.npiOrgId, permissions: user.permissions });
   return { deps, user };
 }
 
@@ -93,7 +151,7 @@ export async function buildTurn(session: TurnSession): Promise<{ deps: TurnDeps;
  *  pseudonymizer's dictionary and the document store. */
 export function buildEditDeps(session: {
   npiToken: string;
-  user: { npiUserId: string; npiOrgId: string; nameAr: string };
+  user: { npiUserId: string; npiOrgId: string; nameAr: string; permissions: string[] };
 }): EditDeps {
   const db = getDb();
   const npi = createNpiClient({ token: session.npiToken });
@@ -103,8 +161,13 @@ export function buildEditDeps(session: {
     llm: createLlmClient({ provider, db }),
     npi,
     storage,
-    execute: (job, plan) =>
-      executeJob({ db, npi, storage, now: undefined }, { npiOrgId: session.user.npiOrgId, npiUserId: session.user.npiUserId }, job, plan),
+    execute: async (job, plan) => {
+      const executed = await executeJob({ db, npi, storage, now: undefined }, { npiOrgId: session.user.npiOrgId, npiUserId: session.user.npiUserId }, job, plan);
+      if (executed.status === 'done') {
+        await refreshNpiMemoryAfterExecution(db, npi, { npiOrgId: session.user.npiOrgId, permissions: session.user.permissions }, job.flowType);
+      }
+      return executed;
+    },
     dictionary: () =>
       buildDictionary(npi, {
         npiOrgId: session.user.npiOrgId,

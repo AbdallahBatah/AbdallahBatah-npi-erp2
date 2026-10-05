@@ -1,0 +1,643 @@
+[
+  {
+    "key": "active_project:prj_00001",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00001",
+    "titleAr": "المشروع محطة مصنع الرياض الشمسية",
+    "mustContain": [
+      "محطة مصنع الرياض الشمسية",
+      "PRJ-00001",
+      "في مرحلة التنفيذ",
+      "بقدرة 500 كيلوواط ذروة"
+    ]
+  },
+  {
+    "key": "active_project:prj_00002",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00002",
+    "titleAr": "المشروع مجمع الورود السكني",
+    "mustContain": [
+      "مجمع الورود السكني",
+      "PRJ-00002",
+      "في مرحلة التوريد",
+      "نهايته المخططة 2027-03-30"
+    ]
+  },
+  {
+    "key": "active_project:prj_00003",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00003",
+    "titleAr": "المشروع مزرعة الواحة الذكية",
+    "mustContain": [
+      "مزرعة الواحة الذكية",
+      "PRJ-00003",
+      "في مرحلة التخطيط",
+      "بقدرة 320 كيلوواط ذروة"
+    ]
+  },
+  {
+    "key": "active_project:prj_00004",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00004",
+    "titleAr": "المشروع مستودعات الفرسان اللوجستية",
+    "mustContain": [
+      "مستودعات الفرسان اللوجستية",
+      "PRJ-00004",
+      "في مرحلة التشغيل التجريبي",
+      "بقدرة 150 كيلوواط ذروة"
+    ]
+  },
+  {
+    "key": "active_project:prj_00005",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00005",
+    "titleAr": "المشروع برج البحر الأحمر الإداري",
+    "mustContain": [
+      "برج البحر الأحمر الإداري",
+      "PRJ-00005",
+      "في مرحلة التنفيذ",
+      "بقدرة 800 كيلوواط ذروة"
+    ]
+  },
+  {
+    "key": "active_project:prj_00006",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00006",
+    "titleAr": "المشروع سقف مصنع الشرقية",
+    "mustContain": [
+      "سقف مصنع الشرقية",
+      "PRJ-00006",
+      "في مرحلة التوريد",
+      "بقدرة 62.5 كيلوواط ذروة"
+    ]
+  },
+  {
+    "key": "active_project:prj_00007",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00007",
+    "titleAr": "المشروع محطة طاقة مستشفى الأمل",
+    "mustContain": [
+      "محطة طاقة مستشفى الأمل",
+      "PRJ-00007",
+      "في مرحلة التخطيط",
+      "نهايته المخططة 2027-09-01"
+    ]
+  },
+  {
+    "key": "active_project:prj_00008",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00008",
+    "titleAr": "المشروع مزارع الأعلاف الشمالية",
+    "mustContain": [
+      "مزارع الأعلاف الشمالية",
+      "PRJ-00008",
+      "في مرحلة التنفيذ",
+      "بقدرة 980 كيلوواط ذروة"
+    ]
+  },
+  {
+    "key": "active_project:prj_00009",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00009",
+    "titleAr": "المشروع الحرم الشمسي لمدارس المستقبل",
+    "mustContain": [
+      "الحرم الشمسي لمدارس المستقبل",
+      "PRJ-00009",
+      "في مرحلة التشغيل التجريبي",
+      "بقدرة 120 كيلوواط ذروة"
+    ]
+  },
+  {
+    "key": "active_project:prj_00010",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00010",
+    "titleAr": "المشروع محطة الدرعية الشمسية",
+    "mustContain": [
+      "محطة الدرعية الشمسية",
+      "PRJ-00010",
+      "في مرحلة التوريد",
+      "بقدرة 640 كيلوواط ذروة"
+    ]
+  },
+  {
+    "key": "active_project:prj_00011",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00011",
+    "titleAr": "المشروع مستودع السحاب للنقليات",
+    "mustContain": [
+      "مستودع السحاب للنقليات",
+      "PRJ-00011",
+      "في مرحلة التنفيذ",
+      "بقدرة 430 كيلوواط ذروة"
+    ]
+  },
+  {
+    "key": "active_project:prj_00012",
+    "kind": "active_project",
+    "entityType": "project",
+    "npiEntityId": "prj_00012",
+    "titleAr": "المشروع محطة الدمام",
+    "mustContain": [
+      "محطة الدمام",
+      "PRJ-00012",
+      "في مرحلة التخطيط",
+      "نهايته المخططة 2028-01-15"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00001",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00001",
+    "titleAr": "شروط عقد CTR-00001 مع مصنع الرياض للصناعات",
+    "mustContain": [
+      "CTR-00001",
+      "دفعة مقدمة 20%، محتجزات 10%",
+      "4 دفعات مرحلية",
+      "القيمة 1,250,000 ريال، النوع تصميم وتوريد وتركيب، الحالة ساري"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00002",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00002",
+    "titleAr": "شروط عقد CTR-00002 مع شركة النخيل للمقاولات",
+    "mustContain": [
+      "CTR-00002",
+      "دفعة مقدمة 30%، محتجزات 5%",
+      "6 دفعات مرحلية",
+      "القيمة 4,500,000 ريال، النوع تصميم وتوريد وتركيب، الحالة ساري"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00003",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00003",
+    "titleAr": "شروط عقد CTR-00003 مع مجموعة الواحة الزراعية",
+    "mustContain": [
+      "CTR-00003",
+      "دفعة مقدمة 0%، محتجزات 0%",
+      "بلا دفعات مرحلية",
+      "القيمة 800,000 ريال، النوع بيع طاقة، الحالة ساري"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00004",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00004",
+    "titleAr": "شروط عقد CTR-00004 مع مؤسسة الفرسان للتجارة",
+    "mustContain": [
+      "CTR-00004",
+      "دفعة مقدمة 10%، محتجزات 5%",
+      "دفعتان مرحليتان",
+      "القيمة 120,000 ريال، النوع تشغيل وصيانة، الحالة ساري"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00005",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00005",
+    "titleAr": "شروط عقد CTR-00005 مع شركة البحر الأحمر للتطوير العقاري",
+    "mustContain": [
+      "CTR-00005",
+      "دفعة مقدمة 25%، محتجزات 10%",
+      "5 دفعات مرحلية",
+      "القيمة 3,200,000 ريال، النوع تصميم وتوريد وتركيب، الحالة ساري"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00006",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00006",
+    "titleAr": "شروط عقد CTR-00006 مع مصنع الشرقية للبلاستيك",
+    "mustContain": [
+      "CTR-00006",
+      "دفعة مقدمة 0%، محتجزات 0%",
+      "دفعة مرحلية واحدة",
+      "القيمة 360,000 ريال، النوع تأجير، الحالة ساري"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00007",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00007",
+    "titleAr": "شروط عقد CTR-00007 مع مستشفى الأمل التخصصي",
+    "mustContain": [
+      "CTR-00007",
+      "دفعة مقدمة 15%، محتجزات 5%",
+      "3 دفعات مرحلية",
+      "القيمة 950,000 ريال، النوع تصميم وتوريد وتركيب، الحالة مسودة"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00008",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00008",
+    "titleAr": "شروط عقد CTR-00008 مع شركة الجزيرة للأعلاف",
+    "mustContain": [
+      "CTR-00008",
+      "دفعة مقدمة 20%، محتجزات 12.5%",
+      "4 دفعات مرحلية",
+      "القيمة 2,150,000 ريال، النوع تصميم وتوريد وتركيب، الحالة ساري"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00009",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00009",
+    "titleAr": "شروط عقد CTR-00009 مع مدارس المستقبل الأهلية",
+    "mustContain": [
+      "CTR-00009",
+      "دفعة مقدمة 10%، محتجزات 10%",
+      "دفعتان مرحليتان",
+      "القيمة 240,000 ريال، النوع تشغيل وصيانة، الحالة موقوف"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00010",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00001",
+    "titleAr": "شروط عقد CTR-00010 مع مصنع الرياض للصناعات",
+    "mustContain": [
+      "CTR-00010",
+      "دفعة مقدمة 30%، محتجزات 10%",
+      "6 دفعات مرحلية",
+      "القيمة 1,800,000 ريال، النوع تصميم وتوريد وتركيب، الحالة مقفل"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00011",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00002",
+    "titleAr": "شروط عقد CTR-00011 مع شركة النخيل للمقاولات",
+    "mustContain": [
+      "CTR-00011",
+      "دفعة مقدمة 0%، محتجزات 5%",
+      "بلا دفعات مرحلية",
+      "القيمة 2,700,000 ريال، النوع بيع طاقة، الحالة ساري"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00012",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00010",
+    "titleAr": "شروط عقد CTR-00012 مع شركة الدرعية للاستثمار",
+    "mustContain": [
+      "CTR-00012",
+      "دفعة مقدمة 20%، محتجزات 5%",
+      "3 دفعات مرحلية",
+      "القيمة 1,600,000 ريال، النوع تصميم وتوريد وتركيب، الحالة ساري"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00013",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00011",
+    "titleAr": "شروط عقد CTR-00013 مع مؤسسة السحاب للنقليات",
+    "mustContain": [
+      "CTR-00013",
+      "دفعة مقدمة 25%، محتجزات 10%",
+      "4 دفعات مرحلية",
+      "القيمة 640,000 ريال، النوع تصميم وتوريد وتركيب، الحالة ساري"
+    ]
+  },
+  {
+    "key": "contract_payment_terms:ctr_00015",
+    "kind": "contract_payment_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00005",
+    "titleAr": "شروط عقد CTR-00015 مع شركة البحر الأحمر للتطوير العقاري",
+    "mustContain": [
+      "CTR-00015",
+      "دفعة مقدمة 5%، محتجزات 0%",
+      "دفعة مرحلية واحدة",
+      "القيمة 150,000 ريال، النوع تشغيل وصيانة، الحالة ساري"
+    ]
+  },
+  {
+    "key": "customer_credit_terms:cus_00001",
+    "kind": "customer_credit_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00001",
+    "titleAr": "أجل سداد العميل مصنع الرياض للصناعات",
+    "mustContain": [
+      "مصنع الرياض للصناعات",
+      "CUS-00001",
+      "30 يوماً"
+    ]
+  },
+  {
+    "key": "customer_credit_terms:cus_00002",
+    "kind": "customer_credit_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00002",
+    "titleAr": "أجل سداد العميل شركة النخيل للمقاولات",
+    "mustContain": [
+      "شركة النخيل للمقاولات",
+      "CUS-00002",
+      "45 يوماً"
+    ]
+  },
+  {
+    "key": "customer_credit_terms:cus_00003",
+    "kind": "customer_credit_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00003",
+    "titleAr": "أجل سداد العميل مجموعة الواحة الزراعية",
+    "mustContain": [
+      "مجموعة الواحة الزراعية",
+      "CUS-00003",
+      "60 يوماً"
+    ]
+  },
+  {
+    "key": "customer_credit_terms:cus_00004",
+    "kind": "customer_credit_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00004",
+    "titleAr": "أجل سداد العميل مؤسسة الفرسان للتجارة",
+    "mustContain": [
+      "مؤسسة الفرسان للتجارة",
+      "CUS-00004",
+      "15 يوماً"
+    ]
+  },
+  {
+    "key": "customer_credit_terms:cus_00005",
+    "kind": "customer_credit_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00005",
+    "titleAr": "أجل سداد العميل شركة البحر الأحمر للتطوير العقاري",
+    "mustContain": [
+      "شركة البحر الأحمر للتطوير العقاري",
+      "CUS-00005",
+      "90 يوماً"
+    ]
+  },
+  {
+    "key": "customer_credit_terms:cus_00006",
+    "kind": "customer_credit_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00006",
+    "titleAr": "أجل سداد العميل مصنع الشرقية للبلاستيك",
+    "mustContain": [
+      "مصنع الشرقية للبلاستيك",
+      "CUS-00006",
+      "30 يوماً"
+    ]
+  },
+  {
+    "key": "customer_credit_terms:cus_00007",
+    "kind": "customer_credit_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00007",
+    "titleAr": "أجل سداد العميل مستشفى الأمل التخصصي",
+    "mustContain": [
+      "مستشفى الأمل التخصصي",
+      "CUS-00007",
+      "60 يوماً"
+    ]
+  },
+  {
+    "key": "customer_credit_terms:cus_00008",
+    "kind": "customer_credit_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00008",
+    "titleAr": "أجل سداد العميل شركة الجزيرة للأعلاف",
+    "mustContain": [
+      "شركة الجزيرة للأعلاف",
+      "CUS-00008",
+      "45 يوماً"
+    ]
+  },
+  {
+    "key": "customer_credit_terms:cus_00009",
+    "kind": "customer_credit_terms",
+    "entityType": "customer",
+    "npiEntityId": "cus_00009",
+    "titleAr": "أجل سداد العميل مدارس المستقبل الأهلية",
+    "mustContain": [
+      "مدارس المستقبل الأهلية",
+      "CUS-00009",
+      "30 يوماً"
+    ]
+  },
+  {
+    "key": "recurring_item:itm_bat_10k",
+    "kind": "recurring_item",
+    "entityType": "item",
+    "npiEntityId": "itm_bat_10k",
+    "titleAr": "الصنف بطارية ليثيوم 10 كيلوواط ساعة يُطلب بانتظام",
+    "mustContain": [
+      "بطارية ليثيوم 10 كيلوواط ساعة",
+      "BAT-10K",
+      "أمري شراء بإجمالي 12 وحدة",
+      "شركة الصحراء للتوريدات"
+    ]
+  },
+  {
+    "key": "recurring_item:itm_bos_kit",
+    "kind": "recurring_item",
+    "entityType": "item",
+    "npiEntityId": "itm_bos_kit",
+    "titleAr": "الصنف طقم مكونات مساعدة يُطلب بانتظام",
+    "mustContain": [
+      "طقم مكونات مساعدة",
+      "BOS-KIT",
+      "أمري شراء بإجمالي 27 طقم",
+      "مؤسسة الأفق للتجهيزات الكهربائية"
+    ]
+  },
+  {
+    "key": "recurring_item:itm_brk_dc",
+    "kind": "recurring_item",
+    "entityType": "item",
+    "npiEntityId": "itm_brk_dc",
+    "titleAr": "الصنف قاطع تيار مستمر يُطلب بانتظام",
+    "mustContain": [
+      "قاطع تيار مستمر",
+      "BRK-DC",
+      "3 أوامر شراء بإجمالي 75 وحدة",
+      "مؤسسة الأفق للتجهيزات الكهربائية"
+    ]
+  },
+  {
+    "key": "recurring_item:itm_cab_ac10",
+    "kind": "recurring_item",
+    "entityType": "item",
+    "npiEntityId": "itm_cab_ac10",
+    "titleAr": "الصنف كابل AC 10مم يُطلب بانتظام",
+    "mustContain": [
+      "كابل AC 10مم",
+      "CAB-AC10",
+      "3 أوامر شراء بإجمالي 670 متر",
+      "شركة الصحراء للتوريدات"
+    ]
+  },
+  {
+    "key": "recurring_item:itm_cab_dc6",
+    "kind": "recurring_item",
+    "entityType": "item",
+    "npiEntityId": "itm_cab_dc6",
+    "titleAr": "الصنف كابل DC 6مم يُطلب بانتظام",
+    "mustContain": [
+      "كابل DC 6مم",
+      "CAB-DC6",
+      "أمري شراء بإجمالي 1,200 متر",
+      "مؤسسة النور للكابلات"
+    ]
+  },
+  {
+    "key": "recurring_item:itm_inv_50k",
+    "kind": "recurring_item",
+    "entityType": "item",
+    "npiEntityId": "itm_inv_50k",
+    "titleAr": "الصنف عاكس 50 كيلوواط يُطلب بانتظام",
+    "mustContain": [
+      "عاكس 50 كيلوواط",
+      "INV-50K",
+      "3 أوامر شراء بإجمالي 9 وحدة",
+      "شركة الطاقة المتقدمة للعواكس"
+    ]
+  },
+  {
+    "key": "recurring_item:itm_mnt_rail",
+    "kind": "recurring_item",
+    "entityType": "item",
+    "npiEntityId": "itm_mnt_rail",
+    "titleAr": "الصنف قضيب تثبيت يُطلب بانتظام",
+    "mustContain": [
+      "قضيب تثبيت",
+      "MNT-RAIL",
+      "أمري شراء بإجمالي 650.5 متر",
+      "شركة الخليج للألواح الشمسية"
+    ]
+  },
+  {
+    "key": "recurring_item:itm_mod_550",
+    "kind": "recurring_item",
+    "entityType": "item",
+    "npiEntityId": "itm_mod_550",
+    "titleAr": "الصنف لوح شمسي 550 واط يُطلب بانتظام",
+    "mustContain": [
+      "لوح شمسي 550 واط",
+      "MOD-550",
+      "3 أوامر شراء بإجمالي 450 وحدة",
+      "شركة الخليج للألواح الشمسية"
+    ]
+  },
+  {
+    "key": "recurring_item:itm_str_roof",
+    "kind": "recurring_item",
+    "entityType": "item",
+    "npiEntityId": "itm_str_roof",
+    "titleAr": "الصنف هيكل تثبيت سطحي يُطلب بانتظام",
+    "mustContain": [
+      "هيكل تثبيت سطحي",
+      "STR-ROOF",
+      "أمري شراء بإجمالي 50 طقم",
+      "مصنع الجزيرة للهياكل المعدنية"
+    ]
+  },
+  {
+    "key": "vendor_lead_time:ven_00001",
+    "kind": "vendor_lead_time",
+    "entityType": "vendor",
+    "npiEntityId": "ven_00001",
+    "titleAr": "مدة توريد المورّد شركة الخليج للألواح الشمسية",
+    "mustContain": [
+      "شركة الخليج للألواح الشمسية",
+      "VEN-00001",
+      "نحو 15 يوماً",
+      "بحسب 4 أوامر شراء"
+    ]
+  },
+  {
+    "key": "vendor_lead_time:ven_00002",
+    "kind": "vendor_lead_time",
+    "entityType": "vendor",
+    "npiEntityId": "ven_00002",
+    "titleAr": "مدة توريد المورّد مؤسسة النور للكابلات",
+    "mustContain": [
+      "مؤسسة النور للكابلات",
+      "VEN-00002",
+      "نحو 11 يوماً",
+      "بحسب أمري شراء"
+    ]
+  },
+  {
+    "key": "vendor_lead_time:ven_00003",
+    "kind": "vendor_lead_time",
+    "entityType": "vendor",
+    "npiEntityId": "ven_00003",
+    "titleAr": "مدة توريد المورّد شركة الطاقة المتقدمة للعواكس",
+    "mustContain": [
+      "شركة الطاقة المتقدمة للعواكس",
+      "VEN-00003",
+      "نحو 32 يوماً",
+      "بحسب 3 أوامر شراء"
+    ]
+  },
+  {
+    "key": "vendor_lead_time:ven_00004",
+    "kind": "vendor_lead_time",
+    "entityType": "vendor",
+    "npiEntityId": "ven_00004",
+    "titleAr": "مدة توريد المورّد مصنع الجزيرة للهياكل المعدنية",
+    "mustContain": [
+      "مصنع الجزيرة للهياكل المعدنية",
+      "VEN-00004",
+      "نحو 5 أيام",
+      "بحسب أمر شراء واحد"
+    ]
+  },
+  {
+    "key": "vendor_lead_time:ven_00005",
+    "kind": "vendor_lead_time",
+    "entityType": "vendor",
+    "npiEntityId": "ven_00005",
+    "titleAr": "مدة توريد المورّد شركة الواحة للبطاريات",
+    "mustContain": [
+      "شركة الواحة للبطاريات",
+      "VEN-00005",
+      "نحو 17 يوماً",
+      "بحسب أمري شراء"
+    ]
+  },
+  {
+    "key": "vendor_lead_time:ven_00006",
+    "kind": "vendor_lead_time",
+    "entityType": "vendor",
+    "npiEntityId": "ven_00006",
+    "titleAr": "مدة توريد المورّد مؤسسة الأفق للتجهيزات الكهربائية",
+    "mustContain": [
+      "مؤسسة الأفق للتجهيزات الكهربائية",
+      "VEN-00006",
+      "نحو 5 أيام",
+      "بحسب أمري شراء"
+    ]
+  }
+]
