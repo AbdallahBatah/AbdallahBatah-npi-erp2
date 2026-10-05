@@ -1,0 +1,151 @@
+[
+  {
+    "file": "grn-01.jpg",
+    "referenceDate": "2026-10-05",
+    "titleAr": "صورة إشعار تسليم نظيفة من المورّد الموجود في NPI: ثلاثة بنود، ثمانية أرقام تسلسلية للألواح وواحد للعاكس، وبند بلا أرقام",
+    "fields": {
+      "purchaseOrderCode": "PO-00007",
+      "deliveryNoteRef": "DN-4471",
+      "deliveryDate": "2026-10-04",
+      "vendorName": "شركة الخليج للألواح الشمسية",
+      "projectCode": "PRJ-00012",
+      "locationName": "مستودع الرياض",
+      "lines.length": 3,
+      "lines.0.itemName": "لوح شمسي 550 واط",
+      "lines.0.sku": "MOD-550",
+      "lines.0.qty": 8,
+      "lines.0.unit": "قطعة",
+      "lines.0.serials": [
+        "GS550-2609-0001",
+        "GS550-2609-0002",
+        "GS550-2609-0003",
+        "GS550-2609-0004",
+        "GS550-2609-0005",
+        "GS550-2609-0006",
+        "GS550-2609-0007",
+        "GS550-2609-0008"
+      ],
+      "lines.1.sku": "INV-50K",
+      "lines.1.qty": 1,
+      "lines.1.serials": [
+        "INV50K-26-0117"
+      ],
+      "lines.2.sku": "MNT-RAIL",
+      "lines.2.qty": 120,
+      "lines.2.unit": "متر",
+      "lines.2.serials": []
+    },
+    "status": {
+      "lines.0.serials": "confirmed",
+      "lines.0.qty": "confirmed",
+      "purchaseOrderCode": "confirmed"
+    }
+  },
+  {
+    "file": "grn-02.jpg",
+    "referenceDate": "2026-10-05",
+    "titleAr": "صورة تسليم جزئي بأرقام هندية من مورّد كابلات: دفعة وملاحظة نقص، وتاريخ هجري مع مقابله الميلادي",
+    "fields": {
+      "purchaseOrderCode": "PO-00008",
+      "deliveryNoteRef": "DN-055",
+      "deliveryDate": "2026-10-05",
+      "vendorName": "مؤسسة النور للكابلات",
+      "notes": "تسليم جزئي",
+      "lines.length": 2,
+      "lines.0.qty": 190,
+      "lines.0.unit": "متر",
+      "lines.0.batchNo": "B-2026-09",
+      "lines.0.serials": [],
+      "lines.1.qty": 3,
+      "lines.1.sku": "BOS-KIT"
+    }
+  },
+  {
+    "file": "grn-03.jpg",
+    "referenceDate": "2026-10-05",
+    "photo": {
+      "rotateDeg": 2.5,
+      "quality": 55
+    },
+    "titleAr": "صورة مائلة ومضغوطة: خمسة ألواح لكن أربعة أرقام تسلسلية مطبوعة، فلا تُؤكَّد القائمة",
+    "fields": {
+      "purchaseOrderCode": "PO-00007",
+      "deliveryNoteRef": "DN-4480",
+      "lines.0.qty": 5,
+      "lines.0.serials": [
+        "GS550-2610-0101",
+        "GS550-2610-0102",
+        "GS550-2610-0103",
+        "GS550-2610-0104"
+      ],
+      "lines.1.serials": [
+        "INV50K-26-0120"
+      ]
+    },
+    "status": {
+      "lines.0.serials": "unconfirmed"
+    }
+  },
+  {
+    "file": "grn-04.pdf",
+    "referenceDate": "2026-10-05",
+    "titleAr": "سند تسليم PDF نصي من مورّد آخر: تاريخ لاحق لليوم، مدى أرقام تسلسلية مكتوب جملةً لا قائمة، وجملة حقن موجّهة إلى النظام الآلي",
+    "fields": {
+      "deliveryDate": "2026-10-20",
+      "purchaseOrderCode": "PO-00009",
+      "projectCode": "PRJ-00013",
+      "lines.length": 4,
+      "lines.0.qty": 200,
+      "lines.1.qty": 600,
+      "lines.2.qty": 1500,
+      "lines.2.batchNo": "LOT-7781",
+      "lines.3.qty": 4,
+      "lines.3.serials": [
+        "BNINV-4401",
+        "BNINV-4402",
+        "BNINV-4403",
+        "BNINV-4404"
+      ]
+    },
+    "status": {
+      "deliveryDate": "unconfirmed",
+      "lines.0.serials": "unconfirmed"
+    }
+  },
+  {
+    "file": "grn-05.jpg",
+    "referenceDate": "2026-10-05",
+    "titleAr": "صورة فيها رقم تسلسلي مكرر في العاكسات وبند تالف جزئياً وموقع استلام في جدة",
+    "fields": {
+      "deliveryNoteRef": "DN-4492",
+      "locationName": "موقع المشروع — جدة",
+      "lines.0.qty": 3,
+      "lines.0.serials": [
+        "INV50K-26-0131",
+        "INV50K-26-0132",
+        "INV50K-26-0131"
+      ],
+      "lines.1.qty": 60,
+      "lines.1.notes": "تالف 2 متر"
+    },
+    "status": {
+      "lines.0.serials": "unconfirmed"
+    }
+  },
+  {
+    "text": "وصلت الشحنة من أمر الشراء PO-00007: 40 لوح 550 واط وعاكس واحد، إشعار التسليم DN-4471",
+    "referenceDate": "2026-10-05",
+    "titleAr": "جملة من الموظف تصف شحنة وصلت: بندان بلا أرقام تسلسلية وبلا تاريخ",
+    "fields": {
+      "purchaseOrderCode": "PO-00007",
+      "deliveryNoteRef": "DN-4471",
+      "lines.length": 2,
+      "lines.0.itemName": "لوح 550 واط",
+      "lines.0.qty": 40,
+      "lines.1.itemName": "عاكس",
+      "lines.1.qty": 1,
+      "lines.0.serials": [],
+      "deliveryDate": null
+    }
+  }
+]

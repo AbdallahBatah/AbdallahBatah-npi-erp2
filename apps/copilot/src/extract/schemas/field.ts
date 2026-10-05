@@ -60,7 +60,16 @@ export type FieldWarning =
   | 'extract.warn.line_total'
   | 'extract.warn.lines_sum'
   | 'extract.warn.vat_total'
-  | 'extract.warn.date_past';
+  | 'extract.warn.date_past'
+  | 'extract.warn.serials_count'
+  | 'extract.warn.serials_duplicate'
+  | 'extract.warn.date_future'
+  | 'extract.warn.over_receipt'
+  | 'extract.warn.serials_required'
+  | 'extract.warn.po_not_receivable'
+  | 'extract.warn.grn_not_accepted'
+  | 'extract.warn.grn_billed'
+  | 'extract.warn.bill_total_mismatch';
 
 export interface AssessedField<T> extends Field<T> {
   status: 'confirmed' | 'unconfirmed';

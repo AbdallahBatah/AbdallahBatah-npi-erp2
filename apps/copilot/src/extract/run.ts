@@ -1,8 +1,8 @@
 // Generic extraction runner (T-23, spec 02 §5.5, ADR-28): prompt → model →
 // strict JSON → zod → server-side validation → per-field confidence.
 //
-// Three flows are registered here (customer_contract, pr, po); T-25 adds the
-// other two by adding a `FlowSpec` to `FLOWS` — nothing else in this file is
+// Five flows are registered here (customer_contract, pr, po, grn,
+// vendor_bill), each a `FlowSpec` in `FLOWS` — nothing else in this file is
 // flow-specific. The runner never talks to NPI and never writes anything:
 // it turns a document into an `ExtractionResult` that the preview card
 // (T-26) shows and the execution plan (T-27) consumes.
@@ -29,6 +29,14 @@ import {
 } from './schemas/customer_contract';
 import { assessPr, PrOutputSchema, type AssessedPr, type PrOutput, type PrValues } from './schemas/pr';
 import { assessPo, PoOutputSchema, type AssessedPo, type PoOutput, type PoValues } from './schemas/po';
+import { assessGrn, GrnOutputSchema, type AssessedGrn, type GrnOutput, type GrnValues } from './schemas/grn';
+import {
+  assessVendorBill,
+  VendorBillOutputSchema,
+  type AssessedVendorBill,
+  type VendorBillOutput,
+  type VendorBillValues,
+} from './schemas/vendor_bill';
 
 // ─── Model-facing JSON schema ───────────────────────────────────────────────
 
@@ -183,6 +191,32 @@ export const FLOWS = {
     },
     jsonSchema: modelJsonSchema(PoOutputSchema),
     assess: assessPo,
+  }),
+  grn: specOf<GrnOutput, AssessedGrn, GrnValues>({
+    flow: 'grn',
+    promptFile: 'extract/grn.md',
+    purpose: 'extract_grn',
+    parse(raw) {
+      const parsed = GrnOutputSchema.safeParse(raw);
+      return parsed.success
+        ? { success: true, data: parsed.data }
+        : { success: false, detail: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+    },
+    jsonSchema: modelJsonSchema(GrnOutputSchema),
+    assess: assessGrn,
+  }),
+  vendor_bill: specOf<VendorBillOutput, AssessedVendorBill, VendorBillValues>({
+    flow: 'vendor_bill',
+    promptFile: 'extract/vendor_bill.md',
+    purpose: 'extract_vendor_bill',
+    parse(raw) {
+      const parsed = VendorBillOutputSchema.safeParse(raw);
+      return parsed.success
+        ? { success: true, data: parsed.data }
+        : { success: false, detail: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+    },
+    jsonSchema: modelJsonSchema(VendorBillOutputSchema),
+    assess: assessVendorBill,
   }),
 } as const;
 

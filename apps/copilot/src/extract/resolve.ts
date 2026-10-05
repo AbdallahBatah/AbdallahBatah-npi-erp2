@@ -9,7 +9,13 @@
 //                    (shown for choice, never auto-picked) → new
 //   project          code exact → normalized name exact → partial → none
 //   purchase order   code exact (digits compared numerically, «PO-12» finds
-//                    PO-00012) → none
+//                    PO-00012) → none; receivable only while SENT or
+//                    PARTIALLY_RECEIVED
+//   PO line          SKU exact → name ≥ 0.85 → partial → none (the same
+//                    ladder as an item, over the lines of one PO)
+//   goods receipt    code exact → the one ACCEPTED, unbilled receipt of the
+//                    PO → partial (several such) → none; a bill needs an
+//                    ACCEPTED receipt that has no bill yet
 //   department       code exact → normalized name exact (a leading «قسم»
 //                    is dropped) → partial → none
 //   requisition      code exact, digits compared numerically → none
@@ -22,6 +28,8 @@
 // similarity = |shared trigrams| / |union|.
 import { normalizeArabic } from '../text/normalize';
 import { readList } from '../npi/responses';
+import { amountTolerance, round2 } from './schemas/common';
+import type { FieldWarning } from './schemas/field';
 
 // ─── Text keys ──────────────────────────────────────────────────────────────
 
@@ -149,6 +157,9 @@ export interface PurchaseOrderRef {
   id: string;
   code: string;
   vendorId: string | null;
+  status: string | null;
+  vendorNameAr: string | null;
+  projectCode: string | null;
 }
 
 export function purchaseOrdersFromNpi(body: unknown): PurchaseOrderRef[] {
@@ -158,7 +169,16 @@ export function purchaseOrdersFromNpi(body: unknown): PurchaseOrderRef[] {
     const id = str(row.id);
     const code = str(row.code);
     if (id === null || code === null) continue;
-    out.push({ id, code, vendorId: str(row.vendorId) });
+    const vendor = isRecord(row.vendor) ? row.vendor : null;
+    const project = isRecord(row.project) ? row.project : null;
+    out.push({
+      id,
+      code,
+      vendorId: str(row.vendorId),
+      status: str(row.status),
+      vendorNameAr: vendor === null ? null : str(vendor.nameAr),
+      projectCode: project === null ? null : str(project.code),
+    });
   }
   return out;
 }
@@ -193,6 +213,101 @@ export function itemsFromNpi(body: unknown): ItemRef[] {
     out.push({ id, sku, nameAr, nameEn: str(row.nameEn), unitCost: num(row.unitCost) });
   }
   return out;
+}
+
+export interface PoLineRef {
+  id: string;
+  itemId: string;
+  sku: string | null;
+  nameAr: string | null;
+  nameEn: string | null;
+  isSerialised: boolean;
+  qty: number;
+  unitPrice: number;
+  receivedQty: number;
+}
+
+export interface GoodsReceiptRef {
+  id: string;
+  code: string;
+  status: string | null;
+  /** The receipt already has a vendor bill (NPI allows one per receipt). */
+  billed: boolean;
+  lines: { purchaseOrderLineId: string; qty: number }[];
+}
+
+export interface PurchaseOrderDetail {
+  id: string;
+  code: string;
+  status: string | null;
+  vendorId: string | null;
+  currency: string | null;
+  lines: PoLineRef[];
+  goodsReceipts: GoodsReceiptRef[];
+}
+
+/** `GET /procurement/purchase-orders/{id}`: the lines (Prisma decimals
+ *  arrive as strings) and the goods receipts. NPI has no list endpoint for
+ *  receipts, so a receipt is reachable only through its PO. `null` when the
+ *  body is not a record with a string id and code. */
+export function purchaseOrderDetailFromNpi(body: unknown): PurchaseOrderDetail | null {
+  if (!isRecord(body)) return null;
+  const id = str(body.id);
+  const code = str(body.code);
+  if (id === null || code === null) return null;
+
+  const lines: PoLineRef[] = [];
+  for (const row of Array.isArray(body.lines) ? body.lines : []) {
+    if (!isRecord(row)) continue;
+    const lineId = str(row.id);
+    const itemId = str(row.itemId);
+    const qty = num(row.qty);
+    if (lineId === null || itemId === null || qty === null) continue;
+    const item = isRecord(row.item) ? row.item : null;
+    lines.push({
+      id: lineId,
+      itemId,
+      sku: item === null ? null : str(item.sku),
+      nameAr: item === null ? null : str(item.nameAr),
+      nameEn: item === null ? null : str(item.nameEn),
+      isSerialised: item !== null && item.isSerialised === true,
+      qty,
+      unitPrice: num(row.unitPrice) ?? 0,
+      receivedQty: num(row.receivedQty) ?? 0,
+    });
+  }
+
+  const goodsReceipts: GoodsReceiptRef[] = [];
+  for (const row of Array.isArray(body.goodsReceipts) ? body.goodsReceipts : []) {
+    if (!isRecord(row)) continue;
+    const grnId = str(row.id);
+    const grnCode = str(row.code);
+    if (grnId === null || grnCode === null) continue;
+    const grnLines: GoodsReceiptRef['lines'] = [];
+    for (const l of Array.isArray(row.lines) ? row.lines : []) {
+      if (!isRecord(l)) continue;
+      const purchaseOrderLineId = str(l.purchaseOrderLineId);
+      const qty = num(l.qty);
+      if (purchaseOrderLineId === null || qty === null) continue;
+      grnLines.push({ purchaseOrderLineId, qty });
+    }
+    goodsReceipts.push({
+      id: grnId,
+      code: grnCode,
+      status: str(row.status),
+      billed: Array.isArray(row.vendorBills) && row.vendorBills.length > 0,
+      lines: grnLines,
+    });
+  }
+
+  return { id, code, status: str(body.status), vendorId: str(body.vendorId), currency: str(body.currency), lines, goodsReceipts };
+}
+
+/** NPI accepts goods only against a PO that was sent to the vendor. */
+export const RECEIVABLE_PO_STATUSES = ['SENT', 'PARTIALLY_RECEIVED'] as const;
+
+export function purchaseOrderReceivable(po: { status: string | null }): boolean {
+  return po.status !== null && (RECEIVABLE_PO_STATUSES as readonly string[]).includes(po.status);
 }
 
 export interface DepartmentRef {
@@ -405,6 +520,39 @@ export function resolvePurchaseOrder(code: string | null | undefined, purchaseOr
   return hit ? { kind: 'matched', purchaseOrder: hit } : { kind: 'none' };
 }
 
+/** The ladder shared by `resolveItem` and `resolvePoLine` so the two never
+ *  drift: SKU exact, then name at or above `ITEM_MATCH_MIN` (a tie at the top
+ *  is a choice), then candidates at or above `ITEM_CANDIDATE_MIN`, else none. */
+type LadderResult<T> =
+  | { kind: 'matched'; by: 'sku' | 'name'; entity: T; similarity: number }
+  | { kind: 'candidates'; candidates: Candidate<T>[] }
+  | { kind: 'none' };
+
+function resolveByNameLadder<T>(
+  query: { sku?: string | null; name?: string | null },
+  entities: readonly T[],
+  skuOf: (entity: T) => string | null,
+  namesOf: (entity: T) => readonly (string | null)[],
+): LadderResult<T> {
+  if (query.sku && query.sku.trim().length > 0) {
+    const sku = normalizeArabic(query.sku).replace(/\s+/g, '');
+    const bySku = entities.find((e) => {
+      const s = skuOf(e);
+      return s !== null && normalizeArabic(s).replace(/\s+/g, '') === sku;
+    });
+    if (bySku !== undefined) return { kind: 'matched', by: 'sku', entity: bySku, similarity: 1 };
+  }
+  const name = query.name?.trim() ?? '';
+  if (name.length === 0) return { kind: 'none' };
+  const scored = topCandidates(entities, (e) => bestNameSimilarity(namesOf(e), [name]), ITEM_CANDIDATE_MIN);
+  if (scored.length > 0 && scored[0].similarity >= ITEM_MATCH_MIN) {
+    // Two entities above the threshold with the same score is a choice, not a match.
+    if (scored.length > 1 && scored[1].similarity === scored[0].similarity) return { kind: 'candidates', candidates: scored };
+    return { kind: 'matched', by: 'name', entity: scored[0].entity, similarity: scored[0].similarity };
+  }
+  return scored.length > 0 ? { kind: 'candidates', candidates: scored } : { kind: 'none' };
+}
+
 export type ItemResolution =
   | { kind: 'matched'; by: 'sku' | 'name'; item: ItemRef; similarity: number }
   | { kind: 'candidates'; candidates: Candidate<ItemRef>[] }
@@ -412,18 +560,90 @@ export type ItemResolution =
   | { kind: 'new' };
 
 export function resolveItem(query: { sku?: string | null; name?: string | null }, items: readonly ItemRef[]): ItemResolution {
-  if (query.sku && query.sku.trim().length > 0) {
-    const sku = normalizeArabic(query.sku).replace(/\s+/g, '');
-    const bySku = items.find((i) => normalizeArabic(i.sku).replace(/\s+/g, '') === sku);
-    if (bySku) return { kind: 'matched', by: 'sku', item: bySku, similarity: 1 };
+  const r = resolveByNameLadder(
+    query,
+    items,
+    (i) => i.sku,
+    (i) => [i.nameAr, i.nameEn],
+  );
+  if (r.kind === 'matched') return { kind: 'matched', by: r.by, item: r.entity, similarity: r.similarity };
+  return r.kind === 'candidates' ? r : { kind: 'new' };
+}
+
+export type PoLineResolution =
+  | { kind: 'matched'; by: 'sku' | 'name'; line: PoLineRef; similarity: number }
+  | { kind: 'candidates'; candidates: Candidate<PoLineRef>[] }
+  | { kind: 'none' };
+
+/** Which line of the PO a delivery-note row belongs to: same ladder and
+ *  thresholds as `resolveItem`, over the PO lines. */
+export function resolvePoLine(query: { sku?: string | null; name?: string | null }, lines: readonly PoLineRef[]): PoLineResolution {
+  const r = resolveByNameLadder(
+    query,
+    lines,
+    (l) => l.sku,
+    (l) => [l.nameAr, l.nameEn],
+  );
+  return r.kind === 'matched' ? { kind: 'matched', by: r.by, line: r.entity, similarity: r.similarity } : r;
+}
+
+/** Warnings for one receipt line against its PO line: more than what is
+ *  still open on the PO, or a serialised item without one serial per unit. */
+export function receiptLineWarnings(line: { qty: number; serials: string[] }, poLine: PoLineRef): FieldWarning[] {
+  const warnings: FieldWarning[] = [];
+  if (line.qty > poLine.qty - poLine.receivedQty + 1e-9) warnings.push('extract.warn.over_receipt');
+  if (poLine.isSerialised && line.serials.length !== line.qty) warnings.push('extract.warn.serials_required');
+  return warnings;
+}
+
+export type GoodsReceiptResolution =
+  | { kind: 'matched'; by: 'code' | 'only_billable'; receipt: GoodsReceiptRef }
+  | { kind: 'candidates'; candidates: Candidate<GoodsReceiptRef>[] }
+  | { kind: 'none' };
+
+const isBillable = (r: GoodsReceiptRef): boolean => r.status === 'ACCEPTED' && !r.billed;
+
+/** Which receipt a bill is for: the printed code, else the only receipt of
+ *  the PO that can still be billed, else a choice among those. */
+export function resolveGoodsReceipt(query: { code?: string | null }, receipts: readonly GoodsReceiptRef[]): GoodsReceiptResolution {
+  if (query.code && query.code.trim().length > 0) {
+    const byCode = receipts.find((r) => sameCode(r.code, query.code as string));
+    if (byCode) return { kind: 'matched', by: 'code', receipt: byCode };
   }
-  const name = query.name?.trim() ?? '';
-  if (name.length === 0) return { kind: 'new' };
-  const scored = topCandidates(items, (i) => bestNameSimilarity([i.nameAr, i.nameEn], [name]), ITEM_CANDIDATE_MIN);
-  if (scored.length > 0 && scored[0].similarity >= ITEM_MATCH_MIN) {
-    // Two items above the threshold with the same score is a choice, not a match.
-    if (scored.length > 1 && scored[1].similarity === scored[0].similarity) return { kind: 'candidates', candidates: scored };
-    return { kind: 'matched', by: 'name', item: scored[0].entity, similarity: scored[0].similarity };
+  const billable = receipts.filter(isBillable);
+  if (billable.length === 1) return { kind: 'matched', by: 'only_billable', receipt: billable[0] };
+  if (billable.length > 1) {
+    return { kind: 'candidates', candidates: billable.slice(0, MAX_CANDIDATES).map((entity) => ({ entity, similarity: 1 })) };
   }
-  return scored.length > 0 ? { kind: 'candidates', candidates: scored } : { kind: 'new' };
+  return { kind: 'none' };
+}
+
+/** NPI creates a bill only from an ACCEPTED receipt that has no bill yet. */
+export function goodsReceiptBlockers(receipt: GoodsReceiptRef): FieldWarning[] {
+  const warnings: FieldWarning[] = [];
+  if (receipt.status !== 'ACCEPTED') warnings.push('extract.warn.grn_not_accepted');
+  if (receipt.billed) warnings.push('extract.warn.grn_billed');
+  return warnings;
+}
+
+/** The bill amounts as NPI computes them: subtotal = sum of receipt qty x PO
+ *  unit price, VAT on top (a receipt line whose PO line is unknown adds 0). */
+export function expectedBillAmounts(
+  receipt: GoodsReceiptRef,
+  po: PurchaseOrderDetail,
+  vatRate = 0.15,
+): { subtotal: number; vatAmount: number; total: number } {
+  const price = new Map(po.lines.map((l) => [l.id, l.unitPrice]));
+  const subtotal = round2(receipt.lines.reduce((acc, l) => acc + l.qty * (price.get(l.purchaseOrderLineId) ?? 0), 0));
+  const vatAmount = round2(subtotal * vatRate);
+  return { subtotal, vatAmount, total: round2(subtotal + vatAmount) };
+}
+
+/** The bill printed subtotal or total differs from what NPI will compute. */
+export function billTotalWarnings(
+  values: { subtotal: number | null; total: number | null },
+  expected: { subtotal: number; total: number },
+): FieldWarning[] {
+  const off = (printed: number | null, want: number): boolean => printed !== null && Math.abs(printed - want) > amountTolerance(want);
+  return off(values.subtotal, expected.subtotal) || off(values.total, expected.total) ? ['extract.warn.bill_total_mismatch'] : [];
 }

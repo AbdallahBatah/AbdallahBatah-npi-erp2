@@ -198,3 +198,114 @@ export function dateNotPastField(w: WireField, flags: AssessFlags): AssessedFiel
     ? withWarning(field, 'extract.warn.date_past')
     : field;
 }
+
+/** A date that should not lie after `flags.referenceDate` (a delivery or an
+ *  invoice dated in the future is a misread or a typo). */
+export function dateNotFutureField(w: WireField, flags: AssessFlags): AssessedField<string> {
+  const field = dateField(w);
+  return flags.referenceDate !== undefined && field.value !== null && field.value > flags.referenceDate
+    ? withWarning(field, 'extract.warn.date_future')
+    : field;
+}
+
+// ─── Serial numbers ─────────────────────────────────────────────────────────
+
+/** «A;B»、«A،B»، one per line → trimmed, ASCII digits, uppercased, inner
+ *  whitespace collapsed, empties dropped. Order is kept (it is the order
+ *  printed on the document). */
+export function splitSerials(text: string): string[] {
+  return asciiDigits(text)
+    .split(/[;،,|\r\n]+/)
+    .map((s) => s.trim().replace(/\s+/g, ' ').toUpperCase())
+    .filter((s) => s.length > 0);
+}
+
+/**
+ * A line's serial numbers. No serials is a valid state: only the resolver
+ * knows whether the item is serialised, and AT-05 wants only serials that
+ * were *read* judged. A list whose count differs from the quantity, or that
+ * repeats a serial, is unconfirmed; so is a list the model was unsure of
+ * (`assessField` adds `low_confidence` below 0.8).
+ */
+export function serialsField(w: WireField, qty: number | null): AssessedField<string[]> {
+  if (splitSerials(w.value).length === 0) {
+    return { value: [], confidence: 1, evidence: null, page: null, status: 'confirmed', warnings: [] };
+  }
+  const { field } = fromWire(w, splitSerials);
+  const serials = field.value ?? [];
+  const warnings: FieldWarning[] = [];
+  if (new Set(serials).size !== serials.length) warnings.push('extract.warn.serials_duplicate');
+  if (qty !== null && serials.length !== qty) warnings.push('extract.warn.serials_count');
+  return assessField(field, warnings);
+}
+
+// ─── Priced-line reconciliation (PO quotes, vendor bills) ───────────────────
+
+/** Saudi VAT rate, for the «subtotal + VAT = total» check. */
+export const VAT_RATE = 0.15;
+
+export interface PricedLineFields {
+  qty: AssessedField<number>;
+  unitPrice: AssessedField<number>;
+  lineTotal: AssessedField<number>;
+}
+
+/**
+ * A line stating a total but no unit price gets `unitPrice = total / qty`,
+ * marked `derived`; a line stating both must agree (`line_total` on both
+ * when `qty × price` differs from the printed total).
+ */
+export function reconcileLine(line: PricedLineFields): PricedLineFields {
+  const { qty } = line;
+  let { unitPrice, lineTotal } = line;
+  if (unitPrice.value === null && lineTotal.value !== null && qty.value !== null && qty.value > 0) {
+    unitPrice = assessField(
+      {
+        value: round2(lineTotal.value / qty.value),
+        confidence: Math.min(lineTotal.confidence, qty.confidence),
+        evidence: lineTotal.evidence,
+        page: lineTotal.page,
+      },
+      ['extract.warn.derived'],
+    );
+  } else if (unitPrice.value !== null && lineTotal.value !== null && qty.value !== null) {
+    if (Math.abs(qty.value * unitPrice.value - lineTotal.value) > amountTolerance(lineTotal.value)) {
+      lineTotal = withWarning(lineTotal, 'extract.warn.line_total');
+      unitPrice = withWarning(unitPrice, 'extract.warn.line_total');
+    }
+  }
+  return { qty, unitPrice, lineTotal };
+}
+
+/**
+ * When every usable line has a price and a subtotal is stated, the lines
+ * must add up to it (`lines_sum` on the subtotal and every usable price —
+ * assigned in place on `lines[i].unitPrice`); the grand total must be the
+ * subtotal plus the stated VAT, or plus 15 % when none is stated
+ * (`vat_total` on the total and, when present, the VAT amount).
+ */
+export function reconcileTotals<L extends PricedLineFields>(
+  lines: L[],
+  usable: (line: L) => boolean,
+  totals: { subtotal: AssessedField<number>; vatAmount: AssessedField<number>; total: AssessedField<number> },
+): { subtotal: AssessedField<number>; vatAmount: AssessedField<number>; total: AssessedField<number> } {
+  let { subtotal, vatAmount, total } = totals;
+  const usableLines = lines.filter(usable);
+
+  if (subtotal.value !== null && usableLines.length > 0 && usableLines.every((l) => l.unitPrice.value !== null)) {
+    const sum = usableLines.reduce((acc, l) => acc + (l.qty.value as number) * (l.unitPrice.value as number), 0);
+    if (Math.abs(sum - subtotal.value) > amountTolerance(subtotal.value)) {
+      subtotal = withWarning(subtotal, 'extract.warn.lines_sum');
+      for (const l of usableLines) l.unitPrice = withWarning(l.unitPrice, 'extract.warn.lines_sum');
+    }
+  }
+
+  if (subtotal.value !== null && total.value !== null) {
+    const expected = subtotal.value + (vatAmount.value ?? round2(subtotal.value * VAT_RATE));
+    if (Math.abs(expected - total.value) > amountTolerance(total.value)) {
+      total = withWarning(total, 'extract.warn.vat_total');
+      if (vatAmount.value !== null) vatAmount = withWarning(vatAmount, 'extract.warn.vat_total');
+    }
+  }
+  return { subtotal, vatAmount, total };
+}

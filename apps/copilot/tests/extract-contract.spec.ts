@@ -4,6 +4,7 @@ import { LlmError } from '../src/llm/client';
 import type { ModelResponse, RedactedBlock, RedactedRequest } from '../src/llm/provider';
 import { Pseudonymizer } from '../src/privacy/pseudonymizer';
 import type { ConsentedBase64 } from '../src/llm/provider';
+import type { FlowType } from '../src/agents/router';
 import {
   FLOWS,
   flattenFields,
@@ -474,7 +475,8 @@ describe('runExtraction (customer_contract)', () => {
 
   it('refuses a flow with no registered spec before calling the model', async () => {
     const llm = new FakeLlm(() => reply('{}'));
-    const result = await runExtraction(depsWith(llm), { flow: 'grn', source: { kind: 'text', pages: [] } }, ctx);
+    // Every FlowType is registered since T-25, so the unregistered case is a flow name NPI will never produce.
+    const result = await runExtraction(depsWith(llm), { flow: 'warranty_claim' as unknown as FlowType, source: { kind: 'text', pages: [{ num: 1, text: 'عقد' }] } }, ctx);
     expect((result as ExtractFailure).reason).toBe('unsupported_flow');
     expect(llm.requests).toHaveLength(0);
   });

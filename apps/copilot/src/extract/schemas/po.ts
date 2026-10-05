@@ -20,10 +20,9 @@
 //   vatNumber   /^(3\d{13}3)?$/                                 packages/shared/src/vat.ts
 import { z } from 'zod';
 import type { components } from '../../npi/types';
-import { assessField, type AssessedField } from './field';
+import type { AssessedField } from './field';
 import {
   amountField,
-  amountTolerance,
   asciiDigits,
   codeField,
   currencyField,
@@ -35,11 +34,12 @@ import {
   identifierField,
   nameField,
   quantityField,
+  reconcileLine,
+  reconcileTotals,
   round2,
   SAUDI_CR_RE,
   SAUDI_VAT_RE,
   textField,
-  withWarning,
   wire,
   type AssessFlags,
 } from './common';
@@ -241,8 +241,34 @@ export function convertToPoDtoFrom(
 
 // ─── Server-side validation and confidence (02 §5.5) ───────────────────────
 
-/** Saudi VAT rate, for the «subtotal + VAT = total» check. */
-const VAT_RATE = 0.15;
+/** The vendor block shared by the PO and vendor-bill flows: identifiers in
+ *  NPI's formats (VAT, CR, e-mail, enum type); `values` is null without a
+ *  vendor name. */
+export function assessVendor(v: VendorOutput, flags: AssessFlags): { assessed: AssessedVendor; values: VendorValues | null } {
+  const assessed: AssessedVendor = {
+    nameAr: nameField(v.nameAr, flags),
+    nameEn: textField(v.nameEn),
+    vendorType: enumField(v.vendorType, VENDOR_TYPES),
+    vatNumber: identifierField(v.vatNumber, SAUDI_VAT_RE, 'extract.warn.vat_format'),
+    crNumber: identifierField(v.crNumber, SAUDI_CR_RE, 'extract.warn.cr_format'),
+    phone: textField({ ...v.phone, value: asciiDigits(v.phone.value) }),
+    email: textField(v.email, (value) => (EMAIL_RE.test(value) ? [] : ['extract.warn.email_format'])),
+  };
+  const nameAr = assessed.nameAr.value;
+  const values: VendorValues | null =
+    nameAr === null
+      ? null
+      : {
+          nameAr,
+          nameEn: assessed.nameEn.value,
+          vendorType: assessed.vendorType.value,
+          vatNumber: assessed.vatNumber.value,
+          crNumber: assessed.crNumber.value,
+          phone: assessed.phone.value,
+          email: assessed.email.value,
+        };
+  return { assessed, values };
+}
 
 /**
  * Turns the model's output into assessed fields and plain values:
@@ -260,41 +286,18 @@ const VAT_RATE = 0.15;
  *    sentence naming an approved PR has no lines and is still actionable).
  */
 export function assessPo(out: PoOutput, flags: AssessFlags = { ligatureSuspect: false }): { assessed: AssessedPo; values: PoValues | null } {
-  const v = out.vendor;
-  const vendor: AssessedVendor = {
-    nameAr: nameField(v.nameAr, flags),
-    nameEn: textField(v.nameEn),
-    vendorType: enumField(v.vendorType, VENDOR_TYPES),
-    vatNumber: identifierField(v.vatNumber, SAUDI_VAT_RE, 'extract.warn.vat_format'),
-    crNumber: identifierField(v.crNumber, SAUDI_CR_RE, 'extract.warn.cr_format'),
-    phone: textField({ ...v.phone, value: asciiDigits(v.phone.value) }),
-    email: textField(v.email, (value) => (EMAIL_RE.test(value) ? [] : ['extract.warn.email_format'])),
-  };
+  const { assessed: vendor, values: vendorValues } = assessVendor(out.vendor, flags);
 
   let subtotal = amountField(out.subtotal);
   let vatAmount = amountField(out.vatAmount);
   let total = amountField(out.total);
 
   const lines: AssessedPoLine[] = out.lines.map((l) => {
-    const qty = quantityField(l.qty);
-    let unitPrice = amountField(l.unitPrice);
-    let lineTotal = amountField(l.lineTotal);
-    if (unitPrice.value === null && lineTotal.value !== null && qty.value !== null && qty.value > 0) {
-      unitPrice = assessField(
-        {
-          value: round2(lineTotal.value / qty.value),
-          confidence: Math.min(lineTotal.confidence, qty.confidence),
-          evidence: lineTotal.evidence,
-          page: lineTotal.page,
-        },
-        ['extract.warn.derived'],
-      );
-    } else if (unitPrice.value !== null && lineTotal.value !== null && qty.value !== null) {
-      if (Math.abs(qty.value * unitPrice.value - lineTotal.value) > amountTolerance(lineTotal.value)) {
-        lineTotal = withWarning(lineTotal, 'extract.warn.line_total');
-        unitPrice = withWarning(unitPrice, 'extract.warn.line_total');
-      }
-    }
+    const { qty, unitPrice, lineTotal } = reconcileLine({
+      qty: quantityField(l.qty),
+      unitPrice: amountField(l.unitPrice),
+      lineTotal: amountField(l.lineTotal),
+    });
     return {
       itemName: textField(l.itemName),
       sku: textField({ ...l.sku, value: l.sku.value.trim().toUpperCase() }),
@@ -311,21 +314,7 @@ export function assessPo(out: PoOutput, flags: AssessFlags = { ligatureSuspect: 
     l.itemName.value !== null && l.qty.value !== null && l.qty.value > 0 && !l.qty.warnings.includes('extract.warn.quantity');
   const usableLines = lines.filter(isUsable);
 
-  if (subtotal.value !== null && usableLines.length > 0 && usableLines.every((l) => l.unitPrice.value !== null)) {
-    const sum = usableLines.reduce((acc, l) => acc + (l.qty.value as number) * (l.unitPrice.value as number), 0);
-    if (Math.abs(sum - subtotal.value) > amountTolerance(subtotal.value)) {
-      subtotal = withWarning(subtotal, 'extract.warn.lines_sum');
-      for (const l of usableLines) l.unitPrice = withWarning(l.unitPrice, 'extract.warn.lines_sum');
-    }
-  }
-
-  if (subtotal.value !== null && total.value !== null) {
-    const expected = subtotal.value + (vatAmount.value ?? round2(subtotal.value * VAT_RATE));
-    if (Math.abs(expected - total.value) > amountTolerance(total.value)) {
-      total = withWarning(total, 'extract.warn.vat_total');
-      if (vatAmount.value !== null) vatAmount = withWarning(vatAmount, 'extract.warn.vat_total');
-    }
-  }
+  ({ subtotal, vatAmount, total } = reconcileTotals(lines, isUsable, { subtotal, vatAmount, total }));
 
   const assessed: AssessedPo = {
     vendor,
@@ -341,20 +330,6 @@ export function assessPo(out: PoOutput, flags: AssessFlags = { ligatureSuspect: 
     total,
     lines,
   };
-
-  const nameAr = vendor.nameAr.value;
-  const vendorValues: VendorValues | null =
-    nameAr === null
-      ? null
-      : {
-          nameAr,
-          nameEn: vendor.nameEn.value,
-          vendorType: vendor.vendorType.value,
-          vatNumber: vendor.vatNumber.value,
-          crNumber: vendor.crNumber.value,
-          phone: vendor.phone.value,
-          email: vendor.email.value,
-        };
 
   const lineValues = usableLines.map(
     (l): PoLineValues => ({
