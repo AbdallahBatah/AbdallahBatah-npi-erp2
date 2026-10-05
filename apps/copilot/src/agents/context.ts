@@ -3,6 +3,7 @@
 // from `run.ts` so that the turn itself stays testable with fakes.
 import { parseKey } from '../crypto/aead';
 import { getDb } from '../db';
+import { executeJob } from '../execute/run';
 import { docsRoot, createFsStorage } from '../intake/upload';
 import { startIntake } from '../intake/job';
 import type { EditDeps } from '../intake/edit';
@@ -96,11 +97,14 @@ export function buildEditDeps(session: {
 }): EditDeps {
   const db = getDb();
   const npi = createNpiClient({ token: session.npiToken });
+  const storage = createFsStorage(docsRoot());
   return {
     db,
     llm: createLlmClient({ provider, db }),
     npi,
-    storage: createFsStorage(docsRoot()),
+    storage,
+    execute: (job, plan) =>
+      executeJob({ db, npi, storage, now: undefined }, { npiOrgId: session.user.npiOrgId, npiUserId: session.user.npiUserId }, job, plan),
     dictionary: () =>
       buildDictionary(npi, {
         npiOrgId: session.user.npiOrgId,

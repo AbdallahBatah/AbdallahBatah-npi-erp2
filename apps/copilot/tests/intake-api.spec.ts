@@ -6,7 +6,7 @@
 import { t } from '../src/i18n/ar';
 import { actOnIntake, loadIntake } from '../src/components/intake/api';
 import type { IntakeAction } from '../src/intake/types';
-import { approvedView, cancelledView, contractView, failedView, readyView } from '../e2e/fixtures/intake';
+import { approvedView, cancelledView, contractView, executedView, executionFailedView, failedView, readyView } from '../e2e/fixtures/intake';
 
 function fakeResponse(status: number, body?: unknown): Response {
   return {
@@ -41,6 +41,8 @@ describe('loadIntake', () => {
 
   it.each([
     ['approved', approvedView()],
+    ['executed (a manual step at the end)', executedView()],
+    ['stopped at a failed step', executionFailedView()],
     ['cancelled', cancelledView()],
     ['failed (no preview)', failedView()],
     ['ready to approve', readyView()],
@@ -49,6 +51,34 @@ describe('loadIntake', () => {
     const result = await loadIntake('job-1');
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.job.status).toBe(view.status);
+  });
+
+  it('an execution with a manual step parses, and the step keeps its state, its entity and its link target', async () => {
+    const view = executedView();
+    expect(view.execution!.steps.map((s) => s.state)).toEqual(['done', 'done', 'done', 'manual']);
+    respondWith(200, { job: view });
+    const result = await loadIntake('job-1');
+    expect(result).toEqual({ ok: true, job: view });
+    if (result.ok) {
+      expect(result.job.status).toBe('done');
+      expect(result.job.execution?.status).toBe('done');
+      expect(result.job.execution?.steps[3].state).toBe('manual');
+      expect(result.job.execution?.steps[1].entity).toEqual({ kindAr: t('exec.kind.contract'), id: 'con-1', code: 'CON-00012', npiPath: '/contracts/con-1' });
+    }
+  });
+
+  it('a failed execution keeps its failed step, the reason and the step it stopped at', async () => {
+    const view = executionFailedView();
+    respondWith(200, { job: view });
+    const result = await loadIntake('job-1');
+    expect(result).toEqual({ ok: true, job: view });
+    if (result.ok) {
+      expect(result.job.status).toBe('failed');
+      expect(result.job.failureAr).toBeNull();
+      expect(result.job.preview).not.toBeNull();
+      expect(result.job.execution?.failedAt).toBe(2);
+      expect(result.job.execution?.steps[1]).toMatchObject({ state: 'failed', errorAr: expect.stringContaining('NPI رفض') });
+    }
   });
 
   it('asks for the id with a GET, same-origin credentials and an Accept header', async () => {
@@ -127,6 +157,9 @@ describe('loadIntake', () => {
       ['a choice without options', mutate((j) => delete j.preview.choices[0].options)],
       ['a document without a name', mutate((j) => delete j.document.fileName)],
       ['an execution step with an unknown state', mutate((j) => (j.execution = { status: 'pending', steps: [{ n: 1, labelAr: 'x', state: 'weird' }] }))],
+      ['an execution log whose status is «manual» (that is a step state, not a log status)', mutate((j) => (j.execution = { status: 'manual', steps: [{ n: 1, labelAr: 'x', state: 'manual' }] }))],
+      ['an execution log with an unknown status', mutate((j) => (j.execution = { status: 'weird', steps: [] }))],
+      ['an execution step with no label', mutate((j) => (j.execution = { status: 'done', steps: [{ n: 1, state: 'done' }] }))],
     ])('%s', async (_name, body) => {
       respondWith(200, body);
       expect(await loadIntake('job-1')).toEqual({ ok: false, kind: 'server', messageAr: t('state.error') });
@@ -166,6 +199,31 @@ describe('actOnIntake', () => {
       expect(result.job.execution?.status).toBe('pending');
       expect(result.job.preview?.canApprove).toBe(true);
     }
+  });
+
+  it('approve answers with the executed job: done, with the step left for NPI marked manual', async () => {
+    const view = executedView();
+    respondWith(200, { job: view });
+    const result = await actOnIntake({ id: 'job-1', action: 'approve' });
+    expect(result).toEqual({ ok: true, job: view });
+    if (result.ok) {
+      expect(result.job.status).toBe('done');
+      expect(result.job.execution?.steps.some((s) => s.state === 'manual')).toBe(true);
+    }
+  });
+
+  it('approve answering with a job that stopped at a failed step is still a normal result, not an error', async () => {
+    const view = executionFailedView();
+    respondWith(200, { job: view });
+    const result = await actOnIntake({ id: 'job-1', action: 'approve' });
+    expect(result).toEqual({ ok: true, job: view });
+  });
+
+  it('maps 422 plan_failed to a refusal carrying the Arabic reason (the plan could not be built; nothing was written)', async () => {
+    const messageAr = t('exec.error.plan', { reason: t('preview.item_required', { name: 'كابل نحاسي 6 ملم' }) });
+    respondWith(422, { error: 'plan_failed', messageAr });
+    const result = await actOnIntake({ id: 'job-1', action: 'approve' });
+    expect(result).toMatchObject({ ok: false, messageAr });
   });
 
   it('maps 409 to state: the server’s message, or the default one', async () => {

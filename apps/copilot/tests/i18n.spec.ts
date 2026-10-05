@@ -26,7 +26,7 @@ describe('ar i18n map', () => {
       'flow.unknown': 'لم أحدد نوع المستند — اختر:',
       'preview.title': 'هذا ما سأُدخله في NPI',
       'preview.evidence': 'المصدر: صفحة {page}: «{quote}»',
-      'exec.failed': 'توقفت عند الخطوة {n}: NPI رفض: {reason}. ما أُنشئ حتى الآن: {created}',
+      'exec.failed': 'توقفت عند الخطوة {n}: {reason} ما أُنشئ حتى الآن: {created}',
       'setup.q1': 'ما نشاط المنشأة وخطوط إيرادها؟',
       'profile.epc': 'مقاول EPC (تصميم وتوريد وتركيب)',
       'trust.col.image_sent': 'صورة أُرسلت',
@@ -120,7 +120,7 @@ describe('ar i18n map', () => {
       expect(t('home.greeting')).toBe('مرحباً {name}');
       expect(t('home.greeting', {})).toBe('مرحباً {name}');
       expect(t('exec.failed', { n: 2 })).toBe(
-        'توقفت عند الخطوة 2: NPI رفض: {reason}. ما أُنشئ حتى الآن: {created}',
+        'توقفت عند الخطوة 2: {reason} ما أُنشئ حتى الآن: {created}',
       );
     });
 

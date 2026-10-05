@@ -170,21 +170,51 @@ export interface StoredPreview {
 
 // ─── Execution (intake_jobs.executionLogJson) ───────────────────────────────
 
-export type ExecutionStepState = 'pending' | 'running' | 'done' | 'failed';
+/** `manual` (T-27): a step the copilot never performs — it names what the
+ *  user does next on NPI's own screen (activate the contract, approve the
+ *  order, inspect the receipt, run the match). Reached when every step before
+ *  it is done; stays `pending` when the execution stopped earlier. */
+export type ExecutionStepState = 'pending' | 'running' | 'done' | 'failed' | 'manual';
+
+/** What the execution creates in NPI (T-27). `attachment` is the source
+ *  document attached to a contract. */
+export type CreatedEntityKind =
+  | 'customer'
+  | 'contract'
+  | 'requisition'
+  | 'vendor'
+  | 'purchase_order'
+  | 'goods_receipt'
+  | 'vendor_bill'
+  | 'attachment';
+
+/** One NPI record the execution created (`intake_jobs.npiEntityRefs` holds
+ *  the list, in creation order). `npiPath` is a path on NPI's web app (e.g.
+ *  `/contracts/<id>`) for `npiWebUrl`, null when NPI has no page for it. */
+export interface CreatedEntity {
+  kind: CreatedEntityKind;
+  id: string;
+  code: string | null;
+  npiPath: string | null;
+}
+
+export type NpiEntityRefs = CreatedEntity[];
 
 export interface ExecutionStep {
   n: number;
   labelAr: string;
   state: ExecutionStepState;
-  /** The NPI record this step created, once it has. `npiPath` is a path on
-   *  NPI's web app (e.g. `/contracts/<id>`) for `npiWebUrl`. */
+  /** The NPI record this step created, once it has. `kindAr` is
+   *  `t('exec.kind.<kind>')`; `npiPath` as on `CreatedEntity`. */
   entity?: { kindAr: string; id: string; code: string | null; npiPath: string | null };
   /** `NpiError.messageAr` of the failed step. */
   errorAr?: string;
 }
 
 /** T-26 writes `{ status: 'pending' }` on approve; T-27 drives the rest
- *  (ADR-29: stop on failure, no automatic retry of writes). */
+ *  inside the same request (ADR-29: stop on failure, no automatic retry of
+ *  writes): `running` with `startedAt`, every step `running` → `done` |
+ *  `failed` | `manual`, then `done` or `failed` with `finishedAt`. */
 export interface ExecutionLog {
   status: 'pending' | 'running' | 'done' | 'failed';
   steps: ExecutionStep[];

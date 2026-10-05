@@ -5,8 +5,11 @@
 // and `tests/intake-api.spec.ts`, so the client guard that parses these
 // bodies is exercised on exactly what the browser tests feed it.
 import { ar, t } from '../../src/i18n/ar';
+import { NpiError } from '../../src/npi/errors';
 import type {
+  CreatedEntityKind,
   ExecutionLog,
+  ExecutionStep,
   IntakeStatus,
   IntakeView,
   PreviewChoice,
@@ -220,6 +223,55 @@ export function approvedView(options: ContractOptions = {}): IntakeView {
     steps: view.preview!.steps.map((s) => ({ n: s.n, labelAr: s.labelAr, state: 'pending' })),
   };
   return { ...view, status: 'approved', execution, approvedAt: '2026-10-05T09:05:00.000Z' };
+}
+
+const STARTED_AT = '2026-10-05T09:05:00.000Z';
+const FINISHED_AT = '2026-10-05T09:05:03.000Z';
+
+function created(kind: CreatedEntityKind, id: string, code: string | null, npiPath: string | null): NonNullable<ExecutionStep['entity']> {
+  return { kindAr: t(`exec.kind.${kind}` as const), id, code, npiPath };
+}
+
+/** The same job after T-27's executor ran every step: customer, contract and
+ *  attachment created in NPI, the last (activation) left for NPI's own screen.
+ *  Labels are those of `approvedView()` with the customer created (not reused),
+ *  so the first step's entity is the one it promised. */
+export function executedView(options: ContractOptions = {}): IntakeView {
+  const view = approvedView({ customerChoice: 'new', ...options });
+  const [first, second, third, fourth] = view.preview!.steps;
+  const execution: ExecutionLog = {
+    status: 'done',
+    startedAt: STARTED_AT,
+    finishedAt: FINISHED_AT,
+    steps: [
+      { n: first.n, labelAr: first.labelAr, state: 'done', entity: created('customer', 'cus-1', 'CUS-00001', '/customers') },
+      { n: second.n, labelAr: second.labelAr, state: 'done', entity: created('contract', 'con-1', 'CON-00012', '/contracts/con-1') },
+      { n: third.n, labelAr: third.labelAr, state: 'done', entity: created('attachment', 'att-1', null, null) },
+      { n: fourth.n, labelAr: fourth.labelAr, state: 'manual' },
+    ],
+  };
+  return { ...view, status: 'done', execution };
+}
+
+/** NPI refused the contract (the user lacks the permission): the customer was
+ *  created, the rest never ran. The preview stays on the job, read-only. */
+export function executionFailedView(options: ContractOptions = {}): IntakeView {
+  const view = approvedView({ customerChoice: 'new', ...options });
+  const [first, second, third, fourth] = view.preview!.steps;
+  const refusal = new NpiError({ status: 403, kind: 'forbidden', npiMessage: 'Insufficient permissions' });
+  const execution: ExecutionLog = {
+    status: 'failed',
+    failedAt: 2,
+    startedAt: STARTED_AT,
+    finishedAt: FINISHED_AT,
+    steps: [
+      { n: first.n, labelAr: first.labelAr, state: 'done', entity: created('customer', 'cus-1', 'CUS-00001', '/customers') },
+      { n: second.n, labelAr: second.labelAr, state: 'failed', errorAr: refusal.messageAr },
+      { n: third.n, labelAr: third.labelAr, state: 'pending' },
+      { n: fourth.n, labelAr: fourth.labelAr, state: 'pending' },
+    ],
+  };
+  return { ...view, status: 'failed', execution };
 }
 
 export function cancelledView(): IntakeView {

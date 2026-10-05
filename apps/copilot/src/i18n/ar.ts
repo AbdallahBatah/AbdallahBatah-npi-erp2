@@ -128,7 +128,7 @@ export const ar = {
 
   'exec.running': 'أُنفّذ في NPI…',
   'exec.done': 'تم. {entity} برقم {code}',
-  'exec.failed': 'توقفت عند الخطوة {n}: NPI رفض: {reason}. ما أُنشئ حتى الآن: {created}',
+  'exec.failed': 'توقفت عند الخطوة {n}: {reason} ما أُنشئ حتى الآن: {created}',
   'exec.after_matrix': 'سيمر الآن بمصفوفة الاعتمادات كالمعتاد',
 
   'setup.q1': 'ما نشاط المنشأة وخطوط إيرادها؟',
@@ -561,12 +561,31 @@ export const ar = {
 
   // Execution card
   'exec.title': 'التنفيذ في NPI',
-  'exec.pending': 'اعتُمدت المعاينة وسُجّل الاعتماد؛ التنفيذ في NPI يُفعَّل في المرحلة التالية.',
+  'exec.pending': 'اعتُمدت المعاينة؛ يبدأ التنفيذ في NPI الآن…',
   'exec.step.pending': 'بانتظار التنفيذ',
   'exec.step.running': 'جارٍ',
   'exec.step.done': 'تم',
   'exec.step.failed': 'فشل',
   'exec.open_in_npi': 'افتح في NPI',
+
+  // ── T-27 additions (execution in NPI) ──
+  'exec.step.manual': 'يدوياً في NPI',
+  'exec.done_all': 'اكتمل التنفيذ في NPI.',
+  'exec.manual_hint': 'الخطوات الموسومة «يدوياً في NPI» تُكمَل من شاشة NPI.',
+  'exec.kind.customer': 'العميل',
+  'exec.kind.contract': 'العقد',
+  'exec.kind.requisition': 'طلب الشراء',
+  'exec.kind.vendor': 'المورّد',
+  'exec.kind.purchase_order': 'أمر الشراء',
+  'exec.kind.goods_receipt': 'سند الاستلام',
+  'exec.kind.vendor_bill': 'فاتورة المورّد',
+  'exec.kind.attachment': 'المرفق',
+  'exec.error.unexpected': 'تعذر إتمام الخطوة لخطأ غير متوقع في مَدار؛ لم يُعَد إرسال أي كتابة.',
+  'exec.error.plan': 'تعذر بناء خطوات التنفيذ: {reason}',
+  'exec.reason.entity_undecided': 'لم يُحدَّد {entity}',
+  'exec.reason.requisition_line': 'لم أجد بند «{name}» في طلب الشراء {code}؛ احذف رقم الطلب المرجعي ليُنشأ أمر شراء مستقل',
+  'exec.reason.steps_drift': 'خطوات التنفيذ لا تطابق ما عُرض على البطاقة',
+  'preview.item_required': 'الصنف «{name}» غير موجود في NPI — أضفه في NPI أولاً أو اختر صنفاً مطابقاً',
 } as const;
 
 export type ArKey = keyof typeof ar;

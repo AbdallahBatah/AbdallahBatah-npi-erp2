@@ -597,6 +597,7 @@ export function PreviewCard({
               ) : null}
 
               {busy && lastAction === 'edit' ? <WaitingIndicator label={t('preview.editing')} /> : null}
+              {busy && lastAction === 'approve' ? <WaitingIndicator label={t('exec.running')} /> : null}
             </div>
           ) : null}
         </div>

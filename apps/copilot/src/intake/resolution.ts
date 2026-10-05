@@ -406,6 +406,28 @@ export async function resolveFlow(npi: ResolutionNpi, flow: FlowType, values: un
   return resolution;
 }
 
+// ─── The decision the user ended up with ────────────────────────────────────
+
+/**
+ * D-T27-6: the NPI id the user ended up with for a pick, or null (create /
+ * undecided / none). `chosen` is the stored `choose` decision for the pick's
+ * target: an option id or `'new'`.
+ *  - matched    → the match, unless the user chose «new» (or another option id);
+ *  - candidates → the chosen candidate, or null while undecided / «new»;
+ *  - new / none / unreadable / undefined → null.
+ */
+export function pickedId(pick: EntityPick | undefined, chosen: string | undefined): string | null {
+  if (pick === undefined) return null;
+  switch (pick.kind) {
+    case 'matched':
+      return chosen === 'new' ? null : (chosen ?? pick.id);
+    case 'candidates':
+      return chosen !== undefined && pick.candidates.some((c) => c.id === chosen) ? chosen : null;
+    default:
+      return null;
+  }
+}
+
 // ─── Hard blockers ──────────────────────────────────────────────────────────
 
 /** What `resolutionBlockers` reads from the flow's values, all optional. */

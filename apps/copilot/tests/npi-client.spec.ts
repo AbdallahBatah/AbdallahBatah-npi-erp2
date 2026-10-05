@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createNpiClient } from '../src/npi/client';
 import { NpiError, mapNpiError } from '../src/npi/errors';
-import { readEntityRef, readMe } from '../src/npi/responses';
+import { readEntityRef, readMe, readRequisitionLines } from '../src/npi/responses';
 
 /** A minimal stand-in for the DOM `Response` the client actually reads
  *  (`.ok`, `.status`, `.text()`). */
@@ -174,10 +174,118 @@ describe('createNpiClient — transport behaviour', () => {
   });
 });
 
+describe('createNpiClient — the writes execution adds (T-27)', () => {
+  interface Call {
+    url: string;
+    init: RequestInit;
+  }
+
+  function recording(status = 201, body: unknown = { id: 'x-1', code: 'X-00001' }) {
+    const calls: Call[] = [];
+    const fetchImpl = jest.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init: init ?? {} });
+      return fakeResponse(status, body);
+    }) as unknown as typeof fetch;
+    const client = createNpiClient({ baseUrl: 'http://api.test/api', token: 'tkn-123', fetchImpl });
+    return { client, calls, fetchImpl };
+  }
+
+  const headersOf = (call: Call) => call.init.headers as Record<string, string>;
+  const hasHeader = (call: Call, name: string) => Object.keys(headersOf(call)).some((h) => h.toLowerCase() === name.toLowerCase());
+
+  describe('attachFile — multipart, a contract only', () => {
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+
+    it('POSTs a multipart form with the file part, the Bearer token and no Content-Type of its own', async () => {
+      const { client, calls, fetchImpl } = recording(201, { id: 'att-1', fileName: 'عقد.pdf' });
+
+      const result = await client.attachFile('contract', 'con-1', { fileName: 'عقد.pdf', mime: 'application/pdf', bytes });
+
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(calls[0].url).toBe('http://api.test/api/attachments/contract/con-1');
+      expect(calls[0].init.method).toBe('POST');
+      expect(headersOf(calls[0]).Authorization).toBe('Bearer tkn-123');
+      // `fetch` sets the multipart boundary itself; a JSON content type would break the upload.
+      expect(hasHeader(calls[0], 'Content-Type')).toBe(false);
+
+      const body = calls[0].init.body;
+      expect(body).toBeInstanceOf(FormData);
+      const file = (body as FormData).get('file');
+      expect(file).toBeInstanceOf(Blob);
+      const part = file as File;
+      expect(part.type).toBe('application/pdf');
+      expect(part.name).toBe('عقد.pdf');
+      expect(new Uint8Array(await part.arrayBuffer())).toEqual(bytes);
+      expect([...(body as FormData).keys()]).toEqual(['file']);
+
+      expect(readEntityRef(result)).toEqual({ id: 'att-1', code: null });
+    });
+
+    it('escapes the id, and a refusal is an NpiError that is never retried', async () => {
+      const fetchImpl = jest.fn(async () => fakeResponse(403, { statusCode: 403, message: 'Insufficient permissions' }));
+      const client = createNpiClient({ baseUrl: 'http://api.test/api', token: 't', fetchImpl: fetchImpl as unknown as typeof fetch });
+
+      await expect(client.attachFile('contract', 'a/b', { fileName: 'x.pdf', mime: 'application/pdf', bytes })).rejects.toMatchObject({
+        kind: 'forbidden',
+        npiMessage: 'Insufficient permissions',
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect((fetchImpl.mock.calls[0] as unknown as [string])[0]).toBe('http://api.test/api/attachments/contract/a%2Fb');
+    });
+  });
+
+  it('createVendor POSTs the vendor as JSON to /procurement/vendors', async () => {
+    const { client, calls } = recording(201, { id: 'ven-9', code: 'VEN-00009' });
+    const dto = { nameAr: 'شركة الخليج للألواح الشمسية', nameEn: 'Gulf Solar Panels Co.', vatNumber: '311111111111113' };
+
+    const result = await client.createVendor(dto as never);
+
+    expect(calls[0].url).toBe('http://api.test/api/procurement/vendors');
+    expect(calls[0].init.method).toBe('POST');
+    expect(headersOf(calls[0])['Content-Type']).toBe('application/json');
+    expect(headersOf(calls[0]).Authorization).toBe('Bearer tkn-123');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual(dto);
+    expect(readEntityRef(result)).toEqual({ id: 'ven-9', code: 'VEN-00009' });
+  });
+
+  it('getRequisition GETs /requisitions/{id} with no body', async () => {
+    const { client, calls } = recording(200, { id: 'req-1', lines: [] });
+
+    await client.getRequisition('req-1');
+
+    expect(calls[0].url).toBe('http://api.test/api/requisitions/req-1');
+    expect(calls[0].init.method).toBe('GET');
+    expect(calls[0].init.body).toBeUndefined();
+    expect(headersOf(calls[0]).Authorization).toBe('Bearer tkn-123');
+  });
+
+  it('convertRequisition POSTs the conversion (vendor and prices by requisition line) to /requisitions/{id}/convert', async () => {
+    const { client, calls } = recording(201, { id: 'po-9', code: 'PO-00009' });
+    const dto = { vendorId: 'ven-1', prices: [{ requisitionLineId: 'prl-1', unitPrice: 320 }] };
+
+    const result = await client.convertRequisition('req-1', dto as never);
+
+    expect(calls[0].url).toBe('http://api.test/api/requisitions/req-1/convert');
+    expect(calls[0].init.method).toBe('POST');
+    expect(headersOf(calls[0])['Content-Type']).toBe('application/json');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual(dto);
+    expect(readEntityRef(result)).toEqual({ id: 'po-9', code: 'PO-00009' });
+  });
+
+  it('none of the new writes is ever re-sent after a failure', async () => {
+    const fetchImpl = jest.fn(async () => fakeResponse(500, { statusCode: 500, message: 'Internal server error' }));
+    const client = createNpiClient({ baseUrl: 'http://api.test/api', token: 't', fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    await expect(client.createVendor({ nameAr: 'م', nameEn: 'V' } as never)).rejects.toMatchObject({ kind: 'server' });
+    await expect(client.convertRequisition('req-1', { vendorId: 'ven-1' } as never)).rejects.toMatchObject({ kind: 'server' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('client.ts guard — approvals and deletes must never appear', () => {
   it('contains none of the forbidden action/endpoint markers', () => {
     const src = readFileSync(path.join(__dirname, '..', 'src', 'npi', 'client.ts'), 'utf8');
-    const forbidden = ["/decide", "/approve", "'APPROVE'", "'REJECT'", "'RETURN'", "method: 'DELETE'"];
+    const forbidden = ["/decide", "/approve", "/match", "/send", "'APPROVE'", "'REJECT'", "'RETURN'", "method: 'DELETE'"];
     for (const marker of forbidden) {
       expect(src.includes(marker)).toBe(false);
     }
@@ -226,5 +334,57 @@ describe('responses.ts readers', () => {
     expect(readEntityRef({ id: 'cust-1' })).toEqual({ id: 'cust-1', code: null });
     expect(() => readEntityRef({ code: 'CUST-0001' })).toThrow(NpiError);
     expect(() => readEntityRef({ id: 42 })).toThrow(NpiError);
+  });
+
+  it('readEntityRef reads the created attachment, which has no code', () => {
+    expect(readEntityRef({ id: 'att-1', fileName: 'عقد.pdf', mime: 'application/pdf' })).toEqual({ id: 'att-1', code: null });
+  });
+});
+
+describe('responses.ts — readRequisitionLines (GET /requisitions/{id})', () => {
+  // The shape of `get()`: the requisition row with `lines` included in full (item and WBS selects as well), then the workflow.
+  const body = {
+    id: 'req-12',
+    code: 'PR-00012',
+    status: 'APPROVED',
+    justification: 'استكمال أعمال التركيب في المشروع',
+    lines: [
+      { id: 'prl-1', requisitionId: 'req-12', itemId: 'itm-550', qty: '40', estimatedUnitPrice: '320', item: { id: 'itm-550', sku: 'MOD-550', nameAr: 'لوح شمسي 550 واط' }, wbsElement: null },
+      { id: 'prl-2', requisitionId: 'req-12', itemId: 'itm-inv', qty: '1', estimatedUnitPrice: '6500', item: { id: 'itm-inv', sku: 'INV-50K', nameAr: 'عاكس 50 كيلوواط' }, wbsElement: { id: 'wbs-1', code: 'WBS-01' } },
+    ],
+    workflow: null,
+    pendingApproval: null,
+  };
+
+  it('accepts the get() include shape and keeps the line id and the item id', () => {
+    expect(readRequisitionLines(body)).toEqual([
+      { id: 'prl-1', itemId: 'itm-550' },
+      { id: 'prl-2', itemId: 'itm-inv' },
+    ]);
+  });
+
+  it('a requisition with no lines is an empty list', () => {
+    expect(readRequisitionLines({ ...body, lines: [] })).toEqual([]);
+  });
+
+  it.each<[string, unknown]>([
+    ['a line without itemId', { ...body, lines: [{ id: 'prl-1' }] }],
+    ['a line without id', { ...body, lines: [{ itemId: 'itm-550' }] }],
+    ['a numeric itemId', { ...body, lines: [{ id: 'prl-1', itemId: 550 }] }],
+    ['an empty id', { ...body, lines: [{ id: '', itemId: 'itm-550' }] }],
+    ['a line that is not an object', { ...body, lines: ['prl-1'] }],
+    ['no lines', { id: 'req-12' }],
+    ['lines that are not a list', { ...body, lines: { id: 'prl-1' } }],
+    ['a body that is not an object', 'nope'],
+    ['null', null],
+  ])('rejects %s as an unexpected NPI response', (_name, input) => {
+    let caught: unknown = null;
+    try {
+      readRequisitionLines(input);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(NpiError);
+    expect((caught as NpiError).kind).toBe('unexpected');
   });
 });

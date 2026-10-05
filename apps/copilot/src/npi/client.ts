@@ -10,6 +10,10 @@
 // a password. Approving and rejecting happen only in NPI's own inbox UI; the
 // copilot has no delete tools. `submitRequisition` below hard-codes its
 // action code and does not accept an arbitrary action string, on purpose.
+// Likewise no call to NPI's approve, decide, match or send endpoints: those are
+// approvals and decisions (or the three-way match) that stay on NPI's own
+// screens. (tests/npi-client.spec.ts greps this file for the literal paths, so
+// they are not spelled out here.)
 //
 // The admin *configuration* writes under "admin configuration" (departments,
 // roles' permission sets, approval-rule bands, catalog items) exist for one
@@ -38,6 +42,9 @@ interface RequestOptions {
   query?: Query;
   /** Only `login` sets this — it is the one call with no user token yet. */
   skipAuth?: boolean;
+  /** A multipart body (file upload). Passed to `fetch` untouched and with no
+   *  `Content-Type` header, so `fetch` adds the multipart boundary itself. */
+  form?: FormData;
 }
 
 function buildUrl(baseUrl: string, path: string, query?: Query): string {
@@ -62,7 +69,7 @@ async function request(
 ): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (!opts.skipAuth) headers.Authorization = `Bearer ${ctx.token}`;
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (opts.form === undefined && opts.body !== undefined) headers['Content-Type'] = 'application/json';
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ctx.timeoutMs);
@@ -72,7 +79,7 @@ async function request(
     res = await ctx.fetchImpl(buildUrl(ctx.baseUrl, path, opts.query), {
       method,
       headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: opts.form !== undefined ? opts.form : opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       cache: 'no-store',
       signal: controller.signal,
     });
@@ -134,6 +141,11 @@ export function createNpiClient(options: CreateNpiClientOptions) {
     /** One project with its `wbsElements` (NPI has no WBS list endpoint). */
     getProject(id: string) {
       return request(ctx, 'GET', `/projects/${encodeURIComponent(id)}`);
+    },
+
+    /** One requisition with its `lines` (the line ids a conversion prices by). */
+    getRequisition(id: string) {
+      return request(ctx, 'GET', `/requisitions/${encodeURIComponent(id)}`);
     },
 
     listItems(search?: paths['/api/items']['get']['parameters']['query']['search']) {
@@ -203,6 +215,11 @@ export function createNpiClient(options: CreateNpiClientOptions) {
       return request(ctx, 'POST', '/contracts', { body: dto });
     },
 
+    /** `POST /procurement/vendors` — a vendor the document names and NPI lacks. */
+    createVendor(dto: components['schemas']['CreateVendorDto']) {
+      return request(ctx, 'POST', '/procurement/vendors', { body: dto });
+    },
+
     createRequisition(dto: components['schemas']['CreateRequisitionDto']) {
       return request(ctx, 'POST', '/requisitions', { body: dto });
     },
@@ -232,6 +249,29 @@ export function createNpiClient(options: CreateNpiClientOptions) {
 
     createBill(dto: components['schemas']['CreateBillDto']) {
       return request(ctx, 'POST', '/procurement/bills', { body: dto });
+    },
+
+    /**
+     * `POST /requisitions/{id}/convert` — creates a purchase order (DRAFT, with
+     * its workflow instance) from an APPROVED requisition, under
+     * `scm.procurement.write`. NPI itself refuses any other status; this is a
+     * creation, not an approval. `prices` are keyed by requisition line id.
+     */
+    convertRequisition(id: string, dto: components['schemas']['ConvertToPoDto']) {
+      return request(ctx, 'POST', `/requisitions/${encodeURIComponent(id)}/convert`, { body: dto });
+    },
+
+    /**
+     * `POST /attachments/{entityType}/{entityId}` as multipart (field `file`).
+     * `entityType` is the literal `'contract'` on purpose (D-T27-4): NPI's
+     * `AttachmentEntity` enum has CONTRACT, INVOICE, PROJECT and WORK_ORDER
+     * only — no purchase order, receipt, bill or requisition — so the copilot
+     * attaches a source document to a contract and nothing else.
+     */
+    attachFile(entityType: 'contract', entityId: string, file: { fileName: string; mime: string; bytes: Uint8Array }) {
+      const form = new FormData();
+      form.append('file', new Blob([file.bytes as BlobPart], { type: file.mime }), file.fileName);
+      return request(ctx, 'POST', `/attachments/${entityType}/${encodeURIComponent(entityId)}`, { form });
     },
 
     // ── admin configuration (onboarding apply only — see the file-top note) ──

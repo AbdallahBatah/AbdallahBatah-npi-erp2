@@ -136,6 +136,14 @@ export interface NpiEntityRef {
  *                         id/code: packages/db/prisma/schema.prisma:1669,1672
  *  - PurchaseRequisition   apps/api/src/modules/procurement/requisitions.service.ts:192 (`return pr;`)
  *                         id/code: packages/db/prisma/schema.prisma:2274,2277
+ *  - Vendor (T-27)        apps/api/src/modules/procurement/procurement.service.ts:126 (`return vendor;`, in `createVendor`)
+ *                         id/code: packages/db/prisma/schema.prisma:863,866
+ *  - PurchaseOrder from   apps/api/src/modules/procurement/requisitions.service.ts:501 (`return this.prisma.$transaction(async (tx) =>
+ *    a requisition         this.buildPoFromRequisition(...))`) whose own `return po;` is line 608 (`po` is the
+ *    (`convertToPo`)       `tx.purchaseOrder.create({ ..., include: { lines: true } })` record, so it is the same
+ *                         raw PurchaseOrder row as `createPo`'s: id/code schema.prisma:952,955)
+ *  - Attachment (T-27)    apps/api/src/modules/platform/attachments.service.ts:123 (`return attachment;`, in `upload`)
+ *                         id: packages/db/prisma/schema.prisma:1834 (no `code` column; `code` reads as null)
  *
  * `code` is read as optional-but-typed: every model above does have a `code`
  * column, but this reader tolerates its absence rather than fail a caller
@@ -173,4 +181,36 @@ export function readList(body: unknown): unknown[] {
   if (Array.isArray(body)) return body;
   if (isRecord(body) && Array.isArray(body.rows)) return body.rows;
   return unexpected('readList: body is neither an array nor an envelope with "rows"');
+}
+
+// ─── a requisition's lines (GET /requisitions/{id}) ─────────────────────────
+
+export interface NpiRequisitionLine {
+  /** `PurchaseRequisitionLine.id` — what `ConvertToPoDto.prices[].requisitionLineId` refers to. */
+  id: string;
+  itemId: string;
+}
+
+/**
+ * `GET /requisitions/{id}` returns `{ ...pr, workflow, pendingApproval }`
+ * (apps/api/src/modules/procurement/requisitions.service.ts:134-135,
+ * `return { ...pr, ...`), where `pr` is the `findFirst` of lines 110-125 with
+ * `lines: { include: { item: …, wbsElement: … } }` (line 117-122). An
+ * `include` on a to-many relation returns every full `PurchaseRequisitionLine`
+ * row, so each line carries its own scalar columns:
+ *  - id      packages/db/prisma/schema.prisma:2306 (`id String @id @default(cuid())`)
+ *  - itemId  packages/db/prisma/schema.prisma:2309 (`itemId String`)
+ * Only these two are read; the extra `item` / `wbsElement` selects are ignored.
+ */
+export function readRequisitionLines(body: unknown): NpiRequisitionLine[] {
+  if (!isRecord(body)) return unexpected('readRequisitionLines: body is not an object');
+  const { lines } = body;
+  if (!Array.isArray(lines)) return unexpected('readRequisitionLines: missing/invalid "lines"');
+  return lines.map((line, index): NpiRequisitionLine => {
+    if (!isRecord(line)) return unexpected(`readRequisitionLines: line ${index} is not an object`);
+    const { id, itemId } = line;
+    if (typeof id !== 'string' || id.length === 0) return unexpected(`readRequisitionLines: line ${index} missing/invalid "id"`);
+    if (typeof itemId !== 'string' || itemId.length === 0) return unexpected(`readRequisitionLines: line ${index} missing/invalid "itemId"`);
+    return { id, itemId };
+  });
 }

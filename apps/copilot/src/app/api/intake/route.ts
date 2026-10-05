@@ -8,13 +8,17 @@
 // api/documents/route.ts: `json()` with no-store, `crossSite()`,
 // `sessionOrNull()`, 503 when NPI cannot confirm the session, 401 without
 // one, details in the server log and a fixed Arabic message in the response.
-// Nothing here writes to NPI: «approve» records the decision (T-27 executes).
+// «approve» EXECUTES in NPI (T-27): it builds the plan, runs it step by step as
+// the logged-in user inside this request and returns the final view; a plan
+// that cannot be built answers 422 `plan_failed` and nothing is written. Every
+// other action only reads NPI (to re-resolve names) or touches the copilot's
+// own database.
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { buildEditDeps } from '@/agents/context';
 import { getServerSession } from '@/auth/session';
 import { t } from '@/i18n/ar';
-import { applyIntakeAction, IntakeEditFailed, IntakeStateError } from '@/intake/edit';
+import { applyIntakeAction, IntakeEditFailed, IntakePlanFailed, IntakeStateError } from '@/intake/edit';
 import { getIntakeView } from '@/intake/job';
 import type { IntakeAction } from '@/intake/types';
 import { NpiError } from '@/npi/errors';
@@ -120,6 +124,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           return json({ error: err.reason }, 400);
       }
     }
+    if (err instanceof IntakePlanFailed) return json({ error: 'plan_failed', messageAr: err.messageAr }, 422);
     if (err instanceof IntakeEditFailed) return json({ error: 'edit_failed', messageAr: err.messageAr }, 422);
     if (err instanceof NpiError) return json({ error: 'npi', messageAr: err.messageAr }, 502);
     console.error('[copilot] intake action failed', action.action, err instanceof Error ? err.message : err);

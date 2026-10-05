@@ -55,6 +55,8 @@ export interface IntakeJobData {
   extractedJson?: Prisma.InputJsonValue;
   previewJson?: Prisma.InputJsonValue;
   executionLogJson?: Prisma.InputJsonValue;
+  /** The `CreatedEntity[]` the execution made, in creation order (T-27). */
+  npiEntityRefs?: Prisma.InputJsonValue;
   error?: string | null;
   approvedAt?: Date | null;
 }
@@ -71,7 +73,10 @@ export interface IntakeJobDb {
       data: { npiOrgId: string; npiUserId: string; documentId: string | null; conversationId: string | null; flowType: FlowType; status: IntakeStatus };
     }): Promise<IntakeJobRow>;
     findFirst(args: { where: { id: string; npiOrgId: string; npiUserId: string } }): Promise<IntakeJobRow | null>;
-    update(args: { where: { id: string }; data: IntakeJobData }): Promise<IntakeJobRow>;
+    /** With `status` in `where` the update is conditional: it rejects when no
+     *  row matches (Prisma P2025), which is how a double «اعتمد» is stopped
+     *  without a transaction (D-T27-7). */
+    update(args: { where: { id: string; status?: IntakeStatus }; data: IntakeJobData }): Promise<IntakeJobRow>;
   };
   document: {
     findFirst(args: { where: { id: string; npiOrgId: string; npiUserId: string } }): Promise<DocumentRow | null>;

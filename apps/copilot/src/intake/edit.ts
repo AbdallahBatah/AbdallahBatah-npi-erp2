@@ -3,7 +3,11 @@
 // sentence, approve, cancel. Every operation that changes what the card shows
 // rebuilds the preview from the stored wire JSON, so the stored model can never
 // drift from the stored fields. Only the sentence edit calls the model; none of
-// them writes to NPI (approval only records the decision — T-27 executes).
+// them writes to NPI except «approve»: since T-27 approval EXECUTES — it builds
+// the plan, records the decision and runs the plan against NPI inside the same
+// request (D-T27-1), returning the final view (`done` | `failed`).
+import { buildPlan, PlanError, type ExecutionPlan } from '../execute/plan';
+import { ExecutionClaimError } from '../execute/run';
 import { FLOWS, runEdit, type ExtractDeps, type FlowSpec } from '../extract/run';
 import { t } from '../i18n/ar';
 import { Pseudonymizer, type DictionaryEntry } from '../privacy/pseudonymizer';
@@ -19,6 +23,10 @@ export interface EditDeps {
   npi: ResolutionNpi;
   dictionary(): Promise<DictionaryEntry[]>;
   now?: () => Date;
+  /** Runs an approved plan against NPI (`execute/run.ts` `executeJob`); the
+   *  job passed in is already `approved`. Rejects with `ExecutionClaimError`
+   *  when it no longer is. */
+  execute(job: IntakeJobRow, plan: ExecutionPlan): Promise<IntakeJobRow>;
   /** Only for the document's page count on the returned view; without it the
    *  count the extraction recorded is used. */
   storage?: DocumentStorage;
@@ -36,6 +44,15 @@ export class IntakeEditFailed extends Error {
   constructor(readonly messageAr: string) {
     super('IntakeEditFailed');
     this.name = 'IntakeEditFailed';
+  }
+}
+
+/** The approved values cannot be turned into an execution plan; nothing was
+ *  persisted or written (T-27). `messageAr` is shown to the user. */
+export class IntakePlanFailed extends Error {
+  constructor(readonly messageAr: string) {
+    super('IntakePlanFailed');
+    this.name = 'IntakePlanFailed';
   }
 }
 
@@ -97,16 +114,22 @@ function findField(model: PreviewModel, path: string): PreviewField | undefined 
  * again (after `set`/`edit`, which change values); `confirm` and `choose`
  * reuse the stored resolution, so they make no NPI call.
  */
+/** Re-assesses the stored wire output (every `set`/`edit` already patched it;
+ *  `confirm` and `choose` change no value). */
+function assessStored(job: IntakeJobRow, extraction: StoredExtraction): { assessed: unknown; values: unknown } {
+  const spec = FLOWS[job.flowType] as FlowSpec<unknown, unknown, unknown>;
+  const parsed = spec.parse(extraction.output);
+  if (!parsed.success) throw new IntakeStateError('state');
+  return spec.assess(parsed.data, extraction.flags);
+}
+
 async function rebuild(
   deps: EditDeps,
   job: IntakeJobRow,
   state: { extraction: StoredExtraction; choices: Record<string, string>; confirmed: string[]; resolution: FlowResolution | null },
   reResolve: boolean,
 ): Promise<StoredPreview> {
-  const spec = FLOWS[job.flowType] as FlowSpec<unknown, unknown, unknown>;
-  const parsed = spec.parse(state.extraction.output);
-  if (!parsed.success) throw new IntakeStateError('state');
-  const { assessed, values } = spec.assess(parsed.data, state.extraction.flags);
+  const { assessed, values } = assessStored(job, state.extraction);
   const resolution = reResolve ? (values === null ? null : await resolveFlow(deps.npi, job.flowType, values)) : state.resolution;
   const { model, fields } = buildPreview({
     flow: job.flowType,
@@ -200,11 +223,38 @@ export async function applyIntakeAction(deps: EditDeps, caller: IntakeCaller, ac
 
     case 'approve': {
       if (!stored.model.canApprove) throw new IntakeStateError('state');
+      const { values } = assessStored(job, extraction);
+      let plan: ExecutionPlan;
+      try {
+        plan = buildPlan({ flow: job.flowType, values, resolution: stored.resolution, choices: stored.choices, hasDocument: job.documentId !== null });
+      } catch (err) {
+        if (err instanceof PlanError) throw new IntakePlanFailed(err.messageAr);
+        throw err;
+      }
       const log: ExecutionLog = {
         status: 'pending',
-        steps: stored.model.steps.map((s) => ({ n: s.n, labelAr: s.labelAr, state: 'pending' as const })),
+        steps: plan.steps.map((s) => ({ n: s.n, labelAr: s.labelAr, state: 'pending' as const })),
       };
-      return persist({ status: 'approved', approvedAt: now, executionLogJson: asJson(log) });
+
+      // Conditional on `preview`: a second «اعتمد» finds no row to move (D-T27-7).
+      let approved: IntakeJobRow;
+      try {
+        approved = await deps.db.intakeJob.update({
+          where: { id: job.id, status: 'preview' },
+          data: { status: 'approved', approvedAt: now, executionLogJson: asJson(log) },
+        });
+      } catch {
+        throw new IntakeStateError('state');
+      }
+
+      let executed: IntakeJobRow;
+      try {
+        executed = await deps.execute(approved, plan);
+      } catch (err) {
+        if (err instanceof ExecutionClaimError) throw new IntakeStateError('state');
+        throw err;
+      }
+      return toIntakeView(executed, await loadDocumentView(deps, caller, executed));
     }
 
     case 'cancel':

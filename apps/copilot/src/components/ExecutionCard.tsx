@@ -15,6 +15,7 @@ const STATE_TONE: Record<ExecutionStepState, BadgeTone> = {
   running: 'info',
   done: 'success',
   failed: 'danger',
+  manual: 'neutral',
 };
 
 const STATE_LABEL_KEY: Record<ExecutionStepState, ArKey> = {
@@ -22,6 +23,7 @@ const STATE_LABEL_KEY: Record<ExecutionStepState, ArKey> = {
   running: 'exec.step.running',
   done: 'exec.step.done',
   failed: 'exec.step.failed',
+  manual: 'exec.step.manual',
 };
 
 /** Flows whose record enters NPI's approval matrix after the execution. */
@@ -50,14 +52,19 @@ function StatusLines({ log, flow }: { log: ExecutionLog; flow: FlowType }) {
   }
   if (log.status === 'done') {
     const lines = log.steps.map(entityLabel).filter((line): line is string => line !== null);
+    const hasManual = log.steps.some((s) => s.state === 'manual');
     return (
       <div className="flex flex-col gap-1">
+        <p role="status" className="text-sm font-semibold text-success-700">
+          {t('exec.done_all')}
+        </p>
         {lines.map((line, i) => (
           <p key={i} className="break-words text-sm font-semibold text-success-700">
             {line}
           </p>
         ))}
         {MATRIX_FLOWS.has(flow) ? <p className="text-sm text-slate-700">{t('exec.after_matrix')}</p> : null}
+        {hasManual ? <p className="text-sm text-slate-600">{t('exec.manual_hint')}</p> : null}
       </div>
     );
   }
@@ -77,9 +84,9 @@ function StatusLines({ log, flow }: { log: ExecutionLog; flow: FlowType }) {
 /**
  * What happened in NPI after approval (spec/madar/03 §2 `ExecutionCard`):
  * the overall status, then each step with its state, the NPI record it
- * created and a link to it. Gold edge like the preview card above it. T-26
- * only ever receives `status: 'pending'`; the other states belong to T-27's
- * executor and are rendered here already so the card does not change later.
+ * created and a link to it. Gold edge like the preview card above it. T-27's
+ * executor produces every state: `manual` marks a step the copilot never
+ * performs (it is completed on NPI's own screen).
  */
 export function ExecutionCard({ log, flowLabelAr, flow }: ExecutionCardProps) {
   return (

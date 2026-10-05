@@ -22,7 +22,7 @@ import {
 } from '../src/intake/labels';
 import { buildPreview, CONFIRMABLE_WARNINGS, previewSteps, type BuildPreviewInput } from '../src/intake/preview';
 import { resolutionBlockers } from '../src/intake/resolution';
-import type { FlowResolution, PreviewField, PreviewModel } from '../src/intake/types';
+import type { EntityPick, FlowResolution, PreviewField, PreviewModel } from '../src/intake/types';
 
 // ─── wire helpers ───────────────────────────────────────────────────────────
 
@@ -741,7 +741,7 @@ describe('buildPreview — warnings from the resolution', () => {
 // ─── 5. choices on other flows ──────────────────────────────────────────────
 
 describe('buildPreview — choices of the procurement flows', () => {
-  it('item candidates ask per line and may become a new item; projects cannot be created', () => {
+  it('item candidates ask per line and cannot become a new item (NPI needs an existing item); projects cannot be created either', () => {
     const { assessed, values } = assessPr(prOutput(), FLAGS);
     const resolution = prResolution({
       project: {
@@ -773,15 +773,38 @@ describe('buildPreview — choices of the procurement flows', () => {
 
     const item = model.choices.find((c) => c.target === 'lines.0.item')!;
     expect(item.promptAr).toBe(t('preview.item_choose', { name: 'لوح 550 واط' }));
-    expect(item.options.map((o) => o.id)).toEqual(['itm-550', 'itm-545', 'new']);
+    expect(item.options.map((o) => o.id)).toEqual(['itm-550', 'itm-545']);
+    expect(item.options.map((o) => o.id)).not.toContain('new');
     expect(model.canApprove).toBe(false);
 
     const decided = buildPreview({
       flow: 'pr', assessed, values, resolution, hasDocument: false, confirmed: [],
-      choices: { project: 'prj-12', 'lines.0.item': 'new' },
+      choices: { project: 'prj-12', 'lines.0.item': 'itm-545' },
     }).model;
-    expect(decided.choices.map((c) => c.chosen)).toEqual(expect.arrayContaining(['prj-12', 'new']));
+    expect(decided.choices.map((c) => c.chosen)).toEqual(expect.arrayContaining(['prj-12', 'itm-545']));
     expect(decided.canApprove).toBe(true);
+  });
+
+  it('a stored «new» for an item is not an option any more: the question is undecided again and blocks', () => {
+    const { assessed, values } = assessPr(prOutput(), FLAGS);
+    const resolution = prResolution({
+      lines: [
+        {
+          item: {
+            kind: 'candidates',
+            candidates: [
+              { id: 'itm-550', labelAr: 'لوح شمسي 550 واط (MOD-550)', similarity: 0.7 },
+              { id: 'itm-545', labelAr: 'لوح شمسي 545 واط (MOD-545)', similarity: 0.6 },
+            ],
+          },
+          warnings: [],
+        },
+      ],
+    });
+    const { model } = buildPreview({ flow: 'pr', assessed, values, resolution, choices: { 'lines.0.item': 'new' }, confirmed: [], hasDocument: false });
+    expect(model.choices.find((c) => c.target === 'lines.0.item')!.chosen).toBeNull();
+    expect(model.blockersAr).toContain(t('preview.block.choice'));
+    expect(model.canApprove).toBe(false);
   });
 
   it('an item that matched by SKU is simply used: no question to answer', async () => {
@@ -800,12 +823,120 @@ describe('buildPreview — choices of the procurement flows', () => {
     const resolution = prResolution({
       department: { kind: 'unreadable', messageAr: note },
       project: { kind: 'none' },
+      // The item exists in NPI: an order or requisition cannot be placed without one (D-T27-5).
+      lines: [{ item: { kind: 'matched', id: 'itm-550', labelAr: 'لوح شمسي 550 واط (MOD-550)', by: 'sku' }, warnings: [] }],
       notesAr: [note, t('preview.project_none', { name: 'PRJ-00012' })],
     });
     const { model } = buildPreview({ flow: 'pr', assessed, values, resolution, choices: {}, confirmed: [], hasDocument: false });
     expect(model.choices).toEqual([]);
     expect(model.notesAr).toEqual([note, t('preview.project_none', { name: 'PRJ-00012' })]);
     expect(model.canApprove).toBe(true);
+  });
+});
+
+describe('buildPreview — an item NPI does not have blocks the order and the requisition (D-T27-5)', () => {
+  const itemRequired = (name: string) => t('preview.block.resolution', { reason: t('preview.item_required', { name }) });
+  const candidatePick: EntityPick = {
+    kind: 'candidates',
+    candidates: [
+      { id: 'itm-550', labelAr: 'لوح شمسي 550 واط (MOD-550)', similarity: 0.7 },
+      { id: 'itm-545', labelAr: 'لوح شمسي 545 واط (MOD-545)', similarity: 0.6 },
+    ],
+  };
+
+  function prModel(item: EntityPick | undefined, choices: Record<string, string> = {}): PreviewModel {
+    const { assessed, values } = assessPr(prOutput(), FLAGS);
+    return buildPreview({ flow: 'pr', assessed, values, resolution: prResolution({ lines: [{ item, warnings: [] }] }), choices, confirmed: [], hasDocument: false }).model;
+  }
+
+  it.each<[string, EntityPick | undefined]>([
+    ['new', { kind: 'new' }],
+    ['none', { kind: 'none' }],
+    ['unreadable', { kind: 'unreadable', messageAr: t('preview.list_unreadable', { list: t('preview.list.items') }) }],
+    ['not resolved at all', undefined],
+  ])('a requisition line whose item is %s: «اعتمد» is blocked, naming the item', (_name, item) => {
+    const model = prModel(item);
+    expect(model.blockersAr).toContain(itemRequired('لوح 550 واط'));
+    expect(model.canApprove).toBe(false);
+    // Nothing to choose: the user fixes it in NPI, not on the card.
+    expect(model.choices.some((c) => c.target === 'lines.0.item')).toBe(false);
+  });
+
+  it('candidates nobody chose ask the question (the existing blocker) and say nothing about a missing item', () => {
+    const model = prModel(candidatePick);
+    expect(model.blockersAr).toContain(t('preview.block.choice'));
+    expect(model.blockersAr).not.toContain(itemRequired('لوح 550 واط'));
+    expect(model.canApprove).toBe(false);
+
+    const chosen = prModel(candidatePick, { 'lines.0.item': 'itm-545' });
+    expect(chosen.blockersAr).toEqual([]);
+    expect(chosen.canApprove).toBe(true);
+  });
+
+  it('a matched item blocks nothing', () => {
+    const model = prModel({ kind: 'matched', id: 'itm-550', labelAr: 'لوح شمسي 550 واط (MOD-550)', by: 'sku' });
+    expect(model.blockersAr).toEqual([]);
+    expect(model.canApprove).toBe(true);
+  });
+
+  it('every offending line is named, once each, and the matched ones are not', () => {
+    const out = prOutput({ lines: [prLine(), prLine({ itemName: f('كابل نحاسي 6 ملم'), sku: f('CBL-6') }), prLine({ itemName: f('قاطع حماية 63 أمبير'), sku: f('BRK-63') })] });
+    const { assessed, values } = assessPr(out, FLAGS);
+    const resolution = prResolution({
+      lines: [
+        { item: { kind: 'matched', id: 'itm-550', labelAr: 'لوح شمسي 550 واط (MOD-550)', by: 'sku' }, warnings: [] },
+        { item: { kind: 'new' }, warnings: [] },
+        { item: { kind: 'none' }, warnings: [] },
+      ],
+    });
+    const { model } = buildPreview({ flow: 'pr', assessed, values, resolution, choices: {}, confirmed: [], hasDocument: false });
+    expect(model.blockersAr.filter((b) => b === itemRequired('كابل نحاسي 6 ملم'))).toHaveLength(1);
+    expect(model.blockersAr.filter((b) => b === itemRequired('قاطع حماية 63 أمبير'))).toHaveLength(1);
+    expect(model.blockersAr).not.toContain(itemRequired('لوح 550 واط'));
+    expect(model.canApprove).toBe(false);
+  });
+
+  it('the same for a purchase order: a line whose item is new blocks, naming the quote’s item', () => {
+    const { assessed, values } = assessPo(poOutput(), FLAGS);
+    const resolution: FlowResolution = {
+      flow: 'po',
+      vendor: { kind: 'matched', id: 'ven-1', labelAr: VENDOR, by: 'vat' },
+      lines: [
+        { item: { kind: 'matched', id: 'itm-550', labelAr: 'لوح شمسي 550 واط (MOD-550)', by: 'sku' }, warnings: [] },
+        { item: { kind: 'new' }, warnings: [] },
+        { item: { kind: 'matched', id: 'itm-rail', labelAr: 'قضيب تثبيت (MNT-RAIL)', by: 'sku' }, warnings: [] },
+      ],
+      warnings: [],
+      notesAr: [],
+    };
+    const { model } = buildPreview({ flow: 'po', assessed, values, resolution, choices: {}, confirmed: [], hasDocument: false });
+    expect(model.blockersAr).toContain(itemRequired('عاكس 50 كيلوواط'));
+    expect(model.blockersAr).not.toContain(itemRequired('لوح شمسي 550 واط'));
+    expect(model.canApprove).toBe(false);
+
+    const allMatched: FlowResolution = {
+      ...resolution,
+      lines: resolution.lines.map((line, i) => ({ item: { kind: 'matched', id: `itm-${i}`, labelAr: `صنف ${i + 1}`, by: 'sku' }, warnings: line.warnings })),
+    };
+    const ok = buildPreview({ flow: 'po', assessed, values, resolution: allMatched, choices: {}, confirmed: [], hasDocument: false }).model;
+    expect(ok.blockersAr).toEqual([]);
+    expect(ok.canApprove).toBe(true);
+  });
+
+  it('only a purchase order and a requisition need existing items: a goods receipt and a bill carry none', () => {
+    const grn = assessGrn(grnOutput(), FLAGS);
+    const grnResolution: FlowResolution = {
+      flow: 'grn',
+      purchaseOrder: { kind: 'matched', id: 'po-7', labelAr: 'PO-00007', by: 'code', status: 'SENT', receivable: true },
+      lines: [
+        { item: { kind: 'new' }, poLine: { kind: 'matched', id: 'pol-1', labelAr: 'لوح شمسي 550 واط', by: 'sku' }, warnings: [] },
+        { poLine: { kind: 'matched', id: 'pol-2', labelAr: 'قضيب تثبيت', by: 'sku' }, warnings: [] },
+      ],
+      warnings: [],
+      notesAr: [],
+    };
+    const { model } = buildPreview({ flow: 'grn', assessed: grn.assessed, values: grn.values, resolution: grnResolution, choices: {}, confirmed: [], hasDocument: false });
+    expect(model.blockersAr.some((b) => b.includes(t('preview.item_required', { name: 'لوح شمسي 550 واط' })))).toBe(false);
   });
 });
 
@@ -876,14 +1007,46 @@ describe('previewSteps', () => {
       t('preview.step.bill_match_npi'),
     ]);
 
+    // With a document the steps are the same: NPI cannot attach a file to a bill (D-T27-4).
     const { assessed } = assessVendorBill(billOutput(), FLAGS);
     const withDoc = buildPreview({ flow: 'vendor_bill', assessed, values, resolution, choices: {}, confirmed: [], hasDocument: true }).model;
-    expect(withDoc.steps.map((s) => s.labelAr)).toEqual([
-      t('preview.step.bill_create', { ref: 'INV-2026-0912', code: 'GRN-00003' }),
-      t('preview.step.attach'),
-      t('preview.step.bill_match_npi'),
-    ]);
+    expect(withDoc.steps.map((s) => s.labelAr)).toEqual(labels);
     expect(withDoc.sections.map((s) => s.key)).toEqual(['vendor', 'invoice', 'totals']);
+  });
+
+  it('only a contract promises to attach the document (D-T27-4: NPI has no attachment target for PO, GRN or bill)', () => {
+    const attach = t('preview.step.attach');
+    const poResolution: FlowResolution = { flow: 'po', vendor: { kind: 'new' }, lines: [{ warnings: [] }, { warnings: [] }, { warnings: [] }], warnings: [], notesAr: [] };
+    const grnResolution: FlowResolution = {
+      flow: 'grn',
+      purchaseOrder: { kind: 'matched', id: 'po-7', labelAr: 'PO-00007', by: 'code', status: 'SENT', receivable: true },
+      lines: [{ warnings: [] }, { warnings: [] }],
+      warnings: [],
+      notesAr: [],
+    };
+    const billResolution: FlowResolution = { flow: 'vendor_bill', goodsReceipt: { kind: 'matched', id: 'grn-3', labelAr: 'GRN-00003', by: 'code' }, lines: [], warnings: [], notesAr: [] };
+
+    for (const hasDocument of [true, false]) {
+      const labelsOf = (flow: FlowType, values: unknown, resolution: FlowResolution | null) => previewSteps(flow, values, resolution, {}, hasDocument).map((x) => x.labelAr);
+      expect(labelsOf('po', assessPo(poOutput(), FLAGS).values, poResolution)).not.toContain(attach);
+      expect(labelsOf('grn', assessGrn(grnOutput(), FLAGS).values, grnResolution)).not.toContain(attach);
+      expect(labelsOf('vendor_bill', assessVendorBill(billOutput(), FLAGS).values, billResolution)).not.toContain(attach);
+      expect(labelsOf('pr', assessPr(prOutput(), FLAGS).values, prResolution())).not.toContain(attach);
+    }
+
+    const contract = assessCustomerContract(contractOutput(), FLAGS).values;
+    expect(previewSteps('customer_contract', contract, customerMatched, {}, true).map((x) => x.labelAr)).toContain(attach);
+    expect(previewSteps('customer_contract', contract, customerMatched, {}, false).map((x) => x.labelAr)).not.toContain(attach);
+  });
+
+  it('po and grn steps are the same with and without a document', () => {
+    const po = assessPo(poOutput(), FLAGS).values;
+    const poResolution: FlowResolution = { flow: 'po', vendor: { kind: 'new' }, lines: [{ warnings: [] }, { warnings: [] }, { warnings: [] }], warnings: [], notesAr: [] };
+    expect(previewSteps('po', po, poResolution, {}, true)).toEqual(previewSteps('po', po, poResolution, {}, false));
+
+    const grn = assessGrn(grnOutput(), FLAGS).values;
+    const grnResolution: FlowResolution = { flow: 'grn', lines: [{ warnings: [] }, { warnings: [] }], warnings: [], notesAr: [] };
+    expect(previewSteps('grn', grn, grnResolution, {}, true)).toEqual(previewSteps('grn', grn, grnResolution, {}, false));
   });
 });
 

@@ -1,4 +1,5 @@
-// End-to-end coverage for T-26: the preview card, the execution card, the
+// End-to-end coverage for T-26 and T-27: the preview card, the execution card
+// (now after a real execution: done, or stopped at a failed step), the
 // document page and the chat wiring around them. Real local NPI API + real
 // copilot, real login; `/copilot/api/chat`, `/copilot/api/documents` and
 // `/copilot/api/intake` are intercepted — no test may call the model, and the
@@ -11,7 +12,7 @@ import { t } from '../src/i18n/ar';
 import { FLOW_TYPES } from '../src/onboarding/profile.schema';
 import type { IntakeView } from '../src/intake/types';
 import { readAdminCredentials } from './fixtures/accounts';
-import { approvedView, cancelledView, contractView, CUSTOMER, DOCUMENT_ID, JOB_ID, readyView } from './fixtures/intake';
+import { cancelledView, contractView, CUSTOMER, DOCUMENT_ID, executedView, executionFailedView, JOB_ID, readyView } from './fixtures/intake';
 
 const CHAT_PATH = '**/copilot/api/chat';
 const DOCUMENTS_PATH = '**/copilot/api/documents';
@@ -263,11 +264,11 @@ test.describe('preview card (T-26)', () => {
     await expect(card(page).getByTestId('preview-steps')).toContainText(t('preview.step.customer_new', { name: CUSTOMER }));
   });
 
-  test('approving shows the execution card and makes the preview read-only', async ({ page }) => {
+  test('approving runs the plan in NPI: a waiting line, then every step with the record it created', async ({ page }) => {
     const mocks = await setup(page, {
       history: intakeHistory(),
       intakeGet: () => ok(readyView()),
-      intakePost: () => ok(approvedView()),
+      intakePost: () => ({ ...ok(executedView()), delayMs: 800 }),
     });
     await expect(approveButton(page)).toBeEnabled();
     await expect(page.getByTestId('execution-card')).toHaveCount(0);
@@ -276,11 +277,32 @@ test.describe('preview card (T-26)', () => {
 
     await expect.poll(() => mocks.intakePosts.length).toBe(1);
     expect(mocks.intakePosts[0]).toEqual({ id: JOB_ID, action: 'approve' });
+    // The request is held: the user sees that something is happening in NPI.
+    await expect(page.getByRole('status').getByText(t('exec.running'))).toBeVisible();
 
     const execution = page.getByTestId('execution-card');
     await expect(execution).toBeVisible();
-    await expect(execution.getByText(t('exec.pending'))).toBeVisible();
-    await expect(execution.getByTestId('execution-step')).toHaveCount(4);
+    await expect(execution.getByText(t('exec.done_all'))).toBeVisible();
+    await expect(page.getByRole('status').getByText(t('exec.running'))).toHaveCount(0);
+    await expect(execution.getByText(t('exec.done', { entity: 'العقد', code: 'CON-00012' }))).toBeVisible();
+    await expect(execution.getByText(t('exec.done', { entity: 'العميل', code: 'CUS-00001' }))).toBeVisible();
+
+    // The contract links to its page in NPI; the attachment has none.
+    const contractLink = execution.locator('a[href$="/contracts/con-1"]');
+    await expect(contractLink).toHaveCount(1);
+    await expect(contractLink).toHaveText(t('exec.open_in_npi'));
+    await expect(execution.getByRole('link', { name: t('exec.open_in_npi') })).toHaveCount(2);
+
+    // Four steps: three done, the last one is for NPI's own screen.
+    const steps = execution.getByTestId('execution-step');
+    await expect(steps).toHaveCount(4);
+    await expect(steps.nth(0)).toHaveAttribute('data-state', 'done');
+    await expect(steps.nth(1)).toHaveAttribute('data-state', 'done');
+    await expect(steps.nth(2)).toHaveAttribute('data-state', 'done');
+    const manual = execution.locator('[data-testid="execution-step"][data-state="manual"]');
+    await expect(manual).toHaveCount(1);
+    await expect(manual.getByText(t('exec.step.manual'), { exact: true })).toBeVisible();
+    await expect(execution.getByText(t('exec.manual_hint'))).toBeVisible();
 
     // Read-only: no approve, edit, cancel, confirm or pencil.
     await expect(card(page).getByText(t('preview.approved'))).toBeVisible();
@@ -289,6 +311,40 @@ test.describe('preview card (T-26)', () => {
     await expect(card(page).getByRole('button', { name: t('preview.cancel'), exact: true })).toHaveCount(0);
     await expect(card(page).getByRole('button', { name: t('preview.edit_field') })).toHaveCount(0);
     await expect(card(page).getByRole('radio')).toHaveCount(0);
+  });
+
+  test('a step NPI refuses stops the run: what was created is named and the later steps never ran', async ({ page }) => {
+    const mocks = await setup(page, {
+      history: intakeHistory(),
+      intakeGet: () => ok(readyView()),
+      intakePost: () => ok(executionFailedView()),
+    });
+    await expect(approveButton(page)).toBeEnabled();
+
+    await approveButton(page).click();
+
+    await expect.poll(() => mocks.intakePosts.length).toBe(1);
+    expect(mocks.intakePosts[0]).toEqual({ id: JOB_ID, action: 'approve' });
+
+    const execution = page.getByTestId('execution-card');
+    await expect(execution).toBeVisible();
+    const alert = execution.getByRole('alert');
+    await expect(alert).toContainText('توقفت عند الخطوة 2');
+    await expect(alert).toContainText('العميل CUS-00001');
+    await expect(alert).toContainText('NPI رفض');
+
+    const steps = execution.getByTestId('execution-step');
+    await expect(steps).toHaveCount(4);
+    await expect(steps.nth(0)).toHaveAttribute('data-state', 'done');
+    await expect(steps.nth(1)).toHaveAttribute('data-state', 'failed');
+    await expect(steps.nth(2)).toHaveAttribute('data-state', 'pending');
+    await expect(steps.nth(3)).toHaveAttribute('data-state', 'pending');
+    await expect(execution.getByText(t('exec.done_all'))).toHaveCount(0);
+
+    // The preview stays on the screen, read-only: nothing can be approved a second time.
+    await expect(card(page)).toBeVisible();
+    await expect(card(page).getByText(t('preview.approved'))).toBeVisible();
+    await expect(approveButton(page)).toHaveCount(0);
   });
 
   test('cancelling takes two steps and writes nothing until the second', async ({ page }) => {
@@ -415,8 +471,8 @@ test.describe('small screens (T-26)', () => {
     expect(await sideways()).toBe(false);
   });
 
-  test('the approved card with its execution card fits too', async ({ page }) => {
-    await setup(page, { history: intakeHistory(), intakeGet: () => ok(approvedView()) });
+  test('the executed card with its execution card fits too', async ({ page }) => {
+    await setup(page, { history: intakeHistory(), intakeGet: () => ok(executedView()) });
     await expect(page.getByTestId('execution-card')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   });

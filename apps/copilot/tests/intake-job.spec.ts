@@ -5,15 +5,17 @@ import path from 'node:path';
 import { t } from '../src/i18n/ar';
 import { LlmError, type LlmContext } from '../src/llm/client';
 import type { ModelResponse, RedactedBlock, RedactedRequest } from '../src/llm/provider';
+import type { LlmAuditData } from '../src/audit/log';
+import { executeJob, type ExecuteDeps, type ExecutionNpi } from '../src/execute/run';
 import { NpiError } from '../src/npi/errors';
 import type { DictionaryEntry } from '../src/privacy/pseudonymizer';
 import { clearPromptCache } from '../src/prompts/load';
 import type { ConsentEventRow } from '../src/intake/consent';
 import { metaSidecarPath, textSidecarPath, type DocumentKind, type DocumentRow, type DocumentStorage } from '../src/intake/upload';
 import { getIntakeView, startIntake, type StartIntakeDeps, type StartIntakeInput } from '../src/intake/job';
-import { applyIntakeAction, IntakeEditFailed, IntakeStateError, type EditDeps } from '../src/intake/edit';
+import { applyIntakeAction, IntakeEditFailed, IntakePlanFailed, IntakeStateError, type EditDeps } from '../src/intake/edit';
 import type { ResolutionNpi } from '../src/intake/resolution';
-import type { IntakeAction, IntakeView, PreviewField, StoredExtraction, StoredPreview } from '../src/intake/types';
+import type { CreatedEntity, ExecutionLog, IntakeAction, IntakeView, PreviewField, StoredExtraction, StoredPreview } from '../src/intake/types';
 
 process.env.COPILOT_PROMPTS_DIR = path.resolve(__dirname, '../prompts');
 
@@ -124,6 +126,7 @@ function createFakeDb() {
   const jobs = new Map<string, Row>();
   const documents = new Map<string, DocumentRow>();
   const consentEvents = new Map<string, ConsentEventRow>();
+  const audit: LlmAuditData[] = [];
   // Rows are cloned in and out, as a real database would: the caller can
   // neither alias the stored JSON nor store something that is not JSON.
   const clone = <T>(value: T): T => structuredClone(value);
@@ -140,9 +143,11 @@ function createFakeDb() {
         const found = [...jobs.values()].find((row) => matches(row, where));
         return found ? clone(found) : null;
       },
-      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-        const row = jobs.get(where.id);
-        if (!row) throw new Error(`no job ${where.id}`);
+      // Honours every key of `where` (a conditional update) and rejects when
+      // no row matches, as Prisma does with P2025 (D-T27-7).
+      update: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        const row = [...jobs.values()].find((r) => matches(r, where));
+        if (!row) throw new Error(`P2025: no job matches ${JSON.stringify(where)}`);
         Object.assign(row, clone(withoutUndefined(data)), { updatedAt: NOW });
         return clone(row);
       },
@@ -162,9 +167,15 @@ function createFakeDb() {
     consentEvent: {
       findUnique: async ({ where }: { where: { id: string } }) => consentEvents.get(where.id) ?? null,
     },
+    llmAudit: {
+      create: async ({ data }: { data: LlmAuditData }) => {
+        audit.push(clone(data));
+        return data;
+      },
+    },
   };
 
-  return { api, jobs, documents, consentEvents };
+  return { api, jobs, documents, consentEvents, audit };
 }
 
 function createFakeStorage() {
@@ -206,8 +217,37 @@ function createFakeNpi() {
       goodsReceipts: [],
     })),
     listItems: jest.fn(async () => [{ id: 'itm-550', sku: 'MOD-550', nameAr: 'لوح شمسي 550 واط', unitCost: '320' }]),
+
+    // Writes (T-27): every one a `jest.fn`, so the tests can count them.
+    createCustomer: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'cus-9', code: 'CUS-00009' })),
+    createContract: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'con-1', code: 'CON-00012' })),
+    createRequisition: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'req-1', code: 'PR-00031' })),
+    submitRequisition: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'wf-1' })),
+    createVendor: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'ven-9', code: 'VEN-00009' })),
+    createPurchaseOrder: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'po-9', code: 'PO-00009' })),
+    getRequisition: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'req-12', code: 'PR-00012', lines: [{ id: 'prl-1', itemId: 'itm-550' }] })),
+    convertRequisition: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'po-9', code: 'PO-00009' })),
+    receiveOnPurchaseOrder: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'grn-5', code: 'GRN-00005' })),
+    createBill: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'bill-4', code: 'VB-00004' })),
+    attachFile: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'att-1' })),
   };
 }
+
+type FakeNpi = ReturnType<typeof createFakeNpi>;
+
+/** Every NPI write the executor can make. */
+const npiWrites = (npi: FakeNpi) => [
+  npi.createCustomer,
+  npi.createContract,
+  npi.createRequisition,
+  npi.submitRequisition,
+  npi.createVendor,
+  npi.createPurchaseOrder,
+  npi.convertRequisition,
+  npi.receiveOnPurchaseOrder,
+  npi.createBill,
+  npi.attachFile,
+];
 
 class FakeLlm {
   requests: RedactedRequest[] = [];
@@ -267,12 +307,20 @@ function createWorld(scripts: Scripts) {
     dictionary: async () => DICTIONARY,
     now: () => NOW,
   };
+  const executeDeps: ExecuteDeps = {
+    db: fake.api as unknown as ExecuteDeps['db'],
+    npi: npi as unknown as ExecutionNpi,
+    storage: store.storage,
+    now: () => NOW,
+  };
   const editDeps: EditDeps = {
     db: fake.api as unknown as EditDeps['db'],
     llm,
     npi: npi as unknown as ResolutionNpi,
     dictionary: async () => DICTIONARY,
     now: () => NOW,
+    // What `buildEditDeps` wires: approve runs the plan against the same db and NPI.
+    execute: (job, plan) => executeJob(executeDeps, CALLER, job, plan),
   };
   return { ...fake, store, npi, llm, deps, editDeps };
 }
@@ -588,9 +636,28 @@ describe('getIntakeView', () => {
 /** A contract whose total and retention the model was unsure of. */
 const unsureContract = () => contractWire({ totalValue: f(850000, 0.5, 'القيمة 850,000', 2), retentionPct: f(10, 0.5, 'المحتجزات 10%', 2) });
 
-async function contractWorld(wire: unknown = unsureContract(), edit?: Scripts['edit']) {
+const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+const CONTRACT_PDF_PAGES = [
+  { num: 1, text: `عقد توريد وتركيب نظام طاقة شمسية\nالطرف الأول: ${CUSTOMER}، السجل التجاري 1010567890.` },
+  { num: 2, text: 'قيمة العقد الإجمالية: 850,000 ريال سعودي. نسبة المحتجزات: 10%.' },
+];
+
+/** The stored contract PDF (text sidecar, meta sidecar and the bytes) a job can be started on. */
+function storeContractPdf(world: World) {
+  world.documents.set('doc-1', makeDocument());
+  world.store.putJson(textSidecarPath('org-1/contract.pdf'), { pages: CONTRACT_PDF_PAGES });
+  world.store.putJson(metaSidecarPath('org-1/contract.pdf'), { pageCount: 3, textChars: 900, rasterPages: 0 });
+  world.store.files.set('org-1/contract.pdf', PDF_BYTES);
+}
+
+async function contractWorld(wire: unknown = unsureContract(), edit?: Scripts['edit'], options: { document?: boolean } = {}) {
   const world = createWorld({ extract: () => reply(JSON.stringify(wire)), edit });
-  const jobId = await start(world, { flow: 'customer_contract', text: `عقد جديد مع ${CUSTOMER} بقيمة 850,000` });
+  if (options.document) storeContractPdf(world);
+  const jobId = await start(world, {
+    flow: 'customer_contract',
+    text: `عقد جديد مع ${CUSTOMER} بقيمة 850,000`,
+    documentId: options.document ? 'doc-1' : null,
+  });
   return { world, jobId };
 }
 
@@ -781,34 +848,198 @@ describe('applyIntakeAction — edit by sentence', () => {
   });
 });
 
-describe('applyIntakeAction — approve and cancel', () => {
-  it('approves a job that can be approved: status, time and a pending execution log', async () => {
-    const { world, jobId } = await contractWorld(contractWire());
+function expectNoNpiWrites(world: World) {
+  for (const write of npiWrites(world.npi)) expect(write).not.toHaveBeenCalled();
+}
+
+const executionOf = (view: IntakeView): ExecutionLog => view.execution as ExecutionLog;
+
+describe('applyIntakeAction — approve executes in NPI (T-27)', () => {
+  it('a contract with its document: the customer is used, the contract is created, the document attached, activation left to NPI', async () => {
+    const { world, jobId } = await contractWorld(contractWire(), undefined, { document: true });
     const ready = await getIntakeView(world.deps, CALLER, jobId);
     expect(ready!.preview!.canApprove).toBe(true);
+    expect(ready!.preview!.steps).toHaveLength(4);
+    expectNoNpiWrites(world);
 
     const view = await act(world, { id: jobId, action: 'approve' });
 
-    const steps = ready!.preview!.steps;
-    expect(view.status).toBe('approved');
-    expect(view.approvedAt).toEqual(expect.any(String));
+    // The card’s own steps, now carried out.
+    expect(view.status).toBe('done');
     expect(new Date(view.approvedAt!).toISOString()).toBe(NOW.toISOString());
-    expect(view.execution).toEqual({ status: 'pending', steps: steps.map((s) => ({ n: s.n, labelAr: s.labelAr, state: 'pending' })) });
-    expect(view.execution!.steps).toHaveLength(steps.length);
+    const execution = executionOf(view);
+    expect(execution.status).toBe('done');
+    expect(execution.steps.map((s) => s.labelAr)).toEqual(ready!.preview!.steps.map((s) => s.labelAr));
+    expect(execution.steps.map((s) => s.state)).toEqual(['done', 'done', 'done', 'manual']);
+    expect(execution.steps[0].entity).toBeUndefined();
+    expect(execution.steps[1].entity).toEqual({ kindAr: t('exec.kind.contract'), id: 'con-1', code: 'CON-00012', npiPath: '/contracts/con-1' });
+    expect(execution.steps[2].entity).toMatchObject({ kindAr: t('exec.kind.attachment'), id: 'att-1', npiPath: null });
+    expect(view.failureAr).toBeNull();
+    expect(view.preview).not.toBeNull();
+
+    // NPI: the existing customer (matched by VAT) is not created again; the contract goes on it.
+    expect(world.npi.createCustomer).not.toHaveBeenCalled();
+    expect(world.npi.createContract).toHaveBeenCalledTimes(1);
+    expect(world.npi.createContract.mock.calls[0][0]).toMatchObject({ customerId: 'cus-1', contractType: 'EPC', totalValue: 850000 });
+    expect(world.npi.attachFile).toHaveBeenCalledTimes(1);
+    expect(world.npi.attachFile).toHaveBeenCalledWith('contract', 'con-1', { fileName: 'عقد.pdf', mime: 'application/pdf', bytes: PDF_BYTES });
 
     const row = world.jobs.get(jobId)!;
-    expect(row.status).toBe('approved');
+    expect(row.status).toBe('done');
     expect(row.approvedAt).toEqual(NOW);
-    expect((row.executionLogJson as { status: string }).status).toBe('pending');
-    // Nothing was written to NPI: no NPI call other than the reads.
+    expect((row.executionLogJson as ExecutionLog).status).toBe('done');
+    expect((row.npiEntityRefs as CreatedEntity[]).map((e) => [e.kind, e.id])).toEqual([
+      ['contract', 'con-1'],
+      ['attachment', 'att-1'],
+    ]);
+
+    // No model call for the execution: the one request is the extraction.
+    expect(world.llm.requests).toHaveLength(1);
+    // One audit row for the execution, tied to the job and its conversation.
+    expect(world.audit).toHaveLength(1);
+    expect(world.audit[0]).toMatchObject({ event: 'intake_executed', intakeJobId: jobId, documentId: 'doc-1', conversationId: 'conv-1', tokensIn: 0, imageSent: false });
+  });
+
+  it('NPI refuses the contract: the job is failed with the log, the preview stays and can be read, nothing is retried', async () => {
+    const { world, jobId } = await contractWorld(contractWire(), undefined, { document: true });
+    world.npi.createContract.mockRejectedValueOnce(new NpiError({ status: 409, kind: 'conflict', npiMessage: 'Contract number already exists' }));
+
+    const view = await act(world, { id: jobId, action: 'approve' });
+
+    expect(view.status).toBe('failed');
+    expect(view.failureAr).toBeNull();
+    expect(view.preview).not.toBeNull();
+    expect(view.preview!.canApprove).toBe(true);
+    expect(view.approvedAt).not.toBeNull();
+
+    const execution = executionOf(view);
+    expect(execution.status).toBe('failed');
+    expect(execution.failedAt).toBe(2);
+    expect(execution.steps.map((s) => s.state)).toEqual(['done', 'failed', 'pending', 'pending']);
+    expect(execution.steps[1].errorAr).toContain('NPI رفض');
+    expect(execution.steps[1].errorAr).toContain('Contract number already exists');
+
+    expect(world.npi.createContract).toHaveBeenCalledTimes(1);
+    expect(world.npi.attachFile).not.toHaveBeenCalled();
+    expect(world.jobs.get(jobId)!.status).toBe('failed');
+    expect(world.audit.map((a) => a.event)).toEqual(['intake_execution_failed']);
+
+    // The same job reads back the same way.
+    const again = await getIntakeView(world.deps, CALLER, jobId);
+    expect(again).toMatchObject({ status: 'failed', failureAr: null });
+    expect(again!.execution).toEqual(view.execution);
+    // A failed job accepts nothing further: the user starts a new one.
+    await expectReason(act(world, { id: jobId, action: 'approve' }), 'state');
+    expect(world.npi.createContract).toHaveBeenCalledTimes(1);
+  });
+
+  it('a purchase requisition: created with the matched item and project and the item’s price, then submitted', async () => {
+    const world = createWorld({ extract: () => reply(JSON.stringify(prWire())) });
+    const jobId = await start(world);
+    const ready = await getIntakeView(world.deps, CALLER, jobId);
+    expect(ready!.preview!.blockersAr).toEqual([]);
+
+    const view = await act(world, { id: jobId, action: 'approve' });
+
+    expect(view.status).toBe('done');
+    expect(executionOf(view).steps.map((s) => s.state)).toEqual(['done', 'done']);
+    expect(executionOf(view).steps[0].entity).toEqual({ kindAr: t('exec.kind.requisition'), id: 'req-1', code: 'PR-00031', npiPath: '/requisitions/req-1' });
+    expect(world.npi.createRequisition).toHaveBeenCalledTimes(1);
+    expect(world.npi.createRequisition.mock.calls[0][0]).toMatchObject({
+      justification: 'استكمال أعمال التركيب في المشروع',
+      projectId: 'prj-12',
+      neededBy: '2026-10-08',
+      lines: [{ itemId: 'itm-550', qty: 40, estimatedUnitPrice: 320 }],
+    });
+    expect(world.npi.submitRequisition).toHaveBeenCalledTimes(1);
+    expect(world.npi.submitRequisition.mock.calls[0][0]).toBe('req-1');
+    // A sentence has no document: nothing to attach, and the model is not called again.
+    expect(world.npi.attachFile).not.toHaveBeenCalled();
     expect(world.llm.requests).toHaveLength(1);
   });
 
-  it('refuses to approve while something blocks', async () => {
-    const { world, jobId } = await contractWorld();
+  it('a goods receipt: received on the matched PO against the PO line, with its serials and the delivery note', async () => {
+    const world = createWorld({ extract: () => reply(JSON.stringify(grnWire())) });
+    const jobId = await start(world, { flow: 'grn', text: 'وصلت الشحنة من أمر الشراء PO-00007: 8 ألواح 550 واط' });
+    const ready = await getIntakeView(world.deps, CALLER, jobId);
+    expect(ready!.preview!.blockersAr).toEqual([]);
+
+    const view = await act(world, { id: jobId, action: 'approve' });
+
+    expect(view.status).toBe('done');
+    expect(executionOf(view).steps.map((s) => s.state)).toEqual(['done', 'manual']);
+    expect(executionOf(view).steps[0].entity).toEqual({ kindAr: t('exec.kind.goods_receipt'), id: 'grn-5', code: 'GRN-00005', npiPath: '/procurement/po-7' });
+    expect(world.npi.receiveOnPurchaseOrder).toHaveBeenCalledTimes(1);
+    const [poId, dto] = world.npi.receiveOnPurchaseOrder.mock.calls[0] as [string, { lines: { poLineId: string; qty: number; serials: string[] }[]; notes?: string }];
+    expect(poId).toBe('po-7');
+    expect(dto.lines[0]).toMatchObject({ poLineId: 'pol-1', qty: 8 });
+    expect(dto.lines[0].serials).toHaveLength(8);
+    expect(dto.notes).toContain('DN-4471');
+  });
+
+  it('refuses to approve while something blocks, and writes nothing to NPI', async () => {
+    const { world, jobId } = await contractWorld(unsureContract(), undefined, { document: true });
     await expectReason(act(world, { id: jobId, action: 'approve' }), 'state');
     expect(world.jobs.get(jobId)!.status).toBe('preview');
     expect(world.jobs.get(jobId)!.approvedAt ?? null).toBeNull();
+    expect(world.jobs.get(jobId)!.executionLogJson ?? null).toBeNull();
+    expectNoNpiWrites(world);
+    expect(world.npi.getRequisition).not.toHaveBeenCalled();
+    expect(world.audit).toHaveLength(0);
+  });
+
+  it('a plan that cannot be built is refused before anything is stored or written', async () => {
+    // A line whose item NPI does not have is blocked on the card; here the
+    // stored model is tampered with so that «اعتمد» is allowed, as a stale card could be.
+    const world = createWorld({
+      extract: () => reply(JSON.stringify(prWire({ lines: [{ ...prWire().lines[0], itemName: f('كابل نحاسي 6 ملم'), sku: f('CBL-6') }] }))),
+    });
+    const jobId = await start(world);
+    const before = await getIntakeView(world.deps, CALLER, jobId);
+    expect(before!.preview!.canApprove).toBe(false);
+    expect(before!.preview!.blockersAr).toContain(t('preview.block.resolution', { reason: t('preview.item_required', { name: 'كابل نحاسي 6 ملم' }) }));
+    stored(world, jobId).preview.model.canApprove = true;
+
+    const error = await act(world, { id: jobId, action: 'approve' }).then(
+      () => null,
+      (err: unknown) => err,
+    );
+
+    expect(error).toBeInstanceOf(IntakePlanFailed);
+    expect((error as IntakePlanFailed).messageAr).toContain(t('preview.item_required', { name: 'كابل نحاسي 6 ملم' }));
+    const row = world.jobs.get(jobId)!;
+    expect(row.status).toBe('preview');
+    expect(row.approvedAt ?? null).toBeNull();
+    expect(row.executionLogJson ?? null).toBeNull();
+    expectNoNpiWrites(world);
+    expect(world.audit).toHaveLength(0);
+  });
+
+  it('approving twice executes once: the second approve is a state conflict', async () => {
+    const { world, jobId } = await contractWorld(contractWire(), undefined, { document: true });
+    await act(world, { id: jobId, action: 'approve' });
+    await expectReason(act(world, { id: jobId, action: 'approve' }), 'state');
+
+    expect(world.npi.createContract).toHaveBeenCalledTimes(1);
+    expect(world.npi.attachFile).toHaveBeenCalledTimes(1);
+    expect(world.audit).toHaveLength(1);
+  });
+
+  it('two approvals racing: one executes, the other is a state conflict (the conditional update)', async () => {
+    const { world, jobId } = await contractWorld(contractWire(), undefined, { document: true });
+
+    const outcomes = await Promise.allSettled([act(world, { id: jobId, action: 'approve' }), act(world, { id: jobId, action: 'approve' })]);
+
+    const won = outcomes.filter((o): o is PromiseFulfilledResult<IntakeView> => o.status === 'fulfilled');
+    const lost = outcomes.filter((o): o is PromiseRejectedResult => o.status === 'rejected');
+    expect(won).toHaveLength(1);
+    expect(won[0].value.status).toBe('done');
+    expect(lost).toHaveLength(1);
+    expect(lost[0].reason).toBeInstanceOf(IntakeStateError);
+    expect((lost[0].reason as IntakeStateError).reason).toBe('state');
+    expect(world.npi.createContract).toHaveBeenCalledTimes(1);
+    expect(world.npi.attachFile).toHaveBeenCalledTimes(1);
+    expect(world.audit).toHaveLength(1);
   });
 
   it('cancels a preview', async () => {
@@ -816,6 +1047,7 @@ describe('applyIntakeAction — approve and cancel', () => {
     const view = await act(world, { id: jobId, action: 'cancel' });
     expect(view.status).toBe('cancelled');
     expect(world.jobs.get(jobId)!.status).toBe('cancelled');
+    expectNoNpiWrites(world);
   });
 
   it.each<[string, (id: string) => IntakeAction]>([
@@ -825,12 +1057,17 @@ describe('applyIntakeAction — approve and cancel', () => {
     ['edit', (id) => ({ id, action: 'edit', text: 'المحتجزات 5%' })],
     ['approve', (id) => ({ id, action: 'approve' })],
     ['cancel', (id) => ({ id, action: 'cancel' })],
-  ])('%s on an approved job is a state conflict and changes nothing', async (_name, build) => {
+  ])('%s on a job that was already executed (done) is a state conflict and changes nothing', async (_name, build) => {
     const { world, jobId } = await contractWorld(contractWire());
-    await act(world, { id: jobId, action: 'approve' });
+    const executed = await act(world, { id: jobId, action: 'approve' });
+    expect(executed.status).toBe('done');
     const before = JSON.stringify(world.jobs.get(jobId));
+    const writes = npiWrites(world.npi).map((w) => w.mock.calls.length);
+
     await expectReason(act(world, build(jobId)), 'state');
+
     expect(JSON.stringify(world.jobs.get(jobId))).toBe(before);
+    expect(npiWrites(world.npi).map((w) => w.mock.calls.length)).toEqual(writes);
     expect(world.llm.requests).toHaveLength(1);
   });
 
@@ -839,6 +1076,50 @@ describe('applyIntakeAction — approve and cancel', () => {
     await act(world, { id: jobId, action: 'cancel' });
     await expectReason(act(world, { id: jobId, action: 'approve' }), 'state');
     await expectReason(act(world, { id: jobId, action: 'confirm', path: 'totalValue' }), 'state');
+  });
+});
+
+describe('applyIntakeAction — items must already exist in NPI (D-T27-5)', () => {
+  /** Two near-identical panels and a quote line that names neither by SKU. */
+  function twoPanelsWorld() {
+    const world = createWorld({
+      extract: () => reply(JSON.stringify(prWire({ lines: [{ ...prWire().lines[0], itemName: f('لوح شمسي 550'), sku: none() }] }))),
+    });
+    world.npi.listItems.mockResolvedValue([
+      { id: 'itm-550', sku: 'MOD-550', nameAr: 'لوح شمسي 550 واط', unitCost: '320' },
+      { id: 'itm-545', sku: 'MOD-545', nameAr: 'لوح شمسي 545 واط', unitCost: '310' },
+    ]);
+    return world;
+  }
+
+  it('the item question offers the candidates and no «جديد»; «new» is refused as a choice', async () => {
+    const world = twoPanelsWorld();
+    const jobId = await start(world);
+    const view = await getIntakeView(world.deps, CALLER, jobId);
+    const item = view!.preview!.choices.find((c) => c.target === 'lines.0.item');
+    expect(item).toBeDefined();
+    expect(item!.options.map((o) => o.id)).not.toContain('new');
+    expect(item!.chosen).toBeNull();
+    expect(view!.preview!.canApprove).toBe(false);
+
+    await expectReason(act(world, { id: jobId, action: 'choose', target: 'lines.0.item', choice: 'new' }), 'bad_choice');
+    expect(stored(world, jobId).preview.choices).toEqual({});
+
+    const picked = await act(world, { id: jobId, action: 'choose', target: 'lines.0.item', choice: item!.options[0].id });
+    expect(picked.preview!.canApprove).toBe(true);
+  });
+
+  it('a stored «new» for an item (decided before T-27) is forgotten on the next rebuild and blocks again', async () => {
+    const world = twoPanelsWorld();
+    const jobId = await start(world);
+    stored(world, jobId).preview.choices['lines.0.item'] = 'new';
+
+    const view = await act(world, { id: jobId, action: 'set', path: 'justification', value: 'استكمال أعمال التركيب' });
+
+    expect(stored(world, jobId).preview.choices).toEqual({});
+    expect(view.preview!.canApprove).toBe(false);
+    await expectReason(act(world, { id: jobId, action: 'approve' }), 'state');
+    expectNoNpiWrites(world);
   });
 });
 

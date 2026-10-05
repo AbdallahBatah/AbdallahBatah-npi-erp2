@@ -85,6 +85,7 @@ export async function writeAuditEvent(
     documentId?: string;
   },
   event: string,
+  error: string | null = null,
 ): Promise<void> {
   await writeLlmAudit(db, {
     npiOrgId: ctx.npiOrgId,
@@ -102,6 +103,6 @@ export async function writeAuditEvent(
     imageSent: false,
     consentEventId: null,
     latencyMs: null,
-    error: null,
+    error,
   });
 }

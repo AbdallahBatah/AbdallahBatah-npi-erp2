@@ -112,13 +112,14 @@ function isPreviewModel(value: unknown): value is PreviewModel {
   );
 }
 
-const STEP_STATES = ['pending', 'running', 'done', 'failed'];
+const LOG_STATUSES = ['pending', 'running', 'done', 'failed'];
+const STEP_STATES = ['pending', 'running', 'done', 'failed', 'manual'];
 
 function isExecutionLog(value: unknown): boolean {
   return (
     isRecord(value) &&
     typeof value.status === 'string' &&
-    STEP_STATES.includes(value.status) &&
+    LOG_STATUSES.includes(value.status) &&
     Array.isArray(value.steps) &&
     value.steps.every(
       (s) =>

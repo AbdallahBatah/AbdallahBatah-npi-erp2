@@ -210,7 +210,7 @@ function buildChoices(values: unknown, resolution: FlowResolution | null, choice
   resolution.lines.forEach((line, i) => {
     const name = lines[i]?.itemName ?? String(i + 1);
     specs.push(
-      { target: `lines.${i}.item`, pick: line.item, allowNew: true, chooseKey: 'preview.item_choose', chooseVars: { name } },
+      { target: `lines.${i}.item`, pick: line.item, allowNew: false, chooseKey: 'preview.item_choose', chooseVars: { name } },
       { target: `lines.${i}.poLine`, pick: line.poLine, allowNew: false, chooseKey: 'preview.po_line_choose', chooseVars: { name } },
       { target: `lines.${i}.wbs`, pick: line.wbs, allowNew: false, chooseKey: 'preview.wbs_choose' },
     );
@@ -245,7 +245,7 @@ function poTotalText(values: { total: number | null; subtotal: number | null; li
   return '—';
 }
 
-/** «ما سيُنفَّذ بالترتيب» — descriptive only; T-27's plan performs the steps.
+/** «ما سيُنفَّذ بالترتيب» — the labels the execution plan (`execute/plan.ts`) mirrors one to one.
  *  Empty when the extraction is incomplete (`values === null`). */
 export function previewSteps(
   flow: FlowType,
@@ -256,6 +256,9 @@ export function previewSteps(
 ): PreviewStep[] {
   if (values === null) return [];
   const labels: string[] = [];
+  // D-T27-4: NPI's `AttachmentEntity` (CONTRACT | INVOICE | PROJECT | WORK_ORDER)
+  // has no purchase-order, receipt, bill or requisition member, so only a
+  // contract can carry the source document; the other flows plan no attach step.
   const attach = () => {
     if (hasDocument) labels.push(t('preview.step.attach'));
   };
@@ -285,14 +288,12 @@ export function previewSteps(
       const requisition = resolution?.requisition;
       if (requisition?.kind === 'matched') labels.push(t('preview.step.po_convert', { code: requisition.labelAr }));
       else labels.push(t('preview.step.po_create', { n: v.lines.length, total: poTotalText(v) }));
-      attach();
       labels.push(t('preview.step.po_matrix'));
       break;
     }
     case 'grn': {
       const v = values as { purchaseOrderCode: string | null; lines: unknown[] };
       labels.push(t('preview.step.grn_create', { code: orDash(v.purchaseOrderCode), n: v.lines.length }));
-      attach();
       labels.push(t('preview.step.grn_inspect_manual'));
       break;
     }
@@ -300,7 +301,6 @@ export function previewSteps(
       const v = values as { invoiceNumber: string | null };
       const grn = chosenLabel(resolution?.goodsReceipt, choices.goodsReceipt);
       labels.push(t('preview.step.bill_create', { ref: orDash(v.invoiceNumber), code: orDash(grn) }));
-      attach();
       labels.push(t('preview.step.bill_match_npi'));
       break;
     }
@@ -366,6 +366,19 @@ export function buildPreview(input: BuildPreviewInput): { model: PreviewModel; f
   if (resolution !== null) {
     const context = values === null ? {} : (values as { purchaseOrderCode?: string | null; lines?: { itemName: string }[] });
     for (const reason of resolutionBlockers(resolution, context)) blockersAr.push(t('preview.block.resolution', { reason }));
+  }
+  // D-T27-5: NPI needs an `itemId` on a requisition or order line, and the
+  // copilot cannot create a catalogue item (category and unit are not in the
+  // sentence). A line whose item is not in NPI is a hard blocker; candidates
+  // still waiting for a choice are covered by `preview.block.choice` above.
+  if (values !== null && resolution !== null && (flow === 'pr' || flow === 'po')) {
+    const names = (values as { lines: { itemName: string }[] }).lines;
+    resolution.lines.forEach((line, i) => {
+      const kind = line.item?.kind;
+      if (kind === undefined || kind === 'new' || kind === 'none' || kind === 'unreadable') {
+        blockersAr.push(t('preview.block.resolution', { reason: t('preview.item_required', { name: names[i]?.itemName ?? String(i + 1) }) }));
+      }
+    });
   }
 
   // A blank optional field is neither confirmed nor something to confirm;
