@@ -60,3 +60,48 @@ export function readSiteEngineerCredentials(): SeededAccount {
 
   return { email: 'engineer@npi.sa', password: match[1], nameAr: match[2] };
 }
+
+/** The three seeded accounts that sit in `userDefs` in seed.ts, by role key. */
+export type SeededRole = 'accountant' | 'pm' | 'site_engineer';
+
+/**
+ * One of the three accounts in seed.ts's `userDefs` array, by role key:
+ * `{ email: 'pm@npi.sa', pass: '…', nameAr: '…', nameEn: '…', role: 'pm' }`.
+ * E-mail, password and Arabic name are read from that entry, never hardcoded.
+ */
+export function readSeededAccount(role: SeededRole): SeededAccount {
+  const contents = seedContents();
+
+  const match = contents.match(
+    new RegExp(
+      String.raw`\{\s*email:\s*'([^']+@npi\.sa)',\s*pass:\s*'([^']+)',\s*nameAr:\s*'([^']+)',\s*nameEn:\s*'[^']+',\s*role:\s*'${role}'\s*\}`,
+    ),
+  );
+  if (!match) {
+    throw new Error(`packages/db/prisma/seed.ts: could not find the userDefs entry for role "${role}"`);
+  }
+
+  return { email: match[1], password: match[2], nameAr: match[3] };
+}
+
+/**
+ * The seeded sales account (contracts yes, requisitions no): e-mail and
+ * password from the "Sales login" summary line, Arabic name from its
+ * `create:` block — the same two patterns `readAdminCredentials` uses for the
+ * admin.
+ */
+export function readSalesCredentials(): SeededAccount {
+  const contents = seedContents();
+
+  const loginLine = contents.match(/Sales login\s*:\s*(\S+)\s*\/\s*([^'\s]+)/);
+  if (!loginLine) {
+    throw new Error('packages/db/prisma/seed.ts: could not find the "Sales login" summary line');
+  }
+
+  const nameMatch = contents.match(/create:\s*\{[^}]*?email:\s*'sales@npi\.sa'[^}]*?nameAr:\s*'([^']+)'/);
+  if (!nameMatch) {
+    throw new Error("packages/db/prisma/seed.ts: could not find the sales user's nameAr field");
+  }
+
+  return { email: loginLine[1], password: loginLine[2], nameAr: nameMatch[1] };
+}

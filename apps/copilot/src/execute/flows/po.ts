@@ -1,6 +1,6 @@
 // po flow (T-27): [vendor_use | vendor_create] → po_create | po_convert →
 // manual (the approval matrix). NPI creates the order DRAFT with its workflow
-// instance (procurement.service.ts `createPo`); NPI's `/approve` is an approval
+// instance (procurement.service.ts `createPo`); NPI's approve endpoint is an approval
 // the copilot must not call, so «po_matrix» is a manual step.
 import { convertToPoDtoFrom, poDtoFrom, vendorDtoFrom, type PoValues } from '../../extract/schemas/po';
 import { t } from '../../i18n/ar';
