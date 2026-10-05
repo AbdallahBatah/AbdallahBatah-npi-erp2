@@ -162,7 +162,7 @@ describe('sendMessage', () => {
     };
     mockFetch(jest.fn(async () => fakeResponse(200, body)));
 
-    const result = await sendMessage('مرحباً');
+    const result = await sendMessage({ text: 'مرحباً' });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.kind).toBe('answer');
@@ -173,14 +173,14 @@ describe('sendMessage', () => {
 
   it('maps 401 to kind "unauthenticated"', async () => {
     mockFetch(jest.fn(async () => fakeResponse(401, { error: 'unauthenticated' })));
-    const result = await sendMessage('نص');
+    const result = await sendMessage({ text: 'نص' });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.kind).toBe('unauthenticated');
   });
 
   it('maps 413 to kind "too_long" using the server message', async () => {
     mockFetch(jest.fn(async () => fakeResponse(413, { error: 'too_long', messageAr: 'طويلة جداً' })));
-    const result = await sendMessage('x'.repeat(MAX_MESSAGE_LENGTH + 1));
+    const result = await sendMessage({ text: 'x'.repeat(MAX_MESSAGE_LENGTH + 1) });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.kind).toBe('too_long');
@@ -190,14 +190,14 @@ describe('sendMessage', () => {
 
   it('falls back to ar.ts for 413 when the server sent no messageAr', async () => {
     mockFetch(jest.fn(async () => fakeResponse(413, { error: 'too_long' })));
-    const result = await sendMessage('x');
+    const result = await sendMessage({ text: 'x' });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.messageAr).toBe(t('chat.error.too_long'));
   });
 
   it('maps 500 to kind "server" using the server message', async () => {
     mockFetch(jest.fn(async () => fakeResponse(500, { error: 'server', messageAr: 'خطأ في الخادم' })));
-    const result = await sendMessage('نص');
+    const result = await sendMessage({ text: 'نص' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.kind).toBe('server');
@@ -207,7 +207,7 @@ describe('sendMessage', () => {
 
   it('maps 503 to kind "npi_down" using the server message', async () => {
     mockFetch(jest.fn(async () => fakeResponse(503, { error: 'npi_down', messageAr: 'NPI متعطل' })));
-    const result = await sendMessage('نص');
+    const result = await sendMessage({ text: 'نص' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.kind).toBe('npi_down');
@@ -217,21 +217,21 @@ describe('sendMessage', () => {
 
   it('treats a malformed 200 body as kind "server"', async () => {
     mockFetch(jest.fn(async () => fakeResponse(200, { nope: true })));
-    const result = await sendMessage('نص');
+    const result = await sendMessage({ text: 'نص' });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.kind).toBe('server');
   });
 
   it('treats a 404 (conversation not found) as kind "server" (no dedicated UI kind)', async () => {
     mockFetch(jest.fn(async () => fakeResponse(404, { error: 'not_found' })));
-    const result = await sendMessage('نص', 'missing-conv');
+    const result = await sendMessage({ text: 'نص', conversationId: 'missing-conv' });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.kind).toBe('server');
   });
 
   it('reports a network failure as kind "network"', async () => {
     mockFetch(jest.fn(async () => { throw new TypeError('fetch failed'); }));
-    const result = await sendMessage('نص');
+    const result = await sendMessage({ text: 'نص' });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.kind).toBe('network');
   });
@@ -242,7 +242,7 @@ describe('sendMessage', () => {
     );
     mockFetch(fetchImpl);
 
-    await sendMessage('مرحباً');
+    await sendMessage({ text: 'مرحباً' });
 
     const [url, init] = fetchImpl.mock.calls[0];
     expect(url).toBe('/copilot/api/chat');
@@ -258,10 +258,182 @@ describe('sendMessage', () => {
     );
     mockFetch(fetchImpl);
 
-    await sendMessage('مرحباً', 'c1');
+    await sendMessage({ text: 'مرحباً', conversationId: 'c1' });
 
     const [, init] = fetchImpl.mock.calls[0];
     expect(JSON.parse(init?.body as string)).toEqual({ text: 'مرحباً', conversationId: 'c1' });
+  });
+});
+
+// T-26: the object form of sendMessage and the intake fields of a reply.
+describe('sendMessage — documents, forced flows and intake replies', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const answerBody = { conversationId: 'c1', messageId: 'm1', kind: 'answer', textAr: 'ok', badges: [], memoryNotes: [] };
+
+  function bodyOfFirstCall(fetchImpl: jest.Mock): unknown {
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    return JSON.parse(init.body as string);
+  }
+
+  it('sends only the keys that are defined', async () => {
+    const fetchImpl = jest.fn(async (_url: string, _init?: RequestInit) => fakeResponse(200, answerBody));
+    mockFetch(fetchImpl);
+    await sendMessage({ text: 'مرحباً' });
+    expect(bodyOfFirstCall(fetchImpl)).toEqual({ text: 'مرحباً' });
+    expect(Object.keys(bodyOfFirstCall(fetchImpl) as object)).toEqual(['text']);
+  });
+
+  it('an attachment alone has no text key', async () => {
+    const fetchImpl = jest.fn(async (_url: string, _init?: RequestInit) => fakeResponse(200, answerBody));
+    mockFetch(fetchImpl);
+    await sendMessage({ documentId: 'doc-1', conversationId: 'c1' });
+    const body = bodyOfFirstCall(fetchImpl) as Record<string, unknown>;
+    expect(body).toEqual({ documentId: 'doc-1', conversationId: 'c1' });
+    expect('text' in body).toBe(false);
+  });
+
+  it('carries the document, the chosen flow and the typed text together', async () => {
+    const fetchImpl = jest.fn(async (_url: string, _init?: RequestInit) => fakeResponse(200, answerBody));
+    mockFetch(fetchImpl);
+    await sendMessage({ text: 'عقد النخيل', conversationId: 'c1', documentId: 'doc-1', forcedFlow: 'customer_contract' });
+    expect(bodyOfFirstCall(fetchImpl)).toEqual({
+      text: 'عقد النخيل',
+      conversationId: 'c1',
+      documentId: 'doc-1',
+      forcedFlow: 'customer_contract',
+    });
+  });
+
+  it('parses an intake reply with its job id and document', async () => {
+    mockFetch(
+      jest.fn(async () =>
+        fakeResponse(200, {
+          conversationId: 'c1',
+          messageId: 'm2',
+          kind: 'intake',
+          textAr: t('chat.intake_ready', { flow: t('flow.customer_contract') }),
+          badges: [t('flow.customer_contract')],
+          memoryNotes: [],
+          intakeJobId: 'job-1',
+          documentId: 'doc-1',
+        }),
+      ),
+    );
+    const result = await sendMessage({ documentId: 'doc-1' });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.kind).toBe('intake');
+      expect(result.intakeJobId).toBe('job-1');
+      expect(result.documentId).toBe('doc-1');
+      expect(result.badges).toEqual([t('flow.customer_contract')]);
+    }
+  });
+
+  it('parses a choose_flow reply with the document it waits on', async () => {
+    mockFetch(
+      jest.fn(async () =>
+        fakeResponse(200, {
+          conversationId: 'c1',
+          messageId: 'm3',
+          kind: 'choose_flow',
+          textAr: t('flow.unknown'),
+          badges: [],
+          memoryNotes: [],
+          documentId: 'doc-1',
+        }),
+      ),
+    );
+    const result = await sendMessage({ documentId: 'doc-1' });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.kind).toBe('choose_flow');
+      expect(result.documentId).toBe('doc-1');
+      expect(result.intakeJobId).toBeUndefined();
+    }
+  });
+
+  it('an ordinary answer carries neither field', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(200, answerBody)));
+    const result = await sendMessage({ text: 'مرحباً' });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect('intakeJobId' in result).toBe(false);
+      expect('documentId' in result).toBe(false);
+    }
+  });
+
+  it('treats a non-string job id as a malformed body', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(200, { ...answerBody, kind: 'intake', intakeJobId: 7 })));
+    const result = await sendMessage({ text: 'x' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.kind).toBe('server');
+  });
+
+  it('shows the server’s own message for a missing document (404) and for a consent not yet given (409)', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(404, { error: 'not_found', messageAr: t('document.error.not_found') })));
+    const missing = await sendMessage({ documentId: 'doc-404' });
+    expect(missing).toEqual({ ok: false, kind: 'server', messageAr: t('document.error.not_found') });
+
+    mockFetch(jest.fn(async () => fakeResponse(409, { error: 'consent_required', messageAr: t('intake.consent_required') })));
+    const consent = await sendMessage({ documentId: 'doc-2', forcedFlow: 'grn' });
+    expect(consent).toEqual({ ok: false, kind: 'server', messageAr: t('intake.consent_required') });
+  });
+
+  it('falls back to the generic message when a 409 has no body message', async () => {
+    mockFetch(jest.fn(async () => fakeResponse(409, { error: 'consent_required' })));
+    const result = await sendMessage({ documentId: 'doc-2' });
+    expect(result).toEqual({ ok: false, kind: 'server', messageAr: t('chat.error.generic') });
+  });
+});
+
+describe('loadConversation — intake rows', () => {
+  const row = (extra: Record<string, unknown>) => ({
+    id: 'm1',
+    role: 'assistant',
+    textAr: 'نص',
+    badges: [],
+    memoryNotes: [],
+    createdAt: '2026-10-05T09:00:00.000Z',
+    ...extra,
+  });
+
+  function respondWith(messages: unknown[]) {
+    globalThis.fetch = jest.fn(async () => ({
+      status: 200,
+      json: async () => ({ conversationId: 'c1', messages }),
+    })) as unknown as typeof fetch;
+  }
+
+  it('keeps the job id and document of an intake reply, so a reload shows the card again', async () => {
+    respondWith([
+      row({ role: 'user', id: 'm0', textAr: t('chat.attached', { name: 'عقد.pdf' }), documentId: 'doc-1' }),
+      row({ kind: 'intake', intakeJobId: 'job-1', documentId: 'doc-1' }),
+    ]);
+    const result = await loadConversation();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.messages[0]).toMatchObject({ role: 'user', documentId: 'doc-1' });
+    expect(result.messages[1]).toMatchObject({ kind: 'intake', intakeJobId: 'job-1', documentId: 'doc-1' });
+  });
+
+  it('keeps a choose_flow row with its document', async () => {
+    respondWith([row({ kind: 'choose_flow', documentId: 'doc-1', textAr: t('flow.unknown') })]);
+    const result = await loadConversation();
+    expect(result.ok && result.messages[0].kind).toBe('choose_flow');
+    expect(result.ok && result.messages[0].documentId).toBe('doc-1');
+  });
+
+  it('rows without the new fields still load', async () => {
+    respondWith([row({ kind: 'answer' })]);
+    const result = await loadConversation();
+    expect(result.ok && result.messages[0].intakeJobId).toBeUndefined();
+    expect(result.ok && result.messages[0].documentId).toBeUndefined();
+  });
+
+  it('a job id that is not a string is a malformed body', async () => {
+    respondWith([row({ kind: 'intake', intakeJobId: 42 })]);
+    await expect(loadConversation()).resolves.toMatchObject({ ok: false, kind: 'server' });
   });
 });
 

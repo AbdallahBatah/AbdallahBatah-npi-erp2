@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { TurnInputError, runTurn, type TurnDb, type TurnDeps, type TurnUser } from '../src/agents/run';
+import type { StartIntakeOutcome } from '../src/intake/job';
 import { t } from '../src/i18n/ar';
 import { LlmError, type LlmContext } from '../src/llm/client';
 import type { ModelResponse, RedactedMessage, RedactedRequest } from '../src/llm/provider';
@@ -26,6 +27,8 @@ const USER: TurnUser = {
   positionId: 'pos-1',
   positionTitleAr: 'المبيعات',
   personaAr: 'أنت وكيل المبيعات.',
+  permissions: ['scm.requisition.write', 'commercial.contract.write'],
+  orgNameAr: 'شركة الطاقة الوطنية والصناعية',
 };
 
 // ─── Fakes ──────────────────────────────────────────────────────────────────
@@ -43,6 +46,7 @@ function createFakeDb(facts: unknown[] = []) {
   const redactions: Row[] = [];
   const usage: Row[] = [];
   const memory: Row[] = [];
+  const documents: Row[] = [];
   const queryRaw = jest.fn(async () => facts);
 
   const db = {
@@ -105,10 +109,14 @@ function createFakeDb(facts: unknown[] = []) {
       update: async () => undefined,
       updateMany: async () => ({ count: 0 }),
     },
+    document: {
+      findFirst: async ({ where }: { where: Record<string, unknown> }) =>
+        documents.find((d) => Object.entries(where).every(([k, v]) => d[k] === v)) ?? null,
+    },
     $queryRaw: queryRaw,
   };
 
-  return { db: db as unknown as TurnDb, conversations, messages, redactions, usage, memory, queryRaw };
+  return { db: db as unknown as TurnDb, conversations, messages, redactions, usage, memory, documents, queryRaw };
 }
 
 type Script = (req: RedactedRequest, call: number) => ModelResponse | Promise<ModelResponse>;
@@ -150,19 +158,26 @@ function createFakeNpi(overrides: Partial<Record<keyof TurnDeps['npi'], jest.Moc
   };
 }
 
-function setup(script: Script, options: { facts?: unknown[]; npi?: ReturnType<typeof createFakeNpi> } = {}) {
+const INTAKE_READY: StartIntakeOutcome = { ok: true, jobId: 'job-1', status: 'preview', failureAr: null };
+
+function setup(
+  script: Script,
+  options: { facts?: unknown[]; npi?: ReturnType<typeof createFakeNpi>; intake?: StartIntakeOutcome } = {},
+) {
   const fake = createFakeDb(options.facts);
   const llm = createFakeLlm(script);
   const npi = options.npi ?? createFakeNpi();
+  const intakeStart = jest.fn(async (..._args: Parameters<TurnDeps['intake']['start']>) => options.intake ?? INTAKE_READY);
   const deps: TurnDeps = {
     db: fake.db,
     llm,
     npi: npi as unknown as TurnDeps['npi'],
     key: randomBytes(32),
     dictionary: async () => DICTIONARY,
+    intake: { start: intakeStart },
     now: () => new Date('2026-09-27T09:00:00.000Z'),
   };
-  return { deps, llm, npi, ...fake };
+  return { deps, llm, npi, intakeStart, ...fake };
 }
 
 /** Everything that was sent to the model in one request, as one string. */
@@ -227,21 +242,174 @@ describe('runTurn — no model call', () => {
     expect(usage[0].messageCount).toBe(1);
   });
 
-  it('an entry request gets the fixed "later milestone" reply with the flow as badge', async () => {
-    const { deps, llm } = setup(() => answer('x'));
-    const reply = await runTurn(deps, USER, { text: 'أبي 40 لوح 550 واط للمشروع PRJ-00012 قبل الخميس' });
-    expect(reply.kind).toBe('flow_pending');
-    expect(reply.badges).toEqual([t('flow.pr')]);
-    expect(reply.textAr).toContain(t('flow.pr'));
-    expect(llm.complete).not.toHaveBeenCalled();
-  });
-
   it('a flow switched off for the firm says so', async () => {
     const { deps } = setup(() => answer('x'));
     const reply = await runTurn({ ...deps, visibleFlows: ['customer_contract'] }, USER, {
       text: 'طلب شراء 10 عواكس',
     });
     expect(reply.textAr).toBe(t('chat.flow_unavailable', { flow: t('flow.pr') }));
+  });
+});
+
+// ─── Intake flows (T-26) ────────────────────────────────────────────────────
+
+describe('runTurn — intake flows', () => {
+  const PR_SENTENCE = 'طلب شراء: 40 لوح 550 واط للمشروع PRJ-00012';
+  const CALLER = { npiOrgId: 'org-1', npiUserId: 'user-1' };
+  const DOC = { id: 'doc-1', npiOrgId: 'org-1', npiUserId: 'user-1', fileName: 'اشعار-تسليم.jpg' };
+
+  it('a flow sentence from a user who may write requisitions starts an intake; the turn itself calls no model', async () => {
+    const { deps, llm, intakeStart, messages, usage } = setup(() => answer('x'));
+    const reply = await runTurn(deps, USER, { text: PR_SENTENCE });
+
+    expect(llm.complete).not.toHaveBeenCalled();
+    expect(intakeStart).toHaveBeenCalledTimes(1);
+    expect(intakeStart).toHaveBeenCalledWith(
+      expect.objectContaining(CALLER),
+      expect.objectContaining({ flow: 'pr', text: PR_SENTENCE, documentId: null, conversationId: reply.conversationId }),
+    );
+    expect(intakeStart.mock.calls[0][1].ourPartyNameAr).toBe('شركة الطاقة الوطنية والصناعية');
+
+    expect(reply).toMatchObject({
+      kind: 'intake',
+      intakeJobId: 'job-1',
+      textAr: t('chat.intake_ready', { flow: t('flow.pr') }),
+      badges: [t('flow.pr')],
+    });
+    expect(messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(messages[1]).toMatchObject({ kind: 'intake', intakeJobId: 'job-1', contentAr: reply.textAr });
+    expect(messages[0].contentAr).toBe(PR_SENTENCE);
+    expect(usage[0].messageCount).toBe(1);
+  });
+
+  it('a question that only mentions a requisition is still chat, not an intake', async () => {
+    const { deps, intakeStart, llm } = setup(() => answer('تم'));
+    const reply = await runTurn(deps, USER, { text: 'وش حالة طلب الشراء PR-00012؟' });
+    expect(intakeStart).not.toHaveBeenCalled();
+    expect(llm.complete).toHaveBeenCalled();
+    expect(reply.kind).toBe('answer');
+  });
+
+  it('without the permission of the flow: an Arabic refusal, no intake, no model call, no job', async () => {
+    const { deps, llm, intakeStart, messages } = setup(() => answer('x'));
+    const reply = await runTurn(deps, { ...USER, permissions: ['inbox.read'] }, { text: PR_SENTENCE });
+
+    expect(reply.kind).toBe('error');
+    expect(reply.textAr).toBe(t('intake.forbidden', { flow: 'طلب شراء' }));
+    expect(reply.intakeJobId).toBeUndefined();
+    expect(intakeStart).not.toHaveBeenCalled();
+    expect(llm.complete).not.toHaveBeenCalled();
+    expect(messages[1]).toMatchObject({ kind: 'error', contentAr: reply.textAr });
+    expect(messages[1].intakeJobId).toBeUndefined();
+  });
+
+  it('each flow asks for its own permission', async () => {
+    // A requisition writer may not enter a vendor bill.
+    const { deps, intakeStart } = setup(() => answer('x'));
+    const reply = await runTurn(deps, { ...USER, permissions: ['scm.requisition.write'] }, {
+      text: 'سجّل فاتورة المورد INV-2026-0912 بمبلغ 24,679',
+    });
+    expect(reply.textAr).toBe(t('intake.forbidden', { flow: t('flow.vendor_bill') }));
+    expect(intakeStart).not.toHaveBeenCalled();
+  });
+
+  it('an attachment with no text asks which kind of document it is, and remembers the document', async () => {
+    const { deps, llm, intakeStart, messages, documents } = setup(() => answer('x'));
+    documents.push(DOC);
+    const reply = await runTurn(deps, USER, { text: '', documentId: 'doc-1' });
+
+    expect(reply.kind).toBe('choose_flow');
+    expect(reply.documentId).toBe('doc-1');
+    expect(reply.textAr).toBe(t('flow.unknown'));
+    expect(intakeStart).not.toHaveBeenCalled();
+    expect(llm.complete).not.toHaveBeenCalled();
+
+    expect(messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(messages[0]).toMatchObject({ contentAr: t('chat.attached', { name: 'اشعار-تسليم.jpg' }), documentId: 'doc-1' });
+    expect(messages[1]).toMatchObject({ kind: 'choose_flow', documentId: 'doc-1' });
+  });
+
+  it('the text typed with the attachment is stored after the attachment line', async () => {
+    const { deps, messages, documents } = setup(() => answer('x'));
+    documents.push(DOC);
+    await runTurn(deps, USER, { text: 'ملاحظة عن الشحنة', documentId: 'doc-1' });
+    expect(messages[0].contentAr).toBe(`${t('chat.attached', { name: 'اشعار-تسليم.jpg' })}\nملاحظة عن الشحنة`);
+  });
+
+  it('a chip press starts the intake of that flow on the document', async () => {
+    const { deps, intakeStart, messages, documents, llm } = setup(() => answer('x'));
+    documents.push(DOC);
+    const reply = await runTurn(deps, USER, { text: '', documentId: 'doc-1', forcedFlow: 'customer_contract' });
+
+    expect(intakeStart).toHaveBeenCalledWith(
+      expect.objectContaining(CALLER),
+      expect.objectContaining({ flow: 'customer_contract', text: null, documentId: 'doc-1', conversationId: reply.conversationId }),
+    );
+    expect(reply).toMatchObject({ kind: 'intake', intakeJobId: 'job-1', badges: [t('flow.customer_contract')] });
+    expect(messages[0].documentId).toBe('doc-1');
+    expect(messages[1]).toMatchObject({ kind: 'intake', intakeJobId: 'job-1', documentId: 'doc-1' });
+    expect(llm.complete).not.toHaveBeenCalled();
+  });
+
+  it('the permission check applies to a chip press too', async () => {
+    const { deps, intakeStart, documents } = setup(() => answer('x'));
+    documents.push(DOC);
+    const reply = await runTurn(deps, { ...USER, permissions: ['scm.requisition.write'] }, { text: '', documentId: 'doc-1', forcedFlow: 'customer_contract' });
+    expect(reply.kind).toBe('error');
+    expect(reply.textAr).toBe(t('intake.forbidden', { flow: t('flow.customer_contract') }));
+    expect(intakeStart).not.toHaveBeenCalled();
+  });
+
+  it('a document that is not the user’s does not exist: nothing is stored, nothing starts', async () => {
+    const { deps, intakeStart, messages, documents, llm } = setup(() => answer('x'));
+    documents.push({ ...DOC, npiUserId: 'someone-else' });
+    await expect(runTurn(deps, USER, { text: '', documentId: 'doc-1' })).rejects.toMatchObject({ reason: 'document_not_found' });
+    await expect(runTurn(deps, USER, { text: '', documentId: 'doc-404' })).rejects.toBeInstanceOf(TurnInputError);
+    expect(messages).toHaveLength(0);
+    expect(intakeStart).not.toHaveBeenCalled();
+    expect(llm.complete).not.toHaveBeenCalled();
+  });
+
+  it('a firm that switched the module off gets the unavailable message, not an intake', async () => {
+    const { deps, intakeStart } = setup(() => answer('x'));
+    const reply = await runTurn({ ...deps, visibleFlows: ['pr'] }, USER, { text: 'عقد جديد مع شركة النخيل للمقاولات بقيمة 850,000' });
+    expect(reply.textAr).toBe(t('chat.flow_unavailable', { flow: t('flow.customer_contract') }));
+    expect(reply.intakeJobId).toBeUndefined();
+    expect(intakeStart).not.toHaveBeenCalled();
+  });
+
+  it('shows the intake’s own refusal (consent) as an error reply with no job', async () => {
+    const { deps, messages, documents } = setup(() => answer('x'), {
+      intake: { ok: false, reason: 'consent_required', messageAr: t('intake.consent_required') },
+    });
+    documents.push(DOC);
+    const reply = await runTurn(deps, USER, { text: '', documentId: 'doc-1', forcedFlow: 'pr' });
+
+    expect(reply.kind).toBe('error');
+    expect(reply.textAr).toBe(t('intake.consent_required'));
+    expect(reply.intakeJobId).toBeUndefined();
+    expect(messages[1]).toMatchObject({ kind: 'error', contentAr: t('intake.consent_required') });
+    expect(messages[1].intakeJobId).toBeUndefined();
+  });
+
+  it('a read that failed is still an intake reply, carrying the reason, so the card can show it', async () => {
+    const { deps, messages } = setup(() => answer('x'), {
+      intake: { ok: true, jobId: 'job-9', status: 'failed', failureAr: t('extract.failed.model_error') },
+    });
+    const reply = await runTurn(deps, USER, { text: PR_SENTENCE });
+    expect(reply).toMatchObject({
+      kind: 'intake',
+      intakeJobId: 'job-9',
+      textAr: t('chat.intake_failed', { flow: t('flow.pr'), reason: t('extract.failed.model_error') }),
+    });
+    expect(messages[1]).toMatchObject({ kind: 'intake', intakeJobId: 'job-9' });
+  });
+
+  it('an HR question is refused before any intake is considered', async () => {
+    const { deps, intakeStart } = setup(() => answer('x'));
+    const reply = await runTurn(deps, USER, { text: 'مين أكفأ مهندس عندنا؟' });
+    expect(reply.kind).toBe('hr_refusal');
+    expect(intakeStart).not.toHaveBeenCalled();
   });
 });
 
@@ -571,6 +739,7 @@ describe('runTurn — a name that reached the user through a tool', () => {
       key: randomBytes(32),
       // Nobody could read the vendor list: the dictionary does not know it.
       dictionary: async () => [],
+      intake: { start: async () => INTAKE_READY },
       now: () => new Date('2026-09-27T09:00:00.000Z'),
     };
 

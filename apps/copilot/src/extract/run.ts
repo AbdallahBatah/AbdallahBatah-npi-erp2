@@ -232,7 +232,12 @@ export function isRegisteredFlow(flow: FlowType): flow is RegisteredFlow {
 
 export interface ExtractDeps {
   llm: { complete(req: RedactedRequest, ctx: LlmContext): Promise<ModelResponse> };
-  pseudonymizer: { redact(text: string): RedactedText; rehydrateJson<T>(value: T): T };
+  pseudonymizer: {
+    redact(text: string): RedactedText;
+    /** Per-string redaction of a JSON value, structure kept (`runEdit` sends the current output through it). */
+    redactJson(value: unknown, fieldLabels?: Readonly<Record<string, string>>): RedactedText;
+    rehydrateJson<T>(value: T): T;
+  };
 }
 
 export type ExtractSource =
@@ -293,6 +298,9 @@ export interface ExtractionResult<K extends RegisteredFlow = RegisteredFlow> {
   fields: Record<string, AssessedField<unknown>>;
   summary: { total: number; confirmed: number; unconfirmed: number };
   usage: ExtractUsage;
+  /** The rehydrated JSON the model returned (names in clear), before
+   *  parsing — what the intake job stores and what a sentence edit sends back. */
+  wire?: unknown;
 }
 
 // ─── Text preparation ───────────────────────────────────────────────────────
@@ -490,14 +498,30 @@ export async function runExtraction(
     effort: 'medium',
   };
 
+  return callAndAssess(deps, spec, input.flow, request, flags, ctx);
+}
+
+/**
+ * One model call and everything after it, shared by the extraction and the
+ * sentence edit: transport errors and stop reasons → `ExtractFailure`; JSON →
+ * rehydrate → zod → server-side assessment → flattened fields.
+ */
+async function callAndAssess(
+  deps: ExtractDeps,
+  spec: FlowSpec<unknown, unknown, unknown>,
+  flow: FlowType,
+  request: RedactedRequest,
+  flags: SourceFlags,
+  ctx: LlmContext,
+): Promise<ExtractionResult | ExtractFailure> {
   const startedAt = Date.now();
   let response: ModelResponse;
   try {
     response = await deps.llm.complete(request, ctx);
   } catch (err) {
-    if (err instanceof LlmError && err.kind === 'refused') return failure(input.flow, 'refused', null, null);
+    if (err instanceof LlmError && err.kind === 'refused') return failure(flow, 'refused', null, null);
     const detail = err instanceof LlmError ? `${err.kind}: ${err.message}` : err instanceof Error ? err.message : String(err);
-    return failure(input.flow, 'model_error', detail, null);
+    return failure(flow, 'model_error', detail, null);
   }
   const usage: ExtractUsage = {
     tokensIn: response.tokensIn,
@@ -506,17 +530,17 @@ export async function runExtraction(
     modelId: response.modelId,
   };
 
-  if (response.stopReason === 'max_tokens') return failure(input.flow, 'truncated', null, usage);
-  if (response.stopReason === 'refusal') return failure(input.flow, 'refused', null, usage);
+  if (response.stopReason === 'max_tokens') return failure(flow, 'truncated', null, usage);
+  if (response.stopReason === 'refusal') return failure(flow, 'refused', null, usage);
 
   const raw = parseModelJson(response.text);
-  if (raw === undefined) return failure(input.flow, 'invalid_json', null, usage);
+  if (raw === undefined) return failure(flow, 'invalid_json', null, usage);
 
   // Originals back in place of the placeholders the model copied — after
   // the audit row exists (the client wrote it before returning).
   const rehydrated = deps.pseudonymizer.rehydrateJson(raw);
   const parsed = spec.parse(rehydrated);
-  if (!parsed.success) return failure(input.flow, 'schema_mismatch', parsed.detail, usage);
+  if (!parsed.success) return failure(flow, 'schema_mismatch', parsed.detail, usage);
 
   const { assessed, values } = spec.assess(parsed.data, flags);
   const fields = flattenFields(assessed);
@@ -525,11 +549,72 @@ export async function runExtraction(
 
   return {
     ok: true,
-    flow: input.flow,
+    flow: flow as RegisteredFlow,
     assessed: assessed as AssessedOf<RegisteredFlow>,
     values: values as ValuesOf<RegisteredFlow> | null,
     fields,
     summary: { total: leaves.length, confirmed, unconfirmed: leaves.length - confirmed },
     usage,
+    wire: rehydrated,
   };
 }
+
+// ─── Sentence edit (T-26, D-T26-6) ──────────────────────────────────────────
+
+export interface EditInput<K extends RegisteredFlow = RegisteredFlow> {
+  flow: K;
+  /** The current wire JSON (rehydrated, as stored in `intake_jobs.extractedJson.output`). */
+  output: unknown;
+  /** What the user typed on the card («المحتجزات 5%»). */
+  text: string;
+  /** YYYY-MM-DD; defaults to today. */
+  referenceDate?: string;
+  /** The extraction's own flag, so a ligature-suspect name stays unconfirmed. */
+  ligatureSuspect?: boolean;
+}
+
+/**
+ * One model call that applies the user's sentence to the current output and
+ * returns the complete JSON of the same schema (no document is re-sent).
+ * Same return as `runExtraction`. The current output goes out through
+ * `pseudonymizer.redactJson` — string by string, so the JSON syntax cannot
+ * be disturbed by a replaced name or identifier.
+ */
+export async function runEdit<K extends RegisteredFlow>(
+  deps: ExtractDeps,
+  input: EditInput<K>,
+  ctx: LlmContext,
+): Promise<ExtractionResult<K> | ExtractFailure>;
+export async function runEdit(deps: ExtractDeps, input: EditInput, ctx: LlmContext): Promise<ExtractionResult | ExtractFailure>;
+export async function runEdit(deps: ExtractDeps, input: EditInput, ctx: LlmContext): Promise<ExtractionResult | ExtractFailure> {
+  if (!isRegisteredFlow(input.flow)) return failure(input.flow, 'unsupported_flow', null, null);
+  const spec = FLOWS[input.flow] as FlowSpec<unknown, unknown, unknown>;
+  const text = input.text.trim();
+  if (text.length === 0) return failure(input.flow, 'empty_input', null, null);
+
+  const flags: SourceFlags = { ligatureSuspect: input.ligatureSuspect ?? false, referenceDate: input.referenceDate ?? todayIso() };
+  const request: RedactedRequest = {
+    tier: 'advanced',
+    purpose: `${spec.purpose}_edit`,
+    system: staticPrompt(loadPrompt('extract/edit.md').replace(/\{\{today\}\}/g, flags.referenceDate)),
+    messages: [
+      {
+        role: 'user',
+        content: joinRedacted([
+          staticPrompt(EDIT_CURRENT_HEADER),
+          deps.pseudonymizer.redactJson(input.output),
+          staticPrompt(EDIT_USER_HEADER),
+          deps.pseudonymizer.redact(text),
+          staticPrompt('\n'),
+        ]),
+      },
+    ],
+    jsonSchema: spec.jsonSchema,
+    maxTokens: MAX_OUTPUT_TOKENS,
+    effort: 'low',
+  };
+  return callAndAssess(deps, spec, input.flow, request, flags, ctx);
+}
+
+const EDIT_CURRENT_HEADER = 'البيانات الحالية (JSON):\n';
+const EDIT_USER_HEADER = '\n\nتعديل المستخدم: ';

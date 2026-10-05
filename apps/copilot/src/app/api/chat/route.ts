@@ -1,5 +1,7 @@
 // Chat endpoint.
-//   POST /copilot/api/chat  { text, conversationId? }  -> the assistant's reply
+//   POST /copilot/api/chat  { text?, conversationId?, documentId?, forcedFlow? }  -> the assistant's reply
+//        (`text` may be left out only when `documentId` is given; an entry flow runs
+//        its extraction inside this call and the reply carries the `intakeJobId`)
 //   GET  /copilot/api/chat[?conversationId=…]          -> a conversation's messages
 //                                                          (the user's latest when no id is given)
 //
@@ -7,11 +9,13 @@
 // conversations. The NPI token stays on the server.
 import { NextResponse, type NextRequest } from 'next/server';
 import { buildTurn } from '@/agents/context';
+import type { FlowType } from '@/agents/router';
 import { MAX_MESSAGE_LENGTH, TurnInputError, runTurn } from '@/agents/run';
 import { getServerSession } from '@/auth/session';
 import { getDb } from '@/db';
 import { t } from '@/i18n/ar';
 import { NpiError } from '@/npi/errors';
+import { FLOW_TYPES } from '@/onboarding/profile.schema';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,9 +65,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch {
     return json({ error: 'bad_request' }, 400);
   }
-  const { text, conversationId } = (body ?? {}) as { text?: unknown; conversationId?: unknown };
-  if (typeof text !== 'string' || text.trim().length === 0) return json({ error: 'bad_request' }, 400);
-  if (text.length > MAX_MESSAGE_LENGTH) {
+  const { text, conversationId, documentId, forcedFlow } = (body ?? {}) as {
+    text?: unknown;
+    conversationId?: unknown;
+    documentId?: unknown;
+    forcedFlow?: unknown;
+  };
+  if (documentId !== undefined && (typeof documentId !== 'string' || documentId.length === 0 || documentId.length > 64)) {
+    return json({ error: 'bad_request' }, 400);
+  }
+  if (forcedFlow !== undefined && (typeof forcedFlow !== 'string' || !(FLOW_TYPES as readonly string[]).includes(forcedFlow))) {
+    return json({ error: 'bad_request' }, 400);
+  }
+  // Text may be left out only when a document is attached.
+  if (text !== undefined && typeof text !== 'string') return json({ error: 'bad_request' }, 400);
+  if (documentId === undefined && (text === undefined || text.trim().length === 0)) return json({ error: 'bad_request' }, 400);
+  if (text !== undefined && text.length > MAX_MESSAGE_LENGTH) {
     return json({ error: 'too_long', messageAr: t('chat.error.too_long') }, 413);
   }
   if (conversationId !== undefined && (typeof conversationId !== 'string' || conversationId.length > 64)) {
@@ -72,13 +89,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const { deps, user } = await buildTurn({ npiToken: session.npiToken, user: session.user });
-    const reply = await runTurn(deps, user, { text, conversationId });
+    const reply = await runTurn(deps, user, {
+      text: text ?? '',
+      conversationId,
+      documentId,
+      forcedFlow: forcedFlow as FlowType | undefined,
+    });
     return json(reply, 200);
   } catch (err) {
     if (err instanceof TurnInputError) {
-      return err.reason === 'conversation_not_found'
-        ? json({ error: 'not_found' }, 404)
-        : json({ error: 'bad_request' }, 400);
+      switch (err.reason) {
+        case 'conversation_not_found':
+          return json({ error: 'not_found' }, 404);
+        case 'document_not_found':
+          return json({ error: 'not_found', messageAr: t('document.error.not_found') }, 404);
+        case 'consent_required':
+          return json({ error: 'consent_required', messageAr: t('intake.consent_required') }, 409);
+        default:
+          return json({ error: 'bad_request' }, 400);
+      }
     }
     // Details stay in the server log; the browser gets a fixed message.
     console.error('[copilot] chat turn failed', err instanceof Error ? err.message : err);
@@ -114,6 +143,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       badge: true,
       kind: true,
       memoryNoteJson: true,
+      intakeJobId: true,
+      documentId: true,
       createdAt: true,
     },
   });
@@ -128,6 +159,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ...(row.kind ? { kind: row.kind } : {}),
         badges: row.badge ? row.badge.split('، ') : [],
         memoryNotes: Array.isArray(row.memoryNoteJson) ? row.memoryNoteJson : [],
+        ...(row.intakeJobId ? { intakeJobId: row.intakeJobId } : {}),
+        ...(row.documentId ? { documentId: row.documentId } : {}),
         createdAt: row.createdAt.toISOString(),
       })),
     },

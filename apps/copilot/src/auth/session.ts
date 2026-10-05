@@ -28,6 +28,8 @@ export interface SessionUser {
   roleKey: string;
   roleNameAr: string;
   permissions: string[];
+  /** The organization's Arabic name, or null (see `NpiMe.orgNameAr`). */
+  orgNameAr: string | null;
   isAdmin: boolean;
   departmentId: string | null;
   positionId: string | null;
@@ -139,6 +141,7 @@ function buildSessionUser(
     roleKey: me.roleKey,
     roleNameAr: me.roleNameAr,
     permissions: me.permissions,
+    orgNameAr: me.orgNameAr,
     isAdmin: me.roleKey === 'admin',
     departmentId: position.departmentId,
     positionId: position.positionId,

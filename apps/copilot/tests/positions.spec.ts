@@ -177,6 +177,7 @@ function makeMe(overrides: Partial<NpiMe> = {}): NpiMe {
     roleKey: 'accountant',
     roleNameAr: 'محاسب',
     permissions: [],
+    orgNameAr: null,
     ...overrides,
   };
 }

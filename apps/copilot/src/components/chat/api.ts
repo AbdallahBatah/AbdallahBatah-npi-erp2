@@ -7,6 +7,7 @@
 // (contract: 413/500/503 bodies carry `messageAr`); everything else falls
 // back to `t('chat.error.generic')` here, never a hardcoded string.
 import { t } from '@/i18n/ar';
+import type { FlowType } from '@/intake/types';
 
 /** Fixed at build time by next.config.js's `basePath` — hardcoded here the
  *  same way `LoginForm.tsx` hardcodes its own API path. */
@@ -31,7 +32,7 @@ export interface MemoryNoteData {
 }
 
 export type MessageRole = 'user' | 'assistant';
-export type TurnKind = 'answer' | 'hr_refusal' | 'flow_pending' | 'error';
+export type TurnKind = 'answer' | 'hr_refusal' | 'flow_pending' | 'error' | 'intake' | 'choose_flow';
 
 export interface ChatMessage {
   id: string;
@@ -43,6 +44,12 @@ export interface ChatMessage {
   /** Only ever set on the message this browser just sent/received this
    *  session, and on history rows written since the `kind` column exists. */
   kind?: TurnKind;
+  /** The intake job this assistant message opened (T-26): the card is
+   *  rendered under the bubble, also after a reload. */
+  intakeJobId?: string;
+  /** The attached document this message refers to (user attachment row, or
+   *  the `choose_flow` reply that still waits for a flow). */
+  documentId?: string;
 }
 
 export interface LoadConversationData {
@@ -57,6 +64,8 @@ export interface SendMessageData {
   textAr: string;
   badges: string[];
   memoryNotes: MemoryNoteData[];
+  intakeJobId?: string;
+  documentId?: string;
 }
 
 export type ChatErrorKind = 'unauthenticated' | 'npi_down' | 'too_long' | 'server' | 'network';
@@ -65,6 +74,10 @@ export type ChatResult<T> = ({ ok: true } & T) | { ok: false; kind: ChatErrorKin
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
 }
 
 function isMemoryNote(value: unknown): value is MemoryNoteData {
@@ -87,6 +100,8 @@ function isMessage(value: unknown): value is ChatMessage {
     Array.isArray(value.memoryNotes) &&
     value.memoryNotes.every(isMemoryNote) &&
     typeof value.createdAt === 'string' &&
+    isOptionalString(value.intakeJobId) &&
+    isOptionalString(value.documentId) &&
     (value.kind === undefined || (typeof value.kind === 'string' && VALID_KINDS.has(value.kind as TurnKind)))
   );
 }
@@ -100,7 +115,14 @@ function isLoadConversationBody(value: unknown): value is LoadConversationData {
   );
 }
 
-const VALID_KINDS: ReadonlySet<TurnKind> = new Set(['answer', 'hr_refusal', 'flow_pending', 'error']);
+const VALID_KINDS: ReadonlySet<TurnKind> = new Set([
+  'answer',
+  'hr_refusal',
+  'flow_pending',
+  'error',
+  'intake',
+  'choose_flow',
+]);
 
 function isSendMessageBody(value: unknown): value is SendMessageData {
   return (
@@ -113,7 +135,9 @@ function isSendMessageBody(value: unknown): value is SendMessageData {
     Array.isArray(value.badges) &&
     value.badges.every((b) => typeof b === 'string') &&
     Array.isArray(value.memoryNotes) &&
-    value.memoryNotes.every(isMemoryNote)
+    value.memoryNotes.every(isMemoryNote) &&
+    isOptionalString(value.intakeJobId) &&
+    isOptionalString(value.documentId)
   );
 }
 
@@ -163,16 +187,32 @@ export async function loadConversation(): Promise<ChatResult<LoadConversationDat
   return genericError();
 }
 
-/** Sends one chat turn. `text` and `conversationId` are passed through as-is
- *  (the server re-validates length and ownership). */
-export async function sendMessage(text: string, conversationId?: string): Promise<ChatResult<SendMessageData>> {
+export interface SendMessageInput {
+  /** May be omitted only when `documentId` is given (an attachment alone). */
+  text?: string;
+  conversationId?: string;
+  /** An uploaded document this turn is about (T-26). */
+  documentId?: string;
+  /** The flow the user picked from the «choose_flow» chips. */
+  forcedFlow?: FlowType;
+}
+
+/** Sends one chat turn. Only the keys the caller defines go into the body
+ *  (the server re-validates length, ownership and the flow). */
+export async function sendMessage(input: SendMessageInput): Promise<ChatResult<SendMessageData>> {
+  const payload: Record<string, string> = {};
+  if (input.text !== undefined) payload.text = input.text;
+  if (input.conversationId !== undefined) payload.conversationId = input.conversationId;
+  if (input.documentId !== undefined) payload.documentId = input.documentId;
+  if (input.forcedFlow !== undefined) payload.forcedFlow = input.forcedFlow;
+
   let res: Response;
   try {
     res = await fetch(CHAT_API_PATH, {
       method: 'POST',
       credentials: 'same-origin',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(conversationId === undefined ? { text } : { text, conversationId }),
+      body: JSON.stringify(payload),
     });
   } catch {
     return networkError();
@@ -190,6 +230,8 @@ export async function sendMessage(text: string, conversationId?: string): Promis
       textAr: body.textAr,
       badges: body.badges,
       memoryNotes: body.memoryNotes,
+      ...(body.intakeJobId !== undefined ? { intakeJobId: body.intakeJobId } : {}),
+      ...(body.documentId !== undefined ? { documentId: body.documentId } : {}),
     };
   }
   if (res.status === 401) return { ok: false, kind: 'unauthenticated', messageAr: t('chat.error.generic') };
@@ -205,7 +247,13 @@ export async function sendMessage(text: string, conversationId?: string): Promis
     const messageAr = isRecord(body) && typeof body.messageAr === 'string' ? body.messageAr : t('chat.error.generic');
     return { ok: false, kind: 'server', messageAr };
   }
-  // 400 / 404 / anything else this UI doesn't special-case: a fixed generic
+  // 404 (document not found) / 409 (consent required): the server's own
+  // Arabic message, shown as an error bubble.
+  if (res.status === 404 || res.status === 409) {
+    const messageAr = isRecord(body) && typeof body.messageAr === 'string' ? body.messageAr : t('chat.error.generic');
+    return { ok: false, kind: 'server', messageAr };
+  }
+  // 400 / anything else this UI doesn't special-case: a fixed generic
   // error, same as a malformed 200 body.
   return genericError();
 }

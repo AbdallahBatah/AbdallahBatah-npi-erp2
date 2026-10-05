@@ -5,6 +5,7 @@ import { t } from '@/i18n/ar';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States';
 import { Button } from '@/components/ui/Button';
 import { ConsentCard } from '@/components/ConsentCard';
+import type { FlowType } from '@/intake/types';
 import {
   consentNeeded,
   loadConversation,
@@ -20,9 +21,8 @@ import { Message } from './Message';
 import { WaitingIndicator } from './WaitingIndicator';
 
 const LOGIN_PATH = '/copilot/login';
-// The question the assistant can already answer today (suggest.3) comes
-// first, ahead of the two document-intake suggestions that only produce
-// `chat.flow_pending` until a later milestone.
+// The question the assistant can answer without a document (suggest.3) comes
+// first, ahead of the two document-intake suggestions.
 const SUGGESTION_KEYS = ['chat.suggest.3', 'chat.suggest.1', 'chat.suggest.2'] as const;
 
 type Phase = 'loading' | 'error' | 'ready';
@@ -36,8 +36,12 @@ type Phase = 'loading' | 'error' | 'ready';
  * T-22 adds the attach + consent flow on top of that: attaching a file
  * uploads it, shows it as a user bubble, and then either asks for consent
  * (image / scanned PDF) via `ConsentCard` or announces the document is text
- * and ready. None of this is persisted server-side as chat messages yet —
- * that is T-26's job; here it is all local component state.
+ * and ready. T-26 closes the loop: once the document is readable (text
+ * straight away, an image after the consent is recorded) the chat sends it
+ * to the server, which reads it and answers with an intake job whose
+ * `PreviewCard` renders under the reply (`Message`). When the server cannot
+ * tell what the document is, the reply carries five flow chips; picking one
+ * sends the same document again with `forcedFlow`.
  */
 export function Chat({ userName: _userName }: { userName?: string } = {}) {
   const [phase, setPhase] = useState<Phase>('loading');
@@ -50,6 +54,12 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
   const [pendingConsent, setPendingConsent] = useState<{ document: DocumentSummary } | null>(null);
   const [consentBusy, setConsentBusy] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
+  // The label of the intake read in flight (the server reads synchronously
+  // inside the chat turn), or null.
+  const [intakeBusy, setIntakeBusy] = useState<string | null>(null);
+  // Page count of each document uploaded in this session, for the «page n of
+  // m» label when a chip re-sends it.
+  const documentPages = useRef(new Map<string, number>());
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -84,7 +94,7 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages, sending, attaching, pendingConsent]);
+  }, [messages, sending, attaching, pendingConsent, intakeBusy]);
 
   function fillComposer(text: string) {
     setDraft(text);
@@ -122,6 +132,7 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
     }
 
     const { document, deduplicated } = result;
+    documentPages.current.set(document.id, document.pageCount);
     setMessages((prev) => [
       ...prev,
       {
@@ -141,7 +152,56 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
       setPendingConsent({ document });
     } else {
       appendNotice(t('chat.document_text_ready'));
+      submitIntake({ documentId: document.id, text: takeDraft() });
     }
+  }
+
+  /** The typed sentence that goes with an attachment; the composer is
+   *  cleared because the sentence now travels with the document. */
+  function takeDraft(): string | undefined {
+    const text = draft.trim();
+    if (text.length === 0) return undefined;
+    setDraft('');
+    return text;
+  }
+
+  /** Sends a document (optionally with the flow the user picked) to the
+   *  server, which reads it inside this one request and answers with the
+   *  intake job (or a failure/choice reply). */
+  async function submitIntake(input: { documentId: string; text?: string; forcedFlow?: FlowType }) {
+    if (intakeBusy !== null) return;
+    const pages = documentPages.current.get(input.documentId);
+    setIntakeBusy(
+      pages === undefined ? t('intake.reading_text') : t('intake.reading', { n: 1, total: pages }),
+    );
+    const result = await sendMessage({ ...input, conversationId: conversationId ?? undefined });
+    setIntakeBusy(null);
+
+    if (!result.ok) {
+      if (result.kind === 'unauthenticated') {
+        window.location.assign(LOGIN_PATH);
+        return;
+      }
+      appendNotice(result.messageAr, 'error');
+      if (input.text) setDraft(input.text);
+      return;
+    }
+
+    setConversationId(result.conversationId);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: result.messageId,
+        role: 'assistant',
+        textAr: result.textAr,
+        badges: result.badges,
+        memoryNotes: result.memoryNotes,
+        createdAt: new Date().toISOString(),
+        kind: result.kind,
+        ...(result.intakeJobId !== undefined ? { intakeJobId: result.intakeJobId } : {}),
+        ...(result.documentId !== undefined ? { documentId: result.documentId } : {}),
+      },
+    ]);
   }
 
   async function handleConsent(decision: ConsentDecision) {
@@ -164,6 +224,7 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
     setPendingConsent(null);
     setConsentError(null);
     appendNotice(t(decision === 'approved' ? 'chat.consent_recorded' : 'chat.consent_cancelled'));
+    if (decision === 'approved') submitIntake({ documentId: pendingConsent.document.id, text: takeDraft() });
   }
 
   async function handleSend() {
@@ -182,7 +243,7 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
     setDraft('');
     setSending(true);
 
-    const result = await sendMessage(text, conversationId ?? undefined);
+    const result = await sendMessage({ text, conversationId: conversationId ?? undefined });
     setSending(false);
 
     if (!result.ok) {
@@ -221,6 +282,8 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
         memoryNotes: result.memoryNotes,
         createdAt: new Date().toISOString(),
         kind: result.kind,
+        ...(result.intakeJobId !== undefined ? { intakeJobId: result.intakeJobId } : {}),
+        ...(result.documentId !== undefined ? { documentId: result.documentId } : {}),
       },
     ]);
   }
@@ -260,7 +323,14 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
             </div>
           </EmptyState>
         ) : (
-          messages.map((message) => <Message key={message.id} message={message} />)
+          messages.map((message) => (
+            <Message
+              key={message.id}
+              message={message}
+              chipsDisabled={sending || intakeBusy !== null}
+              onChooseFlow={(flow, documentId) => submitIntake({ documentId, forcedFlow: flow })}
+            />
+          ))
         )}
         {attaching ? <WaitingIndicator label={t('chat.attaching')} /> : null}
         {pendingConsent ? (
@@ -274,6 +344,7 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
           />
         ) : null}
         {sending ? <WaitingIndicator /> : null}
+        {intakeBusy !== null ? <WaitingIndicator label={intakeBusy} /> : null}
         {/* scroll-mb-* is what actually keeps the newest message clear of the
             sticky composer below: Element.scrollIntoView respects
             scroll-margin, so a plain `block: 'end'` lands above the
@@ -297,7 +368,7 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
           onChange={setDraft}
           onSend={handleSend}
           onAttach={handleAttach}
-          disabled={sending}
+          disabled={sending || intakeBusy !== null}
           attachDisabled={attaching || pendingConsent !== null}
         />
       </div>

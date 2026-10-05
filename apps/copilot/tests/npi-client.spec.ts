@@ -205,6 +205,7 @@ describe('responses.ts readers', () => {
       roleNameAr: 'موظف مشتريات',
       permissions: ['procurement.read', 'procurement.write'],
       organizationId: 'org-1',
+      orgNameAr: 'م',
     });
   });
 

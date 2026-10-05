@@ -34,6 +34,10 @@ export interface NpiMe {
   /** Bilingual role permission keys, as stored on the role — NPI does not
    *  document the element type further than `string[]`. */
   permissions: string[];
+  /** Arabic legal name of the user's organization (`organization.nameAr` of
+   *  `/auth/me`), null when NPI does not send one. The extraction prompts use it
+   *  so the firm's own name is not mistaken for the customer. */
+  orgNameAr: string | null;
 }
 
 /**
@@ -44,6 +48,7 @@ export interface NpiMe {
  *  - roleNameAr    apps/api/src/modules/auth/auth.service.ts:110 (`roleNameAr: user.role.nameAr,`)
  *  - permissions   apps/api/src/modules/auth/auth.service.ts:112 (`permissions: user.role.permissions,`)
  *  - organizationId apps/api/src/modules/auth/auth.service.ts:114 (`organization: { id: user.organization.id, ... }`)
+ *  - orgNameAr     apps/api/src/modules/auth/auth.service.ts:116 (`nameAr: user.organization.legalNameAr`)
  *
  * NOT read here: a department id. `AuthService.me()` (auth.service.ts:98-120)
  * builds its return object field-by-field and never includes one — there is
@@ -65,7 +70,15 @@ export function readMe(body: unknown): NpiMe {
     return unexpected('readMe: missing/invalid "organization.id"');
   }
 
-  return { id, nameAr, roleKey, roleNameAr, permissions, organizationId: organization.id };
+  return {
+    id,
+    nameAr,
+    roleKey,
+    roleNameAr,
+    permissions,
+    organizationId: organization.id,
+    orgNameAr: typeof organization.nameAr === 'string' && organization.nameAr.trim().length > 0 ? organization.nameAr : null,
+  };
 }
 
 // ─── /auth/login ────────────────────────────────────────────────────────────

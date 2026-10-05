@@ -26,6 +26,7 @@ function makeMe(overrides: Partial<NpiMe> = {}): NpiMe {
     roleKey: 'sales',
     roleNameAr: 'المبيعات',
     permissions: [],
+    orgNameAr: null,
     ...overrides,
   };
 }

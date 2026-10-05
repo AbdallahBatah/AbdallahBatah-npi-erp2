@@ -131,6 +131,11 @@ export function createNpiClient(options: CreateNpiClientOptions) {
       return request(ctx, 'GET', '/projects');
     },
 
+    /** One project with its `wbsElements` (NPI has no WBS list endpoint). */
+    getProject(id: string) {
+      return request(ctx, 'GET', `/projects/${encodeURIComponent(id)}`);
+    },
+
     listItems(search?: paths['/api/items']['get']['parameters']['query']['search']) {
       return request(ctx, 'GET', '/items', { query: { search } });
     },

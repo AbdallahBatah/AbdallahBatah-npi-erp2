@@ -282,10 +282,12 @@ model Message {
   role           MessageRole
   contentAr      String      @db.Text
   badge          String?
-  /// answer | hr_refusal | flow_pending | error; null on user messages.
+  /// answer | hr_refusal | flow_pending | intake | choose_flow | error; null on user messages.
   kind           String?
   memoryNoteJson Json?
   intakeJobId    String?
+  /// The attached document (plain id, no relation — same discipline as LlmAudit).
+  documentId     String?
   createdAt      DateTime    @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

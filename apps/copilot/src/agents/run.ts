@@ -1,7 +1,7 @@
 // One chat turn, end to end.
 //
 //   user message ─► router ─► HR refusal                       (no model call)
-//                         ├─► intake flow (a later milestone)  (no model call here)
+//                         ├─► intake flow: permission, then a job (deps.intake runs the extraction)
 //                         └─► chat: model + read-only tools
 //
 // Invariants this file keeps:
@@ -23,6 +23,8 @@ import type { ModelResponse, RedactedBlock, RedactedMessage, RedactedRequest } f
 import { extractFactsFromMessage } from '../memory/extract-chat';
 import { markUsed, retrieveFacts } from '../memory/retrieve';
 import { NpiError } from '../npi/errors';
+import { FLOW_REQUIRED_PERMISSION, FLOW_TYPES } from '../onboarding/profile.schema';
+import type { StartIntakeInput, StartIntakeOutcome } from '../intake/job';
 import {
   Pseudonymizer,
   fromModelOutput,
@@ -50,14 +52,25 @@ export interface TurnUser {
   positionId: string | null;
   positionTitleAr: string | null;
   personaAr: string;
+  /** NPI permission keys of the user; an intake flow needs its own (AT-15). */
+  permissions: string[];
+  /** The firm's Arabic name, so the model does not take it for the customer. */
+  orgNameAr: string | null;
 }
 
 export interface TurnInput {
   conversationId?: string;
+  /** May be empty only when `documentId` is set. */
   text: string;
+  /** A document the user attached (uploaded earlier through /api/documents). */
+  documentId?: string;
+  /** The flow chip the user pressed. */
+  forcedFlow?: FlowType;
 }
 
-export type TurnKind = 'answer' | 'hr_refusal' | 'flow_pending' | 'error';
+/** `flow_pending` is no longer produced (every flow is registered); it stays
+ *  in the union for rows stored by earlier versions. */
+export type TurnKind = 'answer' | 'hr_refusal' | 'flow_pending' | 'intake' | 'choose_flow' | 'error';
 
 export interface TurnReply {
   conversationId: string;
@@ -67,11 +80,15 @@ export interface TurnReply {
   /** Arabic labels of the tools or the flow behind this reply (AssistantBadge). */
   badges: string[];
   memoryNotes: MemoryNote[];
+  /** The intake job behind an `intake` reply. */
+  intakeJobId?: string;
+  /** The attached document, echoed on an `intake` or `choose_flow` reply. */
+  documentId?: string;
 }
 
 export type TurnDb = Pick<
   PrismaClient,
-  'conversation' | 'message' | 'redactionSession' | 'dailyUsage' | 'memoryFact' | '$queryRaw'
+  'conversation' | 'message' | 'redactionSession' | 'dailyUsage' | 'memoryFact' | 'document' | '$queryRaw'
 >;
 
 export interface TurnDeps {
@@ -83,11 +100,16 @@ export interface TurnDeps {
   dictionary: () => Promise<DictionaryEntry[]>;
   classify?: (text: string) => Promise<ClassifierVerdict>;
   visibleFlows?: readonly FlowType[];
+  /** Starts an intake job (extraction + preview). Injected so a turn stays
+   *  testable without a model, a database of jobs or NPI. */
+  intake: { start(caller: { npiOrgId: string; npiUserId: string }, input: StartIntakeInput): Promise<StartIntakeOutcome> };
   now?: () => Date;
 }
 
 export class TurnInputError extends Error {
-  constructor(readonly reason: 'empty' | 'too_long' | 'conversation_not_found') {
+  constructor(
+    readonly reason: 'empty' | 'too_long' | 'conversation_not_found' | 'document_not_found' | 'consent_required' | 'bad_flow',
+  ) {
     super(reason);
   }
 }
@@ -201,6 +223,8 @@ interface ChatOutcome {
   textAr: string;
   badges: string[];
   memoryNotes: MemoryNote[];
+  intakeJobId?: string;
+  documentId?: string;
 }
 
 async function runToolCall(
@@ -367,44 +391,92 @@ async function chat(
   return outcome;
 }
 
-function replyForRoute(decision: Exclude<Route, { kind: 'chat' }>): ChatOutcome {
+function replyForRoute(decision: Extract<Route, { kind: 'hr_refusal' | 'flow_unavailable' }>): ChatOutcome {
   if (decision.kind === 'hr_refusal') {
     return { kind: 'hr_refusal', textAr: t('hr.refusal'), badges: [], memoryNotes: [] };
   }
-  if (decision.kind === 'choose_flow') {
-    return { kind: 'flow_pending', textAr: t('chat.flow_pending.unknown'), badges: [], memoryNotes: [] };
-  }
   const flowAr = t(FLOW_LABEL_KEYS[decision.flow]);
+  return { kind: 'flow_pending', textAr: t('chat.flow_unavailable', { flow: flowAr }), badges: [flowAr], memoryNotes: [] };
+}
+
+/** An entry flow: permission first (AT-15: no model call, no job for a user
+ *  NPI would refuse), then the intake job — extraction and preview run inside
+ *  this turn (D-T26-2). */
+async function startFlow(
+  deps: TurnDeps,
+  user: TurnUser,
+  flow: FlowType,
+  conversationId: string,
+  text: string,
+  documentId: string | undefined,
+): Promise<ChatOutcome> {
+  const flowAr = t(FLOW_LABEL_KEYS[flow]);
+  if (!user.permissions.includes(FLOW_REQUIRED_PERMISSION[flow])) {
+    return { kind: 'error', textAr: t('intake.forbidden', { flow: flowAr }), badges: [flowAr], memoryNotes: [] };
+  }
+  const started = await deps.intake.start(
+    { npiOrgId: user.npiOrgId, npiUserId: user.npiUserId },
+    { flow, text: text.length > 0 ? text : null, documentId: documentId ?? null, conversationId, ourPartyNameAr: user.orgNameAr },
+  );
+  if (!started.ok) return { kind: 'error', textAr: started.messageAr, badges: [], memoryNotes: [] };
   return {
-    kind: 'flow_pending',
-    textAr: t(decision.kind === 'flow_unavailable' ? 'chat.flow_unavailable' : 'chat.flow_pending', { flow: flowAr }),
+    kind: 'intake',
+    textAr:
+      started.status === 'preview'
+        ? t('chat.intake_ready', { flow: flowAr })
+        : t('chat.intake_failed', { flow: flowAr, reason: started.failureAr ?? t('chat.error.generic') }),
     badges: [flowAr],
     memoryNotes: [],
+    intakeJobId: started.jobId,
+    documentId,
   };
 }
 
 export async function runTurn(deps: TurnDeps, user: TurnUser, input: TurnInput): Promise<TurnReply> {
   const now = (deps.now ?? (() => new Date()))();
-  const text = input.text.trim();
-  if (text.length === 0) throw new TurnInputError('empty');
+  const text = (input.text ?? '').trim();
+  const documentId = input.documentId;
+  if (text.length === 0 && !documentId) throw new TurnInputError('empty');
   if (text.length > MAX_MESSAGE_LENGTH) throw new TurnInputError('too_long');
+  if (input.forcedFlow !== undefined && !(FLOW_TYPES as readonly string[]).includes(input.forcedFlow)) {
+    throw new TurnInputError('bad_flow');
+  }
 
-  const conversationId = await openConversation(deps, user, input, text);
+  // The stored user message names the attachment, so a reload shows it.
+  let storedText = text;
+  if (documentId) {
+    const document = await deps.db.document.findFirst({
+      where: { id: documentId, npiOrgId: user.npiOrgId, npiUserId: user.npiUserId },
+      select: { fileName: true },
+    });
+    if (!document) throw new TurnInputError('document_not_found');
+    const attached = t('chat.attached', { name: document.fileName });
+    storedText = text.length > 0 ? `${attached}\n${text}` : attached;
+  }
+
+  const conversationId = await openConversation(deps, user, input, storedText);
   const userMessage = await deps.db.message.create({
-    data: { conversationId, role: 'user', contentAr: text },
+    data: { conversationId, role: 'user', contentAr: storedText, ...(documentId ? { documentId } : {}) },
     select: { id: true },
   });
   await countMessage(deps, user, now);
 
+  // With nothing typed there is nothing for the classifier to read.
   const decision = await route(
-    { text, hasAttachment: false, visibleFlows: deps.visibleFlows },
-    { classify: deps.classify },
+    { text, hasAttachment: !!documentId, forcedFlow: input.forcedFlow, visibleFlows: deps.visibleFlows },
+    { classify: text.length > 0 ? deps.classify : undefined },
   );
 
-  const outcome =
-    decision.kind === 'chat'
-      ? await chat(deps, user, conversationId, userMessage.id, text, now)
-      : replyForRoute(decision);
+  let outcome: ChatOutcome;
+  if (decision.kind === 'chat') {
+    outcome = await chat(deps, user, conversationId, userMessage.id, text, now);
+  } else if (decision.kind === 'flow') {
+    outcome = await startFlow(deps, user, decision.flow, conversationId, text, documentId);
+  } else if (decision.kind === 'choose_flow') {
+    outcome = { kind: 'choose_flow', textAr: t('flow.unknown'), badges: [], memoryNotes: [], documentId };
+  } else {
+    outcome = replyForRoute(decision);
+  }
 
   const saved = await deps.db.message.create({
     data: {
@@ -414,6 +486,8 @@ export async function runTurn(deps: TurnDeps, user: TurnUser, input: TurnInput):
       kind: outcome.kind,
       badge: outcome.badges.length > 0 ? outcome.badges.join('، ') : null,
       memoryNoteJson: outcome.memoryNotes.length > 0 ? (outcome.memoryNotes as never) : undefined,
+      ...(outcome.intakeJobId ? { intakeJobId: outcome.intakeJobId } : {}),
+      ...(outcome.documentId ? { documentId: outcome.documentId } : {}),
     },
     select: { id: true },
   });
@@ -426,5 +500,7 @@ export async function runTurn(deps: TurnDeps, user: TurnUser, input: TurnInput):
     textAr: outcome.textAr,
     badges: outcome.badges,
     memoryNotes: outcome.memoryNotes,
+    ...(outcome.intakeJobId ? { intakeJobId: outcome.intakeJobId } : {}),
+    ...(outcome.documentId ? { documentId: outcome.documentId } : {}),
   };
 }
