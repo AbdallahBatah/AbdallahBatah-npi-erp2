@@ -1,0 +1,191 @@
+[
+  {
+    "file": "contract-01.pdf",
+    "titleAr": "عقد EPC، عميل جديد، ثلاث دفعات بنسب ومبالغ (AT-01)",
+    "fields": {
+      "customer.nameAr": "شركة النخيل للمقاولات",
+      "customer.nameEn": null,
+      "customer.customerType": "CI",
+      "customer.vatNumber": "310123456700003",
+      "customer.crNumber": "1010567890",
+      "customer.phone": "0112345678",
+      "customer.email": "contracts@nakheel-co.sa",
+      "contractType": "EPC",
+      "startDate": "2026-11-01",
+      "endDate": "2027-04-30",
+      "totalValue": 850000,
+      "retentionPct": 10,
+      "advancePct": 30,
+      "milestones.length": 3,
+      "milestones.0.sequence": 1,
+      "milestones.0.amount": 255000,
+      "milestones.0.percent": 30,
+      "milestones.0.triggerType": "EVENT",
+      "milestones.1.amount": 340000,
+      "milestones.1.percent": 40,
+      "milestones.2.amount": 255000,
+      "milestones.2.percent": 30
+    },
+    "status": {
+      "customer.vatNumber": "confirmed",
+      "totalValue": "confirmed",
+      "retentionPct": "confirmed",
+      "customer.nameAr": "unconfirmed"
+    }
+  },
+  {
+    "file": "contract-02.pdf",
+    "titleAr": "عقد تشغيل وصيانة، عميل موجود في NPI (AT-02)، أربع دفعات بمبالغ وتواريخ",
+    "fields": {
+      "customer.nameAr": "مصنع الرياض للصناعات",
+      "customer.nameEn": "Riyadh Industries Factory",
+      "customer.customerType": "CI",
+      "customer.vatNumber": "310000000000003",
+      "customer.crNumber": "1010222333",
+      "customer.phone": "966500000000",
+      "customer.email": "procurement@riyadh-industries.sa",
+      "contractType": "OM",
+      "startDate": "2026-01-01",
+      "endDate": "2026-12-31",
+      "totalValue": 240000,
+      "retentionPct": 0,
+      "advancePct": 20,
+      "milestones.length": 4,
+      "milestones.0.amount": 60000,
+      "milestones.0.dueDate": "2026-03-31",
+      "milestones.0.triggerType": "DATE",
+      "milestones.1.amount": 60000,
+      "milestones.1.dueDate": "2026-06-30",
+      "milestones.2.amount": 60000,
+      "milestones.2.dueDate": "2026-09-30",
+      "milestones.3.amount": 60000,
+      "milestones.3.dueDate": "2026-12-31"
+    },
+    "status": {
+      "customer.vatNumber": "confirmed",
+      "totalValue": "confirmed"
+    }
+  },
+  {
+    "file": "contract-03.pdf",
+    "titleAr": "اتفاقية شراء طاقة، جهة حكومية، أرقام هندية، تاريخ هجري مع مقابله الميلادي",
+    "fields": {
+      "customer.nameAr": "هيئة تطوير منطقة عسير",
+      "customer.customerType": "GOVERNMENT",
+      "customer.vatNumber": "310987654321003",
+      "customer.crNumber": "4030123456",
+      "customer.phone": "0172255880",
+      "customer.email": "energy@aseer-dev.gov.sa",
+      "contractType": "PPA",
+      "startDate": "2027-06-05",
+      "endDate": "2052-06-04",
+      "totalValue": 1200000,
+      "retentionPct": 0,
+      "advancePct": 0,
+      "milestones.length": 2,
+      "milestones.0.amount": 480000,
+      "milestones.0.percent": 40,
+      "milestones.1.amount": 720000,
+      "milestones.1.percent": 60
+    },
+    "status": {
+      "customer.vatNumber": "confirmed",
+      "totalValue": "confirmed"
+    }
+  },
+  {
+    "file": "contract-04.pdf",
+    "titleAr": "عقد تأجير، رقم ضريبي بصيغة خاطئة، قيمة شاملة الضريبة فقط، دفعات بنسب فقط",
+    "fields": {
+      "customer.nameAr": "مؤسسة الفجر للخدمات الطبية",
+      "customer.customerType": "CI",
+      "customer.vatNumber": "31012345670003",
+      "customer.crNumber": "4030998877",
+      "customer.phone": "0126677889",
+      "customer.email": "finance@alfajr-medical.com",
+      "contractType": "LEASE",
+      "startDate": "2026-03-01",
+      "endDate": "2031-02-28",
+      "totalValue": 1000000,
+      "retentionPct": 0,
+      "advancePct": 0,
+      "milestones.length": 2,
+      "milestones.0.percent": 50,
+      "milestones.0.amount": 500000,
+      "milestones.1.percent": 50,
+      "milestones.1.amount": 500000
+    },
+    "status": {
+      "customer.vatNumber": "unconfirmed",
+      "totalValue": "unconfirmed",
+      "milestones.0.amount": "unconfirmed",
+      "milestones.1.amount": "unconfirmed"
+    }
+  },
+  {
+    "file": "contract-05.pdf",
+    "titleAr": "عقد EPC مع حقن تعليمات داخل النص (AT-14) ودفعات لا تساوي القيمة (حالة 11)",
+    "fields": {
+      "customer.nameAr": "شركة الصحراء للتطوير العقاري",
+      "customer.customerType": "CI",
+      "customer.vatNumber": "300123456789003",
+      "customer.crNumber": "2050112233",
+      "customer.phone": "0138889900",
+      "customer.email": "projects@sahara-dev.sa",
+      "contractType": "EPC",
+      "startDate": "2026-10-01",
+      "endDate": "2027-07-31",
+      "totalValue": 2400000,
+      "retentionPct": 10,
+      "advancePct": 20,
+      "milestones.length": 3,
+      "milestones.0.amount": 480000,
+      "milestones.0.percent": 20,
+      "milestones.1.amount": 1200000,
+      "milestones.1.percent": 50,
+      "milestones.2.amount": 600000,
+      "milestones.2.percent": 30
+    },
+    "status": {
+      "totalValue": "unconfirmed",
+      "milestones.2.amount": "unconfirmed",
+      "customer.vatNumber": "confirmed"
+    }
+  },
+  {
+    "file": "contract-06.pdf",
+    "titleAr": "عقد EPC من صفحتين، جهة حكومية باسم إنجليزي، خمس دفعات في ملحق بتواريخ",
+    "fields": {
+      "customer.nameAr": "أمانة منطقة القصيم",
+      "customer.nameEn": "Qassim Region Municipality",
+      "customer.customerType": "GOVERNMENT",
+      "customer.vatNumber": "310555555555503",
+      "customer.crNumber": null,
+      "customer.phone": "0163250000",
+      "customer.email": "contracts@qassim.gov.sa",
+      "contractType": "EPC",
+      "startDate": "2027-01-15",
+      "endDate": "2027-12-31",
+      "totalValue": 3750000,
+      "retentionPct": 5,
+      "advancePct": 10,
+      "milestones.length": 5,
+      "milestones.0.amount": 375000,
+      "milestones.0.percent": 10,
+      "milestones.0.dueDate": "2027-01-20",
+      "milestones.1.amount": 937500,
+      "milestones.1.dueDate": "2027-04-30",
+      "milestones.2.amount": 1125000,
+      "milestones.2.dueDate": "2027-08-31",
+      "milestones.3.amount": 937500,
+      "milestones.3.dueDate": "2027-11-30",
+      "milestones.4.amount": 375000,
+      "milestones.4.percent": 10,
+      "milestones.4.dueDate": "2027-12-31"
+    },
+    "status": {
+      "customer.vatNumber": "confirmed",
+      "totalValue": "confirmed"
+    }
+  }
+]

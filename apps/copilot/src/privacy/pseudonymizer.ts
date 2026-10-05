@@ -385,6 +385,22 @@ function extendPastTrailingDroppedChars(text: string, end: number): number {
   return e;
 }
 
+/**
+ * Punctuation or a line break in the ORIGINAL text between two adjacent
+ * words. Normalization blanks punctuation to a space, so without this check
+ * a heuristic span runs straight across «،», a colon or a newline — on a
+ * contract page «شركة النخيل للمقاولات، الرقم الضريبي» was one org token
+ * whose rehydrated value carried the next field's label (T-23 probe).
+ */
+const SPAN_BOUNDARY_RE = /[\n\r\t،,.:؛;()«»\"'|]/;
+
+function gapHasBoundary(text: string, map: number[], prev: Word, next: Word): boolean {
+  const prevEnd = map[prev.end - 1] + 1;
+  const nextStart = map[next.start];
+  if (nextStart <= prevEnd) return false;
+  return SPAN_BOUNDARY_RE.test(text.slice(prevEnd, nextStart));
+}
+
 function originalSpanForNormalizedRange(
   text: string,
   map: number[],
@@ -876,6 +892,7 @@ export class Pseudonymizer {
       j = startIdx + 1;
     }
     while (counted < maxCounted && j < words.length) {
+      if (j > 0 && gapHasBoundary(text, map, words[j - 1], words[j])) break;
       if (this.isBlockedForHeuristic(text, words[j], map, claimed)) break;
       if (COMMON_VERBS.has(words[j].text)) break;
       // The first word after an honorific may be a name this module has
@@ -943,6 +960,7 @@ export class Pseudonymizer {
         while (
           take < 4 &&
           j < words.length &&
+          !gapHasBoundary(text, map, words[j - 1], words[j]) &&
           !this.isBlockedForHeuristic(text, words[j], map, claimed)
         ) {
           take += 1;

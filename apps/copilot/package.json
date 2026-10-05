@@ -16,7 +16,8 @@
     "prebuild": "prisma generate",
     "pretypecheck": "prisma generate",
     "pretest": "prisma generate",
-    "gen-types": "node scripts/gen-npi-types.mjs"
+    "gen-types": "node scripts/gen-npi-types.mjs",
+    "eval:extract": "dotenv -e ../../.env -- ts-node --transpile-only -P tsconfig.jest.json scripts/eval-extract.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",
