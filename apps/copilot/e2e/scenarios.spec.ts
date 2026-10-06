@@ -548,8 +548,10 @@ test.describe('AT-01 contract from a text PDF @live-flows', () => {
     await expect(ui.card).toBeVisible({ timeout: MODEL_WAIT });
     const latency = Date.now() - t0;
     await attach(testInfo, 'at01-latency-ms', String(latency));
-    // D-T31-4: «within 25 s» is measured and reported; the remaining assertions still run.
-    expect.soft(latency, 'AT-01: the card should appear within 25 s').toBeLessThanOrEqual(25_000);
+    // D-19 (owner, 2026-10-06): 06 AT-01 now reads «within 30 s» (was 25 s — provider
+    // time on this two-page document measured 14.5–26 s). A hard assertion again; the
+    // figure stays attached (`at01-latency-ms`) so every run reports it.
+    expect(latency, 'AT-01: the card should appear within 30 s (06 AT-01, D-19)').toBeLessThanOrEqual(30_000);
 
     // The card.
     await expect(ui.card.getByRole('heading', { name: t('preview.title') })).toBeVisible();
