@@ -6,6 +6,11 @@
 export const PERMISSIONS = {
   CUSTOMER_READ: 'crm.customer.read',
   CUSTOMER_WRITE: 'crm.customer.write',
+  // CRM Phase 1 (Step 2): lists suggested duplicate customers and merges them.
+  // A merge moves every linked document to the surviving record and cannot be
+  // undone from the app, so it is its own key — held by `admin` and `executive`
+  // only — rather than a side effect of `crm.customer.write`.
+  CUSTOMER_MERGE: 'crm.customer.merge',
   LEAD_READ: 'crm.lead.read',
   LEAD_WRITE: 'crm.lead.write',
   OPPORTUNITY_READ: 'crm.opportunity.read',
@@ -133,6 +138,7 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     [PERMISSIONS.LEAD_WRITE, 'إدارة العملاء المحتملين', 'Manage leads', 'العملاء المحتملون', 'Leads'],
     [PERMISSIONS.CUSTOMER_READ, 'عرض العملاء', 'View customers', 'العملاء', 'Customers'],
     [PERMISSIONS.CUSTOMER_WRITE, 'إدارة العملاء', 'Manage customers', 'العملاء', 'Customers'],
+    [PERMISSIONS.CUSTOMER_MERGE, 'دمج العملاء المكررين', 'Merge duplicate customers', 'العملاء', 'Customers'],
     [PERMISSIONS.OPPORTUNITY_READ, 'عرض الفرص', 'View opportunities', 'الفرص', 'Opportunities'],
     [PERMISSIONS.OPPORTUNITY_WRITE, 'إدارة الفرص', 'Manage opportunities', 'الفرص', 'Opportunities'],
     [PERMISSIONS.PROPOSAL_READ, 'عرض العروض', 'View proposals', 'عروض الأسعار', 'Proposals'],

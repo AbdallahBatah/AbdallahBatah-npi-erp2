@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
@@ -51,6 +51,8 @@ export class OpportunitiesService {
       where: { id: dto.customerId, organizationId: user.organizationId },
     });
     if (!customer) throw new NotFoundException('Customer not found');
+    // A duplicate that was merged away takes no new documents.
+    if (customer.mergedIntoId) throw new ConflictException('Customer already merged');
 
     return this.prisma.$transaction(async (tx) => {
       const code = await this.numbering.next(user.organizationId, 'OPPORTUNITY', tx);

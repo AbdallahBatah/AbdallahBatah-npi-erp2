@@ -9,6 +9,7 @@ import type { AuthUser } from '../../common/auth-user';
 import { PERMISSIONS } from '@npi/shared';
 import {
   CUSTOMER_TYPES,
+  CUSTOMER_ENTITY_KINDS,
   LEAD_SOURCES,
   LEAD_STATUSES,
   OPPORTUNITY_STAGES,
@@ -55,6 +56,7 @@ export class ReferenceController {
   enums() {
     return {
       customerTypes: CUSTOMER_TYPES,
+      customerEntityKinds: CUSTOMER_ENTITY_KINDS,
       leadSources: LEAD_SOURCES,
       leadStatuses: LEAD_STATUSES,
       opportunityStages: OPPORTUNITY_STAGES,

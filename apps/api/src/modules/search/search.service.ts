@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PERMISSIONS } from '@npi/shared';
+import { PERMISSIONS, mobileSearchFragment } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 
 export interface SearchHit {
@@ -32,6 +32,7 @@ export class SearchService {
     const orgId = user.organizationId;
     const has = (p: string) => user.permissions.includes(p);
     const contains = (v: string) => ({ ...ci, contains: v });
+    const mobileFrag = mobileSearchFragment(q);
 
     const tasks: Array<Promise<void>> = [];
 
@@ -41,11 +42,14 @@ export class SearchService {
           .findMany({
             where: {
               organizationId: orgId,
+              // A merged-away duplicate is not a customer anyone should land on.
+              mergedIntoId: null,
               OR: [
                 { nameAr: contains(q) },
                 { nameEn: contains(q) },
                 { code: contains(q) },
                 { phone: contains(q) },
+                ...(mobileFrag ? [{ mobile: { contains: mobileFrag } }] : []),
                 { email: contains(q) },
               ],
             },
@@ -59,7 +63,7 @@ export class SearchService {
               labelAr: r.nameAr,
               labelEn: r.nameEn,
               sublabel: r.code,
-              href: `/customers?q=${encodeURIComponent(r.code)}`,
+              href: `/customers/${r.id}`,
             }));
           }),
       );

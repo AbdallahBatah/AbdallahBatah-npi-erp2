@@ -132,10 +132,53 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
     ar: 'يوجد تفويض ساري بين الشخصين نفسيهما يتقاطع مع هذه الفترة',
   },
   { re: /delegation is already revoked/i, ar: 'هذا التفويض مُنهى بالفعل' },
+  // unified customer record (CRM Step 2). The specific "Duplicate customer
+  // key" sentence, which names the existing record, is built in translateError;
+  // this pattern is only the fallback when the message cannot be parsed.
+  {
+    re: /duplicate customer key/i,
+    ar: 'يوجد عميل آخر بنفس السجل التجاري أو الرقم الضريبي أو الجوال',
+    en: 'Another customer already has the same CR number, VAT number or mobile',
+  },
+  {
+    re: /customer already merged/i,
+    ar: 'هذا العميل دُمج في سجل آخر — استخدم السجل الباقي',
+    en: 'This customer was merged into another record — use the surviving record',
+  },
+  {
+    re: /requires a CR number or a VAT number/i,
+    ar: 'المنشأة تتطلب سجلاً تجارياً أو رقماً ضريبياً — أدخل أحدهما على الأقل',
+    en: 'A company needs a CR number or a VAT number — enter at least one',
+  },
+  {
+    re: /individual customer requires a mobile/i,
+    ar: 'الفرد يتطلب رقم جوال',
+    en: 'An individual needs a mobile number',
+  },
+  {
+    re: /mobile must be a Saudi mobile/i,
+    ar: 'رقم الجوال غير صحيح — مثال: 0501234567 أو +966501234567',
+    en: 'The mobile number is not valid — e.g. 0501234567 or +966501234567',
+  },
+  {
+    re: /backupRef/i,
+    ar: 'اكتب اسم ملف النسخة الاحتياطية (8 أحرف على الأقل) قبل الدمج',
+    en: 'Enter the backup file name (at least 8 characters) before merging',
+  },
+  {
+    re: /cannot also be merged into itself/i,
+    ar: 'لا يمكن دمج السجل الباقي في نفسه',
+    en: 'The surviving record cannot be merged into itself',
+  },
 ];
 
 // 403s that deserve a specific sentence instead of the generic "no permission".
 const FORBIDDEN_PATTERNS: Array<{ re: RegExp; ar: string; en: string }> = [
+  {
+    re: /customer merge is disabled/i,
+    ar: 'الدمج معطَّل حتى اعتماد قائمة المكررات من المالك',
+    en: 'Merging is disabled until the owner approves the list of duplicates',
+  },
   {
     re: /cost and margin fields/i,
     ar: 'لا يحق لدورك تحديد التكلفة أو الهامش أو مخطط التسعير — احذف هذه الحقول أو اطلب صلاحية «عرض التكاليف والهوامش»',
@@ -170,6 +213,20 @@ export function translateError(e: unknown, locale: Locale): string {
       return ar
         ? `البند الإلزامي «${checklistMiss[1]}» لم يُنجز بعد`
         : e.message;
+    // A refused duplicate key names the record that already has it.
+    const dup = e.message.match(
+      /^Duplicate customer key: (crNumber|vatNumber|mobile) already used by (\S+) \(([\s\S]*)\)$/,
+    );
+    if (dup) {
+      const field = {
+        crNumber: ar ? 'السجل التجاري' : 'CR number',
+        vatNumber: ar ? 'الرقم الضريبي' : 'VAT number',
+        mobile: ar ? 'الجوال' : 'mobile number',
+      }[dup[1] as 'crNumber' | 'vatNumber' | 'mobile'];
+      return ar
+        ? `يوجد عميل بنفس ${field}: ${dup[2]} — ${dup[3]}`
+        : `A customer with the same ${field} already exists: ${dup[2]} — ${dup[3]}`;
+    }
     for (const p of PATTERNS)
       if (p.re.test(e.message)) return ar ? p.ar : (p.en ?? e.message);
     if (e.status >= 500)

@@ -18,6 +18,7 @@ import { formatDate } from '@/lib/format';
 import { PageHeader, LoadError, Modal, Field, StatusBadge, useConfirm, Btn, Tabs, PageSkeleton } from '@/components/ui';
 import { AuditLogCard } from '@/components/audit-log';
 import { ApprovalMatrixCard } from '@/components/approval-matrix';
+import { CustomerMergeCard } from '@/components/customer-merge';
 
 interface RoleRow {
   id: string;
@@ -78,9 +79,10 @@ export default function AdminPage() {
   const orgManage = can('admin.org.manage');
   const auditRead = can('admin.audit.read');
   const approvalManage = can('admin.approval.manage');
+  const customerMerge = can('crm.customer.merge');
 
-  type AdminTab = 'users' | 'roles' | 'matrix' | 'org' | 'audit';
-  const ADMIN_TABS: AdminTab[] = ['users', 'roles', 'matrix', 'org', 'audit'];
+  type AdminTab = 'users' | 'roles' | 'matrix' | 'org' | 'audit' | 'merge';
+  const ADMIN_TABS: AdminTab[] = ['users', 'roles', 'matrix', 'org', 'audit', 'merge'];
   const [tab, setTabState] = useState<AdminTab>('users');
 
   // The five sections of the densest screen in the product used to live only
@@ -353,6 +355,7 @@ export default function AdminPage() {
           ...(approvalManage ? ['matrix' as const] : []),
           ...(orgManage ? ['org' as const] : []),
           ...(auditRead ? ['audit' as const] : []),
+          ...(customerMerge ? ['merge' as const] : []),
         ].map((k) => ({
           key: k,
           label: t(`adm.tab.${k}`),
@@ -362,7 +365,9 @@ export default function AdminPage() {
         onChange={(k) => setTab(k as AdminTab)}
       />
 
-      {tab === 'audit' ? (
+      {tab === 'merge' ? (
+        customerMerge ? <CustomerMergeCard /> : null
+      ) : tab === 'audit' ? (
         <AuditLogCard />
       ) : tab === 'matrix' ? (
         // The role list is already loaded here — passing it down keeps the

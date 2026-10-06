@@ -34,6 +34,13 @@ enum CustomerType {
   GOVERNMENT
 }
 
+/// CRM Phase 1 (Step 2): a customer is a business or a person. For a NEW record
+/// a COMPANY must carry a CR or VAT number and an INDIVIDUAL a mobile number.
+enum CustomerEntityKind {
+  COMPANY
+  INDIVIDUAL
+}
+
 enum LeadSource {
   WEBSITE
   REFERRAL
@@ -233,6 +240,10 @@ model Organization {
   requisitions        PurchaseRequisition[]
   projectCommitments  ProjectCommitment[]
   threeWayMatches     ThreeWayMatch[]
+  // CRM Phase 1 (Step 2)
+  customerContacts    CustomerContact[]
+  customerMergeLogs   CustomerMergeLog[]
+  orgSettings         OrgSetting[]
 
   @@index([parentOrganizationId])
 }
@@ -364,6 +375,18 @@ model Customer {
   creditTermsDays Int     @default(0)
   phone          String?
   email          String?
+  // CRM Phase 1 (Step 2) — unified customer record.
+  entityKind     CustomerEntityKind @default(COMPANY)
+  /// Canonical `+9665xxxxxxxx` (normalizeSaudiMobile). `phone` stays free text.
+  mobile         String?
+  /// nameAr after normalizeArabicName — what duplicate matching compares.
+  nameNormalized String?
+  /// Set on the record that was merged AWAY. The row is never deleted: its
+  /// CUS-xxxxx code stays reserved and old links keep resolving.
+  mergedIntoId   String?
+  mergedInto     Customer?  @relation("CustomerMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     Customer[] @relation("CustomerMerge")
+  mergedAt       DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -371,9 +394,71 @@ model Customer {
   opportunities  Opportunity[]
   contracts      Contract[]
   invoices       Invoice[]
+  contacts       CustomerContact[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
+  // Non-unique here on purpose: uniqueness is the PARTIAL indexes of migration
+  // 0023 (Prisma cannot express a WHERE), applied once duplicates are merged.
+  @@index([organizationId, crNumber])
+  @@index([organizationId, vatNumber])
+  @@index([organizationId, mobile])
+  @@index([organizationId, nameNormalized])
+  @@index([mergedIntoId])
+}
+
+/// People at a customer. A customer has any number; at most one is primary.
+model CustomerContact {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name           String
+  title          String?
+  phone          String?
+  mobile         String?
+  email          String?
+  isPrimary      Boolean  @default(false)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, customerId])
+}
+
+/// One row per customer merged away: what moved, and the full pre-merge
+/// snapshot of the merged record. There is no automatic un-merge — the way
+/// back is the database backup named in `backupRef`.
+model CustomerMergeLog {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  survivorId         String
+  mergedId           String
+  /// Rows moved per table, e.g. {"Lead":1,"Opportunity":2,"Contract":0,...}.
+  movedJson          Json
+  /// The merged customer, complete, as it was before the merge.
+  mergedSnapshotJson Json
+  /// File name of the backup the administrator took first (typed by them).
+  backupRef          String
+  performedById      String
+  performedAt        DateTime @default(now())
+
+  @@index([organizationId, survivorId])
+}
+
+/// Per-organization settings as key -> JSON value (first used by CRM Step 2:
+/// the similarity threshold and the merge on/off switch; Steps 4 and 5 add more).
+model OrgSetting {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  valueJson      Json
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, key])
 }
 
 model Lead {
@@ -581,6 +666,7 @@ model Contract {
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
+  @@index([customerId])
 }
 
 model ContractMilestone {
@@ -680,6 +766,7 @@ model Invoice {
   @@unique([organizationId, code])
   @@index([organizationId, status])
   @@index([creditedInvoiceId])
+  @@index([customerId])
 }
 
 model InvoiceLine {
@@ -1847,6 +1934,7 @@ enum AttachmentEntity {
   INVOICE
   PROJECT
   WORK_ORDER
+  CUSTOMER
 }
 
 model Attachment {

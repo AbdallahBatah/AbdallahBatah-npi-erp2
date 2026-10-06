@@ -14,7 +14,8 @@ export function setToken(token: string | null) {
 
 /** status 0 = network unreachable (fetch rejected before any HTTP response). */
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  /** `body` is the parsed JSON error response when there was one (e.g. a 409's `existing` record). */
+  constructor(public status: number, message: string, public body?: any) {
     super(message);
   }
 }
@@ -61,7 +62,7 @@ export async function apiFetch<T = any>(
     const message = Array.isArray(body?.message)
       ? body.message.join(', ')
       : body?.message ?? res.statusText;
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, body);
   }
   return body as T;
 }

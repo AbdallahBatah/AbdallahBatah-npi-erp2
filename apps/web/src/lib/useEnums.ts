@@ -11,6 +11,7 @@ export interface EnumOption {
 
 export interface EnumSets {
   customerTypes: EnumOption[];
+  customerEntityKinds: EnumOption[];
   leadSources: EnumOption[];
   leadStatuses: EnumOption[];
   opportunityStages: EnumOption[];

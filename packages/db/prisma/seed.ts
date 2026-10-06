@@ -16,7 +16,7 @@ const prisma = new PrismaClient();
 // Full permission surface for the current slice. Kept in sync with
 // packages/shared/src/permissions.ts (the API imports it from there).
 const ALL_PERMISSIONS = [
-  'crm.customer.read', 'crm.customer.write',
+  'crm.customer.read', 'crm.customer.write', 'crm.customer.merge',
   'crm.lead.read', 'crm.lead.write',
   'crm.opportunity.read', 'crm.opportunity.write',
   'commercial.item.read', 'commercial.item.write',
@@ -78,6 +78,8 @@ const EXECUTIVE_PERMISSIONS = [
     'finance.costs.view',
     'admin.audit.read',
     'admin.approval.manage',
+    // Step 2: merging duplicate customers is an executive / administrator act.
+    'crm.customer.merge',
   ]),
 ];
 
@@ -369,12 +371,45 @@ async function main() {
       nameAr: 'مصنع الرياض للصناعات',
       nameEn: 'Riyadh Industries Factory',
       customerType: 'CI' as CustomerType,
+      // CRM Step 2: the unified record's keys. nameNormalized is
+      // normalizeArabicName('مصنع الرياض للصناعات') — mirrored by migration 0022's SQL function.
+      entityKind: 'COMPANY',
       vatNumber: '310000000000003',
+      crNumber: '1010000001',
       creditTermsDays: 30,
       phone: '+966500000000',
+      mobile: '+966500000000',
+      nameNormalized: 'مصنع رياض للصناعات',
       email: 'procurement@riyadh-industries.sa',
     },
   });
+  // `update: {}` above never touches an existing row, so a database seeded
+  // before Step 2 would keep a CUS-00001 without the new keys. Fill them in —
+  // only where they are still empty, so a real edit is never overwritten.
+  await prisma.customer.updateMany({
+    where: { id: customer.id, crNumber: null },
+    data: { crNumber: '1010000001' },
+  });
+  await prisma.customer.updateMany({
+    where: { id: customer.id, mobile: null },
+    data: { mobile: '+966500000000' },
+  });
+  await prisma.customer.updateMany({
+    where: { id: customer.id, nameNormalized: null },
+    data: { nameNormalized: 'مصنع رياض للصناعات' },
+  });
+
+  // CRM Step 2 settings. `update: {}` — a value an administrator has set is kept.
+  for (const [key, value] of [
+    ['crm.customer.similarityThreshold', 0.8],
+    ['crm.customer.mergeEnabled', false],
+  ] as const) {
+    await prisma.orgSetting.upsert({
+      where: { organizationId_key: { organizationId: org.id, key } },
+      update: {},
+      create: { organizationId: org.id, key, valueJson: value },
+    });
+  }
 
   // SCM-04: default stock locations (site locations are created per project).
   const locations: Array<{ code: string; nameAr: string; nameEn: string; locationType: any }> = [

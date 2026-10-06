@@ -17,6 +17,12 @@ export const CUSTOMER_TYPES: EnumOption[] = [
   { value: 'GOVERNMENT', labelAr: 'حكومي', labelEn: 'Government' },
 ];
 
+/** CRM Phase 1 (Step 2): a customer is a business or a person — it decides which unique key is mandatory. */
+export const CUSTOMER_ENTITY_KINDS: EnumOption[] = [
+  { value: 'COMPANY', labelAr: 'منشأة', labelEn: 'Company' },
+  { value: 'INDIVIDUAL', labelAr: 'فرد', labelEn: 'Individual' },
+];
+
 export const LEAD_SOURCES: EnumOption[] = [
   { value: 'WEBSITE', labelAr: 'الموقع الإلكتروني', labelEn: 'Website' },
   { value: 'REFERRAL', labelAr: 'إحالة', labelEn: 'Referral' },

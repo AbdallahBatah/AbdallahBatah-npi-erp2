@@ -15,6 +15,7 @@ import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { NumberingService } from '../src/common/numbering.service';
 import { AuditService } from '../src/common/audit.service';
+import { OrgSettingsService } from '../src/common/org-settings.service';
 import { PostingService } from '../src/common/posting.service';
 import { TaxService } from '../src/common/tax.service';
 import { NotificationService } from '../src/common/notification.service';
@@ -22,6 +23,7 @@ import { ZatcaService } from '../src/modules/finance/zatca.service';
 import { InvoicesService } from '../src/modules/finance/invoices.service';
 import { ContractsService } from '../src/modules/commercial/contracts.service';
 import { CustomersService } from '../src/modules/crm/customers.service';
+import { CustomerContactsService } from '../src/modules/crm/customer-contacts.service';
 import { AttachmentsService } from '../src/modules/platform/attachments.service';
 import type { AuthUser } from '../src/common/auth-user';
 
@@ -35,7 +37,8 @@ const invoices = new InvoicesService(
   prisma, numbering, audit, posting, new TaxService(prisma), new ZatcaService(), notifications,
 );
 const contracts = new ContractsService(prisma, numbering, audit, notifications);
-const customers = new CustomersService(prisma, numbering, audit);
+const customers = new CustomersService(prisma, numbering, audit, new OrgSettingsService(prisma, audit));
+const customerContacts = new CustomerContactsService(prisma, audit);
 const attachments = new AttachmentsService(prisma, audit);
 
 /** Everything org B owns, for org A to fail to reach. */
@@ -159,10 +162,13 @@ beforeAll(async () => {
     },
   });
   B.userId = userB.id;
-  const USER_B = { userId: userB.id, organizationId: orgB.id } as unknown as AuthUser;
+  // `permissions` must exist since Step 1: contracts.get() reads it (canViewCosts).
+  const USER_B = { userId: userB.id, organizationId: orgB.id, permissions: [] } as unknown as AuthUser;
 
   const customerB = await customers.create(USER_B, {
     nameAr: 'عميل الجارة', nameEn: 'Neighbour Customer', customerType: 'CI',
+    // Step 2: a new company must carry a CR or VAT number.
+    crNumber: `7${suffix}`.slice(0, 10),
   } as never);
   B.customerId = customerB.id;
 
@@ -226,6 +232,10 @@ describe('a tenant cannot reach another tenant by id', () => {
     it('cannot read the invoice', () => must404('invoice.get', () => invoices.get(ATTACKER, B.invoiceId)));
     it('cannot read the contract', () => must404('contract.get', () => contracts.get(ATTACKER, B.contractId)));
     it('cannot read the customer', () => must404('customer.get', () => customers.get(ATTACKER, B.customerId)));
+    it('cannot open the customer overview page', () =>
+      must404('customer.overview', () => customers.overview(ATTACKER, B.customerId)));
+    it('cannot list the customer contacts', () =>
+      must404('customerContacts.list', () => customerContacts.list(ATTACKER, B.customerId)));
     it('cannot download the attachment', () =>
       must404('attachment.download', () => attachments.download(ATTACKER, B.attachmentId)));
   });
@@ -267,6 +277,18 @@ describe('a tenant cannot reach another tenant by id', () => {
       expect(invoiceRows.map((r: { id: string }) => r.id)).not.toContain(B.invoiceId);
       expect(contractRows.map((r: { id: string }) => r.id)).not.toContain(B.contractId);
       expect(customerRows.map((r: { id: string }) => r.id)).not.toContain(B.customerId);
+    });
+
+    it('similar-name search never reveals a neighbour customer, even for its exact name', async () => {
+      const hits = await customers.similar(ATTACKER, 'عميل الجارة');
+      expect(hits.map((h: { id: string }) => h.id)).not.toContain(B.customerId);
+      // ...and only ever returns rows of the attacker's own organization.
+      const own = await prisma.customer.findMany({
+        where: { organizationId: ATTACKER.organizationId },
+        select: { id: true },
+      });
+      const ownIds = new Set(own.map((c) => c.id));
+      for (const h of hits as Array<{ id: string }>) expect(ownIds.has(h.id)).toBe(true);
     });
 
     it('keeps the ledger apart', async () => {

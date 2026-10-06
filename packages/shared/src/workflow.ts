@@ -133,6 +133,9 @@ export const WF_EVENTS = {
   INVOICE_MATCHED: 'invoice.matched',
   INVOICE_APPROVED: 'invoice.approved',
   INVOICE_PAID: 'invoice.paid',
+  // CRM Phase 1 (Step 2): a duplicate customer was merged into the surviving
+  // record. Nothing subscribes yet; later steps (notifications, reports) may.
+  CUSTOMER_MERGED: 'customer.merged',
 } as const;
 
 export type WfEventCode = (typeof WF_EVENTS)[keyof typeof WF_EVENTS];
@@ -145,6 +148,7 @@ export const WF_EVENT_LABELS: Record<string, { ar: string; en: string }> = {
   'invoice.matched': { ar: 'طوبقت الفاتورة ثلاثياً', en: 'Invoice three-way matched' },
   'invoice.approved': { ar: 'اعتُمدت الفاتورة', en: 'Invoice approved' },
   'invoice.paid': { ar: 'سُددت الفاتورة', en: 'Invoice paid' },
+  'customer.merged': { ar: 'دُمج عميل مكرر في السجل الباقي', en: 'Duplicate customer merged' },
 };
 
 // ── retry policy ────────────────────────────────────────────────────────────
