@@ -342,6 +342,10 @@ model MemoryFact {
   searchText   String            @db.Text
   valueJson    Json?
   sourceType   MemorySourceType
+  // D-17 (T-29b): the NPI permission key whose holders may see this fact. Set on
+  // every fact derived from NPI data (the permission of its source); null =
+  // visible to everyone the scope already allows (chat and position facts).
+  sourcePermission String?
   confidence   Float             @default(1)
   useCount     Int               @default(0)
   lastUsedAt   DateTime?

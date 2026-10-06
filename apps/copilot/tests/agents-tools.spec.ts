@@ -15,12 +15,13 @@ function fakeNpi(overrides: Partial<FakeNpi> = {}): FakeNpi {
   };
 }
 
-function ctx(npi: FakeNpi, queryRaw: jest.Mock = jest.fn(async () => [])): ToolContext {
+function ctx(npi: FakeNpi, queryRaw: jest.Mock = jest.fn(async () => []), permissions: string[] = []): ToolContext {
   return {
     npi: npi as unknown as ToolContext['npi'],
     db: { $queryRaw: queryRaw } as unknown as ToolContext['db'],
     npiOrgId: 'org-1',
     positionId: 'pos-1',
+    permissions,
   };
 }
 
@@ -319,6 +320,20 @@ describe('memory_search', () => {
     expect(out.memoryNotes).toEqual([
       { id: 'fact-1', factAr: 'شروط سداد شركة النخيل 30 يوماً', sourceType: 'npi' },
     ]);
+  });
+
+  it("filters by the caller's permissions (D-17): they go into the query as parameters", async () => {
+    const queryRaw = jest.fn(async (..._args: unknown[]) => []);
+    await tool('memory_search').run({ query: 'شروط سداد النخيل' }, ctx(fakeNpi(), queryRaw, ['crm.customer.read']));
+    const sql = queryRaw.mock.calls[0][0] as { sql: string; values: unknown[] };
+    expect(sql.sql).toContain('"sourcePermission" IS NULL OR "sourcePermission" IN');
+    expect(sql.values).toContain('crm.customer.read');
+
+    queryRaw.mockClear();
+    await tool('memory_search').run({ query: 'شروط سداد النخيل' }, ctx(fakeNpi(), queryRaw, []));
+    const none = queryRaw.mock.calls[0][0] as { sql: string };
+    expect(none.sql).toContain('("sourcePermission" IS NULL)');
+    expect(none.sql).not.toContain('IN (');
   });
 
   it('does not touch the database for a query that normalizes to nothing', async () => {

@@ -103,7 +103,7 @@ describe('retrieveFacts', () => {
 
   it('finds a company fact and counts the use', async () => {
     const at = new Date('2026-09-27T10:00:00.000Z');
-    const hits = await retrieveFacts(db, { npiOrgId: orgId, positionId: null, query: 'شروط سداد النخيل' }, () => at);
+    const hits = await retrieveFacts(db, { npiOrgId: orgId, positionId: null, permissions: [], query: 'شروط سداد النخيل' }, () => at);
     expect(hits.map((h) => h.entityType)).toEqual(['customer']);
     const row = await db.memoryFact.findUniqueOrThrow({ where: { id: hits[0].id } });
     expect(row.useCount).toBe(1);
@@ -112,21 +112,43 @@ describe('retrieveFacts', () => {
 
   it('shows a position fact to its own position only', async () => {
     const query = 'مراجعة فواتير الموردين';
-    const own = await retrieveFacts(db, { npiOrgId: orgId, positionId, query });
-    const other = await retrieveFacts(db, { npiOrgId: orgId, positionId: otherPositionId, query });
-    const none = await retrieveFacts(db, { npiOrgId: orgId, positionId: null, query });
+    const own = await retrieveFacts(db, { npiOrgId: orgId, positionId, permissions: [], query });
+    const other = await retrieveFacts(db, { npiOrgId: orgId, positionId: otherPositionId, permissions: [], query });
+    const none = await retrieveFacts(db, { npiOrgId: orgId, positionId: null, permissions: [], query });
     expect(own).toHaveLength(1);
     expect(other).toHaveLength(0);
     expect(none).toHaveLength(0);
   });
 
   it('returns nothing for an unrelated question and counts nothing', async () => {
-    const hits = await retrieveFacts(db, { npiOrgId: orgId, positionId, query: 'حالة الطقس غداً في أبها' });
+    const hits = await retrieveFacts(db, { npiOrgId: orgId, positionId, permissions: [], query: 'حالة الطقس غداً في أبها' });
     expect(hits).toEqual([]);
   });
 
+  it('a fact without a source permission (a chat fact) is found by a caller with no permissions at all (D-17)', async () => {
+    const saved = await saveFact(
+      db,
+      fact({ factAr: 'مورد الأفق للكابلات يمنح خصماً على الدفعات الكبيرة', entityType: 'vendor', sourceType: 'chat' }),
+    );
+    expect(saved).toMatchObject({ saved: true, created: true });
+    const row = await db.memoryFact.findFirstOrThrow({ where: { npiOrgId: orgId, entityType: 'vendor' } });
+    expect(row.sourcePermission).toBeNull();
+    const hits = await retrieveFacts(db, { npiOrgId: orgId, positionId: null, permissions: [], query: 'خصم مورد الأفق للكابلات', countUse: false });
+    expect(hits.map((h) => h.id)).toEqual([row.id]);
+  });
+
+  it('saveFact writes the source permission it is given, and null by default (D-17)', async () => {
+    await saveFact(db, fact({ factAr: 'شروط عقد مؤسسة السدير الخاصة بالدفعة المقدمة', entityType: 'customer', sourcePermission: 'commercial.contract.read' }));
+    const row = await db.memoryFact.findFirstOrThrow({ where: { npiOrgId: orgId, factAr: { contains: 'مؤسسة السدير' } } });
+    expect(row.sourcePermission).toBe('commercial.contract.read');
+    const without = await retrieveFacts(db, { npiOrgId: orgId, positionId: null, permissions: [], query: 'شروط عقد مؤسسة السدير', countUse: false });
+    expect(without).toEqual([]);
+    const withIt = await retrieveFacts(db, { npiOrgId: orgId, positionId: null, permissions: ['commercial.contract.read'], query: 'شروط عقد مؤسسة السدير', countUse: false });
+    expect(withIt.map((h) => h.id)).toEqual([row.id]);
+  });
+
   it('never crosses organizations', async () => {
-    const hits = await retrieveFacts(db, { npiOrgId: `nobody-${runId}`, positionId: null, query: 'شروط سداد النخيل' });
+    const hits = await retrieveFacts(db, { npiOrgId: `nobody-${runId}`, positionId: null, permissions: [], query: 'شروط سداد النخيل' });
     expect(hits).toEqual([]);
   });
 });

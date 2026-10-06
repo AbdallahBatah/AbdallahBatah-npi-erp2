@@ -37,7 +37,7 @@ import { NpiError } from '../src/npi/errors';
 import { readLogin } from '../src/npi/responses';
 import { deriveNpiFacts } from '../src/memory/extract-npi';
 import { buildSearchText } from '../src/memory/fts';
-import type { DerivedFact, NpiMemorySnapshot } from '../src/memory/npi-facts';
+import { PERMISSION_OF_SOURCE, type DerivedFact, type NpiMemorySnapshot } from '../src/memory/npi-facts';
 import { loadNpiMemorySnapshot } from '../src/memory/npi-snapshot';
 import { retrieveFacts } from '../src/memory/retrieve';
 import { normalizeArabic } from '../src/text/normalize';
@@ -156,6 +156,8 @@ async function storeDerived(db: Db, npiOrgId: string, facts: DerivedFact[]): Pro
         searchText: buildSearchText(fact.factAr),
         valueJson: fact.valueJson as never,
         sourceType: 'npi',
+        // D-17: the eval's rows mirror what `refreshNpiMemory` writes.
+        sourcePermission: fact.sourcePermission,
         confidence: fact.confidence,
       },
     });
@@ -205,7 +207,14 @@ async function main(): Promise<void> {
 
   const outcomes: RetrievalOutcome[] = [];
   for (const q of questions) {
-    const hits = await retrieveFacts(db, { npiOrgId: EVAL_ORG, positionId: null, query: q.questionAr, countUse: false });
+    // The eval measures recall with every source readable (D-17): the caller holds all four permissions.
+    const hits = await retrieveFacts(db, {
+      npiOrgId: EVAL_ORG,
+      positionId: null,
+      query: q.questionAr,
+      permissions: Object.values(PERMISSION_OF_SOURCE),
+      countUse: false,
+    });
     const keys = hits.map((h) => keyOf(h.valueJson));
     outcomes.push({
       id: q.id,

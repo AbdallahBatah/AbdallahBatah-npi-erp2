@@ -1,6 +1,6 @@
 // Reads facts from the firm's memory for one chat turn and records that they
-// were used. Visibility (organization, and position for position-scoped
-// facts) is enforced inside `searchFacts`.
+// were used. Visibility (organization, position for position-scoped facts,
+// and the permission of a fact's NPI source) is enforced inside `searchFacts`.
 import type { PrismaClient } from '../generated/prisma';
 import { searchFacts, type FactHit } from './fts';
 
@@ -10,6 +10,9 @@ export interface RetrieveParams {
   npiOrgId: string;
   positionId: string | null;
   query: string;
+  /** The caller's NPI permissions (D-17): facts derived from NPI data are
+   *  returned only to a caller who holds the permission of their source. */
+  permissions: readonly string[];
   /** Default 3: memory is a hint for the turn, not a document dump. */
   limit?: number;
   /** Hits scoring below this are dropped. Default 0.35. */
@@ -32,6 +35,7 @@ export async function retrieveFacts(
     npiOrgId: params.npiOrgId,
     positionId: params.positionId,
     query: params.query,
+    permissions: params.permissions,
     limit: params.limit ?? DEFAULT_LIMIT,
   });
   const kept = hits.filter((hit) => hit.score >= (params.minScore ?? DEFAULT_MIN_SCORE));

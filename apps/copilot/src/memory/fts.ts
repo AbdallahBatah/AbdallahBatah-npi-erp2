@@ -20,6 +20,11 @@ export interface FactSearchParams {
   /** The caller's own position, if any. Position-scoped facts for a
    * *different* position (or for no position at all) are never returned. */
   positionId?: string | null;
+  /** The caller's NPI permissions (D-17). A fact with a `sourcePermission` is
+   * returned only when the caller holds it; a fact without one needs none. An
+   * empty list is valid and sees only the facts without a source permission.
+   * Required on purpose: every caller must say who is asking. */
+  permissions: readonly string[];
   /** Default 5, max 20. */
   limit?: number;
 }
@@ -32,6 +37,8 @@ export interface FactHit {
   npiEntityId: string | null;
   valueJson: unknown;
   sourceType: 'npi' | 'chat';
+  /** The NPI permission whose holders may see the fact; null = no extra rule. */
+  sourcePermission: string | null;
   confidence: number;
   score: number;
 }
@@ -59,6 +66,7 @@ interface FactSearchRow {
   npiEntityId: string | null;
   valueJson: unknown;
   sourceType: string;
+  sourcePermission: string | null;
   confidence: number;
   score: number;
 }
@@ -82,9 +90,18 @@ export async function searchFacts(
   // Position-scope facts are visible only to the matching positionId — a
   // null/undefined positionId on the caller never matches a position-scope
   // row, even if that row's positionId happens to also be null.
-  const visibility = positionId
+  const scopeRule = positionId
     ? Prisma.sql`("scope" = 'company' OR ("scope" = 'position' AND "positionId" = ${positionId}))`
     : Prisma.sql`("scope" = 'company')`;
+  // D-17: a fact derived from NPI data also needs the permission of its source.
+  // An empty permission list never becomes `IN ()` (a syntax error): only the
+  // facts without a source permission pass.
+  const permissions = [...new Set(params.permissions)];
+  const permissionRule =
+    permissions.length > 0
+      ? Prisma.sql`("sourcePermission" IS NULL OR "sourcePermission" IN (${Prisma.join(permissions)}))`
+      : Prisma.sql`("sourcePermission" IS NULL)`;
+  const visibility = Prisma.sql`(${scopeRule} AND ${permissionRule})`;
 
   const rows = await db.$queryRaw<FactSearchRow[]>(Prisma.sql`
     SELECT
@@ -95,6 +112,7 @@ export async function searchFacts(
       "npiEntityId",
       "valueJson",
       "sourceType"::text AS "sourceType",
+      "sourcePermission",
       "confidence",
       (
         ts_rank("fts", plainto_tsquery('simple', ${q}))
@@ -119,6 +137,7 @@ export async function searchFacts(
     npiEntityId: row.npiEntityId,
     valueJson: row.valueJson,
     sourceType: row.sourceType as FactHit['sourceType'],
+    sourcePermission: row.sourcePermission,
     confidence: row.confidence,
     score: Number(row.score),
   }));

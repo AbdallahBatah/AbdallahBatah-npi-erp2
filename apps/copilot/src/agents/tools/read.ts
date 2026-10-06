@@ -32,6 +32,8 @@ export interface ToolContext {
   db: FactSearchDb;
   npiOrgId: string;
   positionId: string | null;
+  /** The caller's NPI permissions: memory facts are filtered by them (D-17). */
+  permissions: readonly string[];
 }
 
 export interface MemoryNote {
@@ -354,6 +356,7 @@ const memorySearch: ReadTool = {
       npiOrgId: ctx.npiOrgId,
       positionId: ctx.positionId,
       query,
+      permissions: ctx.permissions,
       limit: 5,
     });
     return {

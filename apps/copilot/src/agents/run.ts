@@ -286,6 +286,7 @@ async function chat(
     db: deps.db,
     npiOrgId: user.npiOrgId,
     positionId: user.positionId,
+    permissions: user.permissions,
   };
 
   const pseudo = new Pseudonymizer(await deps.dictionary(), await loadRedactionState(deps, conversationId, now));
@@ -293,7 +294,7 @@ async function chat(
   const remembered: MemoryNote[] = (
     await retrieveFacts(
       deps.db,
-      { npiOrgId: user.npiOrgId, positionId: user.positionId, query: text, countUse: false },
+      { npiOrgId: user.npiOrgId, positionId: user.positionId, query: text, permissions: user.permissions, countUse: false },
       () => now,
     )
   ).map((hit) => ({ id: hit.id, factAr: hit.factAr, sourceType: hit.sourceType }));

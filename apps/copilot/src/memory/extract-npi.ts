@@ -11,6 +11,10 @@
 // same row is updated (its id, `useCount` and `lastUsedAt` survive); no row:
 // created; a row of a refreshed kind whose key no longer derives (a closed
 // project, a cancelled contract) is deleted. Chat facts are never touched.
+//
+// D-17 (T-29b): every derived fact carries `sourcePermission` — the NPI
+// permission of its source — and retrieval filters by the caller's permissions.
+// A refresh also repairs a row whose column differs from the derived value.
 import type { PrismaClient } from '../generated/prisma';
 import type { FlowType } from '../agents/router';
 import { isHrEvaluationRequest } from '../agents/hr-guard';
@@ -19,6 +23,7 @@ import { buildSearchText } from './fts';
 import {
   KINDS_OF_SOURCE,
   NPI_MEMORY_SOURCES,
+  PERMISSION_OF_KIND,
   type DerivedFact,
   type NpiContractRow,
   type NpiCustomerRow,
@@ -114,7 +119,10 @@ const DAY_MS = 86_400_000;
 
 // ─── Derivation ──────────────────────────────────────────────────────────────
 
-function customerFact(customer: NpiCustomerRow): DerivedFact | null {
+/** A derived fact before `deriveNpiFacts` stamps the permission of its source. */
+type UnstampedFact = Omit<DerivedFact, 'sourcePermission'>;
+
+function customerFact(customer: NpiCustomerRow): UnstampedFact | null {
   if (!(customer.creditTermsDays > 0)) return null;
   if (!filled(customer.nameAr) || !filled(customer.code)) return null;
   const key = `customer_credit_terms:${customer.id}`;
@@ -135,7 +143,7 @@ function customerFact(customer: NpiCustomerRow): DerivedFact | null {
   };
 }
 
-function contractFact(contract: NpiContractRow): DerivedFact | null {
+function contractFact(contract: NpiContractRow): UnstampedFact | null {
   if (contract.status === 'CANCELLED') return null;
   if (!filled(contract.code) || !filled(contract.customer.nameAr) || !filled(contract.customer.code)) return null;
   const key = `contract_payment_terms:${contract.id}`;
@@ -179,7 +187,7 @@ function leadDays(po: NpiPurchaseOrderRow): number | null {
   return Math.max(0, Math.round((Math.min(...received) - start) / DAY_MS));
 }
 
-function vendorLeadTimeFacts(orders: NpiPurchaseOrderRow[]): DerivedFact[] {
+function vendorLeadTimeFacts(orders: NpiPurchaseOrderRow[]): UnstampedFact[] {
   const byVendor = new Map<string, { vendor: NpiPurchaseOrderRow['vendor']; days: number[]; codes: string[] }>();
   for (const po of orders) {
     const days = leadDays(po);
@@ -190,7 +198,7 @@ function vendorLeadTimeFacts(orders: NpiPurchaseOrderRow[]): DerivedFact[] {
     byVendor.set(po.vendor.id, entry);
   }
 
-  const facts: DerivedFact[] = [];
+  const facts: UnstampedFact[] = [];
   for (const [vendorId, { vendor, days, codes }] of byVendor) {
     if (!filled(vendor.nameAr) || !filled(vendor.code)) continue;
     const n = days.length;
@@ -218,7 +226,7 @@ function vendorLeadTimeFacts(orders: NpiPurchaseOrderRow[]): DerivedFact[] {
   return facts;
 }
 
-function recurringItemFacts(orders: NpiPurchaseOrderRow[]): DerivedFact[] {
+function recurringItemFacts(orders: NpiPurchaseOrderRow[]): UnstampedFact[] {
   interface Seen {
     nameAr: string;
     sku: string;
@@ -256,7 +264,7 @@ function recurringItemFacts(orders: NpiPurchaseOrderRow[]): DerivedFact[] {
     }
   }
 
-  const facts: DerivedFact[] = [];
+  const facts: UnstampedFact[] = [];
   for (const [itemId, seen] of items) {
     if (seen.poIds.size < 2) continue;
     // Name, SKU and unit are read off the line of the most recent order.
@@ -296,7 +304,7 @@ function isLater(a: NpiPurchaseOrderRow, b: NpiPurchaseOrderRow): boolean {
   return a.code > b.code;
 }
 
-function projectFact(project: NpiProjectRow): DerivedFact | null {
+function projectFact(project: NpiProjectRow): UnstampedFact | null {
   if (project.stage === 'CLOSED') return null;
   if (!filled(project.nameAr) || !filled(project.code) || !filled(project.contract.customer.nameAr)) return null;
   const key = `active_project:${project.id}`;
@@ -332,7 +340,7 @@ function projectFact(project: NpiProjectRow): DerivedFact | null {
  */
 export function deriveNpiFacts(snapshot: NpiMemorySnapshot): DerivedFact[] {
   const live = snapshot.purchaseOrders.filter((po) => po.status !== 'CANCELLED');
-  const all: Array<DerivedFact | null> = [
+  const all: Array<UnstampedFact | null> = [
     ...snapshot.customers.map(customerFact),
     ...snapshot.contracts.map(contractFact),
     ...vendorLeadTimeFacts(live),
@@ -341,7 +349,9 @@ export function deriveNpiFacts(snapshot: NpiMemorySnapshot): DerivedFact[] {
   ];
   const byKey = new Map<string, DerivedFact>();
   for (const fact of all) {
-    if (fact !== null && !byKey.has(fact.key)) byKey.set(fact.key, fact);
+    if (fact !== null && !byKey.has(fact.key)) {
+      byKey.set(fact.key, { ...fact, sourcePermission: PERMISSION_OF_KIND[fact.kind] });
+    }
   }
   return [...byKey.values()].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
@@ -454,15 +464,15 @@ export async function refreshNpiMemory(
 
   const rows = await db.memoryFact.findMany({
     where: { npiOrgId, sourceType: 'npi' },
-    select: { id: true, factAr: true, valueJson: true },
+    select: { id: true, factAr: true, valueJson: true, sourcePermission: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   });
-  const byKey = new Map<string, Array<{ id: string; factAr: string; valueJson: unknown }>>();
+  const byKey = new Map<string, Array<{ id: string; factAr: string; valueJson: unknown; sourcePermission: string | null }>>();
   for (const row of rows) {
     const key = keyOf(row.valueJson);
     if (key === null) continue; // an `npi` row this module did not write
     const list = byKey.get(key) ?? [];
-    list.push({ id: row.id, factAr: row.factAr, valueJson: row.valueJson });
+    list.push({ id: row.id, factAr: row.factAr, valueJson: row.valueJson, sourcePermission: row.sourcePermission });
     byKey.set(key, list);
   }
 
@@ -490,18 +500,29 @@ export async function refreshNpiMemory(
           searchText,
           valueJson: fact.valueJson as never,
           sourceType: 'npi',
+          sourcePermission: fact.sourcePermission,
           confidence: fact.confidence,
         },
         select: { id: true },
       });
       created += 1;
-    } else if (existing.factAr === factAr && sameJson(existing.valueJson, fact.valueJson)) {
+    } else if (
+      existing.factAr === factAr &&
+      existing.sourcePermission === fact.sourcePermission && // a row written before 0008 is repaired here
+      sameJson(existing.valueJson, fact.valueJson)
+    ) {
       unchanged += 1;
       unchangedIds.push(existing.id);
     } else {
       await db.memoryFact.update({
         where: { id: existing.id },
-        data: { factAr, searchText, valueJson: fact.valueJson as never, confidence: fact.confidence },
+        data: {
+          factAr,
+          searchText,
+          valueJson: fact.valueJson as never,
+          sourcePermission: fact.sourcePermission,
+          confidence: fact.confidence,
+        },
         select: { id: true },
       });
       updated += 1;

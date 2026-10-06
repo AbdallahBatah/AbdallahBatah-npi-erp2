@@ -9,6 +9,7 @@ import {
   shouldRefreshNpiMemory,
 } from '../src/memory/extract-npi';
 import {
+  PERMISSION_OF_KIND,
   PERMISSION_OF_SOURCE,
   type NpiContractRow,
   type NpiCustomerRow,
@@ -1366,17 +1367,74 @@ describe('refreshNpiMemory (real database)', () => {
     wire.purchaseOrderList = [];
     await refreshNpiMemory({ db, npi: fakeNpi(wire) }, { npiOrgId, permissions: ALL_PERMISSIONS });
 
-    const hits = await retrieveFacts(db, { npiOrgId, positionId: null, query: 'شروط سداد مصنع الرياض للصناعات', countUse: false });
+    const hits = await retrieveFacts(db, { npiOrgId, positionId: null, permissions: ALL_PERMISSIONS, query: 'شروط سداد مصنع الرياض للصناعات', countUse: false });
     expect(hits.map((h) => (h.valueJson as { key: string }).key)).toEqual(['customer_credit_terms:cus_00001']);
     expect(hits[0].sourceType).toBe('npi');
     expect(hits[0].scope).toBe('company');
     expect(hits[0].factAr).toContain('30 يوماً');
   });
 
+  it("D-17: every npi row carries the permission of its kind's source", async () => {
+    const npiOrgId = newOrg('perm-column');
+    await refreshNpiMemory({ db, npi: fakeNpi(refreshWire()) }, { npiOrgId, permissions: ALL_PERMISSIONS });
+    const rows = await npiRows(npiOrgId);
+    expect(rows).toHaveLength(REFRESH_FACTS);
+    for (const row of rows) {
+      const kind = (row.valueJson as { kind: keyof typeof PERMISSION_OF_KIND }).kind;
+      expect(row.sourcePermission).toBe(PERMISSION_OF_KIND[kind]);
+    }
+    expect(new Set(rows.map((r) => r.sourcePermission))).toEqual(new Set(ALL_PERMISSIONS));
+  });
+
+  it('D-17: a row written before 0008 (sourcePermission null) is repaired as an update, then stays unchanged', async () => {
+    const npiOrgId = newOrg('perm-repair');
+    const npi = fakeNpi(refreshWire());
+    await refreshNpiMemory({ db, npi }, { npiOrgId, permissions: ALL_PERMISSIONS });
+    const before = await npiRows(npiOrgId);
+    await db.memoryFact.updateMany({ where: { npiOrgId, sourceType: 'npi' }, data: { sourcePermission: null } });
+    const one = before.find((r) => (r.valueJson as { kind: string }).kind === 'contract_payment_terms');
+    if (!one) throw new Error('no contract fact');
+    await db.memoryFact.updateMany({ where: { npiOrgId, id: { not: one.id } }, data: { sourcePermission: 'x.stale' } });
+
+    const repaired = await refreshNpiMemory({ db, npi }, { npiOrgId, permissions: ALL_PERMISSIONS });
+    expect(repaired).toMatchObject({ derived: REFRESH_FACTS, created: 0, updated: REFRESH_FACTS, unchanged: 0, removed: 0 });
+    const after = await npiRows(npiOrgId);
+    expect(after.map((r) => r.id)).toEqual(before.map((r) => r.id)); // same rows, repaired in place
+    for (const row of after) {
+      expect(row.sourcePermission).toBe(PERMISSION_OF_KIND[(row.valueJson as { kind: keyof typeof PERMISSION_OF_KIND }).kind]);
+    }
+    const again = await refreshNpiMemory({ db, npi }, { npiOrgId, permissions: ALL_PERMISSIONS });
+    expect(again).toMatchObject({ created: 0, updated: 0, unchanged: REFRESH_FACTS });
+  });
+
+  it('D-17: a site-engineer-like caller does not get the customer credit terms from memory; a customer-reader does; the vendor fact reaches both', async () => {
+    const npiOrgId = newOrg('perm-retrieve');
+    await refreshNpiMemory({ db, npi: fakeNpi(refreshWire()) }, { npiOrgId, permissions: ALL_PERMISSIONS });
+    const engineer = ['scm.procurement.read', 'projects.project.read'];
+    const customerReader = ['crm.customer.read'];
+    const keys = async (permissions: string[], query: string) =>
+      (await retrieveFacts(db, { npiOrgId, positionId: null, permissions, query, countUse: false })).map(
+        (h) => (h.valueJson as { key: string }).key,
+      );
+
+    const creditQuestion = 'شروط سداد مصنع الرياض للصناعات';
+    // the engineer may still get the project facts about the same name: only the credit terms are gated
+    expect((await keys(engineer, creditQuestion)).filter((k) => k.startsWith('customer_credit_terms:'))).toEqual([]);
+    expect(await keys(customerReader, creditQuestion)).toContain('customer_credit_terms:cus_00001');
+
+    const contractQuestion = 'شروط عقد مصنع الرياض للصناعات الدفعة المقدمة';
+    expect((await keys(engineer, contractQuestion)).filter((k) => k.startsWith('contract_payment_terms:'))).toEqual([]);
+    expect((await keys(ALL_PERMISSIONS, contractQuestion)).filter((k) => k.startsWith('contract_payment_terms:'))).toHaveLength(1);
+
+    const vendorQuestion = 'مدة توريد المورد شركة الخليج للألواح الشمسية';
+    expect(await keys(engineer, vendorQuestion)).toContain('vendor_lead_time:ven_00001');
+    expect(await keys(['scm.procurement.read'], vendorQuestion)).toContain('vendor_lead_time:ven_00001');
+  });
+
   it('the full demo-sized set answers «شروط سداد {customer}» with the customer fact among the hits', async () => {
     const npiOrgId = newOrg('retrieve-full');
     await refreshNpiMemory({ db, npi: fakeNpi(refreshWire()) }, { npiOrgId, permissions: ALL_PERMISSIONS });
-    const hits = await retrieveFacts(db, { npiOrgId, positionId: null, query: 'شروط سداد مصنع الرياض للصناعات', countUse: false });
+    const hits = await retrieveFacts(db, { npiOrgId, positionId: null, permissions: ALL_PERMISSIONS, query: 'شروط سداد مصنع الرياض للصناعات', countUse: false });
     const keys = hits.map((h) => (h.valueJson as { key: string }).key);
     expect(keys).toContain('customer_credit_terms:cus_00001');
   });

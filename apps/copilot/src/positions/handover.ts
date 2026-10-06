@@ -176,15 +176,20 @@ export async function buildHandoverBody(
 
   // ── memory (the copilot's own database) ──────────────────────────────────
   const visible = [{ scope: 'company' as const }, { scope: 'position' as const, positionId: position.id }];
+  // D-17: a fact derived from NPI data is shown only to a caller who holds the
+  // permission of its source; a fact without one (routines, chat) needs none.
+  const permitted = {
+    AND: [{ OR: [{ sourcePermission: null }, { sourcePermission: { in: [...caller.permissions] } }] }],
+  };
 
   const vendorFacts = (await db.memoryFact.findMany({
-    where: { npiOrgId: caller.npiOrgId, entityType: 'vendor', OR: visible },
+    where: { npiOrgId: caller.npiOrgId, entityType: 'vendor', OR: visible, ...permitted },
     select: FACT_SELECT,
     orderBy: [...FACT_ORDER],
     take: MAX_VENDOR_FACT_ROWS,
   })) as FactRow[];
   const recurringItems = (await db.memoryFact.findMany({
-    where: { npiOrgId: caller.npiOrgId, OR: visible, valueJson: { path: ['kind'], equals: 'recurring_item' } },
+    where: { npiOrgId: caller.npiOrgId, OR: visible, valueJson: { path: ['kind'], equals: 'recurring_item' }, ...permitted },
     select: FACT_SELECT,
     orderBy: [...FACT_ORDER],
     take: MAX_VENDOR_FACT_ROWS,
@@ -200,6 +205,7 @@ export async function buildHandoverBody(
       npiOrgId: caller.npiOrgId,
       scope: 'company',
       OR: COMPANY_FACT_KINDS.map((kind) => ({ valueJson: { path: ['kind'], equals: kind } })),
+      ...permitted,
     },
     select: FACT_SELECT,
     orderBy: [...FACT_ORDER],

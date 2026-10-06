@@ -56,6 +56,18 @@ export const PERMISSION_OF_SOURCE: Record<NpiMemorySource, string> = {
   projects: 'projects.project.read',
 };
 
+/** D-17 (T-29b): the permission each kind of derived fact carries
+ *  (`MemoryFact.sourcePermission`) — the permission of the source that feeds
+ *  the kind. Computed from the two maps above, never retyped. Migration
+ *  0008's backfill spells the same map out in SQL: keep them in step. */
+export const PERMISSION_OF_KIND: Record<NpiFactKind, string> = (() => {
+  const map = {} as Record<NpiFactKind, string>;
+  for (const source of NPI_MEMORY_SOURCES) {
+    for (const kind of KINDS_OF_SOURCE[source]) map[kind] = PERMISSION_OF_SOURCE[source];
+  }
+  return map;
+})();
+
 // ─── Snapshot rows: exactly the fields the derivation reads ─────────────────
 // Dates are ISO strings as NPI serializes them; amounts are numbers (NPI sends
 // Prisma Decimals as strings — the readers parse them).
@@ -164,6 +176,9 @@ export interface DerivedFact {
   valueJson: { kind: NpiFactKind; key: string } & Record<string, unknown>;
   /** 0..1 — how far the sentence is a plain reading of the data. */
   confidence: number;
+  /** D-17: the NPI permission of the fact's source (`PERMISSION_OF_KIND[kind]`);
+   *  stored as `MemoryFact.sourcePermission`, checked at retrieval. */
+  sourcePermission: string;
 }
 
 export interface RefreshOutcome {

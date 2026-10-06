@@ -230,6 +230,7 @@ interface FakeFact {
   factAr: string;
   valueJson: unknown;
   sourceType: 'npi' | 'chat';
+  sourcePermission: string | null;
   useCount: number;
   updatedAt: Date;
 }
@@ -246,20 +247,26 @@ function fact(o: Partial<FakeFact> & { factAr: string }): FakeFact {
     npiEntityId: null,
     valueJson: null,
     sourceType: 'chat',
+    sourcePermission: null,
     useCount: 0,
     updatedAt: new Date('2026-09-01T00:00:00.000Z'),
     ...o,
   };
 }
 
-/** Just enough of Prisma's `where` for the four reads `buildHandoverBody` makes. */
+/** Just enough of Prisma's `where` for the four reads `buildHandoverBody` makes
+ *  (`OR`, `AND`, `valueJson.path`, `{ in: [...] }` and plain equality). */
 function matches(row: Record<string, unknown>, where: Record<string, unknown>): boolean {
   return Object.entries(where).every(([key, value]) => {
     if (key === 'OR') return (value as Record<string, unknown>[]).some((sub) => matches(row, sub));
+    if (key === 'AND') return (value as Record<string, unknown>[]).every((sub) => matches(row, sub));
     if (key === 'valueJson') {
       const { path: p, equals } = value as { path: string[]; equals: unknown };
       const json = row.valueJson as Record<string, unknown> | null;
       return json !== null && typeof json === 'object' && json[p[0]] === equals;
+    }
+    if (value !== null && typeof value === 'object' && 'in' in value) {
+      return (value as { in: unknown[] }).in.includes(row[key]);
     }
     return row[key] === value;
   });
@@ -735,6 +742,57 @@ describe('buildHandoverBody: routines and company facts', () => {
     expect(texts).not.toContain('مدة التوريد.');
     expect(texts).not.toContain('كلام محادثة عن عميل.');
     expect(texts).not.toContain('من منصب.');
+  });
+
+  it('D-17: a company fact whose source permission the caller lacks is left out (contract terms need commercial.contract.read)', async () => {
+    const facts = [
+      fact({
+        factAr: 'شروط عقد CTR-00008.',
+        entityType: 'customer',
+        sourceType: 'npi',
+        sourcePermission: 'commercial.contract.read',
+        valueJson: { kind: 'contract_payment_terms', key: 'contract_payment_terms:c8' },
+      }),
+      fact({
+        factAr: 'أجل سداد عميل.',
+        entityType: 'customer',
+        sourceType: 'npi',
+        sourcePermission: 'crm.customer.read',
+        valueJson: { kind: 'customer_credit_terms', key: 'customer_credit_terms:u1' },
+      }),
+      fact({
+        factAr: 'مشروع بلا صلاحية مصدر.',
+        entityType: 'project',
+        sourceType: 'npi',
+        valueJson: { kind: 'active_project', key: 'active_project:p1' },
+      }),
+    ];
+    const withoutContract = await build(fakeNpi(), facts, { ...ADMIN, permissions: [...ALL_PERMISSIONS, 'crm.customer.read'] });
+    expect(withoutContract.companyFacts.map((f) => f.factAr).sort()).toEqual(['أجل سداد عميل.', 'مشروع بلا صلاحية مصدر.'].sort());
+
+    const none = await build(fakeNpi(), facts, { ...ADMIN, permissions: [] });
+    expect(none.companyFacts.map((f) => f.factAr)).toEqual(['مشروع بلا صلاحية مصدر.']);
+
+    const withContract = await build(fakeNpi(), facts, { ...ADMIN, permissions: [...ALL_PERMISSIONS, 'commercial.contract.read'] });
+    expect(withContract.companyFacts.map((f) => f.factAr)).toContain('شروط عقد CTR-00008.');
+  });
+
+  it('D-17: the vendor read is filtered the same way (a vendor lead-time fact needs scm.procurement.read; a chat fact needs nothing)', async () => {
+    const facts = [
+      fact({
+        factAr: 'مدة توريد المورد.',
+        entityType: 'vendor',
+        sourceType: 'npi',
+        sourcePermission: 'scm.procurement.read',
+        valueJson: { kind: 'vendor_lead_time', key: 'vendor_lead_time:v1', vendorId: 'ven_1' },
+      }),
+      fact({ factAr: 'ملاحظة محادثة عن المورد.', entityType: 'vendor' }),
+    ];
+    const sentences = (body: HandoverBody) => body.vendors.flatMap((v) => v.factsAr);
+    const lacking = await build(fakeNpi(), facts, { ...ADMIN, permissions: [] });
+    expect(sentences(lacking)).toEqual(['ملاحظة محادثة عن المورد.']);
+    const holding = await build(fakeNpi(), facts, { ...ADMIN, permissions: ['scm.procurement.read'] });
+    expect(sentences(holding).sort()).toEqual(['ملاحظة محادثة عن المورد.', 'مدة توريد المورد.'].sort());
   });
 });
 

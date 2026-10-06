@@ -27,6 +27,9 @@ export interface NewFact {
   sourceType: MemorySourceType;
   /** 0..1 */
   confidence: number;
+  /** D-17: the NPI permission whose holders may see the fact; default null
+   *  (chat and position facts carry none). */
+  sourcePermission?: string | null;
 }
 
 export type SaveResult =
@@ -83,6 +86,7 @@ export async function saveFact(db: MemoryStoreDb, fact: NewFact): Promise<SaveRe
       searchText,
       valueJson: fact.valueJson === undefined ? undefined : (fact.valueJson as never),
       sourceType: fact.sourceType,
+      sourcePermission: fact.sourcePermission ?? null,
       confidence: fact.confidence,
     },
     select: { id: true },
