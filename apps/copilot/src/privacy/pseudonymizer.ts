@@ -556,8 +556,27 @@ function isLearnablePersonPart(part: string): boolean {
  *  length of the attached prefix, or null. */
 function attachedGivenNamePrefix(word: string): number | null {
   if (word.length < 4) return null;
-  if ((word.startsWith('و') || word.startsWith('ف')) && GIVEN_NAMES_AR.has(word.slice(1))) return 1;
+  if ((word.startsWith('و') || word.startsWith('ف')) && isTriggerGivenName(word.slice(1))) return 1;
   return null;
+}
+
+/** A given name that may OPEN a heuristic person capture (rule F). «علي»
+ *  normalizes to the same string as the preposition «على», so without this
+ *  guard «وافقنا على الجدول الزمني» became «وافقنا ⟦شخص_1⟧» (T-32 probe):
+ *  a function word never opens a capture, whatever it looks like. It can
+ *  still be a name after an honorific (rule E, see `captureNameSpan`). */
+function isTriggerGivenName(word: string): boolean {
+  return GIVEN_NAMES_AR.has(word) && !FUNCTION_WORDS.has(word);
+}
+
+/** The original text between two adjacent words is exactly the dot of an
+ *  abbreviated honorific («م.», «د.», «أ.»): not a span boundary. Without
+ *  this, «م. سلطان» never captured the name (T-32 probe), because the dot
+ *  that normalization blanks still sat in the gap. */
+function gapIsAbbreviationDot(text: string, map: number[], prev: Word, next: Word): boolean {
+  const prevEnd = map[prev.end - 1] + 1;
+  const nextStart = map[next.start];
+  return nextStart > prevEnd && /^\.\s*$/.test(text.slice(prevEnd, nextStart));
 }
 
 function isNameLikeWord(idx: number, words: Word[]): boolean {
@@ -863,9 +882,12 @@ export class Pseudonymizer {
   ): boolean {
     if (STOPWORDS.has(word.text)) return true;
     if (/^[0-9]+$/.test(word.text)) return true;
+    return this.isClaimedWord(text, word, map, claimed);
+  }
+
+  private isClaimedWord(text: string, word: Word, map: number[], claimed: ClaimedRanges): boolean {
     const span = originalSpanForNormalizedRange(text, map, word.start, word.end);
-    if (claimed.overlaps(span.start, span.end)) return true;
-    return false;
+    return claimed.overlaps(span.start, span.end);
   }
 
   /**
@@ -892,8 +914,16 @@ export class Pseudonymizer {
       j = startIdx + 1;
     }
     while (counted < maxCounted && j < words.length) {
-      if (j > 0 && gapHasBoundary(text, map, words[j - 1], words[j])) break;
-      if (this.isBlockedForHeuristic(text, words[j], map, claimed)) break;
+      // The word right after an honorific (rule E): the honorific's own
+      // abbreviation dot is not a boundary, and a given name that happens to
+      // double as a function word («علي»/«على») is still a name here.
+      const firstAfterHonorific = alreadyCounted === 0 && j === startIdx;
+      if (j > 0 && gapHasBoundary(text, map, words[j - 1], words[j])) {
+        if (!(firstAfterHonorific && gapIsAbbreviationDot(text, map, words[j - 1], words[j]))) break;
+      }
+      if (this.isBlockedForHeuristic(text, words[j], map, claimed)) {
+        if (!(firstAfterHonorific && GIVEN_NAMES_AR.has(words[j].text) && !this.isClaimedWord(text, words[j], map, claimed))) break;
+      }
       if (COMMON_VERBS.has(words[j].text)) break;
       // The first word after an honorific may be a name this module has
       // never seen; every later word has to look like part of a name.
@@ -1002,7 +1032,7 @@ export class Pseudonymizer {
         continue;
       }
 
-      const attached = GIVEN_NAMES_AR.has(wtext) ? 0 : attachedGivenNamePrefix(wtext);
+      const attached = isTriggerGivenName(wtext) ? 0 : attachedGivenNamePrefix(wtext);
       if (attached !== null && isNameLikeContinuation(k + 1, words)) {
         const cap = this.captureNameSpan(text, words, map, claimed, k, 1, 5);
         if (cap.counted >= 2 && cap.indices.length > 0) {

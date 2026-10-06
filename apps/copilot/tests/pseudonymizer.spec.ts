@@ -652,3 +652,33 @@ describe('Pseudonymizer — values masked in a tool result', () => {
     expect(restored.redact('اتصل على الفجر للتوريدات اليوم')).toBe('اتصل على ⟦مورد_1⟧ اليوم');
   });
 });
+
+// Added in review (T-32, the 100-sentence eval and the reviewer's probe):
+// an abbreviated honorific still opens a capture, and the preposition «على»
+// never does, however much it looks like the given name «علي».
+describe('Pseudonymizer — T-32 review additions', () => {
+  it.each([
+    ['م. سلطان سيستلم الشحنة غداً', /^م\. ⟦شخص_1⟧ سيستلم الشحنة غداً$/],
+    ['د. وليد سيحضر الاجتماع', /^د\. ⟦شخص_1⟧ سيحضر الاجتماع$/],
+    ['أ. نورة أرسلت الفاتورة', /^أ\. ⟦شخص_1⟧ أرسلت الفاتورة$/],
+  ])('captures the name after an abbreviated honorific: %s', (sentence, expected) => {
+    expect(new Pseudonymizer([]).redact(sentence)).toMatch(expected);
+  });
+
+  it.each([
+    'وافقنا على الجدول الزمني الجديد',
+    'الرد على الاستفسار تأخر',
+    'على الطلب توقيع المدير',
+    'وعلى الجدول ملاحظة واحدة',
+  ])('leaves the preposition «على» and what follows it alone: %s', (sentence) => {
+    expect(new Pseudonymizer([]).redact(sentence)).toBe(sentence);
+  });
+
+  it('still captures «علي» as a name after an honorific', () => {
+    expect(new Pseudonymizer([]).redact('السيد علي الغامدي وافق على التمديد')).toBe('السيد ⟦شخص_1⟧ وافق على التمديد');
+  });
+
+  it('accepted trade-off: a bare «علي …» without a title is not captured (it reads as «على …»)', () => {
+    expect(new Pseudonymizer([]).redact('علي الغامدي وافق على التمديد')).toBe('علي الغامدي وافق على التمديد');
+  });
+});

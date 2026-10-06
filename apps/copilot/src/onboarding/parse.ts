@@ -19,7 +19,7 @@ import { PROFILE_KEYS, TERM_KEYS, type ProfileKey, type ProfilePack } from './pr
 
 export interface ParseDeps {
   llm: { complete(req: RedactedRequest, ctx: LlmContext): Promise<ModelResponse> };
-  pseudonymizer: { redact(text: string): string };
+  pseudonymizer: { redact(text: string): RedactedText };
 }
 
 export interface ParseInput {
@@ -300,7 +300,7 @@ async function callModel(deps: ParseDeps, input: ParseInput, ctx: LlmContext, ou
         tier: 'economy',
         purpose: 'setup_parse',
         system: staticPrompt(system),
-        messages: [{ role: 'user', content: deps.pseudonymizer.redact(outboundText) as unknown as RedactedText }],
+        messages: [{ role: 'user', content: deps.pseudonymizer.redact(outboundText) }],
         maxTokens: 1024,
       },
       ctx,

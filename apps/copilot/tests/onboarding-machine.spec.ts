@@ -34,6 +34,7 @@ import {
   type SetupDeps,
 } from '../src/onboarding/service';
 import { loadPrompt } from '../src/prompts/load';
+import { staticPrompt } from '../src/privacy/pseudonymizer';
 import { t } from '../src/i18n/ar';
 // Same relative import `tests/onboarding-apply.spec.ts` uses.
 import { PERMISSION_CATALOG } from '../../../packages/shared/src/permissions';
@@ -502,7 +503,7 @@ function countingLlm(): { llm: ParseDeps['llm']; calls: number[] } {
   };
 }
 
-const identityPseudonymizer: ParseDeps['pseudonymizer'] = { redact: (s) => s };
+const identityPseudonymizer: ParseDeps['pseudonymizer'] = { redact: (s) => staticPrompt(s) };
 const ctx = { npiOrgId: 'org1', npiUserId: 'user1' };
 const baseState: SetupState = { step: 1, answers: {}, completedSteps: [] };
 
@@ -624,7 +625,7 @@ describe('parseAnswer — model path', () => {
       },
     };
     const fakePseudonymizer: ParseDeps['pseudonymizer'] = {
-      redact: (s) => s.replace('شركة النخيل', '⟦عميل_1⟧'),
+      redact: (s) => staticPrompt(s.replace('شركة النخيل', '⟦عميل_1⟧')),
     };
     const text = 'خلّوا سقف شركة النخيل ١٠ آلاف ريال';
     await parseAnswer({ llm: spyLlm, pseudonymizer: fakePseudonymizer }, { step: 3, text, pack: pack(), current: baseState }, ctx);
@@ -672,7 +673,7 @@ describe('prompts/setup-parse.md', () => {
         return { text: '{"profileKey":"om_provider"}', model: 'fake', inputTokens: 0, outputTokens: 0, latencyMs: 0 } as never;
       },
     };
-    const deps: ParseDeps = { llm: llm as never, pseudonymizer: { redact: (x) => x } };
+    const deps: ParseDeps = { llm: llm as never, pseudonymizer: { redact: (x) => staticPrompt(x) } };
     await parseAnswer(deps, { step: 1, text: 'نبيع الكهرباء للعميل بعقد طويل', pack: null, current: initialState() }, { npiOrgId: 'o', npiUserId: 'u' } as never);
     for (const key of ['epc', 'om_provider', 'ppa_operator', 'general_contracting', 'equipment_trading', 'engineering_consulting']) {
       expect(seen[0]).toContain(`"${key}"`);
@@ -1022,7 +1023,7 @@ describe('parseAnswer — a matching word inside a longer sentence is not enough
     const pack = loadProfilePack('epc');
     let state = initialState();
     if (step !== 1) state = applyAnswer(state, 1, { step: 1, profileKey: 'epc' });
-    const deps: ParseDeps = { llm, pseudonymizer: { redact: (x) => x } };
+    const deps: ParseDeps = { llm, pseudonymizer: { redact: (x) => staticPrompt(x) } };
     return parseAnswer(deps, { step, text, pack: step === 1 ? null : pack, current: state }, { npiOrgId: 'o', npiUserId: 'u' } as never).then(
       (outcome) => ({ outcome, modelCalls: calls.length }),
     );
@@ -1088,7 +1089,7 @@ describe('parseAnswer — several profiles named, placeholders in model output (
         return { text: reply, tokensIn: 1, tokensOut: 1 } as unknown as Awaited<ReturnType<ParseDeps['llm']['complete']>>;
       },
     };
-    return { calls, deps: { llm, pseudonymizer: { redact: (s: string) => s } } };
+    return { calls, deps: { llm, pseudonymizer: { redact: (s: string) => staticPrompt(s) } } };
   }
   const fresh = (): SetupState => initialState();
 
@@ -1135,7 +1136,7 @@ describe('parseAnswer — hedged multi-profile sentences still reach the model (
           return { text: '{"step":1,"profileKey":"epc"}', tokensIn: 1, tokensOut: 1 } as unknown as Awaited<ReturnType<ParseDeps['llm']['complete']>>;
         },
       };
-      const out = await parseAnswer({ llm, pseudonymizer: { redact: (s: string) => s } }, { step: 1, text, pack: null, current: initialState() }, ctx);
+      const out = await parseAnswer({ llm, pseudonymizer: { redact: (s: string) => staticPrompt(s) } }, { step: 1, text, pack: null, current: initialState() }, ctx);
       expect(calls).toBe(1);
       expect(out).toMatchObject({ kind: 'answer', source: 'model' });
     },

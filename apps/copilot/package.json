@@ -20,7 +20,8 @@
     "gen-types": "node scripts/gen-npi-types.mjs",
     "eval:extract": "dotenv -e ../../.env -- ts-node --transpile-only -P tsconfig.jest.json scripts/eval-extract.ts",
     "eval:extract:photos": "ts-node --transpile-only -P tsconfig.jest.json scripts/eval-extract-photos.ts",
-    "eval:memory": "dotenv -e ../../.env -- ts-node --transpile-only -P tsconfig.jest.json scripts/eval-memory.ts"
+    "eval:memory": "dotenv -e ../../.env -- ts-node --transpile-only -P tsconfig.jest.json scripts/eval-memory.ts",
+    "eval:pii": "dotenv -e ../../.env -- ts-node --transpile-only -P tsconfig.jest.json scripts/eval-pii.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",
