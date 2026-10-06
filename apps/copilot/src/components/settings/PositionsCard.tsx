@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { t } from '@/i18n/ar';
 import { formatDate } from '@/i18n/format';
 import { Card } from '@/components/ui/Card';
@@ -14,12 +15,15 @@ export interface PositionsCardProps {
    *  `firm_config` exists (there is nothing to rerun *from*). */
   canRerun: boolean;
   onRerun: () => void;
+  /** The NPI administrator permission (`admin.user.manage`) is held: each
+   *  position links to the reassignment form («تعيين شاغل جديد», T-30). */
+  isAdmin: boolean;
 }
 
 /** `settings.positions`: always rendered (02 §7, T-19 spec), independent of
  *  whether `firm_config` exists — positions/assignments are copilot-only
  *  rows that can outlive a reset configuration. */
-export function PositionsCard({ positions, canRerun, onRerun }: PositionsCardProps) {
+export function PositionsCard({ positions, canRerun, onRerun, isAdmin }: PositionsCardProps) {
   return (
     <Card title={t('settings.positions')}>
       <div className="flex flex-col gap-3">
@@ -55,6 +59,15 @@ export function PositionsCard({ positions, canRerun, onRerun }: PositionsCardPro
                     ))}
                   </div>
                 )}
+                {isAdmin ? (
+                  <Link
+                    href={`/handover?positionId=${encodeURIComponent(position.id)}`}
+                    data-testid="settings-position-reassign"
+                    className="inline-flex min-h-11 w-fit items-center text-sm font-semibold text-brand-600 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:min-h-0"
+                  >
+                    {t('settings.positions.reassign')}
+                  </Link>
+                ) : null}
               </li>
             ))}
           </ul>

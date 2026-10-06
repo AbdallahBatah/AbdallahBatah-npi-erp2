@@ -133,7 +133,7 @@ export function SettingsPanel() {
         </>
       )}
 
-      <PositionsCard positions={positions} canRerun={config !== null} onRerun={() => handleRerun(2)} />
+      <PositionsCard positions={positions} canRerun={config !== null} onRerun={() => handleRerun(2)} isAdmin />
       <BaselinesCard baselines={baselines} onSave={handleSaveBaseline} />
     </div>
   );

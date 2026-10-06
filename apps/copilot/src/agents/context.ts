@@ -12,7 +12,9 @@ import { latestNpiFactAt, refreshNpiMemory, shouldRefreshNpiMemory, SOURCES_OF_F
 import { createAnthropicProvider } from '../llm/providers/anthropic';
 import { createNpiClient } from '../npi/client';
 import { FLOW_REQUIRED_MODULE, FLOW_TYPES } from '../onboarding/profile.schema';
+import { handoverGuidanceAr } from '../positions/handover';
 import { loadPersona } from '../positions/persona';
+import { activeHandoverFor } from '../positions/reassign';
 import { buildDictionary } from '../privacy/dictionary';
 import type { FlowType } from './router';
 import type { TurnDeps, TurnUser } from './run';
@@ -89,6 +91,26 @@ async function refreshNpiMemoryAfterExecution(
   }
 }
 
+// ─── Handover guidance (T-30, F-13, 01 §3 scenario 5: «إرشاد 7 أيام») ────────
+// For seven days after a user took over a position, their chat's system
+// prompt carries an excerpt of the handover document (open NPI tasks, vendors,
+// routines, the narrative). Best effort: a failure here never fails the turn.
+
+async function handoverGuidanceIfRecent(
+  db: Parameters<typeof activeHandoverFor>[0],
+  user: { npiUserId: string; positionId: string | null },
+  now: Date,
+): Promise<string | null> {
+  if (user.positionId === null) return null;
+  try {
+    const body = await activeHandoverFor(db, { npiUserId: user.npiUserId, positionId: user.positionId }, now);
+    return body ? handoverGuidanceAr(body) : null;
+  } catch (err) {
+    console.warn('[copilot] handover guidance unavailable', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 /** The flows this firm switched on (D-T26-9): a flow is offered when the module
  *  it belongs to is among the firm's visible modules. A firm that has not run
  *  the setup yet has no row, and sees all five. */
@@ -119,6 +141,11 @@ export async function buildTurn(session: TurnSession): Promise<{ deps: TurnDeps;
     personaAr: position?.personaAr ?? loadPersona(session.user.roleKey),
     permissions: session.user.permissions,
     orgNameAr: session.user.orgNameAr,
+    handoverAr: await handoverGuidanceIfRecent(
+      db,
+      { npiUserId: session.user.npiUserId, positionId: session.user.positionId },
+      new Date(),
+    ),
   };
 
   const firm = await db.firmConfig.findUnique({ where: { npiOrgId: user.npiOrgId }, select: { visibleModulesJson: true } });

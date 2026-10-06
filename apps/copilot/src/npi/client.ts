@@ -182,6 +182,19 @@ export function createNpiClient(options: CreateNpiClientOptions) {
       return request(ctx, 'GET', '/inbox/count');
     },
 
+    /**
+     * The control view of the approval matrix: every chain the organization
+     * opened, filterable by status — NPI's `ApprovalsController.history`
+     * (`@Get('history')`, `admin.approval.manage`). Read-only; the copilot
+     * uses it (T-30) to list what is waiting on a *position's* role when a
+     * holder changes, since `/inbox/tasks` only ever shows the caller's own.
+     */
+    listApprovalHistory(query?: { status?: string; documentType?: string; take?: number; skip?: number }) {
+      return request(ctx, 'GET', '/approvals/history', {
+        query: { status: query?.status, documentType: query?.documentType, take: query?.take, skip: query?.skip },
+      });
+    },
+
     listDepartments() {
       return request(ctx, 'GET', '/admin/departments');
     },

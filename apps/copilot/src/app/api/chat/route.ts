@@ -16,6 +16,7 @@ import { getDb } from '@/db';
 import { t } from '@/i18n/ar';
 import { NpiError } from '@/npi/errors';
 import { FLOW_TYPES } from '@/onboarding/profile.schema';
+import { conversationReadableBy } from '@/positions/reassign';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -124,8 +125,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const requested = request.nextUrl.searchParams.get('conversationId');
   const owner = { npiUserId: session.user.npiUserId, npiOrgId: session.user.npiOrgId };
 
+  // A named conversation is the owner's — or, for an administrator, a
+  // predecessor's in the position they left (BR-07, T-30 D-T30-5); anyone else
+  // gets the same 404 as a conversation that does not exist. Without an id,
+  // only the caller's own latest conversation is ever returned.
   const conversation = requested
-    ? await db.conversation.findFirst({ where: { id: requested, ...owner }, select: { id: true } })
+    ? await conversationReadableBy(
+        db,
+        { npiOrgId: session.user.npiOrgId, npiUserId: session.user.npiUserId, permissions: session.user.permissions },
+        requested,
+      )
     : await db.conversation.findFirst({ where: owner, orderBy: { updatedAt: 'desc' }, select: { id: true } });
 
   if (!conversation) {

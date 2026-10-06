@@ -56,6 +56,9 @@ export interface TurnUser {
   permissions: string[];
   /** The firm's Arabic name, so the model does not take it for the customer. */
   orgNameAr: string | null;
+  /** T-30 (F-13): the handover excerpt carried for the first seven days after
+   *  this user took over the position (`handoverGuidanceAr`), or null. */
+  handoverAr?: string | null;
 }
 
 export interface TurnInput {
@@ -209,12 +212,17 @@ function buildSystem(user: TurnUser, pseudo: Pseudonymizer, remembered: MemoryNo
   const memory =
     remembered.length > 0 ? remembered.map((note) => `- ${note.factAr}`).join('\n') : 'لا شيء مسجَّل يخص هذا السؤال.';
 
+  // The handover section exists only while the guidance window is open
+  // (src/agents/context.ts decides); names in it are redacted like the rest.
+  const handover = user.handoverAr ? [staticPrompt('\n\n## Handover\n'), pseudo.redact(user.handoverAr)] : [];
+
   return joinRedacted([
     staticPrompt(loadPrompt('assistant.md')),
     staticPrompt(`\n\n## Today\n${today} (Asia/Riyadh)\n\n## Position\n`),
     pseudo.redact(position),
     staticPrompt('\n\n## Memory\n'),
     pseudo.redact(memory),
+    ...handover,
   ]);
 }
 

@@ -628,6 +628,26 @@ describe('runTurn — continuity', () => {
     expect(llm.requests[0].system).toContain('أنت وكيل المبيعات.');
     expect(llm.requests[0].system).not.toContain('سارة');
   });
+
+  it('carries the handover excerpt, redacted, when the guidance window is open (T-30)', async () => {
+    const { deps, llm } = setup(() => answer('تم'));
+    const handoverAr = `استلم هذا الموظف منصب المبيعات في 2026-09-27 خلفاً لـ سارة القحطاني.\nالموردون: ${CUSTOMER}`;
+    await runTurn(deps, { ...USER, handoverAr }, { text: 'مرحبا' });
+    const system = llm.requests[0].system;
+    // assistant.md describes the section under the same heading; the data
+    // section is the second occurrence.
+    expect(system.split('## Handover')).toHaveLength(3);
+    expect(system).toContain('استلم هذا الموظف منصب المبيعات في 2026-09-27');
+    expect(system).not.toContain('سارة القحطاني');
+    expect(system).not.toContain(CUSTOMER);
+  });
+
+  it('has no handover section when the user has no recent handover', async () => {
+    const { deps, llm } = setup(() => answer('تم'));
+    await runTurn(deps, { ...USER, handoverAr: null }, { text: 'مرحبا' });
+    expect(llm.requests[0].system.split('## Handover')).toHaveLength(2);
+    expect(llm.requests[0].system).not.toContain('استلم هذا الموظف');
+  });
 });
 
 // ─── Learning from the chat ─────────────────────────────────────────────────
