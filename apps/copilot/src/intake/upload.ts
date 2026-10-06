@@ -184,7 +184,7 @@ export interface DocumentRow {
 export interface IntakeDb {
   document: {
     findUnique(args: {
-      where: { npiOrgId_sha256: { npiOrgId: string; sha256: string } };
+      where: { npiOrgId_npiUserId_sha256: { npiOrgId: string; npiUserId: string; sha256: string } };
     }): Promise<DocumentRow | null>;
     findFirst(args: { where: { id: string; npiOrgId: string; npiUserId: string } }): Promise<DocumentRow | null>;
     create(args: {
@@ -300,8 +300,12 @@ export async function uploadDocument(
   if (nameVerdict.confidential) return refuse('confidential', nameVerdict.matched);
 
   const sha256 = sha256Hex(bytes);
+  // D-T31-11: deduplicated per user within the organization. Every later read
+  // of a document (the chat turn, the consent, the document page) is by owner,
+  // so a colleague's identical upload must become a row of their own — it
+  // shares the content-addressed storage path below, so the bytes are kept once.
   const existing = await deps.db.document.findUnique({
-    where: { npiOrgId_sha256: { npiOrgId: caller.npiOrgId, sha256 } },
+    where: { npiOrgId_npiUserId_sha256: { npiOrgId: caller.npiOrgId, npiUserId: caller.npiUserId, sha256 } },
   });
   if (existing) {
     return { status: 'existing', document: await summarizeDocument(deps.storage, existing) };
@@ -385,7 +389,7 @@ export async function uploadDocument(
   } catch (err) {
     if (isUniqueViolation(err)) {
       const race = await deps.db.document.findUnique({
-        where: { npiOrgId_sha256: { npiOrgId: caller.npiOrgId, sha256 } },
+        where: { npiOrgId_npiUserId_sha256: { npiOrgId: caller.npiOrgId, npiUserId: caller.npiUserId, sha256 } },
       });
       if (race) return { status: 'existing', document: await summarizeDocument(deps.storage, race) };
     }

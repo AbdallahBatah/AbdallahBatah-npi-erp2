@@ -235,7 +235,11 @@ model Document {
   consentEvents ConsentEvent[]
   intakeJobs    IntakeJob[]
 
-  @@unique([npiOrgId, sha256])
+  // D-T31-11: identical bytes are deduplicated per USER within the organization.
+  // An org-wide key (T-21) handed a second employee the first uploader's row,
+  // which the chat then refused as not theirs (`runTurn` looks a document up by
+  // owner, and so do consent and the document page).
+  @@unique([npiOrgId, npiUserId, sha256])
   @@index([npiUserId])
   @@map("documents")
 }

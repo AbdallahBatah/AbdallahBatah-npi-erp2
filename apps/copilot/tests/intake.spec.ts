@@ -345,8 +345,8 @@ function createFakeDb() {
   const intakeDb: IntakeDb = {
     document: {
       async findUnique({ where }) {
-        const key = where.npiOrgId_sha256;
-        return rows.find((r) => r.npiOrgId === key.npiOrgId && r.sha256 === key.sha256) ?? null;
+        const key = where.npiOrgId_npiUserId_sha256;
+        return rows.find((r) => r.npiOrgId === key.npiOrgId && r.npiUserId === key.npiUserId && r.sha256 === key.sha256) ?? null;
       },
       async findFirst({ where }) {
         return (
@@ -356,7 +356,8 @@ function createFakeDb() {
       },
       async create({ data }) {
         createCalls += 1;
-        const exists = rows.find((r) => r.npiOrgId === data.npiOrgId && r.sha256 === data.sha256);
+        // D-T31-11: the unique key is (npiOrgId, npiUserId, sha256).
+        const exists = rows.find((r) => r.npiOrgId === data.npiOrgId && r.npiUserId === data.npiUserId && r.sha256 === data.sha256);
         if (exists) throw { code: 'P2002' };
         const now = new Date();
         const row: DocumentRow = {
@@ -573,7 +574,7 @@ describe('uploadDocument', () => {
     expect(invalid).toEqual({ status: 'refused', reason: 'pdf_invalid', detail: 'invalid' });
   });
 
-  it('returns existing on a second upload of identical bytes by a different user of the same org', async () => {
+  it('returns existing on a second upload of identical bytes by the same user, with no second write', async () => {
     const { db } = createFakeDb();
     const { storage, writes } = createFakeStorage();
     const bytes = jpegBytes();
@@ -582,13 +583,36 @@ describe('uploadDocument', () => {
     expect(first.status).toBe('created');
     const writesAfterFirst = writes.length;
 
+    const second = await uploadDocument({ db, storage }, CALLER, { fileName: 'b.jpg', bytes });
+
+    expect(second.status).toBe('existing');
+    if (second.status === 'existing' && first.status === 'created') expect(second.document.id).toBe(first.document.id);
+    expect(writes.length).toBe(writesAfterFirst); // no second write
+  });
+
+  // D-T31-11 (T-31): a colleague's identical upload is a row of THEIR own. The
+  // org-wide dedupe of T-21 handed them the first uploader's row, which every
+  // later read (the chat turn, the consent, the document page) refused as not
+  // theirs. The bytes still live once: the storage path is content-addressed.
+  it('creates a row of their own on a second upload of identical bytes by a different user of the same org', async () => {
+    const { db, rows } = createFakeDb();
+    const { storage } = createFakeStorage();
+    const bytes = jpegBytes();
+
+    const first = await uploadDocument({ db, storage }, CALLER, { fileName: 'a.jpg', bytes });
+    expect(first.status).toBe('created');
+
     const second = await uploadDocument({ db, storage }, { npiOrgId: 'org1', npiUserId: 'user2' }, {
       fileName: 'b.jpg',
       bytes,
     });
 
-    expect(second.status).toBe('existing');
-    expect(writes.length).toBe(writesAfterFirst); // no second write
+    expect(second.status).toBe('created');
+    if (second.status === 'created' && first.status === 'created') {
+      expect(second.document.id).not.toBe(first.document.id);
+      expect(rows.find((r) => r.id === second.document.id)?.npiUserId).toBe('user2');
+      expect(rows.find((r) => r.id === second.document.id)?.storagePath).toBe(rows.find((r) => r.id === first.document.id)?.storagePath);
+    }
   });
 
   it('re-reads and returns existing when create() races with a concurrent insert (P2002)', async () => {
