@@ -20,12 +20,13 @@ const ALL_PERMISSIONS = [
   'crm.lead.read', 'crm.lead.write',
   'crm.opportunity.read', 'crm.opportunity.write',
   'commercial.item.read', 'commercial.item.write',
-  'commercial.proposal.read', 'commercial.proposal.write',
+  'commercial.proposal.read', 'commercial.proposal.write', 'commercial.proposal.approve',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.costs.view',
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
-  'projects.project.read', 'projects.project.write',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
+  'projects.project.read', 'projects.project.write', 'projects.project.approve',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
   'assets.serialunit.read',
   'fsm.workorder.read', 'fsm.workorder.write',
   'admin.org.manage', 'admin.user.manage', 'admin.audit.read', 'admin.approval.manage',
@@ -41,6 +42,7 @@ const SALES_PERMISSIONS = [
   'commercial.proposal.read', 'commercial.proposal.write',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.costs.view',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
@@ -48,16 +50,18 @@ const SALES_PERMISSIONS = [
 const ACCOUNTANT_PERMISSIONS = [
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
+  'finance.costs.view',
   'crm.customer.read',
   'commercial.contract.read', 'commercial.proposal.read', 'commercial.item.read',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
 // مدير المشاريع: التنفيذ والتوريد كاملاً + قراءة العقود والتشغيل والفوترة
 const PM_PERMISSIONS = [
-  'projects.project.read', 'projects.project.write',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
+  'projects.project.read', 'projects.project.write', 'projects.project.approve',
+  'finance.costs.view',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
   'assets.serialunit.read',
   'commercial.contract.read', 'commercial.item.read',
   'crm.customer.read',
@@ -66,7 +70,19 @@ const PM_PERMISSIONS = [
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
-// مهندس الموقع: أوامر العمل والأصول والمخزون — بلا مال ولا عقود
+// الإدارة العليا: كل مفاتيح العرض + كل مفاتيح الاعتماد + التكاليف والهوامش
+// + سجل التدقيق + ضبط مصفوفة الاعتماد. لا مفاتيح كتابة ولا إدارة نظام.
+const EXECUTIVE_PERMISSIONS = [
+  ...new Set([
+    ...ALL_PERMISSIONS.filter((k) => k.endsWith('.read') || k.endsWith('.approve')),
+    'finance.costs.view',
+    'admin.audit.read',
+    'admin.approval.manage',
+  ]),
+];
+
+// مهندس الموقع (ميداني): أوامر العمل والأصول والمخزون — بلا مال ولا عقود،
+// بلا تكاليف (finance.costs.view) وبلا اعتماد.
 const SITE_ENGINEER_PERMISSIONS = [
   'fsm.workorder.read', 'fsm.workorder.write',
   'assets.serialunit.read',
@@ -124,6 +140,7 @@ async function main() {
     { key: 'accountant', nameAr: 'محاسب', nameEn: 'Accountant', permissions: ACCOUNTANT_PERMISSIONS },
     { key: 'pm', nameAr: 'مدير مشاريع', nameEn: 'Project Manager', permissions: PM_PERMISSIONS },
     { key: 'site_engineer', nameAr: 'مهندس موقع', nameEn: 'Site Engineer', permissions: SITE_ENGINEER_PERMISSIONS },
+    { key: 'executive', nameAr: 'الإدارة العليا', nameEn: 'Executive management', permissions: EXECUTIVE_PERMISSIONS },
   ];
   const extraRoles: Record<string, string> = {};
   for (const rd of roleDefs) {
@@ -138,6 +155,7 @@ async function main() {
     { email: 'accountant@npi.sa', pass: 'Acc@12345', nameAr: 'أمين الحسابات', nameEn: 'Chief Accountant', role: 'accountant' },
     { email: 'pm@npi.sa', pass: 'Pm@123456', nameAr: 'مدير المشاريع', nameEn: 'Projects Manager', role: 'pm' },
     { email: 'engineer@npi.sa', pass: 'Eng@12345', nameAr: 'مهندس الموقع', nameEn: 'Site Engineer', role: 'site_engineer' },
+    { email: 'ceo@npi.sa', pass: 'Ceo@12345', nameAr: 'الرئيس التنفيذي', nameEn: 'Chief Executive', role: 'executive' },
   ];
   for (const ud of userDefs) {
     await prisma.user.upsert({
@@ -629,8 +647,8 @@ async function main() {
         { from: 'DRAFT', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'رفع للاعتماد', nameEn: 'Submit for approval', permission: 'scm.requisition.write', condition: 'estimatedTotal > 0', requiresApproval: true },
         { from: 'RETURNED', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'إعادة الرفع', nameEn: 'Resubmit', permission: 'scm.requisition.write', condition: 'estimatedTotal > 0', requiresApproval: true },
         { from: 'DRAFT', to: 'CANCELLED', action: 'CANCEL', nameAr: 'إلغاء', nameEn: 'Cancel', permission: 'scm.requisition.write' },
-        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'scm.procurement.write', emits: 'pr.approved' },
-        { from: 'PENDING_APPROVAL', to: 'REJECTED', action: 'REJECT', nameAr: 'رفض', nameEn: 'Reject', permission: 'scm.procurement.write' },
+        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'scm.procurement.approve', emits: 'pr.approved' },
+        { from: 'PENDING_APPROVAL', to: 'REJECTED', action: 'REJECT', nameAr: 'رفض', nameEn: 'Reject', permission: 'scm.procurement.approve' },
         { from: 'PENDING_APPROVAL', to: 'RETURNED', action: 'RETURN', nameAr: 'إعادة لمقدّم الطلب', nameEn: 'Return to requester', permission: 'scm.procurement.write' },
         { from: 'APPROVED', to: 'CONVERTED', action: 'CONVERT', nameAr: 'تحويل لأمر شراء', nameEn: 'Convert to purchase order', permission: 'scm.procurement.write' },
       ],
@@ -653,8 +671,8 @@ async function main() {
       transitions: [
         { from: 'DRAFT', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'رفع للاعتماد', nameEn: 'Submit for approval', permission: 'scm.procurement.write', condition: 'total > 0', requiresApproval: true },
         { from: 'DRAFT', to: 'CANCELLED', action: 'CANCEL', nameAr: 'إلغاء', nameEn: 'Cancel', permission: 'scm.procurement.write' },
-        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'scm.procurement.write', emits: 'po.approved' },
-        { from: 'PENDING_APPROVAL', to: 'CANCELLED', action: 'REJECT', nameAr: 'رفض', nameEn: 'Reject', permission: 'scm.procurement.write' },
+        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'scm.procurement.approve', emits: 'po.approved' },
+        { from: 'PENDING_APPROVAL', to: 'CANCELLED', action: 'REJECT', nameAr: 'رفض', nameEn: 'Reject', permission: 'scm.procurement.approve' },
         { from: 'APPROVED', to: 'SENT', action: 'SEND', nameAr: 'إرسال للمورّد', nameEn: 'Send to vendor', permission: 'scm.procurement.write', emits: 'po.sent' },
         // RECEIVE moves are written by the receipt flow's acceptance, inside
         // its transaction — they are listed so the map is complete and the

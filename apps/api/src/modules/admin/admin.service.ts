@@ -35,7 +35,31 @@ const USER_SELECT = {
   isActive: true,
   createdAt: true,
   role: { select: { id: true, key: true, nameAr: true, nameEn: true } },
+  extraRoles: {
+    select: { role: { select: { id: true, key: true, nameAr: true, nameEn: true } } },
+    orderBy: { createdAt: 'asc' },
+  },
 } as const;
+
+type UserRow = Prisma.UserGetPayload<{ select: typeof USER_SELECT }>;
+
+/**
+ * Flatten `extraRoles: [{ role }]` into `roles: [role, ...]` — the primary role
+ * first, then the extra ones — so the web app has one list to render as badges.
+ * `role` stays as the primary (unchanged shape for existing readers).
+ */
+function shapeUser(row: UserRow) {
+  const { extraRoles, ...rest } = row;
+  return { ...rest, roles: [row.role, ...extraRoles.map((er) => er.role)] };
+}
+
+/** A user holds `permission` through their primary role or any extra role. */
+const holdsPermission = (permission: string): Prisma.UserWhereInput => ({
+  OR: [
+    { role: { permissions: { has: permission } } },
+    { extraRoles: { some: { role: { permissions: { has: permission } } } } },
+  ],
+});
 
 /**
  * User & role administration. The one invariant everything here protects:
@@ -51,12 +75,37 @@ export class AdminService {
 
   // ── users ─────────────────────────────────────────────────────────────────
 
-  listUsers(user: AuthUser) {
-    return this.prisma.user.findMany({
+  async listUsers(user: AuthUser) {
+    const rows = await this.prisma.user.findMany({
       where: { organizationId: user.organizationId },
       select: USER_SELECT,
       orderBy: { createdAt: 'asc' },
     });
+    return rows.map(shapeUser);
+  }
+
+  /**
+   * Validates a requested set of extra roles: every one belongs to this
+   * organization, none is the primary role (it would be held twice), no
+   * duplicates. Returns the ids.
+   */
+  private async validateExtraRoles(
+    organizationId: string,
+    primaryRoleId: string,
+    extraRoleIds: string[],
+  ): Promise<string[]> {
+    const ids = [...new Set(extraRoleIds)];
+    if (ids.length !== extraRoleIds.length) {
+      throw new BadRequestException('Extra roles must not contain duplicates');
+    }
+    if (ids.includes(primaryRoleId)) {
+      throw new BadRequestException('The primary role cannot also be an extra role');
+    }
+    if (ids.length) {
+      const owned = await this.prisma.role.count({ where: { id: { in: ids }, organizationId } });
+      if (owned !== ids.length) throw new NotFoundException('Role not found');
+    }
+    return ids;
   }
 
   private async getRoleOwned(organizationId: string, roleId: string) {
@@ -74,6 +123,11 @@ export class AdminService {
     const exists = await this.prisma.user.findUnique({ where: { email } });
     if (exists) throw new BadRequestException('Email already in use');
     await this.getRoleOwned(user.organizationId, dto.roleId);
+    const extraRoleIds = await this.validateExtraRoles(
+      user.organizationId,
+      dto.roleId,
+      dto.extraRoleIds ?? [],
+    );
 
     const nameAr = dto.nameAr.trim();
     const nameEn = (dto.nameEn ?? '').trim() || nameAr;
@@ -86,6 +140,7 @@ export class AdminService {
         nameEn,
         locale: dto.locale ?? 'AR',
         roleId: dto.roleId,
+        extraRoles: { create: extraRoleIds.map((roleId) => ({ roleId })) },
       },
       select: USER_SELECT,
     });
@@ -95,46 +150,73 @@ export class AdminService {
       entityType: 'User',
       entityId: created.id,
       action: 'CREATE',
-      after: { email, nameAr, roleId: dto.roleId },
+      after: { email, nameAr, roleId: dto.roleId, extraRoleIds },
     });
-    return created;
+    return shapeUser(created);
   }
 
   async updateUser(user: AuthUser, id: string, dto: UpdateUserDto) {
     const target = await this.prisma.user.findFirst({
       where: { id, organizationId: user.organizationId },
-      include: { role: true },
+      include: { role: true, extraRoles: { include: { role: true } } },
     });
     if (!target) throw new NotFoundException('User not found');
 
     if (dto.isActive === false && id === user.userId) {
       throw new BadRequestException('You cannot deactivate your own account');
     }
-    if (dto.roleId && dto.roleId !== target.roleId) {
-      await this.getRoleOwned(user.organizationId, dto.roleId);
-    }
+    const newPrimary =
+      dto.roleId && dto.roleId !== target.roleId
+        ? await this.getRoleOwned(user.organizationId, dto.roleId)
+        : target.role;
+
+    // The extra roles after this update. Omitted → unchanged, except that a
+    // role promoted to primary stops being an extra (it would be held twice).
+    const currentExtraIds = target.extraRoles.map((er) => er.roleId);
+    const nextExtraIds =
+      dto.extraRoleIds !== undefined
+        ? await this.validateExtraRoles(user.organizationId, newPrimary.id, dto.extraRoleIds)
+        : currentExtraIds.filter((rid) => rid !== newPrimary.id);
+    const extraRolesChanged =
+      dto.extraRoleIds !== undefined || nextExtraIds.length !== currentExtraIds.length;
 
     // Lockout guard: would this update strip the org's last active user-manager?
-    const losesManage =
-      target.role.permissions.includes(PERMISSIONS.USER_MANAGE) &&
-      (dto.isActive === false ||
-        (dto.roleId &&
-          dto.roleId !== target.roleId &&
-          !(await this.getRoleOwned(user.organizationId, dto.roleId)).permissions.includes(
-            PERMISSIONS.USER_MANAGE,
-          )));
+    // A user manages users through their primary role OR any extra role.
+    const holdsNow =
+      target.role.permissions.includes(PERMISSIONS.USER_MANAGE) ||
+      target.extraRoles.some((er) => er.role.permissions.includes(PERMISSIONS.USER_MANAGE));
+    let holdsAfter = newPrimary.permissions.includes(PERMISSIONS.USER_MANAGE);
+    if (!holdsAfter && nextExtraIds.length) {
+      const nextExtras = await this.prisma.role.findMany({
+        where: { id: { in: nextExtraIds }, organizationId: user.organizationId },
+        select: { permissions: true },
+      });
+      holdsAfter = nextExtras.some((r) => r.permissions.includes(PERMISSIONS.USER_MANAGE));
+    }
+    const losesManage = holdsNow && (dto.isActive === false || !holdsAfter);
     if (losesManage) await this.assertAnotherManagerExists(user.organizationId, target.id);
 
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: {
-        nameAr: dto.nameAr?.trim() || undefined,
-        nameEn: dto.nameEn?.trim() || undefined,
-        roleId: dto.roleId,
-        isActive: dto.isActive,
-        locale: dto.locale,
-      },
-      select: USER_SELECT,
+    // Primary role, flags and the extra-role set change together or not at all.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data: {
+          nameAr: dto.nameAr?.trim() || undefined,
+          nameEn: dto.nameEn?.trim() || undefined,
+          roleId: dto.roleId,
+          isActive: dto.isActive,
+          locale: dto.locale,
+        },
+      });
+      if (extraRolesChanged) {
+        await tx.userRole.deleteMany({ where: { userId: id } });
+        if (nextExtraIds.length) {
+          await tx.userRole.createMany({
+            data: nextExtraIds.map((roleId) => ({ userId: id, roleId })),
+          });
+        }
+      }
+      return tx.user.findUniqueOrThrow({ where: { id }, select: USER_SELECT });
     });
     await this.audit.record({
       organizationId: user.organizationId,
@@ -142,10 +224,15 @@ export class AdminService {
       entityType: 'User',
       entityId: id,
       action: 'UPDATE',
-      before: { roleId: target.roleId, isActive: target.isActive, nameAr: target.nameAr },
-      after: dto as unknown as Record<string, unknown>,
+      before: {
+        roleId: target.roleId,
+        extraRoleIds: currentExtraIds,
+        isActive: target.isActive,
+        nameAr: target.nameAr,
+      },
+      after: { ...(dto as unknown as Record<string, unknown>), extraRoleIds: nextExtraIds },
     });
-    return updated;
+    return shapeUser(updated);
   }
 
   /** Admin sets a new password for a colleague who forgot theirs. */
@@ -175,7 +262,7 @@ export class AdminService {
         organizationId,
         isActive: true,
         id: { not: excludeUserId },
-        role: { permissions: { has: PERMISSIONS.USER_MANAGE } },
+        ...holdsPermission(PERMISSIONS.USER_MANAGE),
       },
     });
     if (others === 0) {
@@ -246,8 +333,19 @@ export class AdminService {
           where: {
             organizationId: user.organizationId,
             isActive: true,
-            roleId: { not: role.id },
-            role: { permissions: { has: PERMISSIONS.USER_MANAGE } },
+            // Another user keeps user-management through some role OTHER than
+            // the one being edited — as their primary or as an extra role.
+            OR: [
+              { roleId: { not: role.id }, role: { permissions: { has: PERMISSIONS.USER_MANAGE } } },
+              {
+                extraRoles: {
+                  some: {
+                    roleId: { not: role.id },
+                    role: { permissions: { has: PERMISSIONS.USER_MANAGE } },
+                  },
+                },
+              },
+            ],
           },
         });
         if (others === 0) {
@@ -281,7 +379,9 @@ export class AdminService {
 
   async deleteRole(user: AuthUser, id: string) {
     const role = await this.getRoleOwned(user.organizationId, id);
-    const assigned = await this.prisma.user.count({ where: { roleId: id } });
+    const assigned =
+      (await this.prisma.user.count({ where: { roleId: id } })) +
+      (await this.prisma.userRole.count({ where: { roleId: id } }));
     if (assigned > 0) {
       throw new BadRequestException('Role still has users assigned — reassign them first');
     }

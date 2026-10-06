@@ -45,7 +45,8 @@ interface ItemOption {
   sku: string;
   nameAr: string;
   nameEn: string;
-  unitCost: string | number;
+  // null for a user without finance.costs.view — the price is then left blank.
+  unitCost: string | number | null;
 }
 
 interface DraftLine {
@@ -218,7 +219,7 @@ export default function RequisitionsPage() {
                                 // carries a number the matrix can band on.
                                 estimatedUnitPrice:
                                   row.estimatedUnitPrice ||
-                                  (item ? String(Number(item.unitCost)) : ''),
+                                  (item && item.unitCost != null ? String(Number(item.unitCost)) : ''),
                               }
                             : row,
                         ),

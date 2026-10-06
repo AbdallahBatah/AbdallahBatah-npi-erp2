@@ -11,6 +11,7 @@ const user = (over: Partial<AuthUser> = {}): AuthUser => ({
   permissions: ['scm.procurement.write', 'scm.requisition.write'],
   locale: 'AR',
   ...over,
+  roleIds: over.roleIds ?? [over.roleId ?? 'role-pm'],
 });
 
 const audit = { record: jest.fn().mockResolvedValue(undefined) };

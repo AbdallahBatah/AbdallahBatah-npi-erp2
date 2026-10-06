@@ -1,9 +1,28 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { Prisma } from '@npi/db';
 import bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { ChangePasswordDto, LoginDto } from './dto';
+
+/** The user plus everything needed to describe all of their roles. */
+const USER_INCLUDE = {
+  role: true,
+  organization: true,
+  extraRoles: { include: { role: true } },
+} as const;
+
+type UserWithRoles = Prisma.UserGetPayload<{ include: typeof USER_INCLUDE }>;
+
+/** Primary role first, then extras. Permissions are the sorted union. */
+function describeRoles(user: UserWithRoles) {
+  const all = [user.role, ...user.extraRoles.map((er) => er.role)];
+  return {
+    roles: all.map((r) => ({ id: r.id, key: r.key, nameAr: r.nameAr, nameEn: r.nameEn })),
+    permissions: [...new Set(all.flatMap((r) => r.permissions))].sort(),
+  };
+}
 
 @Injectable()
 export class AuthService {
@@ -22,7 +41,7 @@ export class AuthService {
   async login(dto: LoginDto, ip?: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
-      include: { role: true, organization: true },
+      include: USER_INCLUDE,
     });
 
     if (!user || !user.isActive) {
@@ -64,7 +83,7 @@ export class AuthService {
         roleKey: user.role.key,
         roleNameAr: user.role.nameAr,
         roleNameEn: user.role.nameEn,
-        permissions: user.role.permissions,
+        ...describeRoles(user),
         organization: {
           id: user.organization.id,
           nameAr: user.organization.legalNameAr,
@@ -98,7 +117,7 @@ export class AuthService {
   async me(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      include: { role: true, organization: true },
+      include: USER_INCLUDE,
     });
     return {
       id: user.id,
@@ -109,7 +128,7 @@ export class AuthService {
       roleKey: user.role.key,
       roleNameAr: user.role.nameAr,
       roleNameEn: user.role.nameEn,
-      permissions: user.role.permissions,
+      ...describeRoles(user),
       organization: {
         id: user.organization.id,
         nameAr: user.organization.legalNameAr,

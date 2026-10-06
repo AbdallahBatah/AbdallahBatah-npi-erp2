@@ -240,6 +240,12 @@ export class ApprovalRulesService {
       _count: { _all: true },
     });
     const withUsers = new Set(activeCounts.map((c) => c.roleId));
+    // A role held only as someone's *extra* role still has a person to sign.
+    const extraHolders = await this.prisma.userRole.findMany({
+      where: { roleId: { in: roleIds }, user: { organizationId: user.organizationId, isActive: true } },
+      select: { roleId: true },
+    });
+    for (const h of extraHolders) withUsers.add(h.roleId);
     const empty = roleIds.find((r) => !withUsers.has(r));
     if (empty) {
       throw new BadRequestException(

@@ -32,9 +32,14 @@ interface Po {
   vendor?: { code: string; nameAr: string; nameEn: string };
   project?: { id: string; code: string } | null;
 }
-interface Item { id: string; sku: string; nameAr: string; nameEn: string; unitCost: string; isSerialised: boolean }
+// unitCost is null for a user without finance.costs.view (nulled by the server).
+interface Item { id: string; sku: string; nameAr: string; nameEn: string; unitCost: string | null; isSerialised: boolean }
 interface Project { id: string; code: string; nameAr: string; nameEn: string }
-interface PoLineDraft { itemId: string; qty: number; unitPrice: number }
+// '' = no price yet: when the catalogue cost is hidden from this user the price
+// is left blank for the buyer to type, rather than defaulting to a false 0.
+interface PoLineDraft { itemId: string; qty: number; unitPrice: number | '' }
+const catalogPrice = (it?: { unitCost: string | null }): number | '' =>
+  it && it.unitCost != null ? Number(it.unitCost) : '';
 interface StockRow {
   id: string;
   qty: string;
@@ -142,7 +147,7 @@ export default function ProcurementPage() {
   function addLine() {
     const first = items[0];
     if (!first) return;
-    setPLines([...pLines, { itemId: first.id, qty: 1, unitPrice: Number(first.unitCost) }]);
+    setPLines([...pLines, { itemId: first.id, qty: 1, unitPrice: catalogPrice(first) }]);
   }
   function setLine(i: number, patch: Partial<PoLineDraft>) {
     setPLines(pLines.map((l, idx) => {
@@ -154,13 +159,13 @@ export default function ProcurementPage() {
       if (patch.itemId) {
         const prev = items.find((x) => x.id === l.itemId);
         const it = items.find((x) => x.id === patch.itemId);
-        const priceUntouched = !prev || l.unitPrice === Number(prev.unitCost);
-        if (it && priceUntouched) next.unitPrice = Number(it.unitCost);
+        const priceUntouched = !prev || l.unitPrice === catalogPrice(prev);
+        if (it && priceUntouched) next.unitPrice = catalogPrice(it);
       }
       return next;
     }));
   }
-  const poSubtotal = pLines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+  const poSubtotal = pLines.reduce((s, l) => s + l.qty * (Number(l.unitPrice) || 0), 0);
 
   const poValidation = useValidate(
     { pVendorId, pLines },
@@ -171,9 +176,11 @@ export default function ProcurementPage() {
           ? t('valid.needLine')
           : v.pLines.some((l) => !l.qty || l.qty <= 0)
             ? t('valid.qtyPositive')
-            : v.pLines.some((l) => l.unitPrice < 0)
-              ? t('valid.negative')
-              : undefined,
+            : v.pLines.some((l) => l.unitPrice === '')
+              ? t('valid.required')
+              : v.pLines.some((l) => Number(l.unitPrice) < 0)
+                ? t('valid.negative')
+                : undefined,
     },
   );
 
@@ -199,7 +206,7 @@ export default function ProcurementPage() {
         api.post('/procurement/purchase-orders', {
           vendorId: pVendorId,
           projectId: pProjectId || undefined,
-          lines: pLines,
+          lines: pLines.map((l) => ({ ...l, unitPrice: Number(l.unitPrice) })),
         }),
       { success: t('common.created') },
     );
@@ -491,7 +498,7 @@ export default function ProcurementPage() {
                   <input type="number" min={1} className="input w-24" value={l.qty}
                     onChange={(e) => setLine(i, { qty: Number(e.target.value) })} placeholder={t('po.qty')} />
                   <input type="number" min={0} step="0.01" className="input w-32" value={l.unitPrice}
-                    onChange={(e) => setLine(i, { unitPrice: Number(e.target.value) })} placeholder={t('po.unitPrice')} />
+                    onChange={(e) => setLine(i, { unitPrice: e.target.value === '' ? '' : Number(e.target.value) })} placeholder={t('po.unitPrice')} />
                   <button
                     type="button"
                     aria-label={`${t('po.removeLine')} ${i + 1}`}

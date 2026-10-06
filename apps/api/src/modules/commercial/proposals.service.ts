@@ -8,6 +8,7 @@ import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
 import type { AuthUser } from '../../common/auth-user';
 import { CreateProposalDto, CreateRevisionDto } from './dto';
+import { assertCanSetCosts, canViewCosts, hideRevisionPricing } from './revision-pricing';
 
 @Injectable()
 export class ProposalsService {
@@ -17,8 +18,8 @@ export class ProposalsService {
     private readonly audit: AuditService,
   ) {}
 
-  list(user: AuthUser) {
-    return this.prisma.proposal.findMany({
+  async list(user: AuthUser) {
+    const rows = await this.prisma.proposal.findMany({
       where: { organizationId: user.organizationId },
       include: {
         opportunity: { select: { id: true, code: true, name: true } },
@@ -26,6 +27,8 @@ export class ProposalsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    if (canViewCosts(user)) return rows;
+    return rows.map((p) => ({ ...p, revisions: p.revisions.map(hideRevisionPricing) }));
   }
 
   async get(user: AuthUser, id: string) {
@@ -44,7 +47,10 @@ export class ProposalsService {
       },
     });
     if (!proposal) throw new NotFoundException('Proposal not found');
-    return proposal;
+    if (canViewCosts(user)) return proposal;
+    // Without finance.costs.view the price build-up (subtotal, BOM line prices,
+    // pricing scheme) is hidden; totalAmount — the selling price — stays.
+    return { ...proposal, revisions: proposal.revisions.map(hideRevisionPricing) };
   }
 
   async create(user: AuthUser, dto: CreateProposalDto) {
@@ -84,6 +90,11 @@ export class ProposalsService {
    * optionally records the imported design version, and stores the totals.
    */
   async addRevision(user: AuthUser, proposalId: string, dto: CreateRevisionDto) {
+    // Margin and pricing scheme are cost-side inputs: setting them needs the
+    // same permission as seeing them.
+    if (dto.marginPct !== undefined || dto.pricingSchemeId !== undefined) {
+      assertCanSetCosts(user);
+    }
     const proposal = await this.prisma.proposal.findFirst({
       where: { id: proposalId, organizationId: user.organizationId },
       include: { opportunity: true },
@@ -172,7 +183,9 @@ export class ProposalsService {
         tx,
       );
 
-      return revision;
+      // The caller supplied the BOM prices, but the revision's totals can
+      // embed a margin they may not see — return the redacted shape.
+      return canViewCosts(user) ? revision : hideRevisionPricing(revision);
     });
   }
 
@@ -207,7 +220,7 @@ export class ProposalsService {
         },
         tx,
       );
-      return winning;
+      return canViewCosts(user) ? winning : hideRevisionPricing(winning);
     });
   }
 }

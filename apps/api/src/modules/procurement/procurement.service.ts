@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ForbiddenException,
   type OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -277,6 +278,11 @@ export class ProcurementService implements OnModuleInit {
       documentCode: po.code,
       amount: Number(po.total),
     });
+    if (verdict.cleared && !user.permissions.includes(PERMISSIONS.PROCUREMENT_APPROVE)) {
+      // Separated rights (Step 1): a role that may write/submit but not approve must
+      // not self-approve when no matrix band applies. Fail before any state change.
+      throw new ForbiddenException('Approving this document requires the approve permission; no approval rule routes it to someone else');
+    }
 
     const nextRole = verdict.cleared
       ? user.roleId
@@ -1251,6 +1257,11 @@ export class ProcurementService implements OnModuleInit {
       documentCode: claim.code,
       amount: Number(claim.claimedAmount),
     });
+    if (verdict.cleared && !user.permissions.includes(PERMISSIONS.PROCUREMENT_APPROVE)) {
+      // Separated rights (Step 1): a role that may write/submit but not approve must
+      // not self-approve when no matrix band applies. Fail before any state change.
+      throw new ForbiddenException('Approving this document requires the approve permission; no approval rule routes it to someone else');
+    }
     if (!verdict.cleared) return { ...claim, pendingApproval: verdict.request };
 
     return this.applyClaimApproval(user, claimId);

@@ -91,6 +91,8 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   { re: /cannot deactivate your own account/i, ar: 'لا يمكنك إيقاف حسابك أنت — اطلب من مسؤول آخر' },
   { re: /last active administrator/i, ar: 'لا يمكن إزالة آخر مسؤول نشط — عيّن مسؤولاً آخر أولاً' },
   { re: /last administrator role/i, ar: 'لا يمكن سحب إدارة المستخدمين من دور المسؤول الأخير' },
+  { re: /primary role cannot also be an extra role/i, ar: 'الدور الأساسي لا يُضاف كدور إضافي — اختر أدواراً إضافية مختلفة' },
+  { re: /extra roles must not contain duplicates/i, ar: 'الأدوار الإضافية تحتوي على تكرار — اختر كل دور مرة واحدة' },
   { re: /role still has users assigned/i, ar: 'الدور مسند إلى مستخدمين — انقلهم إلى دور آخر أولاً' },
   { re: /role key already in use/i, ar: 'المعرّف التقني مستخدم مسبقاً — اختر معرّفاً آخر' },
   { re: /key must be a lowercase slug/i, ar: 'المعرّف التقني: حروف إنجليزية صغيرة وأرقام و _ فقط' },
@@ -132,6 +134,20 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   { re: /delegation is already revoked/i, ar: 'هذا التفويض مُنهى بالفعل' },
 ];
 
+// 403s that deserve a specific sentence instead of the generic "no permission".
+const FORBIDDEN_PATTERNS: Array<{ re: RegExp; ar: string; en: string }> = [
+  {
+    re: /cost and margin fields/i,
+    ar: 'لا يحق لدورك تحديد التكلفة أو الهامش أو مخطط التسعير — احذف هذه الحقول أو اطلب صلاحية «عرض التكاليف والهوامش»',
+    en: 'Your role may not set costs, margins or pricing schemes — remove those fields or ask for the "View costs & margins" permission',
+  },
+  {
+    re: /requires the approve permission/i,
+    ar: 'هذا المستند لا تنطبق عليه مصفوفة اعتماد، واعتماده يحتاج صلاحية «اعتماد» لا يملكها دورك — اطلب من مدير النظام إضافة قاعدة اعتماد أو منح الصلاحية',
+    en: 'No approval rule routes this document, and approving it needs an "approve" permission your role lacks — ask the administrator to add an approval rule or grant the permission',
+  },
+];
+
 export function translateError(e: unknown, locale: Locale): string {
   const ar = locale === 'ar';
   if (e instanceof ApiError) {
@@ -141,6 +157,10 @@ export function translateError(e: unknown, locale: Locale): string {
         : 'Could not reach the server — check your connection and try again';
     if (e.status === 401)
       return ar ? 'انتهت الجلسة — سجّل الدخول مجدداً' : 'Session expired — please sign in again';
+    if (e.status === 403) {
+      const specific = FORBIDDEN_PATTERNS.find((p) => p.re.test(e.message));
+      if (specific) return ar ? specific.ar : specific.en;
+    }
     if (e.status === 403)
       return ar ? 'لا تملك صلاحية لتنفيذ هذا الإجراء' : 'You do not have permission for this action';
     if (e.status === 404)

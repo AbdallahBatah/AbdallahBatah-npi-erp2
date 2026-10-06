@@ -63,8 +63,22 @@ export class NotificationService {
         organizationId: input.organizationId,
         isActive: true,
         ...(input.excludeUserId ? { id: { not: input.excludeUserId } } : {}),
-        ...(input.roleId ? { roleId: input.roleId } : {}),
-        role: { permissions: { has: input.permission } },
+        // Primary role OR an extra role (UserRole) — either may carry the
+        // permission, and either may be the role the notification targets.
+        OR: [
+          {
+            ...(input.roleId ? { roleId: input.roleId } : {}),
+            role: { permissions: { has: input.permission } },
+          },
+          {
+            extraRoles: {
+              some: {
+                ...(input.roleId ? { roleId: input.roleId } : {}),
+                role: { permissions: { has: input.permission } },
+              },
+            },
+          },
+        ],
       },
       select: { id: true },
     });

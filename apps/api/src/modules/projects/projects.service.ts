@@ -2,13 +2,14 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ForbiddenException,
   type OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
 import { ApprovalService } from '../../common/approval.service';
-import { isValidStageTransition } from '@npi/shared';
+import { isValidStageTransition, PERMISSIONS } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 import type { CreateChangeOrderDto, CreateProjectDto, SetStageDto } from './dto';
 
@@ -311,6 +312,11 @@ export class ProjectsService implements OnModuleInit {
       documentCode: co.code,
       amount: Number(co.amountDelta),
     });
+    if (verdict.cleared && !user.permissions.includes(PERMISSIONS.PROJECT_APPROVE)) {
+      // Separated rights (Step 1): a role that may write/submit but not approve must
+      // not self-approve when no matrix band applies. Fail before any state change.
+      throw new ForbiddenException('Approving this document requires the approve permission; no approval rule routes it to someone else');
+    }
     if (!verdict.cleared) return { ...co, pendingApproval: verdict.request };
 
     return this.applyChangeOrderApproval(user, changeOrderId);

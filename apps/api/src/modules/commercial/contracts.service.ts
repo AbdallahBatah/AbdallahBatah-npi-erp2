@@ -9,6 +9,7 @@ import { AuditService } from '../../common/audit.service';
 import { NotificationService } from '../../common/notification.service';
 import type { AuthUser } from '../../common/auth-user';
 import { CreateContractDto } from './dto';
+import { canViewCosts, hideRevisionPricing } from './revision-pricing';
 
 @Injectable()
 export class ContractsService {
@@ -41,6 +42,11 @@ export class ContractsService {
       },
     });
     if (!contract) throw new NotFoundException('Contract not found');
+    // The embedded revision carries the price build-up; hide it from callers
+    // who may not see costs and margins (totalAmount stays).
+    if (!canViewCosts(user) && contract.proposalRevision) {
+      return { ...contract, proposalRevision: hideRevisionPricing(contract.proposalRevision) };
+    }
     return contract;
   }
 

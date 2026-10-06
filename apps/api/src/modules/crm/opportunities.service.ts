@@ -4,6 +4,7 @@ import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
 import type { AuthUser } from '../../common/auth-user';
 import { CreateOpportunityDto, UpdateOpportunityDto } from './dto';
+import { canViewCosts, hideRevisionPricing } from '../commercial/revision-pricing';
 
 @Injectable()
 export class OpportunitiesService {
@@ -37,7 +38,11 @@ export class OpportunitiesService {
       },
     });
     if (!opp) throw new NotFoundException('Opportunity not found');
-    return opp;
+    if (canViewCosts(user)) return opp;
+    return {
+      ...opp,
+      proposals: opp.proposals.map((pr) => ({ ...pr, revisions: pr.revisions.map(hideRevisionPricing) })),
+    };
   }
 
   async create(user: AuthUser, dto: CreateOpportunityDto) {

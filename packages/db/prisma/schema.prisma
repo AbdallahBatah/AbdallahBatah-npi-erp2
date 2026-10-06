@@ -247,6 +247,9 @@ model Role {
   // Flat list of permission keys, e.g. ["crm.lead.read", "commercial.contract.write"].
   permissions    String[]
   users          User[]
+  // CRM Phase 1: users who hold this role *in addition to* their primary one
+  // (User.roleId). The primary role still drives display and routing defaults.
+  userRoles      UserRole[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -292,9 +295,25 @@ model User {
   delegationsCreated  ApprovalDelegation[] @relation("DelegationCreator")
   wfHistory           WfHistory[]          @relation("WfHistoryActor")
   requisitions        PurchaseRequisition[] @relation("PrRequester")
+  // CRM Phase 1: roles held in addition to the primary `roleId`.
+  extraRoles          UserRole[]
 
   @@index([organizationId])
   @@index([organizationId, departmentId])
+}
+
+/// CRM Phase 1: a secondary role for a user. `User.roleId` stays the primary
+/// role; a user's effective permissions are the union over primary + these.
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, roleId])
+  @@index([roleId])
 }
 
 model NumberingSequence {

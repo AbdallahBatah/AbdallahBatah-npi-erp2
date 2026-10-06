@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { useValidate } from '@/lib/useValidate';
@@ -13,14 +14,16 @@ import { formatMoney } from '@/lib/format';
 import { PageHeader, StatusBadge, Modal, Field, LoadError, useConfirm, Btn, PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
-interface Item { id: string; sku: string; nameAr: string; nameEn: string; unitCost: string }
-interface Scheme { id: string; code: string; nameAr: string; nameEn: string; marginPct: string }
-interface BomLine { id: string; qty: string; unitPrice: string; lineTotal: string; item: Item }
+// Cost-side fields arrive as null for a user without finance.costs.view — the
+// server nulls them (CostRedactionInterceptor) and the page hides them.
+interface Item { id: string; sku: string; nameAr: string; nameEn: string; unitCost: string | null }
+interface Scheme { id: string; code: string; nameAr: string; nameEn: string; marginPct: string | null }
+interface BomLine { id: string; qty: string; unitPrice: string | null; lineTotal: string | null; item: Item }
 interface Revision {
   id: string;
   revisionNo: number;
-  subtotal: string;
-  marginAmount: string;
+  subtotal: string | null;
+  marginAmount: string | null;
   totalAmount: string;
   status: string;
   isWinning: boolean;
@@ -39,6 +42,10 @@ interface DraftLine { itemId: string; qty: number; unitPrice: number }
 
 export default function ProposalDetailPage() {
   const { t, locale, pick } = useI18n();
+  const { can } = useAuth();
+  // Margin, pricing scheme, line prices and subtotal are hidden without this;
+  // the total (the selling price) always stays.
+  const showCosts = can('finance.costs.view');
   const enums = useEnums();
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -68,8 +75,8 @@ export default function ProposalDetailPage() {
   useEffect(() => {
     load();
     api.get<Item[]>('/items').then(setItems).catch(() => {});
-    api.get<Scheme[]>('/reference/pricing-schemes').then(setSchemes).catch(() => {});
-  }, [load]);
+    if (showCosts) api.get<Scheme[]>('/reference/pricing-schemes').then(setSchemes).catch(() => {});
+  }, [load, showCosts]);
 
   const draftSubtotal = useMemo(
     () => lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0),
@@ -144,7 +151,8 @@ export default function ProposalDetailPage() {
       'revision',
       () =>
         api.post(`/proposals/${id}/revisions`, {
-          pricingSchemeId: schemeId || undefined,
+          // The server refuses a pricing scheme from a caller without costs.view.
+          pricingSchemeId: showCosts ? schemeId || undefined : undefined,
           bomLines: valid.map((l) => ({
             itemId: l.itemId,
             qty: Number(l.qty),
@@ -287,8 +295,8 @@ export default function ProposalDetailPage() {
                 <tr className="border-b border-slate-100 text-xs text-slate-500">
                   <th scope="col" className="th">{t('proposals.item')}</th>
                   <th scope="col" className="th text-end">{t('proposals.qty')}</th>
-                  <th scope="col" className="th text-end">{t('proposals.unitPrice')}</th>
-                  <th scope="col" className="th text-end">{t('common.total')}</th>
+                  {showCosts && <th scope="col" className="th text-end">{t('proposals.unitPrice')}</th>}
+                  {showCosts && <th scope="col" className="th text-end">{t('common.total')}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -296,20 +304,24 @@ export default function ProposalDetailPage() {
                   <tr key={bl.id} className="border-b border-slate-50">
                     <td className="py-2">{bl.item.sku} · {pick(bl.item, 'name')}</td>
                     <td className="td-num">{Number(bl.qty)}</td>
-                    <td className="td-num">{formatMoney(bl.unitPrice, locale)}</td>
-                    <td className="td-num">{formatMoney(bl.lineTotal, locale)}</td>
+                    {showCosts && <td className="td-num">{formatMoney(bl.unitPrice ?? 0, locale)}</td>}
+                    {showCosts && <td className="td-num">{formatMoney(bl.lineTotal ?? 0, locale)}</td>}
                   </tr>
                 ))}
               </tbody>
             </table>
 
             <div className="mt-3 flex flex-col items-end gap-1 text-sm">
-              <span className="text-slate-500">
-                {t('proposals.subtotal')}: {formatMoney(rev.subtotal, locale)}
-              </span>
-              <span className="text-slate-500">
-                {t('proposals.margin')}: {formatMoney(rev.marginAmount, locale)}
-              </span>
+              {showCosts && (
+                <>
+                  <span className="text-slate-500">
+                    {t('proposals.subtotal')}: {formatMoney(rev.subtotal ?? 0, locale)}
+                  </span>
+                  <span className="text-slate-500">
+                    {t('proposals.margin')}: {formatMoney(rev.marginAmount ?? 0, locale)}
+                  </span>
+                </>
+              )}
               <span className="text-lg font-bold text-slate-900">
                 {t('common.total')}: {formatMoney(rev.totalAmount, locale)}
               </span>
@@ -354,17 +366,19 @@ export default function ProposalDetailPage() {
             </div>
           )}
 
-          <div className="mb-4 grid grid-cols-3 gap-4">
-            <Field label={t('proposals.pricingScheme')}>
-              <select className="input" value={schemeId} onChange={(e) => setSchemeId(e.target.value)}>
-                <option value="">{t('proposals.marginPct')}: 0%</option>
-                {schemes.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {pick(s, 'name')} ({Number(s.marginPct)}%)
-                  </option>
-                ))}
-              </select>
-            </Field>
+          <div className={`mb-4 grid gap-4 ${showCosts ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            {showCosts && (
+              <Field label={t('proposals.pricingScheme')}>
+                <select className="input" value={schemeId} onChange={(e) => setSchemeId(e.target.value)}>
+                  <option value="">{t('proposals.marginPct')}: 0%</option>
+                  {schemes.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {pick(s, 'name')} ({Number(s.marginPct)}%)
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field label={t('proposals.capacity')} error={validation.errorOf('capacityKwp')}>
               <input
                 type="number"
@@ -406,7 +420,8 @@ export default function ProposalDetailPage() {
                     const it = items.find((x) => x.id === e.target.value);
                     updateLine(i, {
                       itemId: e.target.value,
-                      unitPrice: it ? Number(it.unitCost) : l.unitPrice,
+                      // Prefill from cost only when the server let us see it.
+                      unitPrice: it && it.unitCost != null ? Number(it.unitCost) : l.unitPrice,
                     });
                   }}
                 >
@@ -458,7 +473,11 @@ export default function ProposalDetailPage() {
 
           <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
             <div className="text-sm text-slate-600">
-              {t('proposals.subtotal')}: {formatMoney(draftSubtotal, locale)} ·{' '}
+              {showCosts && (
+                <>
+                  {t('proposals.subtotal')}: {formatMoney(draftSubtotal, locale)} ·{' '}
+                </>
+              )}
               <span className="font-semibold text-slate-900">
                 {t('common.total')}: {formatMoney(draftTotal, locale)}
               </span>

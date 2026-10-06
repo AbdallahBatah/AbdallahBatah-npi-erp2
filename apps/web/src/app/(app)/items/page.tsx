@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
@@ -23,6 +24,11 @@ interface Item {
 
 export default function ItemsPage() {
   const { t, locale, pick } = useI18n();
+  const { can } = useAuth();
+  // Unit cost is cost data: the server nulls it (and refuses writes) without
+  // finance.costs.view; the UI simply does not offer the column or the field.
+  const showCost = can('finance.costs.view');
+  const colCount = showCost ? 6 : 5;
   const enums = useEnums();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +60,7 @@ export default function ItemsPage() {
           nameEn: String(f.get('nameEn') || '').trim() || String(f.get('nameAr') || '').trim(),
           itemCategory: f.get('itemCategory'),
           uom: f.get('uom') || 'unit',
-          unitCost: Number(f.get('unitCost') || 0),
+          ...(showCost ? { unitCost: Number(f.get('unitCost') || 0) } : {}),
           isSerialised: f.get('isSerialised') === 'on',
         }),
       { success: t('common.created') },
@@ -87,15 +93,15 @@ export default function ItemsPage() {
               <th scope="col" className="th">{t('common.name')}</th>
               <th scope="col" className="th">{t('items.category')}</th>
               <th scope="col" className="th">{t('items.uom')}</th>
-              <th scope="col" className="th">{t('items.unitCost')}</th>
+              {showCost && <th scope="col" className="th">{t('items.unitCost')}</th>}
               <th scope="col" className="th">{t('items.serialised')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <TableSkeleton cols={6} />
+              <TableSkeleton cols={colCount} />
             ) : items.length === 0 ? (
-              <EmptyRow colSpan={6} text={t('common.none')} />
+              <EmptyRow colSpan={colCount} text={t('common.none')} />
             ) : (
               items.map((it) => (
                 <tr key={it.id} className="hover:bg-slate-50">
@@ -103,7 +109,7 @@ export default function ItemsPage() {
                   <td className="td font-medium">{pick(it, 'name')}</td>
                   <td className="td">{optionLabel(enums?.itemCategories, it.itemCategory, locale)}</td>
                   <td className="td">{it.uom}</td>
-                  <td className="td">{formatMoney(it.unitCost, locale)}</td>
+                  {showCost && <td className="td">{formatMoney(it.unitCost, locale)}</td>}
                   <td className="td">
                     {it.isSerialised ? (
                       <Icon name="check" className="h-4 w-4 text-success-600" />
@@ -141,9 +147,11 @@ export default function ItemsPage() {
           <Field label={t('items.uom')}>
             <input name="uom" className="input" defaultValue="unit" />
           </Field>
-          <Field label={t('items.unitCost')}>
-            <input name="unitCost" type="number" step="0.01" className="input" defaultValue="0" />
-          </Field>
+          {showCost && (
+            <Field label={t('items.unitCost')}>
+              <input name="unitCost" type="number" step="0.01" className="input" defaultValue="0" />
+            </Field>
+          )}
           <label className="col-span-2 flex items-center gap-2 text-sm text-slate-600">
             <input name="isSerialised" type="checkbox" />
             {t('items.serialised')}
