@@ -147,6 +147,12 @@ export class LeadsService {
     if (lead.status === 'CONVERTED') {
       throw new BadRequestException('Lead is already converted');
     }
+    // Step 3: a tender opportunity always has its close date, however it is born.
+    const opportunityType = dto.opportunityType ?? 'DIRECT';
+    const tenderCloseDate = dto.tenderCloseDate ? new Date(dto.tenderCloseDate) : null;
+    if (opportunityType === 'TENDER' && (!tenderCloseDate || Number.isNaN(tenderCloseDate.getTime()))) {
+      throw new BadRequestException('Tender close date is required');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       let customerId = dto.customerId ?? lead.customerId ?? undefined;
@@ -207,6 +213,9 @@ export class LeadsService {
           name: dto.opportunityName ?? `${lead.contactName} — ${lead.code}`,
           customerId,
           stage: 'PROSPECTING',
+          stageChangedAt: new Date(),
+          opportunityType,
+          tenderCloseDate: opportunityType === 'TENDER' ? tenderCloseDate : null,
           estimatedKwp: lead.estimatedKwp,
           estimatedValue: dto.estimatedValue,
           ownerId: user.userId,

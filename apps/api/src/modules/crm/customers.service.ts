@@ -370,6 +370,7 @@ export class CustomersService {
               code: true,
               name: true,
               stage: true,
+              opportunityType: true,
               estimatedValue: true,
               currency: true,
               expectedCloseDate: true,

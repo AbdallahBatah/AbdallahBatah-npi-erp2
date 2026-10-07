@@ -8,6 +8,7 @@ import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
 import type { AuthUser } from '../../common/auth-user';
 import { CreateProposalDto, CreateRevisionDto } from './dto';
+import { OpportunitiesService } from '../crm/opportunities.service';
 import { assertCanSetCosts, canViewCosts, hideRevisionPricing } from './revision-pricing';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class ProposalsService {
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
+    private readonly opportunities: OpportunitiesService,
   ) {}
 
   async list(user: AuthUser) {
@@ -60,6 +62,9 @@ export class ProposalsService {
     if (!opp) throw new NotFoundException('Opportunity not found');
 
     return this.prisma.$transaction(async (tx) => {
+      // CRM Step 3: a proposal carries the opportunity to «عرض سعر» in this same
+      // transaction, and a closed (WON / LOST) opportunity takes no proposal (409).
+      await this.opportunities.advanceOnProposal(tx, user, dto.opportunityId);
       const code = await this.numbering.next(user.organizationId, 'PROPOSAL', tx);
       const created = await tx.proposal.create({
         data: {

@@ -34,7 +34,7 @@ export function AttachmentsCard({
   entityType,
   entityId,
 }: {
-  entityType: 'CONTRACT' | 'INVOICE' | 'PROJECT' | 'WORK_ORDER' | 'CUSTOMER';
+  entityType: 'CONTRACT' | 'INVOICE' | 'PROJECT' | 'WORK_ORDER' | 'CUSTOMER' | 'OPPORTUNITY';
   entityId: string;
 }) {
   const { t, locale } = useI18n();

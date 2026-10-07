@@ -22,7 +22,10 @@ import { NotificationService } from '../src/common/notification.service';
 import { ZatcaService } from '../src/modules/finance/zatca.service';
 import { InvoicesService } from '../src/modules/finance/invoices.service';
 import { ContractsService } from '../src/modules/commercial/contracts.service';
+import { OutboxService } from '../src/common/workflow/outbox.service';
 import { CustomersService } from '../src/modules/crm/customers.service';
+import { OpportunitiesService } from '../src/modules/crm/opportunities.service';
+import { LossReasonsService } from '../src/modules/crm/loss-reasons.service';
 import { CustomerContactsService } from '../src/modules/crm/customer-contacts.service';
 import { AttachmentsService } from '../src/modules/platform/attachments.service';
 import type { AuthUser } from '../src/common/auth-user';
@@ -36,7 +39,9 @@ const notifications = new NotificationService(prisma);
 const invoices = new InvoicesService(
   prisma, numbering, audit, posting, new TaxService(prisma), new ZatcaService(), notifications,
 );
-const contracts = new ContractsService(prisma, numbering, audit, notifications);
+const opportunities = new OpportunitiesService(prisma, numbering, audit, new OutboxService(prisma));
+const lossReasons = new LossReasonsService(prisma, audit);
+const contracts = new ContractsService(prisma, numbering, audit, notifications, opportunities);
 const customers = new CustomersService(prisma, numbering, audit, new OrgSettingsService(prisma, audit));
 const customerContacts = new CustomerContactsService(prisma, audit);
 const attachments = new AttachmentsService(prisma, audit);
@@ -52,6 +57,8 @@ const B = {
   retentionEntryId: '',
   journalEntryId: '',
   attachmentId: '',
+  opportunityId: '',
+  lossReasonId: '',
 };
 let ATTACKER: AuthUser;
 
@@ -213,13 +220,22 @@ beforeAll(async () => {
     })
   ).id;
 
+  // CRM Step 3: org B owns an opportunity and a loss reason of its own.
+  B.opportunityId = (await opportunities.create(USER_B, { name: 'فرصة الجارة', customerId: customerB.id } as never)).id;
+  B.lossReasonId = (
+    await lossReasons.create(
+      { ...USER_B, permissions: ['admin.org.manage'] } as AuthUser,
+      { nameAr: 'سبب الجارة', nameEn: 'Neighbour reason' },
+    )
+  ).id;
+
   // The attacker: a legitimate user of org A, holding every permission.
   const attackerOrg = orgA!.id;
   const attacker = await prisma.user.findFirstOrThrow({ where: { organizationId: attackerOrg } });
   ATTACKER = {
     userId: attacker.id,
     organizationId: attackerOrg,
-    permissions: ['*'],
+    permissions: ['*', 'admin.org.manage', 'crm.opportunity.read', 'crm.opportunity.write'],
   } as unknown as AuthUser;
 });
 
@@ -265,6 +281,29 @@ describe('a tenant cannot reach another tenant by id', () => {
         customers.update(ATTACKER, B.customerId, { nameEn: 'Owned' } as never)));
     it('cannot delete the attachment', () =>
       must404('attachment.remove', () => attachments.remove(ATTACKER, B.attachmentId)));
+
+    // CRM Step 3 — the funnel and the loss-reason list.
+    it('cannot read the opportunity', () =>
+      must404('opportunity.get', () => opportunities.get(ATTACKER, B.opportunityId)));
+    it('cannot move the opportunity through its stages', () =>
+      must404('opportunity.changeStage', () =>
+        opportunities.changeStage(ATTACKER, B.opportunityId, { stage: 'QUALIFICATION' })));
+    it('cannot edit the opportunity', () =>
+      must404('opportunity.update', () => opportunities.update(ATTACKER, B.opportunityId, { name: 'Owned' })));
+    it('cannot edit or switch off the loss reason', () =>
+      must404('lossReasons.update', () => lossReasons.update(ATTACKER, B.lossReasonId, { isActive: false })));
+    it('cannot lose its OWN opportunity for a loss reason of another tenant (404, and nothing changes)', async () => {
+      const customerA = await prisma.customer.findFirstOrThrow({ where: { organizationId: ATTACKER.organizationId } });
+      const mine = await opportunities.create(ATTACKER, { name: 'فرصة المهاجم', customerId: customerA.id } as never);
+      await must404('opportunity.changeStage(foreign loss reason)', () =>
+        opportunities.changeStage(ATTACKER, mine.id, { stage: 'LOST', lossReasonId: B.lossReasonId }));
+      expect((await prisma.opportunity.findUniqueOrThrow({ where: { id: mine.id } })).stage).toBe('PROSPECTING');
+    });
+    it('cannot attach a file to the opportunity (404 from the entity check)', async () => {
+      const files = { buffer: Buffer.from('x'), size: 1, originalname: 'a.pdf', mimetype: 'application/pdf' } as Express.Multer.File;
+      await must404('attachment.upload(OPPORTUNITY)', () =>
+        attachments.upload(ATTACKER, 'OPPORTUNITY', B.opportunityId, files));
+    });
   });
 
   describe('listings', () => {
@@ -289,6 +328,15 @@ describe('a tenant cannot reach another tenant by id', () => {
       });
       const ownIds = new Set(own.map((c) => c.id));
       for (const h of hits as Array<{ id: string }>) expect(ownIds.has(h.id)).toBe(true);
+    });
+
+    it('never lists the neighbour opportunity or loss reason, not even to an administrator asking for all', async () => {
+      const [opps, reasons] = await Promise.all([
+        opportunities.list(ATTACKER, {}),
+        lossReasons.list(ATTACKER, true),
+      ]);
+      expect(opps.map((r: { id: string }) => r.id)).not.toContain(B.opportunityId);
+      expect(reasons.map((r: { id: string }) => r.id)).not.toContain(B.lossReasonId);
     });
 
     it('keeps the ledger apart', async () => {

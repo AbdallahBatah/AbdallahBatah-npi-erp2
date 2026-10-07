@@ -136,6 +136,11 @@ export const WF_EVENTS = {
   // CRM Phase 1 (Step 2): a duplicate customer was merged into the surviving
   // record. Nothing subscribes yet; later steps (notifications, reports) may.
   CUSTOMER_MERGED: 'customer.merged',
+  // CRM Phase 1 (Step 3): an opportunity closed. Payload: { opportunityId, code,
+  // customerId, stage, lossReasonId?, estimatedValue }. Moves between OPEN stages
+  // are audited, not announced.
+  OPPORTUNITY_WON: 'opportunity.won',
+  OPPORTUNITY_LOST: 'opportunity.lost',
 } as const;
 
 export type WfEventCode = (typeof WF_EVENTS)[keyof typeof WF_EVENTS];
@@ -149,6 +154,8 @@ export const WF_EVENT_LABELS: Record<string, { ar: string; en: string }> = {
   'invoice.approved': { ar: 'اعتُمدت الفاتورة', en: 'Invoice approved' },
   'invoice.paid': { ar: 'سُددت الفاتورة', en: 'Invoice paid' },
   'customer.merged': { ar: 'دُمج عميل مكرر في السجل الباقي', en: 'Duplicate customer merged' },
+  'opportunity.won': { ar: 'رُبحت فرصة بيع', en: 'Opportunity won' },
+  'opportunity.lost': { ar: 'خُسرت فرصة بيع', en: 'Opportunity lost' },
 };
 
 // ── retry policy ────────────────────────────────────────────────────────────

@@ -7,15 +7,18 @@ import { LeadsController } from './leads.controller';
 import { LeadsService } from './leads.service';
 import { OpportunitiesController } from './opportunities.controller';
 import { OpportunitiesService } from './opportunities.service';
+import { LossReasonsController } from './loss-reasons.controller';
+import { LossReasonsService } from './loss-reasons.service';
 
 @Module({
-  controllers: [CustomersController, LeadsController, OpportunitiesController],
+  controllers: [CustomersController, LeadsController, OpportunitiesController, LossReasonsController],
   providers: [
     CustomersService,
     CustomerContactsService,
     CustomerMergeService,
     LeadsService,
     OpportunitiesService,
+    LossReasonsService,
   ],
   exports: [OpportunitiesService],
 })

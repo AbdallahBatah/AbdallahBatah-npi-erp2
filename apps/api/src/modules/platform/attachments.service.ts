@@ -35,6 +35,7 @@ const ENTITY_READ_PERMISSION: Record<AttachmentEntity, string> = {
   PROJECT: 'projects.project.read',
   WORK_ORDER: 'fsm.workorder.read',
   CUSTOMER: 'crm.customer.read',
+  OPPORTUNITY: 'crm.opportunity.read',
 };
 
 @Injectable()
@@ -66,6 +67,7 @@ export class AttachmentsService {
       : entityType === 'INVOICE' ? await this.prisma.invoice.findFirst({ where, select: { id: true } })
       : entityType === 'PROJECT' ? await this.prisma.project.findFirst({ where, select: { id: true } })
       : entityType === 'CUSTOMER' ? await this.prisma.customer.findFirst({ where, select: { id: true } })
+      : entityType === 'OPPORTUNITY' ? await this.prisma.opportunity.findFirst({ where, select: { id: true } })
       : await this.prisma.workOrder.findFirst({ where, select: { id: true } });
     if (!found) throw new NotFoundException('Entity not found');
   }

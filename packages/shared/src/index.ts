@@ -5,3 +5,4 @@ export * from './invoicing';
 export * from './approvals';
 export * from './workflow';
 export * from './arabic';
+export * from './opportunity-stages';

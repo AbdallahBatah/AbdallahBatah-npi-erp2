@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { OpportunitiesService } from './opportunities.service';
-import { CreateOpportunityDto, UpdateOpportunityDto } from './dto';
+import { ChangeStageDto, CreateOpportunityDto, UpdateOpportunityDto } from './dto';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
 import { PERMISSIONS } from '@npi/shared';
@@ -22,8 +22,13 @@ export class OpportunitiesController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.OPPORTUNITY_READ)
-  list(@CurrentUser() user: AuthUser, @Query('stage') stage?: string) {
-    return this.opportunities.list(user, stage);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query('stage') stage?: string,
+    @Query('type') type?: string,
+    @Query('open') open?: string,
+  ) {
+    return this.opportunities.list(user, { stage, type, open: open === '1' || open === 'true' });
   }
 
   @Get(':id')
@@ -46,5 +51,16 @@ export class OpportunitiesController {
     @Body() dto: UpdateOpportunityDto,
   ) {
     return this.opportunities.update(user, id, dto);
+  }
+
+  /** Moves the opportunity through the funnel (or closes it). LOST needs `lossReasonId`. */
+  @Post(':id/stage')
+  @RequirePermissions(PERMISSIONS.OPPORTUNITY_WRITE)
+  changeStage(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: ChangeStageDto,
+  ) {
+    return this.opportunities.changeStage(user, id, dto);
   }
 }

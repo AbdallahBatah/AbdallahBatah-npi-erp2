@@ -11,6 +11,7 @@ import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatDate, formatMoney, formatNumber } from '@/lib/format';
 import { AttachmentsCard } from '@/components/attachments';
+import { OppTypeBadge } from '@/components/opportunity-bits';
 import {
   Btn,
   EmptyRow,
@@ -55,6 +56,7 @@ interface Opportunity {
   code: string;
   name: string;
   stage: string;
+  opportunityType: string;
   estimatedValue: string | null;
   currency: string;
   expectedCloseDate: string | null;
@@ -339,11 +341,14 @@ export default function CustomerPage() {
         listTable(
           data.counts.opportunities,
           data.opportunities.length,
-          [t('common.code'), t('common.name'), t('common.status'), t('cust.col.value'), t('cust.col.date')],
+          [t('common.code'), t('common.name'), t('opps.type'), t('common.status'), t('cust.col.value'), t('cust.col.date')],
           data.opportunities.map((o) => (
             <tr key={o.id} className="hover:bg-slate-50">
               <td className="td font-mono text-xs">{o.code}</td>
-              <td className="td font-medium">{o.name}</td>
+              <td className="td font-medium">
+                <Link href={`/opportunities/${o.id}`} className="text-brand-700 hover:underline">{o.name}</Link>
+              </td>
+              <td className="td"><OppTypeBadge type={o.opportunityType} /></td>
               <td className="td"><StatusBadge status={o.stage} /></td>
               <td className="td">{o.estimatedValue ? formatMoney(o.estimatedValue, locale, o.currency) : '—'}</td>
               <td className="td text-xs">{formatDate(o.createdAt, locale)}</td>

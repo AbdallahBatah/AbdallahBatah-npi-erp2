@@ -41,6 +41,7 @@ const ENTITY_AR: Record<string, string> = {
   Customer: 'عميل',
   Lead: 'عميل محتمل',
   Opportunity: 'فرصة',
+  LossReason: 'سبب خسارة',
   Proposal: 'عرض سعر',
   ProposalRevision: 'مراجعة عرض',
   Contract: 'عقد',

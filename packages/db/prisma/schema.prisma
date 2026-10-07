@@ -57,12 +57,23 @@ enum LeadStatus {
   CONVERTED
 }
 
+/// CRM Phase 1 (Step 3): محتمل ← تأهيل ← عرض سعر ← تفاوض ← رابحة | خاسرة.
+/// QUALIFICATION was added by migration 0024; Postgres cannot drop an enum
+/// value, so it survives a rollback of that migration.
 enum OpportunityStage {
   PROSPECTING
+  QUALIFICATION
   PROPOSAL
   NEGOTIATION
   WON
   LOST
+}
+
+/// CRM Phase 1 (Step 3): a direct sale or a tender. A tender adds a close date
+/// (mandatory) and the bid-bond particulars on the opportunity itself.
+enum OpportunityType {
+  DIRECT
+  TENDER
 }
 
 enum ItemCategory {
@@ -244,6 +255,7 @@ model Organization {
   customerContacts    CustomerContact[]
   customerMergeLogs   CustomerMergeLog[]
   orgSettings         OrgSetting[]
+  lossReasons         LossReason[]
 
   @@index([parentOrganizationId])
 }
@@ -505,6 +517,25 @@ model Opportunity {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  // CRM Phase 1 · Step 3 (migration 0024) ─────────────────────────────────────
+  opportunityType OpportunityType @default(DIRECT)
+  /// Tender fields: only meaningful when opportunityType = TENDER (the service
+  /// clears them for a DIRECT opportunity). tenderCloseDate is mandatory then.
+  tenderReference String?
+  tenderCloseDate DateTime?
+  bidBondAmount   Decimal? @db.Decimal(18, 2)
+  bidBondBank     String?
+  bidBondExpiry   DateTime?
+  bidBondReference String?
+  /// Mandatory (service-enforced) when stage = LOST; the reason is never deleted.
+  lossReasonId   String?
+  lossReason     LossReason? @relation(fields: [lossReasonId], references: [id], onDelete: Restrict)
+  lossNotes      String?
+  /// The moment the opportunity became WON or LOST.
+  closedAt       DateTime?
+  /// The last stage change — the funnel's "age in stage".
+  stageChangedAt DateTime?
+
   sourceLead     Lead?    @relation("LeadConversion")
   designVersions DesignVersion[]
   proposals      Proposal[]
@@ -512,6 +543,27 @@ model Opportunity {
 
   @@unique([organizationId, code])
   @@index([organizationId, stage])
+  @@index([organizationId, opportunityType])
+  @@index([lossReasonId])
+}
+
+/// CRM Phase 1 · Step 3: the editable list of reasons an opportunity is lost.
+/// Never deleted once used — switched off with isActive = false.
+model LossReason {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nameAr         String
+  nameEn         String
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  opportunities  Opportunity[]
+
+  @@unique([organizationId, nameAr])
+  @@index([organizationId, isActive, sortOrder])
 }
 
 model Item {
@@ -1935,6 +1987,7 @@ enum AttachmentEntity {
   PROJECT
   WORK_ORDER
   CUSTOMER
+  OPPORTUNITY
 }
 
 model Attachment {

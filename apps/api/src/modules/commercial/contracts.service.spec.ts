@@ -1,5 +1,6 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
+import { OpportunitiesService } from '../crm/opportunities.service';
 
 /**
  * D-01 from the 2026-08-01 UAT round: the API created a contract from a
@@ -12,23 +13,33 @@ describe('ContractsService.create — proposal revision guard', () => {
   const audit = { record: jest.fn().mockResolvedValue(undefined) };
   const notifications = { notifyBestEffort: jest.fn().mockResolvedValue(undefined) };
 
-  function service(revision: unknown) {
+  /** `oppStage` is the stage the opportunity row has when the contract is created. */
+  function service(revision: unknown, oppStage = 'NEGOTIATION') {
     const tx = {
       contract: { create: jest.fn().mockResolvedValue({ id: 'c1', milestones: [] }) },
-      opportunity: { update: jest.fn().mockResolvedValue({}) },
+      opportunity: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'opp1', organizationId: 'org1', code: 'OPP-00001', customerId: 'cus1', stage: oppStage, estimatedValue: null }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'opp1', stage: 'WON' }),
+      },
     };
     const prisma = {
       proposalRevision: { findFirst: jest.fn().mockResolvedValue(revision) },
       customer: { findFirst: jest.fn().mockResolvedValue({ id: 'cus1' }) },
       $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
     };
+    const outbox = { emit: jest.fn().mockResolvedValue('evt1') };
+    // The real opportunity rules, on the same transaction double: the contract
+    // path to WON is a rule of the opportunity, not of the contract.
+    const opportunities = new OpportunitiesService(prisma as never, numbering as never, audit as never, outbox as never);
     const svc = new ContractsService(
       prisma as never,
       numbering as never,
       audit as never,
       notifications as never,
+      opportunities,
     );
-    return { svc, prisma, tx };
+    return { svc, prisma, tx, outbox };
   }
 
   const user = { organizationId: 'org1', userId: 'u1' } as never;
@@ -60,7 +71,7 @@ describe('ContractsService.create — proposal revision guard', () => {
   });
 
   it('creates the contract from an accepted revision, inheriting its value', async () => {
-    const { svc, tx } = service(acceptedRevision);
+    const { svc, tx, outbox } = service(acceptedRevision);
     await expect(svc.create(user, dto)).resolves.toMatchObject({ id: 'c1' });
     expect(tx.contract.create).toHaveBeenCalledTimes(1);
     expect(tx.contract.create.mock.calls[0][0].data).toMatchObject({
@@ -68,10 +79,29 @@ describe('ContractsService.create — proposal revision guard', () => {
       totalValue: 138000,
       status: 'DRAFT',
     });
-    // The chain closes: winning the contract moves the opportunity to WON.
-    expect(tx.opportunity.update).toHaveBeenCalledWith({
-      where: { id: 'opp1' },
+    // The chain closes: winning the contract moves the opportunity to WON —
+    // through the shared rule (guarded update, audit tagged via: contract, event).
+    expect(tx.opportunity.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.opportunity.updateMany.mock.calls[0][0]).toMatchObject({
+      where: { id: 'opp1', organizationId: 'org1', stage: 'NEGOTIATION' },
       data: { stage: 'WON' },
     });
+    expect(outbox.emit.mock.calls[0][1].eventCode).toBe('opportunity.won');
+  });
+
+  it('refuses a contract on an opportunity that was LOST (409) — nothing is created', async () => {
+    const { svc, tx, outbox } = service(acceptedRevision, 'LOST');
+    const e = await svc.create(user, dto).catch((x) => x);
+    expect(e).toBeInstanceOf(ConflictException);
+    expect((e as Error).message).toBe('Opportunity is closed');
+    expect(tx.contract.create).not.toHaveBeenCalled();
+    expect(tx.opportunity.updateMany).not.toHaveBeenCalled();
+    expect(outbox.emit).not.toHaveBeenCalled();
+  });
+
+  it('a second contract on an already WON opportunity is allowed and does not touch it', async () => {
+    const { svc, tx } = service(acceptedRevision, 'WON');
+    await expect(svc.create(user, dto)).resolves.toMatchObject({ id: 'c1' });
+    expect(tx.opportunity.updateMany).not.toHaveBeenCalled();
   });
 });

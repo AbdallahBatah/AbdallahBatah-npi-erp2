@@ -9,6 +9,7 @@ import { AuditService } from '../../common/audit.service';
 import { NotificationService } from '../../common/notification.service';
 import type { AuthUser } from '../../common/auth-user';
 import { CreateContractDto } from './dto';
+import { OpportunitiesService } from '../crm/opportunities.service';
 import { canViewCosts, hideRevisionPricing } from './revision-pricing';
 
 @Injectable()
@@ -18,6 +19,7 @@ export class ContractsService {
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationService,
+    private readonly opportunities: OpportunitiesService,
   ) {}
 
   list(user: AuthUser) {
@@ -97,6 +99,12 @@ export class ContractsService {
     if (!customer) throw new NotFoundException('Customer not found');
 
     return this.prisma.$transaction(async (tx) => {
+      // CRM Step 3 — the one rule for winning an opportunity through a contract:
+      // refuses a LOST opportunity (409) before anything is written, guards
+      // against a concurrent stage change, audits via: contract and emits
+      // opportunity.won. A second contract on a WON opportunity passes untouched.
+      if (opportunityId) await this.opportunities.markWonViaContract(tx, user, opportunityId);
+
       const code = await this.numbering.next(user.organizationId, 'CONTRACT', tx);
       const contract = await tx.contract.create({
         data: {
@@ -128,13 +136,6 @@ export class ContractsService {
         },
         include: { milestones: true },
       });
-
-      if (opportunityId) {
-        await tx.opportunity.update({
-          where: { id: opportunityId },
-          data: { stage: 'WON' },
-        });
-      }
 
       await this.audit.record(
         {

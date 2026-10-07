@@ -411,6 +411,26 @@ async function main() {
     });
   }
 
+  // CRM Phase 1 (Step 3): the six default reasons an opportunity is lost, in the
+  // order a salesperson sees them. Editable from Admin > Loss reasons; a reason
+  // is switched off, never deleted. Re-seeding never touches a reason the
+  // administrator has renamed, reordered or switched off (update: {}).
+  const lossReasons: Array<{ nameAr: string; nameEn: string; sortOrder: number }> = [
+    { nameAr: 'السعر', nameEn: 'Price', sortOrder: 1 },
+    { nameAr: 'اختيار منافس', nameEn: 'Competitor chosen', sortOrder: 2 },
+    { nameAr: 'إلغاء المشروع أو تأجيله', nameEn: 'Project cancelled or postponed', sortOrder: 3 },
+    { nameAr: 'عدم توفر التمويل', nameEn: 'Funding not available', sortOrder: 4 },
+    { nameAr: 'عدم استيفاء شروط المناقصة', nameEn: 'Tender requirements not met', sortOrder: 5 },
+    { nameAr: 'أخرى', nameEn: 'Other', sortOrder: 6 },
+  ];
+  for (const r of lossReasons) {
+    await prisma.lossReason.upsert({
+      where: { organizationId_nameAr: { organizationId: org.id, nameAr: r.nameAr } },
+      update: {},
+      create: { organizationId: org.id, ...r },
+    });
+  }
+
   // SCM-04: default stock locations (site locations are created per project).
   const locations: Array<{ code: string; nameAr: string; nameEn: string; locationType: any }> = [
     { code: 'WH-MAIN', nameAr: 'المستودع المركزي', nameEn: 'Central Warehouse', locationType: 'WAREHOUSE' },

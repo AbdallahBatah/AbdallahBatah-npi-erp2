@@ -25,7 +25,8 @@ const CUSTOMER_TYPES = ['RESIDENTIAL', 'CI', 'UTILITY', 'GOVERNMENT'] as const;
 const CUSTOMER_ENTITY_KINDS = ['COMPANY', 'INDIVIDUAL'] as const;
 const LEAD_SOURCES = ['WEBSITE', 'REFERRAL', 'CAMPAIGN', 'DIRECT', 'WHATSAPP', 'OTHER'] as const;
 const LEAD_STATUSES = ['NEW', 'QUALIFIED', 'DISQUALIFIED', 'CONVERTED'] as const;
-const OPPORTUNITY_STAGES = ['PROSPECTING', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'] as const;
+const OPPORTUNITY_STAGES = ['PROSPECTING', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'] as const;
+const OPPORTUNITY_TYPES = ['DIRECT', 'TENDER'] as const;
 
 export class CreateCustomerDto {
   @IsString() @MinLength(1) nameAr!: string;
@@ -87,23 +88,77 @@ export class ConvertLeadDto {
   @IsOptional() @IsString() mobile?: string;
   @IsOptional() @IsString() opportunityName?: string;
   @IsOptional() @IsNumber() estimatedValue?: number;
+  /** Step 3: a converted lead may start as a tender. Default DIRECT. */
+  @IsOptional() @IsEnum(OPPORTUNITY_TYPES) opportunityType?: (typeof OPPORTUNITY_TYPES)[number];
+  /** Mandatory when opportunityType is TENDER (the same rule as creating one by hand). */
+  @IsOptional() @IsString() tenderCloseDate?: string;
 }
 
+/**
+ * An opportunity is always born PROSPECTING: the stage is moved by
+ * POST /opportunities/:id/stage (or by creating a proposal / a contract), never
+ * by a field of the create body.
+ *
+ * Dates arrive as yyyy-mm-dd strings; the service validates them (a bad date is
+ * a 400 there). The tender fields apply to opportunityType = TENDER only —
+ * tenderCloseDate is then mandatory; for DIRECT they are ignored.
+ */
 export class CreateOpportunityDto {
   @IsString() @MinLength(1) name!: string;
   @IsString() customerId!: string;
-  @IsOptional() @IsEnum(OPPORTUNITY_STAGES) stage?: (typeof OPPORTUNITY_STAGES)[number];
+  @IsOptional() @IsEnum(OPPORTUNITY_TYPES) opportunityType?: (typeof OPPORTUNITY_TYPES)[number];
   @IsOptional() @IsNumber() estimatedKwp?: number;
   @IsOptional() @IsNumber() estimatedValue?: number;
   @IsOptional() @IsString() expectedCloseDate?: string;
+  @IsOptional() @IsString() tenderReference?: string;
+  @IsOptional() @IsString() tenderCloseDate?: string;
+  @IsOptional() @IsNumber() @Min(0) bidBondAmount?: number;
+  @IsOptional() @IsString() bidBondBank?: string;
+  @IsOptional() @IsString() bidBondExpiry?: string;
+  @IsOptional() @IsString() bidBondReference?: string;
 }
 
 export class UpdateOpportunityDto {
   @IsOptional() @IsString() name?: string;
-  @IsOptional() @IsEnum(OPPORTUNITY_STAGES) stage?: (typeof OPPORTUNITY_STAGES)[number];
+  /**
+   * Declared ONLY so the service can answer a stage in a PATCH with the clear
+   * 400 "Stage changes go through /stage" (the global pipe would otherwise say
+   * "property stage should not exist"). It is never applied.
+   */
+  @IsOptional() @IsString() stage?: string;
+  @IsOptional() @IsEnum(OPPORTUNITY_TYPES) opportunityType?: (typeof OPPORTUNITY_TYPES)[number];
   @IsOptional() @IsNumber() estimatedKwp?: number;
   @IsOptional() @IsNumber() estimatedValue?: number;
   @IsOptional() @IsString() expectedCloseDate?: string;
+  @IsOptional() @IsString() tenderReference?: string;
+  @IsOptional() @IsString() tenderCloseDate?: string;
+  @IsOptional() @IsNumber() @Min(0) bidBondAmount?: number;
+  @IsOptional() @IsString() bidBondBank?: string;
+  @IsOptional() @IsString() bidBondExpiry?: string;
+  @IsOptional() @IsString() bidBondReference?: string;
+  /** The only fields besides `name` that a closed (WON / LOST) opportunity still accepts. */
+  @IsOptional() @IsString() lossNotes?: string;
+}
+
+/** POST /opportunities/:id/stage. LOST needs `lossReasonId` (an active reason of the organization). */
+export class ChangeStageDto {
+  @IsEnum(OPPORTUNITY_STAGES) stage!: (typeof OPPORTUNITY_STAGES)[number];
+  @IsOptional() @IsString() lossReasonId?: string;
+  @IsOptional() @IsString() lossNotes?: string;
+}
+
+export class CreateLossReasonDto {
+  @IsString() @MinLength(1) nameAr!: string;
+  @IsString() @MinLength(1) nameEn!: string;
+  @IsOptional() @IsInt() sortOrder?: number;
+}
+
+/** There is deliberately no way to delete a reason: switch it off with isActive = false. */
+export class UpdateLossReasonDto {
+  @IsOptional() @IsString() @MinLength(1) nameAr?: string;
+  @IsOptional() @IsString() @MinLength(1) nameEn?: string;
+  @IsOptional() @IsInt() sortOrder?: number;
+  @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
 export class CreateContactDto {

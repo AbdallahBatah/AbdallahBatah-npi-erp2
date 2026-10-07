@@ -13,6 +13,8 @@ import {
   LEAD_SOURCES,
   LEAD_STATUSES,
   OPPORTUNITY_STAGES,
+  OPPORTUNITY_TYPES,
+  OPPORTUNITY_STAGE_FLOW,
   ITEM_CATEGORIES,
   PROPOSAL_STATUSES,
   CONTRACT_TYPES,
@@ -60,6 +62,7 @@ export class ReferenceController {
       leadSources: LEAD_SOURCES,
       leadStatuses: LEAD_STATUSES,
       opportunityStages: OPPORTUNITY_STAGES,
+      opportunityTypes: OPPORTUNITY_TYPES,
       itemCategories: ITEM_CATEGORIES,
       proposalStatuses: PROPOSAL_STATUSES,
       contractTypes: CONTRACT_TYPES,
@@ -108,12 +111,12 @@ export class ReferenceController {
     const [leads, openOpps, contracts, activeContracts, pipeline] = await Promise.all([
       this.prisma.lead.count({ where: { organizationId: org, status: { not: 'CONVERTED' } } }),
       this.prisma.opportunity.count({
-        where: { organizationId: org, stage: { notIn: ['WON', 'LOST'] } },
+        where: { organizationId: org, stage: { in: [...OPPORTUNITY_STAGE_FLOW] } },
       }),
       this.prisma.contract.count({ where: { organizationId: org } }),
       this.prisma.contract.count({ where: { organizationId: org, status: 'ACTIVE' } }),
       this.prisma.opportunity.aggregate({
-        where: { organizationId: org, stage: { notIn: ['WON', 'LOST'] } },
+        where: { organizationId: org, stage: { in: [...OPPORTUNITY_STAGE_FLOW] } },
         _sum: { estimatedValue: true },
       }),
     ]);

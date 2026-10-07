@@ -170,6 +170,44 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
     ar: 'لا يمكن دمج السجل الباقي في نفسه',
     en: 'The surviving record cannot be merged into itself',
   },
+  // opportunities and the sales funnel (CRM Step 3). "Invalid stage transition"
+  // is translated per reason in translateError (it needs the response body);
+  // this pattern is only the fallback.
+  {
+    re: /invalid stage transition/i,
+    ar: 'لا يمكن نقل الفرصة إلى هذه المرحلة — حدّث الصفحة وحاول مجدداً',
+    en: 'The opportunity cannot be moved to that stage - refresh the page and try again',
+  },
+  {
+    re: /loss reason is required/i,
+    ar: 'سبب الخسارة إلزامي — اختر سبباً من القائمة',
+    en: 'A loss reason is required - pick one from the list',
+  },
+  {
+    re: /tender close date is required/i,
+    ar: 'تاريخ إقفال المناقصة إلزامي للفرصة من نوع مناقصة',
+    en: 'The tender close date is required for a tender opportunity',
+  },
+  {
+    re: /opportunity is closed/i,
+    ar: 'الفرصة مقفلة (رابحة أو خاسرة) — لا تقبل تعديلاً ولا عروضاً جديدة؛ أنشئ فرصة جديدة',
+    en: 'The opportunity is closed (won or lost) - it takes no edits or new proposals; create a new opportunity',
+  },
+  {
+    re: /stage changes go through/i,
+    ar: 'تُغيَّر المرحلة من شريط المراحل في صفحة الفرصة',
+    en: 'Change the stage from the stepper on the opportunity page',
+  },
+  {
+    re: /loss reason name already in use/i,
+    ar: 'اسم السبب موجود في القائمة مسبقاً',
+    en: 'A loss reason with that name already exists',
+  },
+  {
+    re: /must be a valid date/i,
+    ar: 'تاريخ غير صالح — اختر التاريخ من التقويم',
+    en: 'Not a valid date - pick it from the calendar',
+  },
 ];
 
 // 403s that deserve a specific sentence instead of the generic "no permission".
@@ -226,6 +264,22 @@ export function translateError(e: unknown, locale: Locale): string {
       return ar
         ? `يوجد عميل بنفس ${field}: ${dup[2]} — ${dup[3]}`
         : `A customer with the same ${field} already exists: ${dup[2]} — ${dup[3]}`;
+    }
+    // A refused stage move says WHY in the body (TERMINAL / SKIP / CONCURRENT).
+    if (e.status === 409 && /^Invalid stage transition/i.test(e.message)) {
+      const reason = e.body?.reason as string | undefined;
+      if (reason === 'TERMINAL')
+        return ar
+          ? 'الفرصة مقفلة (رابحة أو خاسرة) ولا يمكن إعادة فتحها — أنشئ فرصة جديدة'
+          : 'The opportunity is closed (won or lost) and cannot be reopened - create a new opportunity';
+      if (reason === 'SKIP')
+        return ar
+          ? 'لا يمكن القفز فوق مرحلة — انتقل إلى المرحلة التالية مباشرة'
+          : 'A stage cannot be skipped - move to the next stage';
+      if (reason === 'CONCURRENT')
+        return ar
+          ? 'غيّر مستخدم آخر مرحلة هذه الفرصة قبل لحظات — حدّث الصفحة'
+          : 'Another user just changed this opportunity - refresh the page';
     }
     for (const p of PATTERNS)
       if (p.re.test(e.message)) return ar ? p.ar : (p.en ?? e.message);

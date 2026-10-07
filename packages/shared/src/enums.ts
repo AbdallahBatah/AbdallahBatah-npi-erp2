@@ -39,12 +39,21 @@ export const LEAD_STATUSES: EnumOption[] = [
   { value: 'CONVERTED', labelAr: 'محوَّل', labelEn: 'Converted' },
 ];
 
+// CRM Phase 1 · Step 3 (§4.2 / §9): محتمل ← تأهيل ← عرض سعر ← تفاوض ← رابحة | خاسرة.
+// The order here IS the funnel order; the transition rules live in
+// opportunity-stages.ts.
 export const OPPORTUNITY_STAGES: EnumOption[] = [
-  { value: 'PROSPECTING', labelAr: 'استكشاف', labelEn: 'Prospecting' },
+  { value: 'PROSPECTING', labelAr: 'محتمل', labelEn: 'Prospecting' },
+  { value: 'QUALIFICATION', labelAr: 'تأهيل', labelEn: 'Qualification' },
   { value: 'PROPOSAL', labelAr: 'عرض سعر', labelEn: 'Proposal' },
   { value: 'NEGOTIATION', labelAr: 'تفاوض', labelEn: 'Negotiation' },
-  { value: 'WON', labelAr: 'مكسوبة', labelEn: 'Won' },
+  { value: 'WON', labelAr: 'رابحة', labelEn: 'Won' },
   { value: 'LOST', labelAr: 'خاسرة', labelEn: 'Lost' },
+];
+
+export const OPPORTUNITY_TYPES: EnumOption[] = [
+  { value: 'DIRECT', labelAr: 'مباشرة', labelEn: 'Direct' },
+  { value: 'TENDER', labelAr: 'مناقصة', labelEn: 'Tender' },
 ];
 
 export const ITEM_CATEGORIES: EnumOption[] = [

@@ -99,6 +99,30 @@ export class SearchService {
       );
     }
 
+    if (has(PERMISSIONS.OPPORTUNITY_READ)) {
+      tasks.push(
+        this.prisma.opportunity
+          .findMany({
+            where: {
+              organizationId: orgId,
+              OR: [{ name: contains(q) }, { code: contains(q) }, { tenderReference: contains(q) }],
+            },
+            select: { id: true, code: true, name: true, tenderReference: true },
+            take: TAKE,
+          })
+          .then((rows) => {
+            out.opportunities = rows.map((r) => ({
+              type: 'opportunities',
+              id: r.id,
+              labelAr: r.name,
+              labelEn: r.name,
+              sublabel: r.tenderReference ? `${r.code} · ${r.tenderReference}` : r.code,
+              href: `/opportunities/${r.id}`,
+            }));
+          }),
+      );
+    }
+
     if (has(PERMISSIONS.CONTRACT_READ)) {
       tasks.push(
         this.prisma.contract

@@ -63,7 +63,7 @@ describe('ProposalsService redaction', () => {
         findFirst: jest.fn().mockResolvedValue(proposal()),
       },
     };
-    return { svc: new ProposalsService(prisma as never, {} as never, {} as never), prisma };
+    return { svc: new ProposalsService(prisma as never, {} as never, {} as never, {} as never), prisma };
   };
 
   it('get(): hides the price build-up from a user without costs.view, keeps totalAmount', async () => {
