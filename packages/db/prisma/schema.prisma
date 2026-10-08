@@ -86,11 +86,31 @@ enum ItemCategory {
   SERVICE
 }
 
+// CRM Phase 1 · Step 4 (§9 status map): مسودة ← بانتظار الاعتماد ← معتمد ← مُرسل ←
+// مقبول | مرفوض (by the customer) | منتهي الصلاحية | مُستبدَل بنسخة أحدث. Used by
+// Proposal.status (a mirror of its current revision) and ProposalRevision.status;
+// SUPERSEDED only ever appears on a revision. The four new values are added by
+// migration 0026 and first used by 0027 (Postgres cannot use a value in the
+// transaction that adds it).
 enum ProposalStatus {
   DRAFT
+  PENDING_APPROVAL
+  APPROVED
   SENT
   ACCEPTED
   REJECTED
+  EXPIRED
+  SUPERSEDED
+}
+
+// Where a proposal line's cost came from (CRM Step 4, spec 4.3): the last accepted
+// goods receipt, the last approved purchase order, the catalogue cost (no date),
+// or a manual change with a recorded reason.
+enum CostSource {
+  GRN
+  PO
+  CATALOGUE
+  MANUAL
 }
 
 enum ContractType {
@@ -320,6 +340,8 @@ model User {
   requisitions        PurchaseRequisition[] @relation("PrRequester")
   // CRM Phase 1: roles held in addition to the primary `roleId`.
   extraRoles          UserRole[]
+  // CRM Phase 1 · Step 4: proposal revisions this person created.
+  proposalRevisionsCreated ProposalRevision[] @relation("ProposalRevisionCreator")
 
   @@index([organizationId])
   @@index([organizationId, departmentId])
@@ -665,10 +687,26 @@ model ProposalRevision {
   isWinning      Boolean  @default(false)
   createdAt      DateTime @default(now())
 
+  // CRM Phase 1 · Step 4 (spec 4.3). All nullable: a revision written before
+  // this step has none of them and keeps its old meaning.
+  /// The last day the offer is valid (UTC midnight of a Riyadh calendar day).
+  validUntil     DateTime?
+  submittedAt    DateTime?
+  approvedAt     DateTime?
+  sentAt         DateTime?
+  /// The moment the revision stopped being current: accepted, rejected by the
+  /// customer, expired or superseded.
+  closedAt       DateTime?
+  /// The newer revision that took its place (set with status SUPERSEDED).
+  supersededById String?
+  createdById    String?
+  createdBy      User?    @relation("ProposalRevisionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
   bomLines       BomLine[]
   contract       Contract?
 
   @@unique([proposalId, revisionNo])
+  @@index([status, validUntil])
 }
 
 model BomLine {
@@ -681,6 +719,20 @@ model BomLine {
   unitPrice          Decimal @default(0) @db.Decimal(18, 2)
   isAdder            Boolean @default(false)
   lineTotal          Decimal @default(0) @db.Decimal(18, 2)
+
+  // CRM Phase 1 · Step 4 (spec 4.3). From Step 4 on a new revision keeps the COST
+  // here and the SELLING price in unitPrice; a line without unitCost is a pre-Step-4
+  // line whose unitPrice is the cost base. originalUnitCost is what the system
+  // fetched; unitCost differs from it only after a manual change (with its reason).
+  unitCost           Decimal? @db.Decimal(18, 2)
+  originalUnitCost   Decimal? @db.Decimal(18, 2)
+  costSource         CostSource?
+  /// When that cost was incurred (receipt / order date); null for a catalogue cost.
+  costDate           DateTime?
+  costAgeDays        Int?
+  costOverrideReason String?
+  costOverriddenAt   DateTime?
+  costOverriddenById String?
 
   @@index([proposalRevisionId])
 }
@@ -2049,6 +2101,9 @@ enum ApprovalDocument {
   PURCHASE_ORDER
   PROGRESS_CLAIM
   CHANGE_ORDER
+  // CRM Phase 1 · Step 4: a proposal is banded on its selling total and signed
+  // by the executive before it may be sent to the customer.
+  PROPOSAL
 }
 
 enum ApprovalStatus {

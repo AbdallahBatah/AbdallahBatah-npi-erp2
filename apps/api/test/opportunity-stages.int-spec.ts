@@ -20,9 +20,9 @@ import { NotificationService } from '../src/common/notification.service';
 import { OutboxService } from '../src/common/workflow/outbox.service';
 import { OpportunitiesService } from '../src/modules/crm/opportunities.service';
 import { LossReasonsService } from '../src/modules/crm/loss-reasons.service';
-import { ProposalsService } from '../src/modules/commercial/proposals.service';
 import { ContractsService } from '../src/modules/commercial/contracts.service';
 import type { AuthUser } from '../src/common/auth-user';
+import { buildProposalStack, cloneProposalFlow } from './support/proposal-stack';
 
 const prisma = new PrismaService();
 const numbering = new NumberingService(prisma);
@@ -30,7 +30,8 @@ const audit = new AuditService(prisma);
 const outbox = new OutboxService(prisma);
 const opportunities = new OpportunitiesService(prisma, numbering, audit, outbox);
 const lossReasons = new LossReasonsService(prisma, audit);
-const proposals = new ProposalsService(prisma, numbering, audit, opportunities);
+// Step 4: a proposal opens its workflow instance at creation, so the services come from the shared wiring.
+const proposals = buildProposalStack(prisma).proposals;
 const contracts = new ContractsService(prisma, numbering, audit, new NotificationService(prisma), opportunities);
 
 const suffix = `${Date.now()}`;
@@ -74,6 +75,8 @@ beforeAll(async () => {
     where: { id: { not: org.id }, numberingSequences: { some: { documentType: 'OPPORTUNITY' } } },
     select: { id: true },
   });
+  // Step 4: the new organization needs the PROPOSAL flow for proposals.create() to open its instance.
+  await cloneProposalFlow(prisma, org.id);
   const sequences = await prisma.numberingSequence.findMany({ where: { organizationId: source.id } });
   await prisma.numberingSequence.createMany({
     data: sequences.map((s) => ({

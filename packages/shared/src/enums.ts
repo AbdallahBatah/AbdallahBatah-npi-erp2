@@ -66,11 +66,25 @@ export const ITEM_CATEGORIES: EnumOption[] = [
   { value: 'SERVICE', labelAr: 'خدمة', labelEn: 'Service' },
 ];
 
+// CRM Phase 1 · Step 4 (§9): مسودة ← بانتظار الاعتماد ← معتمد ← مُرسل ← مقبول | مرفوض
+// (رفض العميل) | منتهي الصلاحية | مُستبدَل بنسخة أحدث. The order is the document's.
 export const PROPOSAL_STATUSES: EnumOption[] = [
   { value: 'DRAFT', labelAr: 'مسودة', labelEn: 'Draft' },
+  { value: 'PENDING_APPROVAL', labelAr: 'بانتظار الاعتماد', labelEn: 'Pending approval' },
+  { value: 'APPROVED', labelAr: 'معتمد', labelEn: 'Approved' },
   { value: 'SENT', labelAr: 'مُرسَل', labelEn: 'Sent' },
   { value: 'ACCEPTED', labelAr: 'مقبول', labelEn: 'Accepted' },
   { value: 'REJECTED', labelAr: 'مرفوض', labelEn: 'Rejected' },
+  { value: 'EXPIRED', labelAr: 'منتهي الصلاحية', labelEn: 'Expired' },
+  { value: 'SUPERSEDED', labelAr: 'مُستبدَل بنسخة أحدث', labelEn: 'Superseded by a newer revision' },
+];
+
+/** Where a proposal line's cost came from (spec 4.3): the last purchase, or a recorded manual change. */
+export const COST_SOURCES: EnumOption[] = [
+  { value: 'GRN', labelAr: 'آخر استلام مقبول', labelEn: 'Last accepted receipt' },
+  { value: 'PO', labelAr: 'آخر أمر شراء معتمد', labelEn: 'Last approved purchase order' },
+  { value: 'CATALOGUE', labelAr: 'تكلفة الكتالوج', labelEn: 'Catalogue cost' },
+  { value: 'MANUAL', labelAr: 'تعديل يدوي', labelEn: 'Manual change' },
 ];
 
 export const CONTRACT_TYPES: EnumOption[] = [

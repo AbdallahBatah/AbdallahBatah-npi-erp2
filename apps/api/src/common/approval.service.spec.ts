@@ -566,3 +566,42 @@ describe('ApprovalService.inbox', () => {
     await expect(make(prisma).inboxCount(user())).resolves.toBe(1);
   });
 });
+
+// ── CRM Phase 1 · Step 4: the proposal joins the matrix ─────────────────────
+
+describe('PROPOSAL in the approval matrix', () => {
+  it('is an advertised document type, decided with the proposal approve key', () => {
+    const meta = APPROVAL_DOCUMENTS.find((d) => d.value === 'PROPOSAL');
+    expect(meta).toMatchObject({
+      value: 'PROPOSAL',
+      labelAr: 'عرض سعر',
+      permission: 'commercial.proposal.approve',
+    });
+    expect(meta!.amountLabelAr).toContain('سعر البيع');
+  });
+
+  it('the boot gate demands an applier for it — forgetting the registration fails the start', () => {
+    const svc = make(prismaWith());
+    for (const d of APPROVAL_DOCUMENTS) if (d.value !== 'PROPOSAL') svc.register(d.value, jest.fn());
+    expect(() => svc.onApplicationBootstrap()).toThrow(/PROPOSAL/);
+    svc.register('PROPOSAL', jest.fn(), jest.fn());
+    expect(() => svc.onApplicationBootstrap()).not.toThrow();
+  });
+
+  it('a procurement approver cannot sign a proposal — the key is the proposal’s own', async () => {
+    const prisma = prismaWith();
+    const req = {
+      id: 'req9', organizationId: 'org1', documentType: 'PROPOSAL', documentId: 'p1', documentCode: 'PRP-1 R1',
+      amount: 90_000, status: 'PENDING', currentStep: 1, currentStepAt: new Date(), createdAt: new Date(), closedAt: null,
+      raisedById: 'u-sales', raisedBy: null,
+      steps: [{
+        id: 's1', sequence: 1, roleId: 'role-pm', status: 'PENDING',
+        role: { id: 'role-pm', nameAr: 'م', nameEn: 'M' }, decidedById: null, decidedBy: null, decidedAt: null, note: null, escalatedAt: null,
+      }],
+    };
+    (prisma.approvalRequest.findFirst as jest.Mock).mockResolvedValue(req);
+    (prisma.approvalRequest.update as jest.Mock).mockResolvedValue({ ...req, status: 'PENDING' });
+    (prisma.approvalRequest.findUnique as jest.Mock).mockResolvedValue({ ...req, status: 'PENDING' });
+    await expect(make(prisma).decide(user(), 'req9', 'APPROVE')).rejects.toThrow(ForbiddenException);
+  });
+});

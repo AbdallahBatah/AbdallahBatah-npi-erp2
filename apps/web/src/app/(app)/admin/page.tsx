@@ -20,6 +20,7 @@ import { AuditLogCard } from '@/components/audit-log';
 import { ApprovalMatrixCard } from '@/components/approval-matrix';
 import { CustomerMergeCard } from '@/components/customer-merge';
 import { LossReasonsCard } from '@/components/loss-reasons';
+import { ProposalSettingsCard } from '@/components/proposal-settings';
 
 interface RoleRow {
   id: string;
@@ -378,6 +379,7 @@ export default function AdminPage() {
         // matrix editor from re-fetching what this screen owns.
         <ApprovalMatrixCard roles={roles} />
       ) : tab === 'org' ? (
+        <div className="space-y-6">
         <div className="card max-w-2xl p-6">
           {orgErr ? (
             <LoadError message={orgErr} onRetry={loadOrg} />
@@ -507,6 +509,8 @@ export default function AdminPage() {
               </div>
             </form>
           )}
+        </div>
+        <ProposalSettingsCard />
         </div>
       ) : tab === 'users' ? (
         <div className="card overflow-hidden">

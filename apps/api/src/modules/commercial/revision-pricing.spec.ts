@@ -45,6 +45,66 @@ describe('hideRevisionPricing', () => {
   });
 });
 
+// CRM Phase 1 · Step 4 (contract §1-4): a revision created from now on carries the
+// COST in the base columns and the SELLING price in unitPrice / lineTotal / totalAmount.
+// What a caller without finance.costs.view must not see flips accordingly; a revision
+// created before Step 4 (no validity date, no line cost) keeps the old redaction.
+describe('hideRevisionPricing — cost-based revisions', () => {
+  const costBased = () => ({
+    id: 'rev2',
+    validUntil: new Date('2099-01-01T00:00:00Z'),
+    subtotal: '200.00',
+    marginAmount: '60.00',
+    totalAmount: '260.00',
+    pricingScheme: { id: 's1', marginPct: '10' },
+    bomLines: [
+      {
+        id: 'l1',
+        qty: 2,
+        unitCost: '100.00',
+        originalUnitCost: '100.00',
+        costSource: 'GRN',
+        costDate: new Date('2026-09-20'),
+        costAgeDays: 18,
+        costOverrideReason: 'quote 12',
+        costOverriddenAt: new Date('2026-10-01'),
+        costOverriddenById: 'u1',
+        unitPrice: '130.00',
+        lineTotal: '260.00',
+        item: { sku: 'X' },
+      },
+    ],
+  });
+
+  it('keeps the selling price (unitPrice, lineTotal, totalAmount) and hides the cost build-up', () => {
+    const out = hideRevisionPricing(costBased());
+    expect(out.subtotal).toBeNull();
+    expect(out.marginAmount).toBeNull();
+    expect(out.pricingScheme).toBeNull();
+    const line = out.bomLines[0] as Record<string, unknown>;
+    expect(line.unitPrice).toBe('130.00');
+    expect(line.lineTotal).toBe('260.00');
+    expect(out.totalAmount).toBe('260.00');
+    for (const k of ['unitCost', 'originalUnitCost', 'costSource', 'costDate', 'costAgeDays', 'costOverrideReason', 'costOverriddenAt', 'costOverriddenById']) {
+      expect(line[k]).toBeNull();
+    }
+    expect(line.qty).toBe(2);
+  });
+
+  it('recognises a cost-based revision by its lines when the revision row carries no date', () => {
+    const rev = { ...costBased(), validUntil: undefined };
+    expect((hideRevisionPricing(rev).bomLines[0] as Record<string, unknown>).unitPrice).toBe('130.00');
+  });
+
+  it('a revision from before Step 4 is redacted exactly as it always was', () => {
+    const legacy = { ...revision(), validUntil: null };
+    const out = hideRevisionPricing(legacy);
+    expect(out.bomLines[0].unitPrice).toBeNull();
+    expect(out.bomLines[0].lineTotal).toBeNull();
+    expect(out.subtotal).toBeNull();
+  });
+});
+
 describe('cost-permission helpers', () => {
   it('canViewCosts / assertCanSetCosts follow finance.costs.view', () => {
     expect(canViewCosts(withCosts)).toBe(true);
@@ -63,7 +123,17 @@ describe('ProposalsService redaction', () => {
         findFirst: jest.fn().mockResolvedValue(proposal()),
       },
     };
-    return { svc: new ProposalsService(prisma as never, {} as never, {} as never, {} as never), prisma };
+    // get() / list() also ask the engine, the matrix and the settings (Step 4).
+    const engine = { available: jest.fn().mockResolvedValue([]), history: jest.fn().mockResolvedValue([]) };
+    const approvals = { forDocument: jest.fn().mockResolvedValue(null), pendingFor: jest.fn().mockResolvedValue(new Map()) };
+    const settings = { get: jest.fn().mockImplementation(async (_o: string, _k: string, d: unknown) => d) };
+    return {
+      svc: new ProposalsService(
+        prisma as never, {} as never, {} as never, {} as never,
+        engine as never, approvals as never, {} as never, settings as never,
+      ),
+      prisma,
+    };
   };
 
   it('get(): hides the price build-up from a user without costs.view, keeps totalAmount', async () => {

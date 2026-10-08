@@ -201,6 +201,9 @@ export const COST_FIELDS: readonly string[] = [
   // bomLines[].item.unitCost, requisition/PO item lookups, WorkOrderPart.unitCost
   // (schema.prisma:1426).
   'unitCost',
+  // BomLine.originalUnitCost (CRM Step 4): the cost the system fetched before a manual
+  // change; the changed cost itself is covered by 'unitCost'.
+  'originalUnitCost',
   // ProposalRevision.marginAmount (schema.prisma:525) — the margin added on top
   // of the BOM subtotal; computed in proposals.service addRevision (line ~114).
   'marginAmount',

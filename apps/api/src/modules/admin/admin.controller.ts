@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
+import { OrgSettingsService } from '../../common/org-settings.service';
 import { CreateRoleDto, CreateUserDto, ResetPasswordDto, UpdateOrgDto, UpdateRoleDto, UpdateUserDto } from './dto';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
@@ -9,7 +10,10 @@ import type { AuthUser } from '../../common/auth-user';
 @Controller('admin')
 @UseGuards(PermissionsGuard)
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly settings: OrgSettingsService,
+  ) {}
 
   /** Bilingual catalog for the role editor — one source of truth in @npi/shared. */
   @Get('permissions')
@@ -116,5 +120,23 @@ export class AdminController {
   @RequirePermissions(PERMISSIONS.ORG_MANAGE)
   updateOrg(@CurrentUser() user: AuthUser, @Body() dto: UpdateOrgDto) {
     return this.admin.updateOrg(user, dto);
+  }
+
+  /**
+   * CRM Phase 1 · Step 4: the few organization settings that are safe to edit from
+   * the screen (proposal validity, cost-age warning, name-similarity threshold) as a
+   * flat { key: value } object. Any other key is a 400; so is a value out of range.
+   */
+  @Get('settings')
+  @RequirePermissions(PERMISSIONS.ORG_MANAGE)
+  getSettings(@CurrentUser() user: AuthUser) {
+    return this.settings.getEditable(user.organizationId);
+  }
+
+  @Patch('settings')
+  @RequirePermissions(PERMISSIONS.ORG_MANAGE)
+  async updateSettings(@CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {
+    await this.settings.setEditable(user.organizationId, body ?? {}, user.userId);
+    return this.settings.getEditable(user.organizationId);
   }
 }

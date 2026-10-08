@@ -303,6 +303,9 @@ const STATUS_META: Record<string, { ar: string; en: string; cls: string; dot: st
   COMMISSIONING: { ar: 'تشغيل تجريبي', en: 'Commissioning', cls: 'bg-info-50 text-info-700', dot: 'bg-info-500' },
   // procurement
   APPROVED: { ar: 'معتمد', en: 'Approved', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  PENDING_APPROVAL: { ar: 'بانتظار الاعتماد', en: 'Pending approval', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
+  EXPIRED: { ar: 'منتهي الصلاحية', en: 'Expired', cls: 'bg-danger-50 text-danger-600', dot: 'bg-danger-500' },
+  SUPERSEDED: { ar: 'مُستبدَل', en: 'Superseded', cls: 'bg-slate-100 text-slate-500', dot: 'bg-slate-400' },
   PARTIALLY_RECEIVED: { ar: 'مستلم جزئياً', en: 'Partially received', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
   RECEIVED: { ar: 'مستلم', en: 'Received', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
   POSTED: { ar: 'مرحَّلة', en: 'Posted', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },

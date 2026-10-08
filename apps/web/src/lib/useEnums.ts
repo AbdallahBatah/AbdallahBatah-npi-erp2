@@ -18,6 +18,7 @@ export interface EnumSets {
   opportunityTypes: EnumOption[];
   itemCategories: EnumOption[];
   proposalStatuses: EnumOption[];
+  costSources: EnumOption[];
   contractTypes: EnumOption[];
   contractStatuses: EnumOption[];
   milestoneTriggerTypes: EnumOption[];

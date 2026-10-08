@@ -208,6 +208,122 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
     ar: 'تاريخ غير صالح — اختر التاريخ من التقويم',
     en: 'Not a valid date - pick it from the calendar',
   },
+  // proposals, their revisions and their approval (CRM Step 4)
+  {
+    re: /cost override reason is required/i,
+    ar: 'تعديل التكلفة يلزمه سبب — اكتب سبب التغيير في خانة «سبب التعديل»',
+    en: 'A changed cost needs a reason - write it in the "Reason for the change" field',
+  },
+  {
+    re: /validity date must be in the future/i,
+    ar: 'تاريخ صلاحية العرض يجب أن يكون بعد اليوم',
+    en: 'The proposal validity date must be after today',
+  },
+  {
+    re: /validity date must be a valid date/i,
+    ar: 'تاريخ الصلاحية غير صالح — اختر التاريخ من التقويم',
+    en: 'The validity date is not valid - pick it from the calendar',
+  },
+  {
+    re: /selling price is required/i,
+    ar: 'أدخل سعر البيع لكل بند',
+    en: 'Enter the selling price of every line',
+  },
+  {
+    re: /previous revision is awaiting approval/i,
+    ar: 'النسخة الحالية بانتظار الاعتماد — لا تُضاف نسخة جديدة ولا يُعدَّل العرض حتى يُبتّ فيه',
+    en: 'The current revision is awaiting approval - it cannot be changed or replaced until it is decided',
+  },
+  {
+    re: /proposal is accepted/i,
+    ar: 'العرض مقبول — لا يُعدَّل إلا بأمر تغيير',
+    en: 'The proposal is accepted - it can only be changed by a change order',
+  },
+  {
+    re: /still a draft/i,
+    ar: 'النسخة الحالية ما زالت مسودة — عدّلها مباشرة بدل إنشاء نسخة جديدة',
+    en: 'The current revision is still a draft - edit it instead of adding a new one',
+  },
+  {
+    re: /only a draft revision can be edited/i,
+    ar: 'تُعدَّل المسودة فقط — أنشئ نسخة جديدة لتغيير نسخة أُرسلت أو اعتُمدت',
+    en: 'Only a draft can be edited - add a new revision to change one that was approved or sent',
+  },
+  {
+    re: /only a draft revision can be submitted/i,
+    ar: 'يُرفع للاعتماد المسودة فقط',
+    en: 'Only a draft can be submitted for approval',
+  },
+  {
+    re: /proposal needs at least one line/i,
+    ar: 'أضف بنداً واحداً على الأقل قبل رفع العرض للاعتماد',
+    en: 'Add at least one line before submitting the proposal',
+  },
+  {
+    re: /no other approver is available/i,
+    ar: 'لا يوجد معتمِد آخر غيرك لهذا العرض — لا يعتمد أحد عرضاً رفعه بنفسه. يلزم حامل آخر لدور الإدارة العليا، أو تفويض مؤقت من غيرك',
+    en: 'There is no other approver for this proposal - nobody approves what they raised themselves. Another holder of the executive role, or a temporary delegation from someone else, is needed',
+  },
+  {
+    re: /proposal revision has expired/i,
+    ar: 'انتهت صلاحية هذه النسخة — أنشئ نسخة جديدة بتاريخ صلاحية جديد',
+    en: 'This revision has expired - add a new revision with a new validity date',
+  },
+  {
+    re: /only an approved revision can be sent/i,
+    ar: 'يُرسل للعميل العرض المعتمد فقط',
+    en: 'Only an approved revision can be sent to the customer',
+  },
+  {
+    re: /only the current sent revision can be accepted/i,
+    ar: 'يُسجَّل قبول العميل للنسخة الحالية المُرسَلة فقط — حدّث الصفحة',
+    en: 'Only the current, sent revision can be accepted - refresh the page',
+  },
+  {
+    re: /only a sent revision can be rejected/i,
+    ar: 'يُسجَّل رفض العميل للنسخة المُرسَلة فقط',
+    en: 'Only a sent revision can be rejected by the customer',
+  },
+  {
+    re: /rejection reason is required/i,
+    ar: 'سبب رفض العميل إلزامي',
+    en: 'The customer\'s reason for refusing is required',
+  },
+  {
+    re: /another revision was added at the same moment/i,
+    ar: 'أضاف مستخدم آخر نسخة في اللحظة نفسها — حدّث الصفحة وحاول مجدداً',
+    en: 'Another user added a revision at the same moment - refresh and try again',
+  },
+  {
+    re: /is not a legal action on/i,
+    ar: 'هذا الإجراء غير متاح في الحالة الحالية للمستند — حدّث الصفحة',
+    en: 'That action is not available in the document\'s current state - refresh the page',
+  },
+  {
+    re: /already awaiting approval/i,
+    ar: 'المستند بانتظار الاعتماد بالفعل',
+    en: 'The document is already awaiting approval',
+  },
+  {
+    re: /moved while this action was in flight/i,
+    ar: 'تغيّرت حالة المستند أثناء التنفيذ — حدّث الصفحة وحاول مجدداً',
+    en: 'The document changed state while this was happening - refresh and try again',
+  },
+  {
+    re: /does not meet the condition/i,
+    ar: 'المستند لا يستوفي شرط هذا الإجراء — تأكد أن الإجمالي أكبر من صفر',
+    en: 'The document does not meet the condition for this action - check that the total is above zero',
+  },
+  {
+    re: /unknown setting key/i,
+    ar: 'إعداد غير معروف',
+    en: 'Unknown setting',
+  },
+  {
+    re: /setting value out of range/i,
+    ar: 'القيمة خارج المدى المسموح — أدخل عدداً صحيحاً من 1 إلى 365',
+    en: 'The value is out of range - enter a whole number from 1 to 365',
+  },
 ];
 
 // 403s that deserve a specific sentence instead of the generic "no permission".

@@ -123,6 +123,31 @@ export class SearchService {
       );
     }
 
+    // CRM Step 4: a proposal is found by its code (PRP-…) or its opportunity's name.
+    if (has(PERMISSIONS.PROPOSAL_READ)) {
+      tasks.push(
+        this.prisma.proposal
+          .findMany({
+            where: {
+              organizationId: orgId,
+              OR: [{ code: contains(q) }, { opportunity: { name: contains(q) } }],
+            },
+            select: { id: true, code: true, opportunity: { select: { name: true } } },
+            take: TAKE,
+          })
+          .then((rows) => {
+            out.proposals = rows.map((r) => ({
+              type: 'proposals',
+              id: r.id,
+              labelAr: r.code,
+              labelEn: r.code,
+              sublabel: r.opportunity.name,
+              href: `/proposals/${r.id}`,
+            }));
+          }),
+      );
+    }
+
     if (has(PERMISSIONS.CONTRACT_READ)) {
       tasks.push(
         this.prisma.contract

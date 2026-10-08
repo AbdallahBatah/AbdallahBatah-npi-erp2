@@ -29,6 +29,7 @@ import { LossReasonsService } from '../src/modules/crm/loss-reasons.service';
 import { CustomerContactsService } from '../src/modules/crm/customer-contacts.service';
 import { AttachmentsService } from '../src/modules/platform/attachments.service';
 import type { AuthUser } from '../src/common/auth-user';
+import { buildProposalStack } from './support/proposal-stack';
 
 const prisma = new PrismaService();
 const numbering = new NumberingService(prisma);
@@ -45,6 +46,8 @@ const contracts = new ContractsService(prisma, numbering, audit, notifications, 
 const customers = new CustomersService(prisma, numbering, audit, new OrgSettingsService(prisma, audit));
 const customerContacts = new CustomerContactsService(prisma, audit);
 const attachments = new AttachmentsService(prisma, audit);
+// CRM Step 4: the proposal service with the real kernel behind it.
+const proposals = buildProposalStack(prisma).proposals;
 
 /** Everything org B owns, for org A to fail to reach. */
 const B = {
@@ -59,6 +62,9 @@ const B = {
   attachmentId: '',
   opportunityId: '',
   lossReasonId: '',
+  itemId: '',
+  proposalId: '',
+  revisionId: '',
 };
 let ATTACKER: AuthUser;
 
@@ -229,6 +235,21 @@ beforeAll(async () => {
     )
   ).id;
 
+  // CRM Step 4: org B owns an item and a SENT proposal with one revision (written directly: org B has no workflow flow).
+  const itemB = await prisma.item.create({
+    data: { organizationId: orgB.id, sku: `B-${suffix}`, nameAr: 'صنف الجارة', nameEn: 'Neighbour item', itemCategory: 'MODULE', unitCost: 10 },
+  });
+  B.itemId = itemB.id;
+  const proposalB = await prisma.proposal.create({
+    data: { organizationId: orgB.id, code: `PRP-B-${suffix}`, opportunityId: B.opportunityId, status: 'SENT' },
+  });
+  B.proposalId = proposalB.id;
+  B.revisionId = (
+    await prisma.proposalRevision.create({
+      data: { proposalId: proposalB.id, revisionNo: 1, status: 'SENT', totalAmount: 1000, validUntil: new Date('2099-01-01T00:00:00Z') },
+    })
+  ).id;
+
   // The attacker: a legitimate user of org A, holding every permission.
   const attackerOrg = orgA!.id;
   const attacker = await prisma.user.findFirstOrThrow({ where: { organizationId: attackerOrg } });
@@ -244,6 +265,35 @@ afterAll(async () => {
 });
 
 describe('a tenant cannot reach another tenant by id', () => {
+  describe('CRM Step 4 — proposals', () => {
+    const ATTACKER_COSTS = () => ({ ...ATTACKER, permissions: [...ATTACKER.permissions, 'finance.costs.view', 'commercial.proposal.write', 'commercial.proposal.read'] }) as AuthUser;
+    const line = () => ({ itemId: B.itemId, qty: 1, unitPrice: 1 });
+
+    it('cost-lookup for the neighbour’s item returns nothing — not its cost, not even that it exists', async () => {
+      await expect(proposals.costLookup(ATTACKER_COSTS(), { itemIds: [B.itemId], currency: 'SAR' })).resolves.toEqual([]);
+    });
+    it('cannot read the proposal', () => must404('proposal.get', () => proposals.get(ATTACKER, B.proposalId)));
+    it('cannot raise it for approval', () => must404('proposal.submit', () => proposals.submit(ATTACKER_COSTS(), B.proposalId)));
+    it('cannot send it to the customer', () => must404('proposal.send', () => proposals.send(ATTACKER_COSTS(), B.proposalId)));
+    it('cannot record the customer’s refusal', () =>
+      must404('proposal.rejectByCustomer', () => proposals.rejectByCustomer(ATTACKER_COSTS(), B.proposalId, { reason: 'x' })));
+    it('cannot accept its revision', () =>
+      must404('proposal.acceptRevision', () => proposals.acceptRevision(ATTACKER_COSTS(), B.proposalId, B.revisionId)));
+    it('cannot add or edit a revision', async () => {
+      await must404('proposal.addRevision', () => proposals.addRevision(ATTACKER_COSTS(), B.proposalId, { validUntil: '2099-01-01', bomLines: [line()] }));
+      await must404('proposal.updateRevision', () =>
+        proposals.updateRevision(ATTACKER_COSTS(), B.proposalId, B.revisionId, { validUntil: '2099-01-01', bomLines: [line()] }));
+    });
+    it('never lists the neighbour’s proposal', async () => {
+      const rows = await proposals.list(ATTACKER);
+      expect(rows.map((r: { id: string }) => r.id)).not.toContain(B.proposalId);
+    });
+    it('expireBySystem for another organization’s proposal does nothing', async () => {
+      await expect(proposals.expireBySystem(ATTACKER.organizationId, B.proposalId)).resolves.toBe(false);
+      expect((await prisma.proposalRevision.findUniqueOrThrow({ where: { id: B.revisionId } })).status).toBe('SENT');
+    });
+  });
+
   describe('reads', () => {
     it('cannot read the invoice', () => must404('invoice.get', () => invoices.get(ATTACKER, B.invoiceId)));
     it('cannot read the contract', () => must404('contract.get', () => contracts.get(ATTACKER, B.contractId)));

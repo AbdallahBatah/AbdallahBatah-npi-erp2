@@ -403,6 +403,9 @@ async function main() {
   for (const [key, value] of [
     ['crm.customer.similarityThreshold', 0.8],
     ['crm.customer.mergeEnabled', false],
+    // CRM Step 4: default proposal validity and the cost-age warning limit, in days.
+    ['crm.proposal.validityDays', 30],
+    ['crm.proposal.costAgeWarnDays', 30],
   ] as const) {
     await prisma.orgSetting.upsert({
       where: { organizationId_key: { organizationId: org.id, key } },
@@ -524,6 +527,15 @@ async function main() {
         select: { id: true, code: true, status: true },
       }),
     },
+    // CRM Step 4: proposals written before the engine knew them are adopted in the
+    // state they are in (migration 0027 does the same for existing organizations).
+    {
+      flow: 'PROPOSAL',
+      rows: await prisma.proposal.findMany({
+        where: { organizationId: org.id },
+        select: { id: true, code: true, status: true },
+      }),
+    },
   ];
 
   let adopted = 0;
@@ -598,7 +610,7 @@ async function main() {
   // customer wants on day one. Only created when absent — an organization that
   // has tuned its own bands must never have them overwritten by a re-seed.
   const matrixDefaults: Array<{
-    documentType: 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PROGRESS_CLAIM' | 'CHANGE_ORDER';
+    documentType: 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PROGRESS_CLAIM' | 'CHANGE_ORDER' | 'PROPOSAL';
     minAmount: number;
     chain: string[];
   }> = [
@@ -609,6 +621,10 @@ async function main() {
     { documentType: 'PURCHASE_ORDER', minAmount: 100_000, chain: ['pm', 'accountant'] },
     { documentType: 'PROGRESS_CLAIM', minAmount: 250_000, chain: ['pm', 'accountant'] },
     { documentType: 'CHANGE_ORDER', minAmount: 100_000, chain: ['pm', 'admin'] },
+    // CRM Step 4 (decision CRM-S4-a): EVERY proposal, from 0 SAR up, is signed by the
+    // executive — the band's floor is the financial limit and is edited from
+    // Admin > Approval matrix, not in code.
+    { documentType: 'PROPOSAL', minAmount: 0, chain: ['executive'] },
   ];
   const roleIdByKey: Record<string, string> = {
     admin: adminRole.id,
@@ -777,6 +793,41 @@ async function main() {
         { from: 'MATCHED', to: 'DRAFT', action: 'RETURN', nameAr: 'إعادة للمراجعة', nameEn: 'Return for review', permission: 'finance.payment.write' },
         { from: 'APPROVED', to: 'SCHEDULED', action: 'SCHEDULE', nameAr: 'جدولة الدفع', nameEn: 'Schedule payment', permission: 'finance.payment.write' },
         { from: 'SCHEDULED', to: 'PAID', action: 'PAY', nameAr: 'سداد', nameEn: 'Pay', permission: 'finance.payment.write', emits: 'invoice.paid' },
+      ],
+    },
+    // CRM Step 4 (spec 4.3 / §9): the numbered, approved proposal. The same 7 states and
+    // 12 transitions migration 0027 writes for the organizations that already exist.
+    // REJECTED and EXPIRED are not final: the document itself says a change after
+    // sending is a new revision, and a refused or expired offer can be revived the same way.
+    {
+      code: 'PROPOSAL',
+      nameAr: 'عرض سعر',
+      nameEn: 'Proposal',
+      documentType: 'Proposal',
+      states: [
+        { code: 'DRAFT', nameAr: 'مسودة', nameEn: 'Draft', kind: 'INITIAL' },
+        { code: 'PENDING_APPROVAL', nameAr: 'بانتظار الاعتماد', nameEn: 'Pending approval', kind: 'INTERMEDIATE' },
+        { code: 'APPROVED', nameAr: 'معتمد', nameEn: 'Approved', kind: 'INTERMEDIATE' },
+        { code: 'SENT', nameAr: 'مُرسَل', nameEn: 'Sent to customer', kind: 'INTERMEDIATE' },
+        { code: 'ACCEPTED', nameAr: 'مقبول', nameEn: 'Accepted', kind: 'FINAL' },
+        { code: 'REJECTED', nameAr: 'مرفوض', nameEn: 'Rejected by customer', kind: 'INTERMEDIATE' },
+        { code: 'EXPIRED', nameAr: 'منتهي الصلاحية', nameEn: 'Expired', kind: 'INTERMEDIATE' },
+      ],
+      transitions: [
+        { from: 'DRAFT', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'رفع للاعتماد', nameEn: 'Submit for approval', permission: 'commercial.proposal.write', condition: 'total > 0', requiresApproval: true },
+        // Performed by the matrix's applier / rejecter only — no endpoint offers these.
+        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'commercial.proposal.approve', emits: 'proposal.approved' },
+        { from: 'PENDING_APPROVAL', to: 'DRAFT', action: 'RETURN', nameAr: 'إعادة للمسودة', nameEn: 'Return to draft', permission: 'commercial.proposal.approve' },
+        { from: 'APPROVED', to: 'SENT', action: 'SEND', nameAr: 'إرسال للعميل', nameEn: 'Send to customer', permission: 'commercial.proposal.write', emits: 'proposal.sent' },
+        { from: 'SENT', to: 'ACCEPTED', action: 'ACCEPT', nameAr: 'قبول العميل', nameEn: 'Customer accepted', permission: 'commercial.proposal.write', emits: 'proposal.accepted' },
+        { from: 'SENT', to: 'REJECTED', action: 'REJECT', nameAr: 'رفض العميل', nameEn: 'Customer rejected', permission: 'commercial.proposal.write' },
+        // EXPIRE is performed by the system actor (nightly sweep), never by a person.
+        { from: 'APPROVED', to: 'EXPIRED', action: 'EXPIRE', nameAr: 'انتهاء الصلاحية', nameEn: 'Expire', permission: 'commercial.proposal.write', emits: 'proposal.expired' },
+        { from: 'SENT', to: 'EXPIRED', action: 'EXPIRE', nameAr: 'انتهاء الصلاحية', nameEn: 'Expire', permission: 'commercial.proposal.write', emits: 'proposal.expired' },
+        { from: 'APPROVED', to: 'DRAFT', action: 'REVISE', nameAr: 'نسخة جديدة', nameEn: 'New revision', permission: 'commercial.proposal.write' },
+        { from: 'SENT', to: 'DRAFT', action: 'REVISE', nameAr: 'نسخة جديدة', nameEn: 'New revision', permission: 'commercial.proposal.write' },
+        { from: 'REJECTED', to: 'DRAFT', action: 'REVISE', nameAr: 'نسخة جديدة', nameEn: 'New revision', permission: 'commercial.proposal.write' },
+        { from: 'EXPIRED', to: 'DRAFT', action: 'REVISE', nameAr: 'نسخة جديدة', nameEn: 'New revision', permission: 'commercial.proposal.write' },
       ],
     },
   ];

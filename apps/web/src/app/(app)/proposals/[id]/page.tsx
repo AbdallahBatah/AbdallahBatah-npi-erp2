@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -10,15 +11,32 @@ import { useValidate } from '@/lib/useValidate';
 import { useDraft } from '@/lib/useDraft';
 import { translateError } from '@/lib/errors';
 import { useEnums } from '@/lib/useEnums';
-import { formatMoney } from '@/lib/format';
+import { formatDateTime, formatDay, formatMoney } from '@/lib/format';
 import { PageHeader, StatusBadge, Modal, Field, LoadError, useConfirm, Btn, PageSkeleton } from '@/components/ui';
+import { ApprovalChain, type ApprovalRequestView } from '@/components/approvals';
+import { daysUntil } from '@/components/opportunity-bits';
 import { Icon } from '@/components/icons';
 
 // Cost-side fields arrive as null for a user without finance.costs.view — the
-// server nulls them (CostRedactionInterceptor) and the page hides them.
+// server nulls them (CostRedactionInterceptor + hideRevisionPricing) and the page
+// hides them. The selling price (unitPrice, lineTotal, totalAmount) always stays,
+// on a revision made since the approval flow existed.
 interface Item { id: string; sku: string; nameAr: string; nameEn: string; unitCost: string | null }
 interface Scheme { id: string; code: string; nameAr: string; nameEn: string; marginPct: string | null }
-interface BomLine { id: string; qty: string; unitPrice: string | null; lineTotal: string | null; item: Item }
+interface BomLine {
+  id: string;
+  itemId: string;
+  qty: string;
+  unitPrice: string | null;
+  lineTotal: string | null;
+  unitCost?: string | null;
+  originalUnitCost?: string | null;
+  costSource?: string | null;
+  costDate?: string | null;
+  costAgeDays?: number | null;
+  costOverrideReason?: string | null;
+  item: Item;
+}
 interface Revision {
   id: string;
   revisionNo: number;
@@ -27,25 +45,87 @@ interface Revision {
   totalAmount: string;
   status: string;
   isWinning: boolean;
+  validUntil: string | null;
+  submittedAt: string | null;
+  approvedAt: string | null;
+  sentAt: string | null;
+  closedAt: string | null;
+  supersededById: string | null;
+  createdBy?: { id: string; nameAr: string; nameEn: string } | null;
   bomLines: BomLine[];
   designVersion?: { capacityKwp: string; expectedAnnualKwh: string; sourceTool: string } | null;
+}
+interface HistoryRow {
+  id: string;
+  actionCode: string;
+  comment: string | null;
+  createdAt: string;
+  actor: { nameAr: string; nameEn: string } | null;
+  toStateName: { nameAr: string; nameEn: string } | null;
 }
 interface Proposal {
   id: string;
   code: string;
   status: string;
+  currency: string;
   opportunity: { id: string; name: string; customer: { id: string; nameAr: string; nameEn: string } };
   revisions: Revision[];
+  contracts: { id: string; code: string }[];
+  approval: ApprovalRequestView | null;
+  pendingApproval: ApprovalRequestView | null;
+  actions: { actionCode: string; nameAr: string; nameEn: string }[];
+  history: HistoryRow[];
+  settings: { validityDays: number; costAgeWarnDays: number };
+  /** The role the approval matrix will ask to sign this total (a draft only; null when no rule applies). */
+  submitTo: { nameAr: string; nameEn: string } | null;
+}
+interface Fetched {
+  itemId: string;
+  unitCost: string;
+  costSource: string;
+  costDate: string | null;
+  costAgeDays: number | null;
+  stale: boolean;
+  warnDays: number;
 }
 
-interface DraftLine { itemId: string; qty: number; unitPrice: number }
+/** One line of the form. Costs are text so a half-typed number is not rewritten under the cursor. */
+interface DraftLine {
+  itemId: string;
+  qty: number;
+  unitCost: string;
+  unitPrice: string;
+  /** Once the author has typed a price, a margin change no longer rewrites it. */
+  priceTouched: boolean;
+  reason: string;
+  fetched: Fetched | null;
+}
+const blankLine = (): DraftLine => ({ itemId: '', qty: 1, unitCost: '', unitPrice: '', priceTouched: false, reason: '', fetched: null });
+
+type FormState = { mode: 'create' | 'edit'; revisionId?: string } | null;
+
+// Display arithmetic only (a live preview while typing): the server prices the revision in Decimal.
+const money = (n: number) => (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
+const suggest = (cost: number, pct: number) => money(cost * (1 + pct / 100));
+const dayKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const inDays = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return dayKey(d);
+};
+const costChanged = (l: DraftLine) =>
+  !!l.fetched && l.unitCost !== '' && Math.abs(Number(l.unitCost) - Number(l.fetched.unitCost)) >= 0.005;
 
 export default function ProposalDetailPage() {
   const { t, locale, pick } = useI18n();
+  const ar = locale === 'ar';
   const { can } = useAuth();
-  // Margin, pricing scheme, line prices and subtotal are hidden without this;
-  // the total (the selling price) always stays.
+  // Cost, source, margin, pricing scheme and subtotal are hidden without this;
+  // the selling price and the total always stay.
   const showCosts = can('finance.costs.view');
+  const canWrite = can('commercial.proposal.write');
+  const canApprove = can('commercial.proposal.approve');
   const enums = useEnums();
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -54,12 +134,17 @@ export default function ProposalDetailPage() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [schemes, setSchemes] = useState<Scheme[]>([]);
-  const [lines, setLines] = useState<DraftLine[]>([{ itemId: '', qty: 1, unitPrice: 0 }]);
+  const [form, setForm] = useState<FormState>(null);
+  const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
+  const [validUntil, setValidUntil] = useState('');
   const [schemeId, setSchemeId] = useState('');
   const [capacityKwp, setCapacityKwp] = useState('');
   const [annualKwh, setAnnualKwh] = useState('');
   const [contractOpen, setContractOpen] = useState(false);
   const [contractErr, setContractErr] = useState('');
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectErr, setRejectErr] = useState('');
   const [loadErr, setLoadErr] = useState('');
   const { act, busy } = useAct();
   const { confirm, confirmNode } = useConfirm();
@@ -78,38 +163,55 @@ export default function ProposalDetailPage() {
     if (showCosts) api.get<Scheme[]>('/reference/pricing-schemes').then(setSchemes).catch(() => {});
   }, [load, showCosts]);
 
-  const draftSubtotal = useMemo(
+  const marginPct = Number(schemes.find((s) => s.id === schemeId)?.marginPct ?? 0);
+  const draftTotal = useMemo(
     () => lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0),
     [lines],
   );
-  const marginPct = Number(schemes.find((s) => s.id === schemeId)?.marginPct ?? 0);
-  const draftTotal = draftSubtotal * (1 + marginPct / 100);
+  const draftSubtotal = useMemo(
+    () => lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitCost) || 0), 0),
+    [lines],
+  );
 
+  // Newest first on the page; the highest revision number is the current one.
+  const revisions = useMemo(() => [...(proposal?.revisions ?? [])].sort((a, b) => b.revisionNo - a.revisionNo), [proposal]);
+  const current = revisions[0] ?? null;
   const winning = proposal?.revisions.find((r) => r.isWinning);
+  const has = (code: string) => !!proposal?.actions.some((a) => a.actionCode === code);
 
-  // A revision can be many lines of hand-entered pricing; losing it to a
-  // refresh is the single most expensive accident on this screen. Keyed by
-  // proposal so two tabs on different proposals do not overwrite each other.
+  // The form opens by itself while there is nothing to look at but a blank page.
+  useEffect(() => {
+    if (proposal && proposal.revisions.length === 0 && !form && canWrite) {
+      setForm({ mode: 'create' });
+      setValidUntil((v) => v || inDays(proposal.settings.validityDays));
+    }
+  }, [proposal, form, canWrite]);
+
+  // A revision can be many lines of hand-entered pricing; losing it to a refresh
+  // is the single most expensive accident on this screen. Keyed by proposal so two
+  // tabs on different proposals do not overwrite each other.
   const draft = useDraft(
-    `revision:${id}`,
-    { lines, schemeId, capacityKwp, annualKwh },
+    `revision2:${id}`,
+    { form, lines, schemeId, validUntil, capacityKwp, annualKwh },
     (saved) => {
+      setForm(saved.form);
       setLines(saved.lines);
       setSchemeId(saved.schemeId);
+      setValidUntil(saved.validUntil);
       setCapacityKwp(saved.capacityKwp);
       setAnnualKwh(saved.annualKwh);
     },
     {
       // A pristine form (one blank line, nothing typed) is not a draft.
       shouldSave: (v) =>
-        Boolean(v.capacityKwp || v.annualKwh || v.schemeId || v.lines.some((l) => l.itemId)),
+        v.form !== null && Boolean(v.capacityKwp || v.annualKwh || v.schemeId || v.lines.some((l) => l.itemId)),
     },
   );
 
   // The design figures are optional, but if one is given the other is expected
   // and neither may be negative — the server would reject silently otherwise.
   const validation = useValidate(
-    { capacityKwp, annualKwh, lines },
+    { capacityKwp, annualKwh, lines, validUntil },
     {
       capacityKwp: (v) =>
         Number(v.capacityKwp) < 0
@@ -123,12 +225,17 @@ export default function ProposalDetailPage() {
           : v.capacityKwp && !v.annualKwh
             ? t('valid.needBoth')
             : undefined,
+      validUntil: (v) => (v.validUntil && v.validUntil > dayKey(new Date()) ? undefined : t('proposals.err.validUntil')),
       lines: (v) =>
         v.lines.some((l) => l.itemId && (!l.qty || l.qty <= 0))
           ? t('valid.qtyPositive')
           : v.lines.filter((l) => l.itemId && l.qty > 0).length === 0
             ? t('valid.needLine')
-            : undefined,
+            : v.lines.some((l) => l.itemId && costChanged(l) && !l.reason.trim())
+              ? t('proposals.overrideReasonRequired')
+              : !showCosts && v.lines.some((l) => l.itemId && l.unitPrice === '')
+                ? t('proposals.err.price')
+                : undefined,
     },
   );
 
@@ -136,54 +243,178 @@ export default function ProposalDetailPage() {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
   function addLine() {
-    setLines((prev) => [...prev, { itemId: '', qty: 1, unitPrice: 0 }]);
+    setLines((prev) => [...prev, blankLine()]);
   }
   function removeLine(i: number) {
-    setLines((prev) => prev.filter((_, idx) => idx !== i));
+    setLines((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : [blankLine()]));
   }
 
-  async function submitRevision(e: FormEvent) {
+  /** The cost a line would get, from the server (last accepted receipt / approved order / catalogue). */
+  async function fetchCosts(ids: string[]): Promise<Map<string, Fetched>> {
+    if (!showCosts || ids.length === 0 || !proposal) return new Map();
+    try {
+      const rows = await api.get<Fetched[]>(
+        `/proposals/cost-lookup?itemIds=${encodeURIComponent(ids.join(','))}&currency=${encodeURIComponent(proposal.currency)}`,
+      );
+      return new Map(rows.map((r) => [r.itemId, r]));
+    } catch {
+      return new Map(); // the server still fetches the cost on save; the form just cannot preview it
+    }
+  }
+
+  async function onItemChange(i: number, itemId: string) {
+    updateLine(i, { itemId, fetched: null, unitCost: '', reason: '' });
+    if (!itemId || !showCosts) return;
+    const f = (await fetchCosts([itemId])).get(itemId) ?? null;
+    setLines((prev) =>
+      prev.map((l, idx) =>
+        idx === i && l.itemId === itemId
+          ? {
+              ...l,
+              fetched: f,
+              unitCost: f ? f.unitCost : '',
+              unitPrice: l.priceTouched || !f ? l.unitPrice : suggest(Number(f.unitCost), marginPct),
+            }
+          : l,
+      ),
+    );
+  }
+
+  function onSchemeChange(value: string) {
+    setSchemeId(value);
+    const pct = Number(schemes.find((s) => s.id === value)?.marginPct ?? 0);
+    // A price the author never touched follows the margin; one they typed stays.
+    setLines((prev) =>
+      prev.map((l) => (!l.priceTouched && l.itemId && l.unitCost !== '' ? { ...l, unitPrice: suggest(Number(l.unitCost), pct) } : l)),
+    );
+  }
+
+  function onCostChange(i: number, value: string) {
+    setLines((prev) =>
+      prev.map((l, idx) =>
+        idx === i
+          ? { ...l, unitCost: value, unitPrice: l.priceTouched || value === '' ? l.unitPrice : suggest(Number(value), marginPct) }
+          : l,
+      ),
+    );
+  }
+
+  /** Open the form: a new revision (prefilled from the current one) or an edit of the current draft. */
+  async function openForm(mode: 'create' | 'edit') {
+    if (!proposal) return;
+    const base = current;
+    setForm({ mode, revisionId: mode === 'edit' ? base?.id : undefined });
+    const keep = base && base.validUntil && base.validUntil.slice(0, 10) > dayKey(new Date()) ? base.validUntil.slice(0, 10) : '';
+    setValidUntil(keep || inDays(proposal.settings.validityDays));
+    setSchemeId('');
+    setCapacityKwp(base?.designVersion ? String(Number(base.designVersion.capacityKwp)) : '');
+    setAnnualKwh(base?.designVersion ? String(Number(base.designVersion.expectedAnnualKwh)) : '');
+    validation.reset();
+    if (!base || base.bomLines.length === 0) {
+      setLines([blankLine()]);
+      return;
+    }
+    const fetched = await fetchCosts([...new Set(base.bomLines.map((l) => l.itemId))]);
+    const costBased = base.validUntil !== null; // made since the approval flow: unitPrice is the selling price
+    setLines(
+      base.bomLines.map((l) => {
+        const f = fetched.get(l.itemId) ?? null;
+        const own = costBased && l.unitCost != null ? String(Number(l.unitCost)) : f ? f.unitCost : '';
+        return {
+          itemId: l.itemId,
+          qty: Number(l.qty),
+          unitCost: showCosts ? own : '',
+          unitPrice: costBased && l.unitPrice != null ? String(Number(l.unitPrice)) : '',
+          priceTouched: costBased && l.unitPrice != null,
+          reason: l.costOverrideReason ?? '',
+          fetched: f,
+        };
+      }),
+    );
+  }
+
+  function closeForm() {
+    setForm(null);
+    setLines([blankLine()]);
+    setSchemeId('');
+    setCapacityKwp('');
+    setAnnualKwh('');
+    validation.reset();
+    draft.clear();
+  }
+
+  async function saveRevision(e: FormEvent) {
     e.preventDefault();
+    if (!form) return;
     // Reveals every message at once rather than failing on the server.
     if (!validation.validateAll()) return;
     const valid = lines.filter((l) => l.itemId && l.qty > 0);
+    const body = {
+      validUntil,
+      // The server refuses a pricing scheme from a caller without costs.view.
+      pricingSchemeId: showCosts ? schemeId || undefined : undefined,
+      bomLines: valid.map((l) => ({
+        itemId: l.itemId,
+        qty: Number(l.qty),
+        unitPrice: l.unitPrice !== '' ? Number(l.unitPrice) : undefined,
+        // Only a cost the author CHANGED is sent: otherwise the server's own fetch decides.
+        unitCost: showCosts && costChanged(l) ? Number(l.unitCost) : undefined,
+        costOverrideReason: showCosts && costChanged(l) ? l.reason.trim() : undefined,
+      })),
+      designVersion:
+        capacityKwp || annualKwh
+          ? { sourceTool: 'manual', capacityKwp: Number(capacityKwp) || 0, expectedAnnualKwh: Number(annualKwh) || 0 }
+          : undefined,
+    };
     const ok = await act(
       'revision',
       () =>
-        api.post(`/proposals/${id}/revisions`, {
-          // The server refuses a pricing scheme from a caller without costs.view.
-          pricingSchemeId: showCosts ? schemeId || undefined : undefined,
-          bomLines: valid.map((l) => ({
-            itemId: l.itemId,
-            qty: Number(l.qty),
-            unitPrice: Number(l.unitPrice),
-          })),
-          designVersion:
-            capacityKwp || annualKwh
-              ? {
-                  sourceTool: 'manual',
-                  capacityKwp: Number(capacityKwp) || 0,
-                  expectedAnnualKwh: Number(annualKwh) || 0,
-                }
-              : undefined,
-        }),
-      { success: t('common.created') },
+        form.mode === 'edit'
+          ? api.patch(`/proposals/${id}/revisions/${form.revisionId}`, body)
+          : api.post(`/proposals/${id}/revisions`, body),
+      { success: form.mode === 'edit' ? t('common.done') : t('common.created') },
     );
     if (ok) {
-      setLines([{ itemId: '', qty: 1, unitPrice: 0 }]);
-      setCapacityKwp('');
-      setAnnualKwh('');
-      validation.reset();
-      draft.clear();
+      closeForm();
       load();
     }
   }
 
+  async function submitForApproval() {
+    if (!proposal) return;
+    // Who will be asked to sign, as the approval matrix names it for this total.
+    const role = proposal.submitTo ? (ar ? proposal.submitTo.nameAr : proposal.submitTo.nameEn) : t('proposals.theApprover');
+    if (!(await confirm({ title: t('confirm.submitPropTitle'), message: t('confirm.submitPropMsg').replace('{role}', role) }))) return;
+    if (await act('submit', () => api.post(`/proposals/${id}/submit`, {}), { success: t('common.done') })) load();
+  }
+
+  async function sendToCustomer() {
+    if (!(await confirm({ title: t('confirm.sendPropTitle'), message: t('confirm.sendPropMsg') }))) return;
+    // Reload on failure too: a 409 «expired» means the server has just moved the
+    // revision to EXPIRED, and the page must show that, not a stale «approved».
+    await act('send', () => api.post(`/proposals/${id}/send`, {}));
+    load();
+  }
+
   async function accept(revId: string) {
-    if (!(await confirm({ title: t('confirm.acceptRevTitle'), message: t('confirm.acceptRevMsg') })))
+    if (!(await confirm({ title: t('confirm.acceptRevTitle'), message: t('confirm.acceptRevMsg') }))) return;
+    // Same as send: acceptance of a lapsed revision expires it server-side.
+    await act(`accept:${revId}`, () => api.post(`/proposals/${id}/revisions/${revId}/accept`, {}));
+    load();
+  }
+
+  async function rejectByCustomer(e: FormEvent) {
+    e.preventDefault();
+    if (!rejectReason.trim()) {
+      setRejectErr(t('proposals.rejectReasonRequired'));
       return;
-    if (await act(`accept:${revId}`, () => api.post(`/proposals/${id}/revisions/${revId}/accept`, {})))
+    }
+    setRejectErr('');
+    if (await act('reject', () => api.post(`/proposals/${id}/reject`, { reason: rejectReason.trim() }))) {
+      setRejectOpen(false);
+      setRejectReason('');
       load();
+    }
   }
 
   async function createContract(e: FormEvent<HTMLFormElement>) {
@@ -194,12 +425,12 @@ export default function ProposalDetailPage() {
     // Arabic-only entry no longer silently drops milestones.
     const milestones = [1, 2, 3]
       .map((n) => {
-        const ar = String(f.get(`m${n}_ar`) || '').trim();
+        const arText = String(f.get(`m${n}_ar`) || '').trim();
         const en = String(f.get(`m${n}_en`) || '').trim();
         return {
           sequence: n,
-          descriptionAr: ar || en,
-          descriptionEn: en || ar,
+          descriptionAr: arText || en,
+          descriptionEn: en || arText,
           amount: Number(f.get(`m${n}_amt`) || 0),
           triggerType: 'PROGRESS' as const,
         };
@@ -241,6 +472,246 @@ export default function ProposalDetailPage() {
   if (loadErr) return <LoadError message={loadErr} onRetry={load} />;
   if (!proposal) return <PageSkeleton stats={2} />;
 
+  const sourceLabel = (code: string | null | undefined) => {
+    if (!code) return '—';
+    const o = enums?.costSources?.find((x) => x.value === code);
+    return o ? (ar ? o.labelAr : o.labelEn) : code;
+  };
+
+  // The three helpers below are plain render functions, not components: a component
+  // defined inside this one would be a new type on every render and remount (collapsing
+  // an opened <details>, dropping focus) each time the form state changes.
+
+  /** Green when fresh, yellow when old, grey when the age is unknown (a catalogue cost). */
+  function costAgeBadge(line: BomLine) {
+    const days = line.costAgeDays;
+    if (days === null || days === undefined) {
+      return <span className="badge bg-slate-100 text-slate-600">{t('proposals.costUnknown')}</span>;
+    }
+    return days > proposal!.settings.costAgeWarnDays ? (
+      <span className="badge bg-warning-50 text-warning-700">
+        <Icon name="alert-triangle" className="h-3 w-3" />
+        {t('proposals.costStale').replace('{n}', String(days))}
+      </span>
+    ) : (
+      <span className="badge bg-success-50 text-success-700">{t('proposals.costFresh').replace('{n}', String(days))}</span>
+    );
+  }
+
+  /** The status strip: where the proposal stands and what is owed, in a sentence. */
+  function renderBanner() {
+    if (!current) return null;
+    const last = proposal!.history[proposal!.history.length - 1];
+    const returned = current.status === 'DRAFT' && last?.actionCode === 'RETURN';
+    const pend = proposal!.pendingApproval;
+    const waiting = pend?.steps.find((s) => s.sequence === pend.currentStep);
+    let tone = 'border-slate-200 bg-slate-50 text-slate-700';
+    let text = '';
+    if (current.status === 'PENDING_APPROVAL') {
+      tone = 'border-warning-200 bg-warning-50/60 text-warning-900';
+      text = t('proposals.banner.pending')
+        .replace('{role}', waiting ? (ar ? waiting.role.nameAr : waiting.role.nameEn) : '—')
+        .replace('{date}', formatDateTime(pend?.createdAt ?? current.submittedAt, locale));
+    } else if (current.status === 'APPROVED') {
+      tone = 'border-success-200 bg-success-50/60 text-success-800';
+      text = t('proposals.banner.approved');
+    } else if (current.status === 'SENT') {
+      tone = 'border-info-200 bg-info-50/60 text-info-800';
+      text = t('proposals.banner.sent').replace('{date}', formatDay(current.sentAt, locale));
+    } else if (current.status === 'EXPIRED') {
+      tone = 'border-danger-200 bg-danger-50/60 text-danger-800';
+      text = t('proposals.banner.expired').replace('{date}', formatDay(current.validUntil, locale));
+    } else if (current.status === 'REJECTED') {
+      tone = 'border-danger-200 bg-danger-50/60 text-danger-800';
+      text = t('proposals.banner.rejected');
+    } else if (current.status === 'ACCEPTED') {
+      tone = 'border-success-200 bg-success-50/60 text-success-800';
+      text = t('proposals.banner.accepted');
+    } else if (returned) {
+      tone = 'border-warning-200 bg-warning-50/60 text-warning-900';
+      text = t('proposals.banner.returned').replace('{note}', last?.comment ?? '');
+    }
+    if (!text) return null;
+    return (
+      <div className={`mb-4 rounded-xl border p-4 ${tone}`} role="status">
+        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+          <Icon name={current.status === 'PENDING_APPROVAL' ? 'stamp' : current.status === 'EXPIRED' ? 'alert-triangle' : 'check-circle'} className="h-4 w-4" />
+          {text}
+          {current.status === 'PENDING_APPROVAL' && canApprove && (
+            <Link href="/approvals" className="ms-2 text-xs font-semibold underline">
+              {t('proposals.openInbox')}
+            </Link>
+          )}
+        </div>
+        {current.status === 'PENDING_APPROVAL' && pend && (
+          <div className="mt-3">
+            <ApprovalChain request={pend} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const urgentValidity = (rev: Revision) => {
+    if (!rev.validUntil || !['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'SENT'].includes(rev.status)) return false;
+    const left = daysUntil(rev.validUntil);
+    return left !== null && left <= 7;
+  };
+
+  function renderRevision(rev: Revision) {
+    const isCurrent = current?.id === rev.id;
+    const superseded = rev.status === 'SUPERSEDED';
+    const costBased = rev.validUntil !== null;
+    const newer = rev.supersededById ? proposal!.revisions.find((r) => r.id === rev.supersededById) : null;
+    const showPriceCols = costBased || showCosts;
+    const body = (
+      <>
+        {rev.designVersion && (
+          <p className="mb-3 text-xs text-slate-500">
+            {t('proposals.design')}: {Number(rev.designVersion.capacityKwp)} kWp · {Number(rev.designVersion.expectedAnnualKwh)} kWh/y
+          </p>
+        )}
+        {!costBased && showCosts && <p className="mb-2 text-xs text-slate-500">{t('proposals.legacyNote')}</p>}
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-slate-500">
+                <th scope="col" className="th">{t('proposals.item')}</th>
+                <th scope="col" className="th text-end">{t('proposals.qty')}</th>
+                {costBased && showCosts && <th scope="col" className="th text-end">{t('proposals.cost')}</th>}
+                {costBased && showCosts && <th scope="col" className="th">{t('proposals.costSource')}</th>}
+                {showPriceCols && (
+                  <th scope="col" className="th text-end">{costBased ? t('proposals.sellingPrice') : t('proposals.unitPrice')}</th>
+                )}
+                {showPriceCols && <th scope="col" className="th text-end">{t('proposals.lineTotal')}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {rev.bomLines.map((bl) => {
+                const manual = bl.costSource === 'MANUAL';
+                return (
+                  <tr key={bl.id} className={`border-b border-slate-50 ${manual && showCosts ? 'bg-warning-50/70' : ''}`}>
+                    <td className="py-2">
+                      <div>{bl.item.sku} · {pick(bl.item, 'name')}</div>
+                      {manual && showCosts && (
+                        <div className="mt-0.5 flex items-start gap-1 text-xs text-warning-800">
+                          <Icon name="alert-triangle" className="mt-0.5 h-3 w-3 shrink-0" />
+                          <span>
+                            {t('proposals.overridden')}
+                            {bl.costOverrideReason ? ` — ${t('proposals.overrideReason')}: ${bl.costOverrideReason}` : ''}
+                          </span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="td-num">{Number(bl.qty)}</td>
+                    {costBased && showCosts && (
+                      <td className="td-num">
+                        {manual && bl.originalUnitCost != null && (
+                          <s className="me-1.5 text-xs text-slate-400" title={t('proposals.originalCost')}>
+                            {formatMoney(bl.originalUnitCost, locale)}
+                          </s>
+                        )}
+                        <span className={manual ? 'font-semibold text-warning-800' : ''}>{formatMoney(bl.unitCost ?? 0, locale)}</span>
+                      </td>
+                    )}
+                    {costBased && showCosts && (
+                      <td className="td">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs text-slate-600">{sourceLabel(bl.costSource)}</span>
+                          {costAgeBadge(bl)}
+                        </div>
+                      </td>
+                    )}
+                    {showPriceCols && <td className="td-num">{formatMoney(bl.unitPrice ?? 0, locale)}</td>}
+                    {showPriceCols && <td className="td-num">{formatMoney(bl.lineTotal ?? 0, locale)}</td>}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 flex flex-col items-end gap-1 text-sm">
+          {showCosts && (
+            <>
+              <span className="text-slate-500">
+                {costBased ? t('proposals.cost') : t('proposals.subtotal')}: {formatMoney(rev.subtotal ?? 0, locale)}
+              </span>
+              <span className="text-slate-500">
+                {t('proposals.margin')}: {formatMoney(rev.marginAmount ?? 0, locale)}
+              </span>
+            </>
+          )}
+          <span className="text-lg font-bold text-slate-900">
+            {t('common.total')}: {formatMoney(rev.totalAmount, locale)}
+          </span>
+        </div>
+        {rev.isWinning && canWrite && (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            {proposal!.contracts.length === 0 ? (
+              <Btn variant="primary" icon="file-signature" onClick={() => setContractOpen(true)}>
+                {t('proposals.createContract')}
+              </Btn>
+            ) : (
+              <Link href={`/contracts/${proposal!.contracts[0].id}`} className="text-sm font-semibold text-brand-700 underline">
+                {proposal!.contracts[0].code}
+              </Link>
+            )}
+          </div>
+        )}
+      </>
+    );
+
+    const head = (
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-semibold text-slate-800">
+          {t('proposals.revision')} #{rev.revisionNo}
+        </span>
+        <StatusBadge status={rev.status} />
+        {isCurrent && !superseded && <span className="badge bg-brand-50 text-brand-700">{t('proposals.current')}</span>}
+        {rev.isWinning && (
+          <span className="badge bg-success-100 text-success-700">
+            <Icon name="star" className="h-3 w-3" />
+            {t('proposals.accepted')}
+          </span>
+        )}
+        {superseded && newer && (
+          <span className="text-xs text-slate-500">{t('proposals.supersededBy').replace('{n}', String(newer.revisionNo))}</span>
+        )}
+        {rev.validUntil && (
+          <span className={`inline-flex items-center gap-1 text-xs ${urgentValidity(rev) ? 'font-semibold text-danger-600' : 'text-slate-500'}`}>
+            {urgentValidity(rev) && <Icon name="alert-triangle" className="h-3 w-3" />}
+            {t('proposals.validUntil')}: {formatDay(rev.validUntil, locale)}
+          </span>
+        )}
+        {rev.createdBy && (
+          <span className="text-xs text-slate-500">
+            {t('proposals.createdBy')}: {ar ? rev.createdBy.nameAr : rev.createdBy.nameEn}
+          </span>
+        )}
+      </div>
+    );
+
+    // A superseded revision stays on the page for the record, folded and grey.
+    if (superseded) {
+      return (
+        <details className="card bg-slate-50/70 p-4 opacity-80">
+          <summary className="cursor-pointer list-none">{head}</summary>
+          <div className="mt-3">{body}</div>
+        </details>
+      );
+    }
+    return (
+      <div className="card p-5">
+        <div className="mb-3">{head}</div>
+        {body}
+      </div>
+    );
+  }
+
+  const formOpen = form !== null;
+  const reviseAvailable = has('REVISE') && !formOpen;
+  const canEditDraft = canWrite && current?.status === 'DRAFT' && !formOpen;
+
   return (
     <div>
       <PageHeader
@@ -250,98 +721,58 @@ export default function ProposalDetailPage() {
         action={<StatusBadge status={proposal.status} />}
       />
 
-      {/* Existing revisions */}
+      {renderBanner()}
+
+      {/* What the engine allows on the current revision, as buttons. */}
+      {canWrite && !formOpen && (canEditDraft || has('SUBMIT') || has('SEND') || has('ACCEPT') || has('REJECT') || reviseAvailable) && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {canEditDraft && (
+            <Btn icon="undo" onClick={() => openForm('edit')} disabled={busy()}>
+              {t('proposals.edit')}
+            </Btn>
+          )}
+          {has('SUBMIT') && (
+            <Btn variant="primary" icon="stamp" busy={busy('submit')} disabled={busy()} onClick={submitForApproval}>
+              {t('proposals.submit')}
+            </Btn>
+          )}
+          {has('SEND') && (
+            <Btn variant="primary" icon="file-text" busy={busy('send')} disabled={busy()} onClick={sendToCustomer}>
+              {t('proposals.send')}
+            </Btn>
+          )}
+          {has('ACCEPT') && current && (
+            <Btn variant="solar" icon="check" busy={busy(`accept:${current.id}`)} disabled={busy()} onClick={() => accept(current.id)}>
+              {t('proposals.customerAccept')}
+            </Btn>
+          )}
+          {has('REJECT') && (
+            <Btn variant="danger" icon="x" disabled={busy()} onClick={() => { setRejectReason(''); setRejectErr(''); setRejectOpen(true); }}>
+              {t('proposals.customerReject')}
+            </Btn>
+          )}
+          {reviseAvailable && (
+            <Btn icon="plus" disabled={busy()} onClick={() => openForm('create')}>
+              {t('proposals.revise')}
+            </Btn>
+          )}
+        </div>
+      )}
+
+      {/* Revisions, newest first. */}
       <div className="space-y-4">
-        {proposal.revisions.map((rev) => (
-          <div key={rev.id} className="card p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="font-semibold text-slate-800">
-                  {t('proposals.revision')} #{rev.revisionNo}
-                </span>
-                <StatusBadge status={rev.status} />
-                {rev.isWinning && (
-                  <span className="badge bg-success-100 text-success-700">
-                    <Icon name="star" className="h-3 w-3" />
-                    {t('proposals.accepted')}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {!rev.isWinning && proposal.status !== 'ACCEPTED' && (
-                  <Btn
-                    variant="solar"
-                    sm
-                    icon="check"
-                    busy={busy(`accept:${rev.id}`)}
-                    disabled={busy()}
-                    onClick={() => accept(rev.id)}
-                  >
-                    {t('proposals.accept')}
-                  </Btn>
-                )}
-              </div>
-            </div>
-
-            {rev.designVersion && (
-              <p className="mb-3 text-xs text-slate-500">
-                {t('proposals.design')}: {Number(rev.designVersion.capacityKwp)} kWp ·{' '}
-                {Number(rev.designVersion.expectedAnnualKwh)} kWh/y
-              </p>
-            )}
-
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-slate-500">
-                  <th scope="col" className="th">{t('proposals.item')}</th>
-                  <th scope="col" className="th text-end">{t('proposals.qty')}</th>
-                  {showCosts && <th scope="col" className="th text-end">{t('proposals.unitPrice')}</th>}
-                  {showCosts && <th scope="col" className="th text-end">{t('common.total')}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {rev.bomLines.map((bl) => (
-                  <tr key={bl.id} className="border-b border-slate-50">
-                    <td className="py-2">{bl.item.sku} · {pick(bl.item, 'name')}</td>
-                    <td className="td-num">{Number(bl.qty)}</td>
-                    {showCosts && <td className="td-num">{formatMoney(bl.unitPrice ?? 0, locale)}</td>}
-                    {showCosts && <td className="td-num">{formatMoney(bl.lineTotal ?? 0, locale)}</td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className="mt-3 flex flex-col items-end gap-1 text-sm">
-              {showCosts && (
-                <>
-                  <span className="text-slate-500">
-                    {t('proposals.subtotal')}: {formatMoney(rev.subtotal ?? 0, locale)}
-                  </span>
-                  <span className="text-slate-500">
-                    {t('proposals.margin')}: {formatMoney(rev.marginAmount ?? 0, locale)}
-                  </span>
-                </>
-              )}
-              <span className="text-lg font-bold text-slate-900">
-                {t('common.total')}: {formatMoney(rev.totalAmount, locale)}
-              </span>
-            </div>
-
-            {rev.isWinning && (
-              <div className="mt-4 border-t border-slate-100 pt-4">
-                <Btn variant="primary" icon="file-signature" onClick={() => setContractOpen(true)}>
-                  {t('proposals.createContract')}
-                </Btn>
-              </div>
-            )}
-          </div>
+        {revisions.length === 0 && <p className="card p-5 text-sm text-slate-500">{t('proposals.noRevisions')}</p>}
+        {revisions.map((rev) => (
+          <Fragment key={rev.id}>{renderRevision(rev)}</Fragment>
         ))}
       </div>
 
-      {/* New revision builder */}
-      {proposal.status !== 'ACCEPTED' && (
-        <form onSubmit={submitRevision} className="card mt-6 p-5">
-          <h3 className="mb-4 font-semibold text-slate-800">{t('proposals.addRevision')}</h3>
+      {/* The form: a new revision, or an edit of the current draft. */}
+      {formOpen && canWrite && (
+        <form onSubmit={saveRevision} className="card mt-6 p-5">
+          <h3 className="mb-4 font-semibold text-slate-800">
+            {form?.mode === 'edit' ? t('proposals.editRevision') : t('proposals.newRevision')}
+          </h3>
 
           {draft.restored && (
             <div className="mb-4 flex items-center justify-between gap-3 rounded-lg bg-info-50 px-3 py-2 text-xs text-info-800">
@@ -349,27 +780,26 @@ export default function ProposalDetailPage() {
                 <Icon name="undo" className="h-3.5 w-3.5" />
                 {t('draft.restored')}
               </span>
-              <button
-                type="button"
-                className="font-semibold underline"
-                onClick={() => {
-                  setLines([{ itemId: '', qty: 1, unitPrice: 0 }]);
-                  setSchemeId('');
-                  setCapacityKwp('');
-                  setAnnualKwh('');
-                  validation.reset();
-                  draft.clear();
-                }}
-              >
+              <button type="button" className="font-semibold underline" onClick={closeForm}>
                 {t('draft.discard')}
               </button>
             </div>
           )}
 
-          <div className={`mb-4 grid gap-4 ${showCosts ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <div className={`mb-4 grid gap-4 ${showCosts ? 'grid-cols-1 sm:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'}`}>
+            <Field label={t('proposals.validUntilField')} error={validation.errorOf('validUntil')} hint={t('proposals.validHint')}>
+              <input
+                type="date"
+                className="input"
+                value={validUntil}
+                min={inDays(1)}
+                onChange={(e) => setValidUntil(e.target.value)}
+                onBlur={() => validation.onBlur('validUntil')}
+              />
+            </Field>
             {showCosts && (
               <Field label={t('proposals.pricingScheme')}>
-                <select className="input" value={schemeId} onChange={(e) => setSchemeId(e.target.value)}>
+                <select className="input" value={schemeId} onChange={(e) => onSchemeChange(e.target.value)}>
                   <option value="">{t('proposals.marginPct')}: 0%</option>
                   {schemes.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -404,90 +834,173 @@ export default function ProposalDetailPage() {
           </div>
 
           <label className="label">{t('proposals.bom')}</label>
+          {showCosts && <p className="mb-2 text-xs text-slate-500">{t('proposals.marginHint')}</p>}
           {validation.errorOf('lines') && (
             <p role="alert" className="mb-2 text-xs font-medium text-danger-600">
               {validation.errorOf('lines')}
             </p>
           )}
-          <div className="space-y-2">
-            {lines.map((l, i) => (
-              <div key={i} className="flex flex-wrap items-center gap-2">
-                <select
-                  aria-label={t('proposals.item')}
-                  className="input min-w-[12rem] flex-1"
-                  value={l.itemId}
-                  onChange={(e) => {
-                    const it = items.find((x) => x.id === e.target.value);
-                    updateLine(i, {
-                      itemId: e.target.value,
-                      // Prefill from cost only when the server let us see it.
-                      unitPrice: it && it.unitCost != null ? Number(it.unitCost) : l.unitPrice,
-                    });
-                  }}
-                >
-                  <option value="">—</option>
-                  {items.map((it) => (
-                    <option key={it.id} value={it.id}>
-                      {it.sku} · {pick(it, 'name')}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  step="0.001"
-                  min={0}
-                  className={`input w-24 ${l.itemId && (!l.qty || l.qty <= 0) ? '!border-danger-300' : ''}`}
-                  aria-label={t('proposals.qty')}
-                  placeholder={t('proposals.qty')}
-                  value={l.qty}
-                  onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
-                  onBlur={() => validation.onBlur('lines')}
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  className="input w-28"
-                  aria-label={t('proposals.unitPrice')}
-                  placeholder={t('proposals.unitPrice')}
-                  value={l.unitPrice}
-                  onChange={(e) => updateLine(i, { unitPrice: Number(e.target.value) })}
-                />
-                <span className="w-28 text-end text-sm text-slate-500">
-                  {formatMoney((Number(l.qty) || 0) * (Number(l.unitPrice) || 0), locale)}
-                </span>
-                <button
-                  type="button"
-                  aria-label={`${t('proposals.removeLine')} ${i + 1}`}
-                  className="rounded-md p-1.5 text-slate-500 transition hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-300"
-                  onClick={() => removeLine(i)}
-                >
-                  <Icon name="x" className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
+          <div className="space-y-3">
+            {lines.map((l, i) => {
+              const changed = showCosts && costChanged(l);
+              return (
+                <div key={i} className={`rounded-lg border p-2 ${changed ? 'border-warning-300 bg-warning-50/50' : 'border-transparent'}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      aria-label={t('proposals.item')}
+                      className="input min-w-[12rem] flex-1"
+                      value={l.itemId}
+                      onChange={(e) => onItemChange(i, e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {items.map((it) => (
+                        <option key={it.id} value={it.id}>
+                          {it.sku} · {pick(it, 'name')}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min={0}
+                      className={`input w-24 ${l.itemId && (!l.qty || l.qty <= 0) ? '!border-danger-300' : ''}`}
+                      aria-label={t('proposals.qty')}
+                      placeholder={t('proposals.qty')}
+                      value={l.qty}
+                      onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
+                      onBlur={() => validation.onBlur('lines')}
+                    />
+                    {showCosts && (
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        className="input w-28"
+                        aria-label={t('proposals.cost')}
+                        placeholder={t('proposals.cost')}
+                        value={l.unitCost}
+                        onChange={(e) => onCostChange(i, e.target.value)}
+                      />
+                    )}
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      className="input w-28"
+                      aria-label={t('proposals.sellingPrice')}
+                      placeholder={t('proposals.sellingPrice')}
+                      value={l.unitPrice}
+                      onChange={(e) => updateLine(i, { unitPrice: e.target.value, priceTouched: true })}
+                      onBlur={() => validation.onBlur('lines')}
+                    />
+                    <span className="w-28 text-end text-sm text-slate-500">
+                      {formatMoney((Number(l.qty) || 0) * (Number(l.unitPrice) || 0), locale)}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`${t('proposals.removeLine')} ${i + 1}`}
+                      className="rounded-md p-1.5 text-slate-500 transition hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-300"
+                      onClick={() => removeLine(i)}
+                    >
+                      <Icon name="x" className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {showCosts && l.fetched && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                      <span>{sourceLabel(l.fetched.costSource)}</span>
+                      {l.fetched.costAgeDays === null ? (
+                        <span className="badge bg-slate-100 text-slate-600">{t('proposals.costUnknown')}</span>
+                      ) : l.fetched.stale ? (
+                        <span className="badge bg-warning-50 text-warning-700">
+                          <Icon name="alert-triangle" className="h-3 w-3" />
+                          {t('proposals.costStale').replace('{n}', String(l.fetched.costAgeDays))}
+                        </span>
+                      ) : (
+                        <span className="badge bg-success-50 text-success-700">
+                          {t('proposals.costFresh').replace('{n}', String(l.fetched.costAgeDays))}
+                        </span>
+                      )}
+                      {changed && (
+                        <span className="text-slate-400">
+                          {t('proposals.originalCost')}: <s>{formatMoney(l.fetched.unitCost, locale)}</s>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {changed && (
+                    <div className="mt-2">
+                      <input
+                        className={`input w-full ${!l.reason.trim() ? '!border-warning-400' : ''}`}
+                        aria-label={t('proposals.overrideReason')}
+                        placeholder={`${t('proposals.overrideReason')} *`}
+                        value={l.reason}
+                        maxLength={300}
+                        onChange={(e) => updateLine(i, { reason: e.target.value })}
+                        onBlur={() => validation.onBlur('lines')}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <button type="button" className="btn-ghost mt-2 text-xs" onClick={addLine}>
             + {t('proposals.addLine')}
           </button>
 
-          <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
             <div className="text-sm text-slate-600">
               {showCosts && (
                 <>
-                  {t('proposals.subtotal')}: {formatMoney(draftSubtotal, locale)} ·{' '}
+                  {t('proposals.cost')}: {formatMoney(draftSubtotal, locale)} ·{' '}
                 </>
               )}
               <span className="font-semibold text-slate-900">
                 {t('common.total')}: {formatMoney(draftTotal, locale)}
               </span>
             </div>
-            <Btn type="submit" variant="primary" icon="plus" busy={busy('revision')} disabled={busy()}>
-              {t('proposals.addRevision')}
-            </Btn>
+            <div className="flex items-center gap-2">
+              {(proposal.revisions.length > 0 || form?.mode === 'edit') && <Btn onClick={closeForm}>{t('common.cancel')}</Btn>}
+              <Btn type="submit" variant="primary" icon={form?.mode === 'edit' ? 'check' : 'plus'} busy={busy('revision')} disabled={busy()}>
+                {form?.mode === 'edit' ? t('proposals.saveRevision') : t('proposals.addRevision')}
+              </Btn>
+            </div>
           </div>
         </form>
       )}
+
+      {/* The proposal's own trail: who moved it, when, and what they said. */}
+      {proposal.history.length > 0 && (
+        <details className="card mt-6 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-700">{t('proposals.history')}</summary>
+          <ol className="mt-3 space-y-2 text-xs text-slate-600">
+            {proposal.history.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-baseline gap-2 border-b border-slate-50 pb-2">
+                <span className="text-slate-400">{formatDateTime(h.createdAt, locale)}</span>
+                <span className="font-semibold">{h.toStateName ? (ar ? h.toStateName.nameAr : h.toStateName.nameEn) : h.actionCode}</span>
+                <span>{h.actor ? (ar ? h.actor.nameAr : h.actor.nameEn) : '—'}</span>
+                {h.comment && <span className="italic text-slate-500">“{h.comment}”</span>}
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+
+      {/* The customer's refusal: the reason is mandatory. */}
+      <Modal open={rejectOpen} title={t('proposals.rejectTitle')} onClose={() => setRejectOpen(false)} dirty={rejectReason.trim().length > 0}>
+        <form onSubmit={rejectByCustomer} className="grid gap-4">
+          <Field label={t('proposals.rejectReason')} error={rejectErr || undefined}>
+            <textarea className="input min-h-[80px]" maxLength={500} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Btn onClick={() => setRejectOpen(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="danger" busy={busy('reject')} disabled={busy()}>
+              {t('proposals.customerReject')}
+            </Btn>
+          </div>
+        </form>
+      </Modal>
 
       {/* Create-contract modal */}
       <Modal open={contractOpen} title={t('proposals.createContract')} onClose={() => setContractOpen(false)}>
@@ -497,7 +1010,7 @@ export default function ProposalDetailPage() {
               <select name="contractType" className="input" defaultValue="EPC">
                 {enums?.contractTypes.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {locale === 'ar' ? o.labelAr : o.labelEn}
+                    {ar ? o.labelAr : o.labelEn}
                   </option>
                 ))}
               </select>

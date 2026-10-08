@@ -9,6 +9,7 @@
  * question people actually have, and a badge saying PENDING answers none of it.
  */
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
@@ -17,7 +18,12 @@ import { formatDateTime, formatMoney } from '@/lib/format';
 import { Btn, EmptyRow, Field, LoadError, Modal, StatusBadge, TableSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
-export type ApprovalDocType = 'PURCHASE_ORDER' | 'PROGRESS_CLAIM' | 'CHANGE_ORDER';
+export type ApprovalDocType =
+  | 'PURCHASE_REQUISITION'
+  | 'PURCHASE_ORDER'
+  | 'PROGRESS_CLAIM'
+  | 'CHANGE_ORDER'
+  | 'PROPOSAL';
 
 export interface ApprovalStepView {
   sequence: number;
@@ -45,6 +51,8 @@ export interface ApprovalRequestView {
 }
 
 export const DOC_LABEL: Record<ApprovalDocType, { ar: string; en: string }> = {
+  PURCHASE_REQUISITION: { ar: 'طلب شراء', en: 'Purchase requisition' },
+  PROPOSAL: { ar: 'عرض سعر', en: 'Proposal' },
   PURCHASE_ORDER: { ar: 'أمر شراء', en: 'Purchase order' },
   PROGRESS_CLAIM: { ar: 'مستخلص مقاول', en: 'Subcontractor claim' },
   CHANGE_ORDER: { ar: 'أمر تغيير', en: 'Change order' },
@@ -182,6 +190,15 @@ export function ApprovalInbox({ onDecided }: { onDecided?: () => void }) {
                     <div className="text-xs font-semibold text-slate-700">
                       {ar ? DOC_LABEL[r.documentType].ar : DOC_LABEL[r.documentType].en}
                     </div>
+                    {r.documentType === 'PROPOSAL' && (
+                      <Link
+                        href={`/proposals/${r.documentId}`}
+                        className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 underline"
+                      >
+                        <Icon name="file-text" className="h-3 w-3" />
+                        {t('apr.openDocument')}
+                      </Link>
+                    )}
                   </td>
                   <td className="td-num font-semibold text-slate-800">
                     {formatMoney(r.amount, locale)}
