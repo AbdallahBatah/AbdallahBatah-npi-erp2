@@ -269,7 +269,7 @@ beforeAll(async () => {
     await prisma.followUpTask.create({
       data: {
         organizationId: orgB.id, code: `TSK-B-${suffix}`, customerId: customerB.id, title: 'مهمة سرية للجارة',
-        dueAt: new Date('2099-01-01T00:00:00Z'), assigneeId: userB.id, createdById: userB.id,
+        dueAt: new Date('2020-01-01T00:00:00Z'), assigneeId: userB.id, createdById: userB.id,
       },
     })
   ).id;
@@ -366,6 +366,19 @@ describe('a tenant cannot reach another tenant by id', () => {
       await expect(
         followUpTasks.create(ATTACKER_CRM(), { customerId: mine.id, title: 'x', dueAt: dueTomorrow(), assigneeId: B.userId }),
       ).rejects.toThrow('Assignee not found');
+    });
+    it('the assignee list of the attacker’s organization does not contain the neighbour’s user', async () => {
+      const rows = (await followUpTasks.assignees(ATTACKER_CRM())) as Array<{ id: string }>;
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.map((r) => r.id)).not.toContain(B.userId);
+    });
+    it('the dashboard summary never counts the neighbour’s tasks', async () => {
+      // the neighbour's task is open and long overdue: it counts for its own assignee ...
+      const own = await followUpTasks.mySummary({ userId: B.userId, organizationId: B.organizationId, permissions: ['crm.customer.read'] } as unknown as AuthUser);
+      expect(own.overdue).toBe(1);
+      // ... and not for anyone asking inside the attacker's organization, even with the neighbour's user id
+      const crossed = await followUpTasks.mySummary({ userId: B.userId, organizationId: ATTACKER.organizationId, permissions: ['crm.customer.read'] } as unknown as AuthUser);
+      expect(crossed).toEqual({ dueToday: 0, overdue: 0 });
     });
     it('cannot attach a file to the neighbour’s log entry (404 from the entity check)', async () => {
       const files = { buffer: Buffer.from('x'), size: 1, originalname: 'a.pdf', mimetype: 'application/pdf' } as Express.Multer.File;

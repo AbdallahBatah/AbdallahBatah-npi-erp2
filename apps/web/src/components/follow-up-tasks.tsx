@@ -104,19 +104,19 @@ export function TaskStatusBadge({ status }: { status: TaskRow['status'] }) {
 }
 
 /**
- * The people a task may be given to. The only user lists the server offers need the
- * user-administration key, so without it the list is empty and the form offers «أنا» alone
- * (a documented limit of Step 5).
+ * The people a task may be given to: the active users of the organization, from the
+ * tasks module's own list (it needs only the key to create tasks — not user administration).
+ * "Me" is left out; the form offers it as the default.
  */
 export function useAssignees(): Person[] {
   const { can, user } = useAuth();
   const [people, setPeople] = useState<Person[]>([]);
-  const canList = can('admin.user.manage');
+  const canList = can('crm.customer.write');
   useEffect(() => {
     if (!canList) return;
     api
-      .get<Array<Person & { isActive: boolean }>>('/admin/users')
-      .then((rows) => setPeople(rows.filter((r) => r.isActive && r.id !== user?.id)))
+      .get<Person[]>('/tasks/assignees')
+      .then((rows) => setPeople(rows.filter((r) => r.id !== user?.id)))
       .catch(() => setPeople([]));
   }, [canList, user?.id]);
   return people;

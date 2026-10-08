@@ -9,7 +9,10 @@
  * The clock is faked: "now" is 13:00 on Thursday 8 October 2026 in Riyadh (10:00 UTC).
  */
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { PERMISSIONS } from '@npi/shared';
+import { PERMISSIONS_KEY } from '../../common/decorators';
 import { FollowUpTasksService } from './follow-up-tasks.service';
+import { FollowUpTasksController } from './follow-up-tasks.controller';
 import type { AuthUser } from '../../common/auth-user';
 
 const NOW = new Date('2026-10-08T10:00:00.000Z');
@@ -82,7 +85,12 @@ function setup(tx: ReturnType<typeof makeTx>, settings: Record<string, number> =
     opportunity: { findFirst: jest.fn().mockResolvedValue({ id: 'o1', customerId: 'c1' }) },
     project: { findFirst: jest.fn().mockResolvedValue({ id: 'p1' }) },
     customerContact: { findFirst: jest.fn().mockResolvedValue({ id: 'ct1' }) },
-    followUpTask: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(stored()) },
+    followUpTask: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(stored()),
+      count: jest.fn().mockResolvedValue(0),
+    },
+    user: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const numbering = { next: jest.fn().mockResolvedValue('TSK-00001') };
   const audit = { record: jest.fn().mockResolvedValue(undefined) };
@@ -546,5 +554,54 @@ describe('FollowUpTasksService.list / get', () => {
     const e = await thrown(svc.get(USER, 'other-org-task'));
     expect(e).toBeInstanceOf(NotFoundException);
     expect(prisma.followUpTask.findFirst.mock.calls[0][0].where).toEqual({ id: 'other-org-task', organizationId: 'org1' });
+  });
+});
+
+describe('FollowUpTasksService.assignees — who a task may be given to', () => {
+  it('asks Prisma for the active users of the caller’s organization only, ordered by Arabic name', async () => {
+    const { svc, prisma } = setup(makeTx());
+    prisma.user.findMany.mockResolvedValue([{ id: 'u2', nameAr: 'أحمد', nameEn: 'Ahmad' }]);
+    await svc.assignees(USER);
+    const args = prisma.user.findMany.mock.calls[0][0];
+    expect(args.where).toEqual({ organizationId: 'org1', isActive: true });
+    expect(args.orderBy).toEqual({ nameAr: 'asc' });
+  });
+
+  it('selects id, nameAr and nameEn and nothing else (no e-mail, role or status)', async () => {
+    const { svc, prisma } = setup(makeTx());
+    prisma.user.findMany.mockResolvedValue([{ id: 'u2', nameAr: 'أحمد', nameEn: 'Ahmad' }]);
+    const rows = await svc.assignees(USER);
+    expect(prisma.user.findMany.mock.calls[0][0].select).toEqual({ id: true, nameAr: true, nameEn: true });
+    expect(rows).toEqual([{ id: 'u2', nameAr: 'أحمد', nameEn: 'Ahmad' }]);
+  });
+});
+
+describe('FollowUpTasksService.mySummary — the dashboard card', () => {
+  it('counts the caller’s own open tasks due today and before today (Riyadh days)', async () => {
+    const { svc, prisma } = setup(makeTx());
+    prisma.followUpTask.count.mockResolvedValueOnce(2).mockResolvedValueOnce(5);
+    const res = await svc.mySummary(USER);
+    expect(res).toEqual({ dueToday: 2, overdue: 5 });
+    // "now" is 13:00 on 8 Oct in Riyadh: the stored form of today is UTC midnight of that date
+    const today = new Date('2026-10-08T00:00:00.000Z');
+    const wheres = prisma.followUpTask.count.mock.calls.map((c) => c[0].where);
+    expect(wheres).toContainEqual({ organizationId: 'org1', assigneeId: 'u1', status: 'OPEN', dueAt: today });
+    expect(wheres).toContainEqual({ organizationId: 'org1', assigneeId: 'u1', status: 'OPEN', dueAt: { lt: today } });
+  });
+});
+
+describe('FollowUpTasksController — the keys of the two new reads', () => {
+  const keyOf = (method: string): string[] =>
+    Reflect.getMetadata(PERMISSIONS_KEY, (FollowUpTasksController.prototype as unknown as Record<string, object>)[method]);
+
+  it('assignees needs the write key (it only feeds the assign-to picker), summary the read key', () => {
+    expect(keyOf('assignees')).toEqual([PERMISSIONS.CUSTOMER_WRITE]);
+    expect(keyOf('summary')).toEqual([PERMISSIONS.CUSTOMER_READ]);
+  });
+
+  it('the static routes are declared before :id so the parameter cannot swallow them', () => {
+    const names = Object.getOwnPropertyNames(FollowUpTasksController.prototype);
+    expect(names.indexOf('assignees')).toBeLessThan(names.indexOf('get'));
+    expect(names.indexOf('summary')).toBeLessThan(names.indexOf('get'));
   });
 });

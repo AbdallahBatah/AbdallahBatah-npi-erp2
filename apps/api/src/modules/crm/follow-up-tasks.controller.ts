@@ -43,6 +43,24 @@ export class FollowUpTasksController {
     });
   }
 
+  /**
+   * The active users of the organization a task may be given to (id and names only).
+   * Static routes (`assignees`, `summary`) are declared BEFORE `:id` or the parameter
+   * would swallow them.
+   */
+  @Get('assignees')
+  @RequirePermissions(PERMISSIONS.CUSTOMER_WRITE)
+  assignees(@CurrentUser() user: AuthUser) {
+    return this.tasks.assignees(user);
+  }
+
+  /** The caller's own open tasks due today / already late — the dashboard card. */
+  @Get('summary')
+  @RequirePermissions(PERMISSIONS.CUSTOMER_READ)
+  summary(@CurrentUser() user: AuthUser) {
+    return this.tasks.mySummary(user);
+  }
+
   @Get(':id')
   @RequirePermissions(PERMISSIONS.CUSTOMER_READ)
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {

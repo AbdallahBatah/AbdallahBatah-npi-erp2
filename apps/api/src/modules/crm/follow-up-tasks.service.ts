@@ -124,6 +124,36 @@ export class FollowUpTasksService {
     return [...open, ...closed];
   }
 
+  /**
+   * The people a task may be given to: the ACTIVE users of the caller's organization, by
+   * Arabic name, with nothing but the three fields a picker needs (no e-mail, role or
+   * status). The caller is included — the screen drops "me" itself, because "me" is the
+   * default when nobody is picked. Read behind the write key: only someone who may create
+   * a task has a reason to ask.
+   */
+  assignees(user: AuthUser) {
+    return this.prisma.user.findMany({
+      where: { organizationId: user.organizationId, isActive: true },
+      select: { id: true, nameAr: true, nameEn: true },
+      orderBy: { nameAr: 'asc' },
+    });
+  }
+
+  /**
+   * The dashboard card: the caller's OWN open tasks due today and already late. Riyadh
+   * days — a due day is stored as UTC midnight of its Riyadh date, and `normalizeValidUntil`
+   * gives today's stored form.
+   */
+  async mySummary(user: AuthUser): Promise<{ dueToday: number; overdue: number }> {
+    const today = normalizeValidUntil(new Date()) as Date;
+    const mine = { organizationId: user.organizationId, assigneeId: user.userId, status: 'OPEN' as const };
+    const [dueToday, overdue] = await Promise.all([
+      this.prisma.followUpTask.count({ where: { ...mine, dueAt: today } }),
+      this.prisma.followUpTask.count({ where: { ...mine, dueAt: { lt: today } } }),
+    ]);
+    return { dueToday, overdue };
+  }
+
   async get(user: AuthUser, id: string) {
     const row = await this.prisma.followUpTask.findFirst({
       where: { id, organizationId: user.organizationId },

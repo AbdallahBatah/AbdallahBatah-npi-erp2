@@ -261,12 +261,99 @@ describe('who may do what — the keys of the existing customer module', () => {
     for (const m of ['create', 'update']) expect(keyOf(ActivitiesController, m)).toEqual([PERMISSIONS.CUSTOMER_WRITE]);
     expect(keyOf(ActivitiesController, 'list')).toEqual([PERMISSIONS.CUSTOMER_READ]);
     for (const m of ['create', 'update', 'complete', 'cancel']) expect(keyOf(FollowUpTasksController, m)).toEqual([PERMISSIONS.CUSTOMER_WRITE]);
-    for (const m of ['list', 'get']) expect(keyOf(FollowUpTasksController, m)).toEqual([PERMISSIONS.CUSTOMER_READ]);
+    for (const m of ['list', 'get', 'summary']) expect(keyOf(FollowUpTasksController, m)).toEqual([PERMISSIONS.CUSTOMER_READ]);
+    expect(keyOf(FollowUpTasksController, 'assignees')).toEqual([PERMISSIONS.CUSTOMER_WRITE]);
   });
 
   it('the executive (read only) holds the read key but not the write key, so POST /activities answers 403 at the guard', () => {
     expect(CEO.permissions).toContain(PERMISSIONS.CUSTOMER_READ);
     expect(CEO.permissions).not.toContain(PERMISSIONS.CUSTOMER_WRITE);
+  });
+});
+
+describe('Step 5-b — the assignee list and the dashboard summary', () => {
+  let inactiveId = '';
+  afterAll(async () => {
+    if (inactiveId) await prisma.user.delete({ where: { id: inactiveId } });
+  });
+
+  it('the sales user is offered the active administrator, with the three name fields only', async () => {
+    const rows = (await tasks.assignees(SALES)) as Array<Record<string, unknown>>;
+    const admin = rows.find((r) => r.id === ADMIN.userId);
+    expect(admin).toBeDefined();
+    expect(Object.keys(admin!).sort()).toEqual(['id', 'nameAr', 'nameEn']);
+    // not filtered by the caller: the screen drops "me" itself
+    expect(rows.some((r) => r.id === SALES.userId)).toBe(true);
+  });
+
+  it('a deactivated user is not offered', async () => {
+    const role = await prisma.role.findFirstOrThrow({ where: { organizationId: SALES.organizationId } });
+    const u = await prisma.user.create({
+      data: {
+        organizationId: SALES.organizationId,
+        email: `inactive-${suffix}@assignees.test`,
+        passwordHash: 'x',
+        nameAr: 'مستخدم معطّل',
+        nameEn: 'Inactive User',
+        roleId: role.id,
+        isActive: false,
+      },
+    });
+    inactiveId = u.id;
+    const rows = (await tasks.assignees(SALES)) as Array<{ id: string }>;
+    expect(rows.some((r) => r.id === u.id)).toBe(false);
+  });
+
+  it('the list is ordered by Arabic name', async () => {
+    const rows = (await tasks.assignees(SALES)) as Array<{ nameAr: string }>;
+    expect(rows.length).toBeGreaterThan(1);
+    // Postgres collation may differ from a code-point sort, so compare with the database's own order.
+    const dbOrder = await prisma.user.findMany({
+      where: { organizationId: SALES.organizationId, isActive: true },
+      orderBy: { nameAr: 'asc' },
+      select: { nameAr: true },
+    });
+    expect(rows.map((r) => r.nameAr)).toEqual(dbOrder.map((r) => r.nameAr));
+  });
+
+  it('the read-only executive does not hold the key of the assignee list (403 at the guard) but does hold the summary key', () => {
+    expect(CEO.permissions).not.toContain(PERMISSIONS.CUSTOMER_WRITE);
+    expect(CEO.permissions).toContain(PERMISSIONS.CUSTOMER_READ);
+  });
+
+  it('mySummary counts the caller’s open tasks due today, then overdue once the day has passed', async () => {
+    const before = await tasks.mySummary(SALES);
+    const t = (await tasks.create(SALES, {
+      customerId: CUSTOMER_ID,
+      title: `ملخص اللوحة — ${suffix}`,
+      dueAt: today().toISOString().slice(0, 10),
+    })) as { id: string };
+    madeTasks.push(t.id);
+    const withToday = await tasks.mySummary(SALES);
+    expect(withToday.dueToday).toBe(before.dueToday + 1);
+    expect(withToday.overdue).toBe(before.overdue);
+
+    await prisma.followUpTask.update({ where: { id: t.id }, data: { dueAt: inDays(-1) } });
+    const late = await tasks.mySummary(SALES);
+    expect(late.dueToday).toBe(before.dueToday);
+    expect(late.overdue).toBe(before.overdue + 1);
+
+    // a finished task is neither
+    await tasks.complete(SALES, t.id);
+    const done = await tasks.mySummary(SALES);
+    expect(done.overdue).toBe(before.overdue);
+  });
+
+  it('mySummary is the caller’s own: a task given to the administrator is not counted for the sales user', async () => {
+    const before = await tasks.mySummary(SALES);
+    const t = (await tasks.create(SALES, {
+      customerId: CUSTOMER_ID,
+      title: `لغيري — ${suffix}`,
+      dueAt: today().toISOString().slice(0, 10),
+      assigneeId: ADMIN.userId,
+    })) as { id: string };
+    madeTasks.push(t.id);
+    expect(await tasks.mySummary(SALES)).toEqual(before);
   });
 });
 
