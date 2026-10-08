@@ -326,6 +326,7 @@ describe('no-bypass-llm R4: one provider, behind one client', () => {
     'src/agents/context.ts': 'one provider per process for the chat/intake context',
     'src/app/api/setup/route.ts': 'one provider per process for the setup route',
     'scripts/eval-extract.ts': 'the extraction eval runs the real model through createLlmClient with the copilot database',
+    'scripts/eval-behaviour.ts': 'the behaviour eval (06 §3 #20) hands createLlmClient a daily_usage reader that reports the cap as reached',
   };
   /** Of those, the files that must hand the provider to createLlmClient and to nothing else. */
   const MUST_FEED_CLIENT = ['src/agents/context.ts', 'src/app/api/setup/route.ts'];
