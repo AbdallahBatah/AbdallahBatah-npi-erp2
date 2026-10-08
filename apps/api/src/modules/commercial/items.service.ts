@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthUser } from '../../common/auth-user';
 import { CreateItemDto, UpdateItemDto } from './dto';
+import { assertCanSetCosts } from './revision-pricing';
 
 @Injectable()
 export class ItemsService {
@@ -26,6 +27,8 @@ export class ItemsService {
   }
 
   async create(user: AuthUser, dto: CreateItemDto) {
+    // The unit cost is cost data: setting it needs finance.costs.view.
+    if (dto.unitCost !== undefined) assertCanSetCosts(user);
     return this.prisma.item.create({
       data: {
         organizationId: user.organizationId,
@@ -41,6 +44,7 @@ export class ItemsService {
   }
 
   async update(user: AuthUser, id: string, dto: UpdateItemDto) {
+    if (dto.unitCost !== undefined) assertCanSetCosts(user);
     const existing = await this.prisma.item.findFirst({
       where: { id, organizationId: user.organizationId },
     });

@@ -35,22 +35,24 @@ interface VatReturn {
   };
   netVatDue: number;
 }
+// Cost and margin fields are null for a user without finance.costs.view (the
+// server nulls them); the page hides those columns rather than showing zeros.
 interface ProfRow {
   contractId: string;
   code: string;
   customer: { nameAr: string; nameEn: string };
   status: string;
   contractValue: number;
-  estCost: number;
-  estMargin: number;
-  estMarginPct: number;
+  estCost: number | null;
+  estMargin: number | null;
+  estMarginPct: number | null;
   billed: number;
   progressPct: number;
-  earnedMargin: number;
-  actualCost: number;
-  marginToDate: number;
+  earnedMargin: number | null;
+  actualCost: number | null;
+  marginToDate: number | null;
   projectCode?: string | null;
-  costBasis: 'ACTUAL' | 'BOM_ESTIMATE';
+  costBasis: 'ACTUAL' | 'BOM_ESTIMATE' | null;
 }
 
 const POSITION_STYLE: Record<PocRow['position'], string> = {
@@ -62,6 +64,7 @@ const POSITION_STYLE: Record<PocRow['position'], string> = {
 export default function FinanceReportsPage() {
   const { t, locale, pick } = useI18n();
   const { can } = useAuth();
+  const showCosts = can('finance.costs.view');
   const [poc, setPoc] = useState<PocRow[] | null>(null);
   const [vat, setVat] = useState<VatReturn | null>(null);
   const [prof, setProf] = useState<ProfRow[] | null>(null);
@@ -120,7 +123,8 @@ export default function FinanceReportsPage() {
   const totContracts = sum(poc?.map((r) => r.contractValue));
   const totRecognized = sum(poc?.map((r) => r.recognizedRevenue));
   const totBilled = sum(poc?.map((r) => r.billedRevenue));
-  const avgMargin = prof && prof.length ? sum(prof.map((r) => r.estMarginPct)) / prof.length : null;
+  const avgMargin =
+    showCosts && prof && prof.length ? sum(prof.map((r) => r.estMarginPct ?? 0)) / prof.length : null;
 
   const kpis = [
     { key: 'fin.kpi.contracts', v: poc ? formatMoney(totContracts, locale) : '—', tone: 'text-slate-800' },
@@ -131,11 +135,15 @@ export default function FinanceReportsPage() {
       v: vat ? formatMoney(Math.abs(vat.netVatDue), locale) : '—',
       tone: vat && vat.netVatDue < 0 ? 'text-success-600' : 'text-warning-600',
     },
-    {
-      key: 'fin.kpi.avgMargin',
-      v: avgMargin !== null ? `${avgMargin.toFixed(1)}%` : '—',
-      tone: avgMargin !== null && avgMargin < 0 ? 'text-danger-600' : 'text-slate-800',
-    },
+    ...(showCosts
+      ? [
+          {
+            key: 'fin.kpi.avgMargin',
+            v: avgMargin !== null ? `${avgMargin.toFixed(1)}%` : '—',
+            tone: avgMargin !== null && avgMargin < 0 ? 'text-danger-600' : 'text-slate-800',
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -145,7 +153,7 @@ export default function FinanceReportsPage() {
       {confirmNode}
 
       {/* KPI strip */}
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <div className={`mb-6 grid grid-cols-2 gap-4 ${showCosts ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
         {kpis.map((k) => (
           <div key={k.key} className="card p-4">
             <p className="text-xs text-slate-500">{t(k.key)}</p>
@@ -333,55 +341,61 @@ export default function FinanceReportsPage() {
               <tr>
                 <th scope="col" className="th">{t('fin.poc.contract')}</th>
                 <th scope="col" className="th text-end">{t('fin.poc.value')}</th>
-                <th scope="col" className="th text-end">{t('fin.prof.estCost')}</th>
-                <th scope="col" className="th text-end">{t('fin.prof.actualCost')}</th>
-                <th scope="col" className="th text-end">{t('fin.prof.marginPct')}</th>
+                {showCosts && <th scope="col" className="th text-end">{t('fin.prof.estCost')}</th>}
+                {showCosts && <th scope="col" className="th text-end">{t('fin.prof.actualCost')}</th>}
+                {showCosts && <th scope="col" className="th text-end">{t('fin.prof.marginPct')}</th>}
                 <th scope="col" className="th text-end">{t('fin.poc.billed')}</th>
-                <th scope="col" className="th text-end">{t('fin.prof.marginToDate')}</th>
-                <th scope="col" className="th text-end">{t('fin.prof.earned')}</th>
+                {showCosts && <th scope="col" className="th text-end">{t('fin.prof.marginToDate')}</th>}
+                {showCosts && <th scope="col" className="th text-end">{t('fin.prof.earned')}</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {!prof ? (
-                <TableSkeleton cols={8} />
+                <TableSkeleton cols={showCosts ? 8 : 3} />
               ) : prof.length === 0 ? (
-                <EmptyRow colSpan={8} text={t('common.none')} />
+                <EmptyRow colSpan={showCosts ? 8 : 3} text={t('common.none')} />
               ) : (
                 prof.map((r) => (
                   <tr
                     key={r.contractId}
-                    className={`hover:bg-slate-50 ${r.marginToDate < 0 ? 'bg-danger-50/40' : ''}`}
+                    className={`hover:bg-slate-50 ${showCosts && (r.marginToDate ?? 0) < 0 ? 'bg-danger-50/40' : ''}`}
                   >
                     <td className="td">
                       <span className="font-mono text-xs">{r.code}</span>
                       <p className="text-xs text-slate-500">{pick(r.customer, 'name')}</p>
                     </td>
                     <td className="td-num">{formatMoney(r.contractValue, locale)}</td>
-                    <td className="td-num">{formatMoney(r.estCost, locale)}</td>
-                    <td className="td-num">
-                      {formatMoney(r.actualCost, locale)}
-                      {r.costBasis === 'ACTUAL' && (
-                        <span className="ms-1 badge bg-brand-100 text-brand-800">{t('fin.prof.actualBadge')}</span>
-                      )}
-                    </td>
-                    <td className="td-num">
-                      <div className="flex items-center justify-end gap-2">
-                        <span className={r.estMarginPct < 0 ? 'font-medium text-danger-600' : ''}>
-                          {r.estMarginPct}%
-                        </span>
-                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className={`h-full rounded-full ${r.estMarginPct < 0 ? 'bg-danger-500' : r.estMarginPct < 10 ? 'bg-warning-500' : 'bg-success-500'}`}
-                            style={{ width: `${Math.min(100, Math.max(4, Math.abs(r.estMarginPct)))}%` }}
-                          />
+                    {showCosts && <td className="td-num">{formatMoney(r.estCost ?? 0, locale)}</td>}
+                    {showCosts && (
+                      <td className="td-num">
+                        {formatMoney(r.actualCost ?? 0, locale)}
+                        {r.costBasis === 'ACTUAL' && (
+                          <span className="ms-1 badge bg-brand-100 text-brand-800">{t('fin.prof.actualBadge')}</span>
+                        )}
+                      </td>
+                    )}
+                    {showCosts && (
+                      <td className="td-num">
+                        <div className="flex items-center justify-end gap-2">
+                          <span className={(r.estMarginPct ?? 0) < 0 ? 'font-medium text-danger-600' : ''}>
+                            {r.estMarginPct ?? 0}%
+                          </span>
+                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-full rounded-full ${(r.estMarginPct ?? 0) < 0 ? 'bg-danger-500' : (r.estMarginPct ?? 0) < 10 ? 'bg-warning-500' : 'bg-success-500'}`}
+                              style={{ width: `${Math.min(100, Math.max(4, Math.abs(r.estMarginPct ?? 0)))}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
+                    )}
                     <td className="td-num">{formatMoney(r.billed, locale)}</td>
-                    <td className={`td text-end font-medium ${r.marginToDate >= 0 ? 'text-success-700' : 'text-danger-600'}`}>
-                      {formatMoney(r.marginToDate, locale)}
-                    </td>
-                    <td className="td-num">{formatMoney(r.earnedMargin, locale)}</td>
+                    {showCosts && (
+                      <td className={`td text-end font-medium ${(r.marginToDate ?? 0) >= 0 ? 'text-success-700' : 'text-danger-600'}`}>
+                        {formatMoney(r.marginToDate ?? 0, locale)}
+                      </td>
+                    )}
+                    {showCosts && <td className="td-num">{formatMoney(r.earnedMargin ?? 0, locale)}</td>}
                   </tr>
                 ))
               )}

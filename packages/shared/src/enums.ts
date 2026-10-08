@@ -17,6 +17,12 @@ export const CUSTOMER_TYPES: EnumOption[] = [
   { value: 'GOVERNMENT', labelAr: 'حكومي', labelEn: 'Government' },
 ];
 
+/** CRM Phase 1 (Step 2): a customer is a business or a person — it decides which unique key is mandatory. */
+export const CUSTOMER_ENTITY_KINDS: EnumOption[] = [
+  { value: 'COMPANY', labelAr: 'منشأة', labelEn: 'Company' },
+  { value: 'INDIVIDUAL', labelAr: 'فرد', labelEn: 'Individual' },
+];
+
 export const LEAD_SOURCES: EnumOption[] = [
   { value: 'WEBSITE', labelAr: 'الموقع الإلكتروني', labelEn: 'Website' },
   { value: 'REFERRAL', labelAr: 'إحالة', labelEn: 'Referral' },
@@ -33,12 +39,35 @@ export const LEAD_STATUSES: EnumOption[] = [
   { value: 'CONVERTED', labelAr: 'محوَّل', labelEn: 'Converted' },
 ];
 
+// CRM Phase 1 · Step 3 (§4.2 / §9): محتمل ← تأهيل ← عرض سعر ← تفاوض ← رابحة | خاسرة.
+// The order here IS the funnel order; the transition rules live in
+// opportunity-stages.ts.
 export const OPPORTUNITY_STAGES: EnumOption[] = [
-  { value: 'PROSPECTING', labelAr: 'استكشاف', labelEn: 'Prospecting' },
+  { value: 'PROSPECTING', labelAr: 'محتمل', labelEn: 'Prospecting' },
+  { value: 'QUALIFICATION', labelAr: 'تأهيل', labelEn: 'Qualification' },
   { value: 'PROPOSAL', labelAr: 'عرض سعر', labelEn: 'Proposal' },
   { value: 'NEGOTIATION', labelAr: 'تفاوض', labelEn: 'Negotiation' },
-  { value: 'WON', labelAr: 'مكسوبة', labelEn: 'Won' },
+  { value: 'WON', labelAr: 'رابحة', labelEn: 'Won' },
   { value: 'LOST', labelAr: 'خاسرة', labelEn: 'Lost' },
+];
+
+export const OPPORTUNITY_TYPES: EnumOption[] = [
+  { value: 'DIRECT', labelAr: 'مباشرة', labelEn: 'Direct' },
+  { value: 'TENDER', labelAr: 'مناقصة', labelEn: 'Tender' },
+];
+
+/** CRM Phase 1 · Step 5 (spec 4.4): the kinds of communication-log entry. Files are attachments on any entry, not a kind. */
+export const ACTIVITY_TYPES: EnumOption[] = [
+  { value: 'NOTE', labelAr: 'ملاحظة', labelEn: 'Note' },
+  { value: 'CALL', labelAr: 'مكالمة', labelEn: 'Call' },
+  { value: 'MEETING', labelAr: 'اجتماع', labelEn: 'Meeting' },
+];
+
+/** CRM Phase 1 · Step 5: the life of a follow-up task. A finished or cancelled task is not re-opened. */
+export const FOLLOWUP_TASK_STATUSES: EnumOption[] = [
+  { value: 'OPEN', labelAr: 'مفتوحة', labelEn: 'Open' },
+  { value: 'DONE', labelAr: 'منجزة', labelEn: 'Done' },
+  { value: 'CANCELLED', labelAr: 'ملغاة', labelEn: 'Cancelled' },
 ];
 
 export const ITEM_CATEGORIES: EnumOption[] = [
@@ -51,11 +80,25 @@ export const ITEM_CATEGORIES: EnumOption[] = [
   { value: 'SERVICE', labelAr: 'خدمة', labelEn: 'Service' },
 ];
 
+// CRM Phase 1 · Step 4 (§9): مسودة ← بانتظار الاعتماد ← معتمد ← مُرسل ← مقبول | مرفوض
+// (رفض العميل) | منتهي الصلاحية | مُستبدَل بنسخة أحدث. The order is the document's.
 export const PROPOSAL_STATUSES: EnumOption[] = [
   { value: 'DRAFT', labelAr: 'مسودة', labelEn: 'Draft' },
+  { value: 'PENDING_APPROVAL', labelAr: 'بانتظار الاعتماد', labelEn: 'Pending approval' },
+  { value: 'APPROVED', labelAr: 'معتمد', labelEn: 'Approved' },
   { value: 'SENT', labelAr: 'مُرسَل', labelEn: 'Sent' },
   { value: 'ACCEPTED', labelAr: 'مقبول', labelEn: 'Accepted' },
   { value: 'REJECTED', labelAr: 'مرفوض', labelEn: 'Rejected' },
+  { value: 'EXPIRED', labelAr: 'منتهي الصلاحية', labelEn: 'Expired' },
+  { value: 'SUPERSEDED', labelAr: 'مُستبدَل بنسخة أحدث', labelEn: 'Superseded by a newer revision' },
+];
+
+/** Where a proposal line's cost came from (spec 4.3): the last purchase, or a recorded manual change. */
+export const COST_SOURCES: EnumOption[] = [
+  { value: 'GRN', labelAr: 'آخر استلام مقبول', labelEn: 'Last accepted receipt' },
+  { value: 'PO', labelAr: 'آخر أمر شراء معتمد', labelEn: 'Last approved purchase order' },
+  { value: 'CATALOGUE', labelAr: 'تكلفة الكتالوج', labelEn: 'Catalogue cost' },
+  { value: 'MANUAL', labelAr: 'تعديل يدوي', labelEn: 'Manual change' },
 ];
 
 export const CONTRACT_TYPES: EnumOption[] = [

@@ -1,5 +1,6 @@
 import {
   ArrayNotEmpty,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsEmail,
@@ -32,6 +33,13 @@ export class CreateUserDto {
   @IsString()
   roleId!: string;
 
+  /** Roles held in addition to `roleId` (CRM Phase 1). Never includes the primary. */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  extraRoleIds?: string[];
+
   @IsOptional()
   @IsIn(['AR', 'EN'])
   locale?: 'AR' | 'EN';
@@ -51,6 +59,13 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   roleId?: string;
+
+  /** When present, REPLACES the user's whole set of extra roles. [] clears it. */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  extraRoleIds?: string[];
 
   @IsOptional()
   @IsBoolean()

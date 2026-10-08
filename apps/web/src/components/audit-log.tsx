@@ -41,6 +41,7 @@ const ENTITY_AR: Record<string, string> = {
   Customer: 'عميل',
   Lead: 'عميل محتمل',
   Opportunity: 'فرصة',
+  LossReason: 'سبب خسارة',
   Proposal: 'عرض سعر',
   ProposalRevision: 'مراجعة عرض',
   Contract: 'عقد',
@@ -72,6 +73,8 @@ const ENTITY_AR: Record<string, string> = {
   Role: 'دور',
   Organization: 'المنشأة',
   Attachment: 'مرفق',
+  Activity: 'قيد تواصل',
+  FollowUpTask: 'مهمة متابعة',
 };
 
 const ACTION_AR: Record<string, string> = {
@@ -91,6 +94,7 @@ const ACTION_AR: Record<string, string> = {
   OPEN_YEAR: 'فتح سنة',
   REOPEN_YEAR: 'إعادة فتح سنة',
   COMPLETE: 'إكمال',
+  REASSIGN: 'إعادة إسناد',
   CONSUME_PART: 'صرف قطعة غيار',
   CONVERT: 'تحويل',
   COST_RECOGNITION: 'اعتراف بالتكلفة',

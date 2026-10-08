@@ -34,6 +34,13 @@ enum CustomerType {
   GOVERNMENT
 }
 
+/// CRM Phase 1 (Step 2): a customer is a business or a person. For a NEW record
+/// a COMPANY must carry a CR or VAT number and an INDIVIDUAL a mobile number.
+enum CustomerEntityKind {
+  COMPANY
+  INDIVIDUAL
+}
+
 enum LeadSource {
   WEBSITE
   REFERRAL
@@ -50,12 +57,38 @@ enum LeadStatus {
   CONVERTED
 }
 
+/// CRM Phase 1 (Step 3): محتمل ← تأهيل ← عرض سعر ← تفاوض ← رابحة | خاسرة.
+/// QUALIFICATION was added by migration 0024; Postgres cannot drop an enum
+/// value, so it survives a rollback of that migration.
 enum OpportunityStage {
   PROSPECTING
+  QUALIFICATION
   PROPOSAL
   NEGOTIATION
   WON
   LOST
+}
+
+/// CRM Phase 1 (Step 3): a direct sale or a tender. A tender adds a close date
+/// (mandatory) and the bid-bond particulars on the opportunity itself.
+enum OpportunityType {
+  DIRECT
+  TENDER
+}
+
+/// CRM Phase 1 · Step 5: the kinds of communication-log entry.
+enum ActivityType {
+  NOTE
+  CALL
+  MEETING
+}
+
+/// CRM Phase 1 · Step 5: the life of a follow-up task. No re-opening: a finished or
+/// cancelled task stays so, and a new one is created instead.
+enum FollowUpTaskStatus {
+  OPEN
+  DONE
+  CANCELLED
 }
 
 enum ItemCategory {
@@ -68,11 +101,31 @@ enum ItemCategory {
   SERVICE
 }
 
+// CRM Phase 1 · Step 4 (§9 status map): مسودة ← بانتظار الاعتماد ← معتمد ← مُرسل ←
+// مقبول | مرفوض (by the customer) | منتهي الصلاحية | مُستبدَل بنسخة أحدث. Used by
+// Proposal.status (a mirror of its current revision) and ProposalRevision.status;
+// SUPERSEDED only ever appears on a revision. The four new values are added by
+// migration 0026 and first used by 0027 (Postgres cannot use a value in the
+// transaction that adds it).
 enum ProposalStatus {
   DRAFT
+  PENDING_APPROVAL
+  APPROVED
   SENT
   ACCEPTED
   REJECTED
+  EXPIRED
+  SUPERSEDED
+}
+
+// Where a proposal line's cost came from (CRM Step 4, spec 4.3): the last accepted
+// goods receipt, the last approved purchase order, the catalogue cost (no date),
+// or a manual change with a recorded reason.
+enum CostSource {
+  GRN
+  PO
+  CATALOGUE
+  MANUAL
 }
 
 enum ContractType {
@@ -233,6 +286,14 @@ model Organization {
   requisitions        PurchaseRequisition[]
   projectCommitments  ProjectCommitment[]
   threeWayMatches     ThreeWayMatch[]
+  // CRM Phase 1 (Step 2)
+  customerContacts    CustomerContact[]
+  customerMergeLogs   CustomerMergeLog[]
+  orgSettings         OrgSetting[]
+  lossReasons         LossReason[]
+  // CRM Phase 1 (Step 5)
+  activities          Activity[]
+  followUpTasks       FollowUpTask[]
 
   @@index([parentOrganizationId])
 }
@@ -247,6 +308,9 @@ model Role {
   // Flat list of permission keys, e.g. ["crm.lead.read", "commercial.contract.write"].
   permissions    String[]
   users          User[]
+  // CRM Phase 1: users who hold this role *in addition to* their primary one
+  // (User.roleId). The primary role still drives display and routing defaults.
+  userRoles      UserRole[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -292,9 +356,32 @@ model User {
   delegationsCreated  ApprovalDelegation[] @relation("DelegationCreator")
   wfHistory           WfHistory[]          @relation("WfHistoryActor")
   requisitions        PurchaseRequisition[] @relation("PrRequester")
+  // CRM Phase 1: roles held in addition to the primary `roleId`.
+  extraRoles          UserRole[]
+  // CRM Phase 1 · Step 4: proposal revisions this person created.
+  proposalRevisionsCreated ProposalRevision[] @relation("ProposalRevisionCreator")
+  // CRM Phase 1 · Step 5: the communication log and the follow-up tasks.
+  activitiesCreated      Activity[]     @relation("ActivityCreator")
+  assignedFollowUpTasks  FollowUpTask[] @relation("TaskAssignee")
+  followUpTasksCreated   FollowUpTask[] @relation("TaskCreator")
+  followUpTasksCompleted FollowUpTask[] @relation("TaskCompleter")
 
   @@index([organizationId])
   @@index([organizationId, departmentId])
+}
+
+/// CRM Phase 1: a secondary role for a user. `User.roleId` stays the primary
+/// role; a user's effective permissions are the union over primary + these.
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, roleId])
+  @@index([roleId])
 }
 
 model NumberingSequence {
@@ -345,6 +432,18 @@ model Customer {
   creditTermsDays Int     @default(0)
   phone          String?
   email          String?
+  // CRM Phase 1 (Step 2) — unified customer record.
+  entityKind     CustomerEntityKind @default(COMPANY)
+  /// Canonical `+9665xxxxxxxx` (normalizeSaudiMobile). `phone` stays free text.
+  mobile         String?
+  /// nameAr after normalizeArabicName — what duplicate matching compares.
+  nameNormalized String?
+  /// Set on the record that was merged AWAY. The row is never deleted: its
+  /// CUS-xxxxx code stays reserved and old links keep resolving.
+  mergedIntoId   String?
+  mergedInto     Customer?  @relation("CustomerMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     Customer[] @relation("CustomerMerge")
+  mergedAt       DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -352,9 +451,77 @@ model Customer {
   opportunities  Opportunity[]
   contracts      Contract[]
   invoices       Invoice[]
+  contacts       CustomerContact[]
+  // CRM Phase 1 · Step 5
+  activities     Activity[]
+  followUpTasks  FollowUpTask[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
+  // Non-unique here on purpose: uniqueness is the PARTIAL indexes of migration
+  // 0023 (Prisma cannot express a WHERE), applied once duplicates are merged.
+  @@index([organizationId, crNumber])
+  @@index([organizationId, vatNumber])
+  @@index([organizationId, mobile])
+  @@index([organizationId, nameNormalized])
+  @@index([mergedIntoId])
+}
+
+/// People at a customer. A customer has any number; at most one is primary.
+model CustomerContact {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name           String
+  title          String?
+  phone          String?
+  mobile         String?
+  email          String?
+  isPrimary      Boolean  @default(false)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // CRM Phase 1 · Step 5: entries logged against this person.
+  activities     Activity[]
+
+  @@index([organizationId, customerId])
+}
+
+/// One row per customer merged away: what moved, and the full pre-merge
+/// snapshot of the merged record. There is no automatic un-merge — the way
+/// back is the database backup named in `backupRef`.
+model CustomerMergeLog {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  survivorId         String
+  mergedId           String
+  /// Rows moved per table, e.g. {"Lead":1,"Opportunity":2,"Contract":0,...}.
+  movedJson          Json
+  /// The merged customer, complete, as it was before the merge.
+  mergedSnapshotJson Json
+  /// File name of the backup the administrator took first (typed by them).
+  backupRef          String
+  performedById      String
+  performedAt        DateTime @default(now())
+
+  @@index([organizationId, survivorId])
+}
+
+/// Per-organization settings as key -> JSON value (first used by CRM Step 2:
+/// the similarity threshold and the merge on/off switch; Steps 4 and 5 add more).
+model OrgSetting {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  valueJson      Json
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, key])
 }
 
 model Lead {
@@ -401,13 +568,56 @@ model Opportunity {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  // CRM Phase 1 · Step 3 (migration 0024) ─────────────────────────────────────
+  opportunityType OpportunityType @default(DIRECT)
+  /// Tender fields: only meaningful when opportunityType = TENDER (the service
+  /// clears them for a DIRECT opportunity). tenderCloseDate is mandatory then.
+  tenderReference String?
+  tenderCloseDate DateTime?
+  bidBondAmount   Decimal? @db.Decimal(18, 2)
+  bidBondBank     String?
+  bidBondExpiry   DateTime?
+  bidBondReference String?
+  /// Mandatory (service-enforced) when stage = LOST; the reason is never deleted.
+  lossReasonId   String?
+  lossReason     LossReason? @relation(fields: [lossReasonId], references: [id], onDelete: Restrict)
+  lossNotes      String?
+  /// The moment the opportunity became WON or LOST.
+  closedAt       DateTime?
+  /// The last stage change — the funnel's "age in stage".
+  stageChangedAt DateTime?
+
   sourceLead     Lead?    @relation("LeadConversion")
   designVersions DesignVersion[]
   proposals      Proposal[]
   contracts      Contract[]
+  // CRM Phase 1 · Step 5
+  activities     Activity[]
+  followUpTasks  FollowUpTask[]
 
   @@unique([organizationId, code])
   @@index([organizationId, stage])
+  @@index([organizationId, opportunityType])
+  @@index([lossReasonId])
+}
+
+/// CRM Phase 1 · Step 3: the editable list of reasons an opportunity is lost.
+/// Never deleted once used — switched off with isActive = false.
+model LossReason {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nameAr         String
+  nameEn         String
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  opportunities  Opportunity[]
+
+  @@unique([organizationId, nameAr])
+  @@index([organizationId, isActive, sortOrder])
 }
 
 model Item {
@@ -509,10 +719,26 @@ model ProposalRevision {
   isWinning      Boolean  @default(false)
   createdAt      DateTime @default(now())
 
+  // CRM Phase 1 · Step 4 (spec 4.3). All nullable: a revision written before
+  // this step has none of them and keeps its old meaning.
+  /// The last day the offer is valid (UTC midnight of a Riyadh calendar day).
+  validUntil     DateTime?
+  submittedAt    DateTime?
+  approvedAt     DateTime?
+  sentAt         DateTime?
+  /// The moment the revision stopped being current: accepted, rejected by the
+  /// customer, expired or superseded.
+  closedAt       DateTime?
+  /// The newer revision that took its place (set with status SUPERSEDED).
+  supersededById String?
+  createdById    String?
+  createdBy      User?    @relation("ProposalRevisionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
   bomLines       BomLine[]
   contract       Contract?
 
   @@unique([proposalId, revisionNo])
+  @@index([status, validUntil])
 }
 
 model BomLine {
@@ -525,6 +751,20 @@ model BomLine {
   unitPrice          Decimal @default(0) @db.Decimal(18, 2)
   isAdder            Boolean @default(false)
   lineTotal          Decimal @default(0) @db.Decimal(18, 2)
+
+  // CRM Phase 1 · Step 4 (spec 4.3). From Step 4 on a new revision keeps the COST
+  // here and the SELLING price in unitPrice; a line without unitCost is a pre-Step-4
+  // line whose unitPrice is the cost base. originalUnitCost is what the system
+  // fetched; unitCost differs from it only after a manual change (with its reason).
+  unitCost           Decimal? @db.Decimal(18, 2)
+  originalUnitCost   Decimal? @db.Decimal(18, 2)
+  costSource         CostSource?
+  /// When that cost was incurred (receipt / order date); null for a catalogue cost.
+  costDate           DateTime?
+  costAgeDays        Int?
+  costOverrideReason String?
+  costOverriddenAt   DateTime?
+  costOverriddenById String?
 
   @@index([proposalRevisionId])
 }
@@ -562,6 +802,7 @@ model Contract {
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
+  @@index([customerId])
 }
 
 model ContractMilestone {
@@ -661,6 +902,7 @@ model Invoice {
   @@unique([organizationId, code])
   @@index([organizationId, status])
   @@index([creditedInvoiceId])
+  @@index([customerId])
 }
 
 model InvoiceLine {
@@ -886,6 +1128,81 @@ model Vendor {
   @@index([organizationId])
 }
 
+/// CRM Phase 1 · Step 5 (migration 0028): what happened with a customer — a note, a
+/// call, a meeting. Always tied to a customer, optionally to an opportunity, a
+/// project and the person at the customer. Edited by its author only and never
+/// deleted: the communication log is historical evidence, like the audit trail.
+/// Files are `Attachment` rows of entityType ACTIVITY.
+model Activity {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  opportunityId  String?
+  opportunity    Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  contactId      String?
+  contact        CustomerContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  activityType   ActivityType
+  /// When it happened (not when it was typed in).
+  occurredAt     DateTime
+  body           String   @db.Text
+  createdById    String?
+  createdBy      User?    @relation("ActivityCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, customerId, occurredAt(sort: Desc)])
+  @@index([organizationId, opportunityId])
+  @@index([createdById])
+}
+
+/// CRM Phase 1 · Step 5 (migration 0028): what must happen next. `dueAt` is a DAY
+/// (UTC midnight of its Riyadh date, the convention of a proposal's validUntil); a
+/// task is late once a Riyadh day has begun after it. Shared by the team: anyone who
+/// may edit customers completes, cancels or re-assigns it. Reminders and the overdue
+/// notice are in-system notifications, each sent once (`reminderSentAt`,
+/// `overdueNotifiedAt`).
+model FollowUpTask {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// TSK-00001 … from the FOLLOWUP_TASK numbering sequence.
+  code           String
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  opportunityId  String?
+  opportunity    Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  title          String
+  details        String?  @db.Text
+  dueAt          DateTime
+  remindAt       DateTime?
+  assigneeId     String
+  assignee       User     @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+  status         FollowUpTaskStatus @default(OPEN)
+  completedAt    DateTime?
+  completedById  String?
+  completedBy    User?    @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  cancelReason   String?
+  reminderSentAt DateTime?
+  overdueNotifiedAt DateTime?
+  createdById    String?
+  createdBy      User?    @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId, assigneeId, status, dueAt])
+  @@index([organizationId, customerId, status])
+  @@index([organizationId, opportunityId])
+  @@index([status, remindAt])
+  @@index([status, dueAt])
+}
+
 // PRJ-01/02/03: the execution container born from a contract.
 model Project {
   id               String   @id @default(cuid())
@@ -919,6 +1236,9 @@ model Project {
   journalEntries JournalEntry[]
   requisitions   PurchaseRequisition[]
   commitments    ProjectCommitment[]
+  // CRM Phase 1 · Step 5 (optional link; the screens do not offer it yet)
+  activities     Activity[]
+  followUpTasks  FollowUpTask[]
 
   @@unique([organizationId, code])
   @@index([organizationId, stage])
@@ -1828,6 +2148,10 @@ enum AttachmentEntity {
   INVOICE
   PROJECT
   WORK_ORDER
+  CUSTOMER
+  OPPORTUNITY
+  // CRM Phase 1 · Step 5 (migration 0028): a file hangs off a log entry.
+  ACTIVITY
 }
 
 model Attachment {
@@ -1889,6 +2213,9 @@ enum ApprovalDocument {
   PURCHASE_ORDER
   PROGRESS_CLAIM
   CHANGE_ORDER
+  // CRM Phase 1 · Step 4: a proposal is banded on its selling total and signed
+  // by the executive before it may be sent to the customer.
+  PROPOSAL
 }
 
 enum ApprovalStatus {

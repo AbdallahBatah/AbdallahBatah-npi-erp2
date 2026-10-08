@@ -11,6 +11,7 @@ const admin = (over: Partial<AuthUser> = {}): AuthUser => ({
   permissions: ['admin.department.manage'],
   locale: 'AR',
   ...over,
+  roleIds: over.roleIds ?? [over.roleId ?? 'role-admin'],
 });
 
 const audit = { record: jest.fn().mockResolvedValue(undefined) };

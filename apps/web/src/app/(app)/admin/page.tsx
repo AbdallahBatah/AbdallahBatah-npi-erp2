@@ -3,7 +3,8 @@
 /**
  * User & role administration — the screen that lets a real customer run the
  * system without touching the seed. Two tabs: users (create/edit/deactivate/
- * set password) and roles (permission checkboxes from the server catalog).
+ * set password, primary + additional roles) and roles (a screens x actions
+ * grid built from the server catalog, plus a "special permissions" section).
  * The API enforces the lockout guards; the UI just avoids offering footguns
  * (no deactivate button on yourself).
  */
@@ -17,6 +18,10 @@ import { formatDate } from '@/lib/format';
 import { PageHeader, LoadError, Modal, Field, StatusBadge, useConfirm, Btn, Tabs, PageSkeleton } from '@/components/ui';
 import { AuditLogCard } from '@/components/audit-log';
 import { ApprovalMatrixCard } from '@/components/approval-matrix';
+import { CustomerMergeCard } from '@/components/customer-merge';
+import { LossReasonsCard } from '@/components/loss-reasons';
+import { ProposalSettingsCard } from '@/components/proposal-settings';
+import { TaskSettingsCard } from '@/components/task-settings';
 
 interface RoleRow {
   id: string;
@@ -33,15 +38,28 @@ interface UserRow {
   nameEn: string;
   isActive: boolean;
   createdAt: string;
-  role: { id: string; key: string; nameAr: string; nameEn: string };
+  role: RoleRef;
+  /** Primary role first, then the additional ones. */
+  roles?: RoleRef[];
 }
+interface RoleRef {
+  id: string;
+  key: string;
+  nameAr: string;
+  nameEn: string;
+}
+type PermAction = 'view' | 'write' | 'approve' | 'special';
 interface PermMeta {
   key: string;
   groupAr: string;
   groupEn: string;
   labelAr: string;
   labelEn: string;
+  screenAr: string;
+  screenEn: string;
+  action: PermAction;
 }
+const GRID_COLUMNS = ['view', 'write', 'approve'] as const;
 interface OrgSettings {
   legalNameAr: string;
   legalNameEn: string;
@@ -64,9 +82,10 @@ export default function AdminPage() {
   const orgManage = can('admin.org.manage');
   const auditRead = can('admin.audit.read');
   const approvalManage = can('admin.approval.manage');
+  const customerMerge = can('crm.customer.merge');
 
-  type AdminTab = 'users' | 'roles' | 'matrix' | 'org' | 'audit';
-  const ADMIN_TABS: AdminTab[] = ['users', 'roles', 'matrix', 'org', 'audit'];
+  type AdminTab = 'users' | 'roles' | 'matrix' | 'org' | 'audit' | 'merge' | 'lossReasons';
+  const ADMIN_TABS: AdminTab[] = ['users', 'roles', 'matrix', 'org', 'audit', 'merge', 'lossReasons'];
   const [tab, setTabState] = useState<AdminTab>('users');
 
   // The five sections of the densest screen in the product used to live only
@@ -102,6 +121,7 @@ export default function AdminPage() {
   const [uEmail, setUEmail] = useState('');
   const [uPassword, setUPassword] = useState('');
   const [uRoleId, setURoleId] = useState('');
+  const [uExtra, setUExtra] = useState<Set<string>>(new Set());
 
   // set-password modal
   const [pOpen, setPOpen] = useState<UserRow | null>(null);
@@ -180,13 +200,27 @@ export default function AdminPage() {
     if (await act('orgLogo', () => api.patch<OrgSettings>('/admin/org', { logoDataUrl: '' }))) loadOrg();
   }
 
-  const groups = useMemo(() => {
-    const map = new Map<string, PermMeta[]>();
+  // The role editor grid: per sidebar group, one row per screen with up to
+  // three cells (view / create & edit / approve). A cell with no key is empty.
+  const { gridGroups, specials } = useMemo(() => {
+    const groupMap = new Map<string, Map<string, { name: string; cells: Partial<Record<PermAction, PermMeta>> }>>();
+    const special: PermMeta[] = [];
     for (const p of catalog) {
+      if (p.action === 'special') {
+        special.push(p);
+        continue;
+      }
       const g = ar ? p.groupAr : p.groupEn;
-      map.set(g, [...(map.get(g) ?? []), p]);
+      const rows = groupMap.get(g) ?? new Map();
+      const row = rows.get(p.screenEn) ?? { name: ar ? p.screenAr : p.screenEn, cells: {} };
+      row.cells[p.action] = p;
+      rows.set(p.screenEn, row);
+      groupMap.set(g, rows);
     }
-    return [...map.entries()];
+    return {
+      gridGroups: [...groupMap.entries()].map(([g, rows]) => [g, [...rows.values()]] as const),
+      specials: special,
+    };
   }, [catalog, ar]);
 
   function openCreateUser() {
@@ -196,6 +230,7 @@ export default function AdminPage() {
     setUEmail('');
     setUPassword('');
     setURoleId(roles?.[0]?.id ?? '');
+    setUExtra(new Set());
     setUOpen(true);
   }
   function openEditUser(u: UserRow) {
@@ -205,17 +240,27 @@ export default function AdminPage() {
     setUEmail(u.email);
     setUPassword('');
     setURoleId(u.role.id);
+    setUExtra(new Set((u.roles ?? [u.role]).filter((r) => r.id !== u.role.id).map((r) => r.id)));
     setUOpen(true);
   }
   async function submitUser() {
     const nameAr = uNameAr.trim() || uNameEn.trim();
     const nameEn = uNameEn.trim() || uNameAr.trim();
+    // The primary role can never also be an additional one.
+    const extraRoleIds = [...uExtra].filter((id) => id !== uRoleId);
     const ok = uEdit
       ? await act('user', () =>
-          api.patch(`/admin/users/${uEdit.id}`, { nameAr, nameEn, roleId: uRoleId }),
+          api.patch(`/admin/users/${uEdit.id}`, { nameAr, nameEn, roleId: uRoleId, extraRoleIds }),
         )
       : await act('user', () =>
-          api.post('/admin/users', { nameAr, nameEn, email: uEmail.trim(), password: uPassword, roleId: uRoleId }),
+          api.post('/admin/users', {
+            nameAr,
+            nameEn,
+            email: uEmail.trim(),
+            password: uPassword,
+            roleId: uRoleId,
+            extraRoleIds,
+          }),
         );
     if (ok) {
       setUOpen(false);
@@ -313,6 +358,8 @@ export default function AdminPage() {
           ...(approvalManage ? ['matrix' as const] : []),
           ...(orgManage ? ['org' as const] : []),
           ...(auditRead ? ['audit' as const] : []),
+          ...(customerMerge ? ['merge' as const] : []),
+          ...(orgManage ? ['lossReasons' as const] : []),
         ].map((k) => ({
           key: k,
           label: t(`adm.tab.${k}`),
@@ -322,13 +369,18 @@ export default function AdminPage() {
         onChange={(k) => setTab(k as AdminTab)}
       />
 
-      {tab === 'audit' ? (
+      {tab === 'lossReasons' ? (
+        orgManage ? <LossReasonsCard /> : null
+      ) : tab === 'merge' ? (
+        customerMerge ? <CustomerMergeCard /> : null
+      ) : tab === 'audit' ? (
         <AuditLogCard />
       ) : tab === 'matrix' ? (
         // The role list is already loaded here — passing it down keeps the
         // matrix editor from re-fetching what this screen owns.
         <ApprovalMatrixCard roles={roles} />
       ) : tab === 'org' ? (
+        <div className="space-y-6">
         <div className="card max-w-2xl p-6">
           {orgErr ? (
             <LoadError message={orgErr} onRetry={loadOrg} />
@@ -459,6 +511,9 @@ export default function AdminPage() {
             </form>
           )}
         </div>
+        <ProposalSettingsCard />
+        <TaskSettingsCard />
+        </div>
       ) : tab === 'users' ? (
         <div className="card overflow-hidden">
           <table className="min-w-full text-sm">
@@ -466,7 +521,7 @@ export default function AdminPage() {
               <tr>
                 <th scope="col" className="th">{t('adm.user.name')}</th>
                 <th scope="col" className="th">{t('adm.user.email')}</th>
-                <th scope="col" className="th">{t('adm.user.role')}</th>
+                <th scope="col" className="th">{t('adm.user.roles')}</th>
                 <th scope="col" className="th">{t('adm.user.status')}</th>
                 <th scope="col" className="th">{t('common.date')}</th>
                 <th scope="col" className="th">{t('common.actions')}</th>
@@ -483,7 +538,19 @@ export default function AdminPage() {
                     {u.id === me?.id && <span className="ms-2 text-xs font-normal text-brand-600">({ar ? 'أنت' : 'you'})</span>}
                   </td>
                   <td className="td" dir="ltr">{u.email}</td>
-                  <td className="td">{roleName(u.role)}</td>
+                  <td className="td">
+                    <div className="flex flex-wrap gap-1">
+                      {(u.roles ?? [u.role]).map((r, i) => (
+                        <span
+                          key={r.id}
+                          className={`badge ${i === 0 ? 'bg-brand-50 text-brand-700' : 'bg-slate-100 text-slate-700'}`}
+                          title={i === 0 ? t('adm.user.primaryRole') : t('adm.user.extraRoles')}
+                        >
+                          {roleName(r)}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
                   <td className="td">
                     <StatusBadge status={u.isActive ? 'ACTIVE' : 'SUSPENDED'} />
                   </td>
@@ -602,14 +669,48 @@ export default function AdminPage() {
               />
             </Field>
           )}
-          <Field label={t('adm.user.role')}>
-            <select className="input" required value={uRoleId} onChange={(e) => setURoleId(e.target.value)}>
+          <Field label={t('adm.user.primaryRole')}>
+            <select
+              className="input"
+              required
+              value={uRoleId}
+              onChange={(e) => {
+                setURoleId(e.target.value);
+                // Promoting a role to primary removes it from the additional ones.
+                setUExtra((prev) => {
+                  const next = new Set(prev);
+                  next.delete(e.target.value);
+                  return next;
+                });
+              }}
+            >
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
                   {roleName(r)}
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label={t('adm.user.extraRoles')} hint={t('adm.user.extraRolesHint')}>
+            <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-slate-200 p-2 sm:grid-cols-2">
+              {roles
+                .filter((r) => r.id !== uRoleId)
+                .map((r) => (
+                  <label key={r.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-xs text-slate-700 hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={uExtra.has(r.id)}
+                      onChange={(e) => {
+                        const next = new Set(uExtra);
+                        if (e.target.checked) next.add(r.id);
+                        else next.delete(r.id);
+                        setUExtra(next);
+                      }}
+                    />
+                    {roleName(r)}
+                  </label>
+                ))}
+            </div>
           </Field>
           <div className="flex justify-end gap-2">
             <Btn onClick={() => setUOpen(false)}>{t('common.cancel')}</Btn>
@@ -699,23 +800,74 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
-            <div className="max-h-[45vh] space-y-4 overflow-y-auto rounded-lg border border-slate-200 p-3 [scrollbar-width:thin]">
-              {groups.map(([group, perms]) => (
-                <div key={group}>
-                  <label className="mb-1.5 flex items-center gap-2 text-xs font-bold text-slate-500">
-                    <input
-                      type="checkbox"
-                      checked={perms.every((p) => rPerms.has(p.key))}
-                      onChange={(e) => {
-                        const next = new Set(rPerms);
-                        perms.forEach((p) => (e.target.checked ? next.add(p.key) : next.delete(p.key)));
-                        setRPerms(next);
-                      }}
-                    />
-                    {group}
-                  </label>
+            <p className="mb-2 text-xs text-slate-500">{t('adm.role.gridHint')}</p>
+            <div className="max-h-[50vh] space-y-4 overflow-y-auto rounded-lg border border-slate-200 p-3 [scrollbar-width:thin]">
+              {gridGroups.map(([group, rows]) => {
+                const groupKeys = rows.flatMap((r) => GRID_COLUMNS.map((c) => r.cells[c]?.key).filter((k): k is string => !!k));
+                return (
+                  <div key={group}>
+                    <label className="mb-1.5 flex items-center gap-2 text-xs font-bold text-slate-500">
+                      <input
+                        type="checkbox"
+                        checked={groupKeys.length > 0 && groupKeys.every((k) => rPerms.has(k))}
+                        onChange={(e) => {
+                          const next = new Set(rPerms);
+                          groupKeys.forEach((k) => (e.target.checked ? next.add(k) : next.delete(k)));
+                          setRPerms(next);
+                        }}
+                      />
+                      {group}
+                    </label>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-slate-600">
+                          <th scope="col" className="py-1 text-start font-semibold">{t('adm.role.grid.screen')}</th>
+                          {GRID_COLUMNS.map((c) => (
+                            <th key={c} scope="col" className="w-24 py-1 text-center font-semibold">
+                              {t(`adm.role.grid.${c}`)}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {rows.map((row) => (
+                          <tr key={row.name} className="hover:bg-slate-50">
+                            <th scope="row" className="py-1.5 text-start font-normal text-slate-700">{row.name}</th>
+                            {GRID_COLUMNS.map((c) => {
+                              const p = row.cells[c];
+                              return (
+                                <td key={c} className="py-1.5 text-center">
+                                  {p ? (
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`${row.name} — ${t(`adm.role.grid.${c}`)}`}
+                                      title={ar ? p.labelAr : p.labelEn}
+                                      checked={rPerms.has(p.key)}
+                                      onChange={(e) => {
+                                        const next = new Set(rPerms);
+                                        if (e.target.checked) next.add(p.key);
+                                        else next.delete(p.key);
+                                        setRPerms(next);
+                                      }}
+                                    />
+                                  ) : null}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+
+              {specials.length > 0 && (
+                <div>
+                  <div className="mb-0.5 text-xs font-bold text-slate-500">{t('adm.role.special')}</div>
+                  <p className="mb-1.5 text-xs text-slate-500">{t('adm.role.specialHint')}</p>
                   <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                    {perms.map((p) => (
+                    {specials.map((p) => (
                       <label key={p.key} className="flex items-center gap-2 rounded px-1.5 py-1 text-xs text-slate-700 hover:bg-slate-50">
                         <input
                           type="checkbox"
@@ -732,7 +884,7 @@ export default function AdminPage() {
                     ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
 

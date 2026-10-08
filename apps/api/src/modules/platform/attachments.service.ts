@@ -34,6 +34,16 @@ const ENTITY_READ_PERMISSION: Record<AttachmentEntity, string> = {
   INVOICE: 'finance.invoice.read',
   PROJECT: 'projects.project.read',
   WORK_ORDER: 'fsm.workorder.read',
+  CUSTOMER: 'crm.customer.read',
+  OPPORTUNITY: 'crm.opportunity.read',
+  // CRM Step 5: a file on a communication-log entry — seen and added by whoever sees the customer.
+  ACTIVITY: 'crm.customer.read',
+};
+
+// Adding a file to — or removing one from — a log entry also needs the right to edit
+// customers (CRM Step 5); every other entity keeps the single read-access rule above.
+const ENTITY_WRITE_PERMISSION: Partial<Record<AttachmentEntity, string>> = {
+  ACTIVITY: 'crm.customer.write',
 };
 
 @Injectable()
@@ -57,6 +67,13 @@ export class AttachmentsService {
     }
   }
 
+  private requireEntityWrite(user: AuthUser, entityType: AttachmentEntity) {
+    const needed = ENTITY_WRITE_PERMISSION[entityType];
+    if (needed && !user.permissions.includes(needed)) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+  }
+
   /** 404 unless the parent row exists inside the caller's organization. */
   private async assertEntityExists(user: AuthUser, entityType: AttachmentEntity, entityId: string) {
     const where = { id: entityId, organizationId: user.organizationId };
@@ -64,6 +81,9 @@ export class AttachmentsService {
       entityType === 'CONTRACT' ? await this.prisma.contract.findFirst({ where, select: { id: true } })
       : entityType === 'INVOICE' ? await this.prisma.invoice.findFirst({ where, select: { id: true } })
       : entityType === 'PROJECT' ? await this.prisma.project.findFirst({ where, select: { id: true } })
+      : entityType === 'CUSTOMER' ? await this.prisma.customer.findFirst({ where, select: { id: true } })
+      : entityType === 'OPPORTUNITY' ? await this.prisma.opportunity.findFirst({ where, select: { id: true } })
+      : entityType === 'ACTIVITY' ? await this.prisma.activity.findFirst({ where, select: { id: true } })
       : await this.prisma.workOrder.findFirst({ where, select: { id: true } });
     if (!found) throw new NotFoundException('Entity not found');
   }
@@ -81,6 +101,7 @@ export class AttachmentsService {
   async upload(user: AuthUser, rawType: string, entityId: string, file?: Express.Multer.File) {
     const entityType = this.parseEntityType(rawType);
     this.requireEntityAccess(user, entityType);
+    this.requireEntityWrite(user, entityType);
     if (!file || !file.buffer?.length) throw new BadRequestException('No file uploaded');
     if (file.size > MAX_UPLOAD_BYTES) {
       throw new BadRequestException('File exceeds the 10 MB limit');
@@ -146,6 +167,7 @@ export class AttachmentsService {
 
   async remove(user: AuthUser, id: string) {
     const attachment = await this.getOwned(user, id);
+    this.requireEntityWrite(user, attachment.entityType);
     await this.prisma.attachment.delete({ where: { id: attachment.id } });
     // Best-effort unlink — the DB row is the source of truth; an orphan file
     // is harmless, a dangling row is not.

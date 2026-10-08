@@ -88,6 +88,7 @@ async function authUserFor(email: string): Promise<AuthUser> {
     email: user.email,
     roleId: user.roleId,
     roleKey: user.role.key,
+    roleIds: [user.roleId], // Step 1 added roleIds to AuthUser
     permissions: user.role.permissions,
     locale: 'EN',
   };

@@ -28,20 +28,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload): Promise<AuthUser> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      include: { role: true },
+      include: { role: true, extraRoles: { include: { role: true } } },
     });
 
     if (!user || !user.isActive || user.organizationId !== payload.org) {
       throw new UnauthorizedException();
     }
 
+    // Primary role first, then the extra ones; permissions are the union.
+    const roles = [user.role, ...user.extraRoles.map((er) => er.role)];
     return {
       userId: user.id,
       organizationId: user.organizationId,
       email: user.email,
       roleId: user.roleId,
       roleKey: user.role.key,
-      permissions: user.role.permissions,
+      roleIds: roles.map((r) => r.id),
+      permissions: [...new Set(roles.flatMap((r) => r.permissions))].sort(),
       locale: user.locale,
     };
   }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PERMISSIONS } from '@npi/shared';
+import { PERMISSIONS, mobileSearchFragment } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 
 export interface SearchHit {
@@ -32,6 +32,7 @@ export class SearchService {
     const orgId = user.organizationId;
     const has = (p: string) => user.permissions.includes(p);
     const contains = (v: string) => ({ ...ci, contains: v });
+    const mobileFrag = mobileSearchFragment(q);
 
     const tasks: Array<Promise<void>> = [];
 
@@ -41,11 +42,14 @@ export class SearchService {
           .findMany({
             where: {
               organizationId: orgId,
+              // A merged-away duplicate is not a customer anyone should land on.
+              mergedIntoId: null,
               OR: [
                 { nameAr: contains(q) },
                 { nameEn: contains(q) },
                 { code: contains(q) },
                 { phone: contains(q) },
+                ...(mobileFrag ? [{ mobile: { contains: mobileFrag } }] : []),
                 { email: contains(q) },
               ],
             },
@@ -59,7 +63,7 @@ export class SearchService {
               labelAr: r.nameAr,
               labelEn: r.nameEn,
               sublabel: r.code,
-              href: `/customers?q=${encodeURIComponent(r.code)}`,
+              href: `/customers/${r.id}`,
             }));
           }),
       );
@@ -90,6 +94,55 @@ export class SearchService {
               labelEn: r.contactName,
               sublabel: r.companyName ?? r.code,
               href: `/leads?q=${encodeURIComponent(r.code)}`,
+            }));
+          }),
+      );
+    }
+
+    if (has(PERMISSIONS.OPPORTUNITY_READ)) {
+      tasks.push(
+        this.prisma.opportunity
+          .findMany({
+            where: {
+              organizationId: orgId,
+              OR: [{ name: contains(q) }, { code: contains(q) }, { tenderReference: contains(q) }],
+            },
+            select: { id: true, code: true, name: true, tenderReference: true },
+            take: TAKE,
+          })
+          .then((rows) => {
+            out.opportunities = rows.map((r) => ({
+              type: 'opportunities',
+              id: r.id,
+              labelAr: r.name,
+              labelEn: r.name,
+              sublabel: r.tenderReference ? `${r.code} · ${r.tenderReference}` : r.code,
+              href: `/opportunities/${r.id}`,
+            }));
+          }),
+      );
+    }
+
+    // CRM Step 4: a proposal is found by its code (PRP-…) or its opportunity's name.
+    if (has(PERMISSIONS.PROPOSAL_READ)) {
+      tasks.push(
+        this.prisma.proposal
+          .findMany({
+            where: {
+              organizationId: orgId,
+              OR: [{ code: contains(q) }, { opportunity: { name: contains(q) } }],
+            },
+            select: { id: true, code: true, opportunity: { select: { name: true } } },
+            take: TAKE,
+          })
+          .then((rows) => {
+            out.proposals = rows.map((r) => ({
+              type: 'proposals',
+              id: r.id,
+              labelAr: r.code,
+              labelEn: r.code,
+              sublabel: r.opportunity.name,
+              href: `/proposals/${r.id}`,
             }));
           }),
       );

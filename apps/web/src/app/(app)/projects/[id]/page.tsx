@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
@@ -20,10 +21,12 @@ interface Wbs {
   code: string;
   nameAr: string;
   nameEn: string;
-  budgetAmount: string;
-  committed: number;
-  actual: number;
-  variance: number;
+  // Budget / job-costing figures are null without finance.costs.view (nulled
+  // by the server); the page hides them instead of showing zeros.
+  budgetAmount: string | null;
+  committed: number | null;
+  actual: number | null;
+  variance: number | null;
 }
 interface Po {
   id: string;
@@ -90,17 +93,20 @@ interface Project {
   contract?: { id: string; code: string; totalValue: string; customer?: { nameAr: string; nameEn: string } };
   wbsElements: Wbs[];
   purchaseOrders: Po[];
-  costEntries: CostEntry[];
+  costEntries: CostEntry[] | null;
   serialUnits: Serial[];
   changeOrders: ChangeOrder[];
   subcontracts: Subcontract[];
-  costSummary: { budget: number; committed: number; actual: number; variance: number };
+  costSummary: { budget: number | null; committed: number | null; actual: number | null; variance: number | null };
 }
 
 // Order comes from the shared package — the API enforces the same sequence.
 
 export default function ProjectDetailPage() {
   const { t, locale, pick } = useI18n();
+  const { can } = useAuth();
+  // Budget, committed, actual, variance and the cost ledger need finance.costs.view.
+  const showCosts = can('finance.costs.view');
   const enums = useEnums();
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -244,7 +250,13 @@ export default function ProjectDetailPage() {
 
   if (loadErr && !p) return <LoadError message={loadErr} onRetry={load} />;
   if (!p) return <PageSkeleton />;
-  const cs = p.costSummary;
+  const cs = {
+    budget: p.costSummary.budget ?? 0,
+    committed: p.costSummary.committed ?? 0,
+    actual: p.costSummary.actual ?? 0,
+    variance: p.costSummary.variance ?? 0,
+  };
+  const costEntries = p.costEntries ?? [];
   const maxBar = Math.max(cs.budget, cs.committed + cs.actual, 1);
 
   return (
@@ -268,7 +280,9 @@ export default function ProjectDetailPage() {
       />
       {confirmNode}
 
-      {/* Cost summary (PRJ-03) */}
+      {/* Cost summary (PRJ-03) — hidden without finance.costs.view */}
+      {showCosts && (
+      <>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           { key: 'prj.budget', v: cs.budget, tone: 'text-slate-700' },
@@ -304,6 +318,8 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* The cost figures above stay pinned — they are the project's vital
           signs. Everything below is tabbed: this page used to stack twelve
@@ -312,7 +328,7 @@ export default function ProjectDetailPage() {
         <Tabs
           tabs={[
             { key: 'wbs', label: t('prj.wbs'), count: p.wbsElements.length },
-            { key: 'cost', label: t('prj.tab.cost'), count: p.purchaseOrders.length + p.costEntries.length },
+            { key: 'cost', label: t('prj.tab.cost'), count: p.purchaseOrders.length + costEntries.length },
             { key: 'subs', label: t('prj.tab.subs'), count: p.changeOrders.length + p.subcontracts.length },
             { key: 'files', label: t('att.title') },
           ]}
@@ -333,10 +349,10 @@ export default function ProjectDetailPage() {
               <tr>
                 <th scope="col" className="th">{t('common.code')}</th>
                 <th scope="col" className="th">{t('common.name')}</th>
-                <th scope="col" className="th text-end">{t('prj.budget')}</th>
-                <th scope="col" className="th text-end">{t('prj.committed')}</th>
-                <th scope="col" className="th text-end">{t('prj.actual')}</th>
-                <th scope="col" className="th text-end">{t('prj.variance')}</th>
+                {showCosts && <th scope="col" className="th text-end">{t('prj.budget')}</th>}
+                {showCosts && <th scope="col" className="th text-end">{t('prj.committed')}</th>}
+                {showCosts && <th scope="col" className="th text-end">{t('prj.actual')}</th>}
+                {showCosts && <th scope="col" className="th text-end">{t('prj.variance')}</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -344,12 +360,14 @@ export default function ProjectDetailPage() {
                 <tr key={w.id}>
                   <td className="td font-mono text-xs">{w.code}</td>
                   <td className="td">{locale === 'ar' ? w.nameAr : w.nameEn}</td>
-                  <td className="td-num">{formatMoney(w.budgetAmount, locale)}</td>
-                  <td className="td-num">{formatMoney(w.committed, locale)}</td>
-                  <td className="td-num">{formatMoney(w.actual, locale)}</td>
-                  <td className={`td text-end ${w.variance >= 0 ? 'text-success-600' : 'text-danger-600'}`}>
-                    {formatMoney(w.variance, locale)}
-                  </td>
+                  {showCosts && <td className="td-num">{formatMoney(w.budgetAmount ?? 0, locale)}</td>}
+                  {showCosts && <td className="td-num">{formatMoney(w.committed ?? 0, locale)}</td>}
+                  {showCosts && <td className="td-num">{formatMoney(w.actual ?? 0, locale)}</td>}
+                  {showCosts && (
+                    <td className={`td text-end ${(w.variance ?? 0) >= 0 ? 'text-success-600' : 'text-danger-600'}`}>
+                      {formatMoney(w.variance ?? 0, locale)}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -397,7 +415,8 @@ export default function ProjectDetailPage() {
           </table>
         </div>
 
-        {/* Cost ledger */}
+        {/* Cost ledger — hidden without finance.costs.view */}
+        {showCosts && (
         <div className="card overflow-hidden">
           <h2 className="card-title">
             {t('prj.costEntries')}
@@ -412,10 +431,10 @@ export default function ProjectDetailPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {p.costEntries.length === 0 ? (
+              {costEntries.length === 0 ? (
                 <EmptyRow colSpan={4} text={t('common.none')} />
               ) : (
-                p.costEntries.map((ce) => (
+                costEntries.map((ce) => (
                   <tr key={ce.id}>
                     <td className="td">{optionLabel(enums?.costTypes, ce.costType, locale)}</td>
                     <td className="td text-xs text-slate-500">{ce.memo ?? ce.sourceType}</td>
@@ -427,6 +446,7 @@ export default function ProjectDetailPage() {
             </tbody>
           </table>
         </div>
+        )}
 
         {/* Serial units */}
         <div className="card overflow-hidden">

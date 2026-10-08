@@ -19,6 +19,27 @@ async function call(method, path, body) {
   if (!res.ok) throw new Error(`${method} ${path} → ${res.status}: ${json?.message ?? text}`);
   return json;
 }
+/** Run `fn` with another user's token (the executive signs what the salesperson raises), then restore. */
+const tokens = new Map(); // one login per user: the login route is rate-limited
+async function asUser(email, password, fn) {
+  const saved = TOKEN;
+  try {
+    if (!tokens.has(email)) {
+      const res = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(`login ${email} → ${res.status}: ${json?.message}`);
+      tokens.set(email, json.accessToken);
+    }
+    TOKEN = tokens.get(email);
+    return await fn();
+  } finally {
+    TOKEN = saved;
+  }
+}
 const step = async (name, fn) => {
   try {
     const r = await fn();
@@ -71,7 +92,35 @@ const step = async (name, fn) => {
   const rail = items.find((i) => i.sku === 'MNT-RAIL');
   const schemes = await call('GET', '/reference/pricing-schemes');
 
-  async function makeOppWithProposal(custKey, name, kwp, qtyMod, accept) {
+  // CRM Step 4: a proposal is not accepted straight from a draft any more. It is raised for
+  // approval, signed by the executive (ceo@npi.sa, through the approvals inbox), sent to the
+  // customer, and only then accepted. `upTo` says how far the demo takes it:
+  //   'accept' - accepted (a contract can follow) · 'sent' - with the customer ·
+  //   'pending' - waiting in the executive's inbox · 'draft' - left as a draft.
+  // The BOM is priced in SELLING prices now (the old demo prices were cost bases): the
+  // server fetches each line's cost itself (last purchase, else the catalogue).
+  const margin = 1 + Number(schemes[0]?.marginPct ?? 0) / 100;
+  const sell = (base) => Math.round(base * margin * 100) / 100;
+
+  async function takeProposalTo(upTo, name, p, rev) {
+    if (!rev || upTo === 'draft') return;
+    const raised = await step(`رفع العرض للاعتماد: ${name}`, () => call('POST', `/proposals/${p.id}/submit`, {}));
+    if (!raised || upTo === 'pending') return;
+    const signed = await step(`اعتماد الرئيس التنفيذي: ${name}`, () =>
+      asUser('ceo@npi.sa', 'Ceo@12345', async () => {
+        const inbox = await call('GET', '/approvals/inbox');
+        const row = inbox.find((r) => r.documentType === 'PROPOSAL' && r.documentId === p.id);
+        if (!row) throw new Error('not in the executive inbox');
+        return call('POST', `/approvals/${row.id}/decide`, { decision: 'APPROVE', note: 'اعتماد العرض' });
+      }),
+    );
+    if (!signed) return;
+    const sent = await step(`إرسال العرض للعميل: ${name}`, () => call('POST', `/proposals/${p.id}/send`, {}));
+    if (!sent || upTo === 'sent') return;
+    await step(`قبول العميل: ${name}`, () => call('POST', `/proposals/${p.id}/revisions/${rev.id}/accept`, {}));
+  }
+
+  async function makeOppWithProposal(custKey, name, kwp, qtyMod, upTo) {
     const cust = customers[custKey];
     if (!cust) return null;
     const opps = await call('GET', '/opportunities');
@@ -88,21 +137,20 @@ const step = async (name, fn) => {
       call('POST', `/proposals/${p.id}/revisions`, {
         pricingSchemeId: schemes[0]?.id,
         bomLines: [
-          { itemId: mod.id, qty: qtyMod, unitPrice: 800 },
-          { itemId: inv.id, qty: Math.ceil(qtyMod / 90), unitPrice: 22000 },
-          { itemId: rail.id, qty: qtyMod * 2, unitPrice: 45 },
+          { itemId: mod.id, qty: qtyMod, unitPrice: sell(800) },
+          { itemId: inv.id, qty: Math.ceil(qtyMod / 90), unitPrice: sell(22000) },
+          { itemId: rail.id, qty: qtyMod * 2, unitPrice: sell(45) },
         ],
         designVersion: { sourceTool: 'PVsyst', capacityKwp: kwp, expectedAnnualKwh: kwp * 1650 },
       }),
     );
-    if (rev && accept)
-      await step(`قبول المراجعة: ${name}`, () => call('POST', `/proposals/${p.id}/revisions/${rev.id}/accept`, {}));
+    await takeProposalTo(upTo, name, p, rev);
     return { opp, proposal: p, revision: rev };
   }
 
-  const hosp = await makeOppWithProposal('مستشفى الشفاء التخصصي', 'نظام شمسي لمواقف المستشفى 500kWp', 500, 910, true);
-  await makeOppWithProposal('مصنع أسمنت الشرقية', 'محطة أرضية للمصنع 2MWp', 2000, 3640, false);
-  await makeOppWithProposal('مجمع الواحة التجاري', 'أسطح المجمع التجاري 300kWp', 300, 546, false);
+  const hosp = await makeOppWithProposal('مستشفى الشفاء التخصصي', 'نظام شمسي لمواقف المستشفى 500kWp', 500, 910, 'accept');
+  await makeOppWithProposal('مصنع أسمنت الشرقية', 'محطة أرضية للمصنع 2MWp', 2000, 3640, 'sent');
+  await makeOppWithProposal('مجمع الواحة التجاري', 'أسطح المجمع التجاري 300kWp', 300, 546, 'pending');
 
   // ── 4. Contract #2 (hospital) → activate → milestone → invoice → payment
   let contract2 = (await call('GET', '/contracts')).find((c) => c.customer?.nameAr === 'مستشفى الشفاء التخصصي');

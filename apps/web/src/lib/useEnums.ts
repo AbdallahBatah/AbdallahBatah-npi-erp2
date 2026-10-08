@@ -11,11 +11,16 @@ export interface EnumOption {
 
 export interface EnumSets {
   customerTypes: EnumOption[];
+  customerEntityKinds: EnumOption[];
   leadSources: EnumOption[];
   leadStatuses: EnumOption[];
   opportunityStages: EnumOption[];
+  opportunityTypes: EnumOption[];
+  activityTypes: EnumOption[];
+  followUpTaskStatuses: EnumOption[];
   itemCategories: EnumOption[];
   proposalStatuses: EnumOption[];
+  costSources: EnumOption[];
   contractTypes: EnumOption[];
   contractStatuses: EnumOption[];
   milestoneTriggerTypes: EnumOption[];
