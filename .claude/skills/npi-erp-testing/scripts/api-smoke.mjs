@@ -97,8 +97,19 @@ async function check(label, fn) {
   }
 }
 
+async function fetchRetry(url, init) {
+  // undici reuses a kept-alive socket the server may have just closed after a long idle
+  // (the login limiter waits are 40-60 s); the first reuse fails with 'fetch failed' — try once more.
+  try {
+    return await fetch(url, init);
+  } catch (e) {
+    if (!/fetch failed/.test(String(e?.message))) throw e;
+    await new Promise((r) => setTimeout(r, 300));
+    return fetch(url, init);
+  }
+}
 async function call(path, { token, method = 'GET', body } = {}) {
-  const res = await fetch(BASE + path, {
+  const res = await fetchRetry(BASE + path, {
     method,
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
