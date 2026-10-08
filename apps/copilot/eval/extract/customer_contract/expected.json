@@ -187,5 +187,107 @@
       "customer.vatNumber": "confirmed",
       "totalValue": "confirmed"
     }
+  },
+  {
+    "file": "contract-01-scan.pdf",
+    "scan": {
+      "source": "contract-01.pdf"
+    },
+    "titleAr": "النسخة الممسوحة ضوئياً من contract-01 (03 §6: عقد ممسوح) — صفحتان صوريتان بلا طبقة نصية، تمرّ بمسار الموافقة",
+    "fields": {
+      "customer.nameAr": "شركة النخيل للمقاولات",
+      "customer.nameEn": null,
+      "customer.customerType": "CI",
+      "customer.vatNumber": "310123456700003",
+      "customer.crNumber": "1010567890",
+      "customer.phone": "0112345678",
+      "customer.email": "contracts@nakheel-co.sa",
+      "contractType": "EPC",
+      "startDate": "2026-11-01",
+      "endDate": "2027-04-30",
+      "totalValue": 850000,
+      "retentionPct": 10,
+      "advancePct": 30,
+      "milestones.length": 3,
+      "milestones.0.sequence": 1,
+      "milestones.0.amount": 255000,
+      "milestones.0.percent": 30,
+      "milestones.0.triggerType": "EVENT",
+      "milestones.1.amount": 340000,
+      "milestones.1.percent": 40,
+      "milestones.2.amount": 255000,
+      "milestones.2.percent": 30
+    },
+    "status": {
+      "customer.vatNumber": "confirmed",
+      "totalValue": "confirmed",
+      "retentionPct": "confirmed"
+    }
+  },
+  {
+    "file": "contract-03-scan.pdf",
+    "scan": {
+      "source": "contract-03.pdf",
+      "rotateDeg": -1.1,
+      "quality": 60
+    },
+    "titleAr": "النسخة الممسوحة ضوئياً من contract-03 (03 §6: عقد ممسوح) — أرقام هندية وتاريخ هجري يُقرآن من الصورة، ميل أكبر وضغط أعلى",
+    "fields": {
+      "customer.nameAr": "هيئة تطوير منطقة عسير",
+      "customer.customerType": "GOVERNMENT",
+      "customer.vatNumber": "310987654321003",
+      "customer.crNumber": "4030123456",
+      "customer.phone": "0172255880",
+      "customer.email": "energy@aseer-dev.gov.sa",
+      "contractType": "PPA",
+      "startDate": "2027-06-05",
+      "endDate": "2052-06-04",
+      "totalValue": 1200000,
+      "retentionPct": 0,
+      "advancePct": 0,
+      "milestones.length": 2,
+      "milestones.0.amount": 480000,
+      "milestones.0.percent": 40,
+      "milestones.1.amount": 720000,
+      "milestones.1.percent": 60
+    },
+    "status": {
+      "customer.vatNumber": "confirmed",
+      "totalValue": "confirmed"
+    }
+  },
+  {
+    "file": "contract-07.jpg",
+    "photo": {
+      "rotateDeg": 1.6,
+      "quality": 78
+    },
+    "titleAr": "صورة بالجوال لعقد تشغيل وصيانة من صفحة واحدة (03 §6: عقد مصوَّر)، عميل جديد، دفعتان بتاريخين ومبلغين ونسبتين",
+    "fields": {
+      "customer.nameAr": "شركة الواحة للتبريد والتكييف",
+      "customer.customerType": "CI",
+      "customer.vatNumber": "300456789012003",
+      "customer.crNumber": "1010345678",
+      "customer.phone": "0114455667",
+      "customer.email": "ops@alwaha-hvac.sa",
+      "contractType": "OM",
+      "startDate": "2026-10-01",
+      "endDate": "2027-09-30",
+      "totalValue": 180000,
+      "retentionPct": 0,
+      "advancePct": 0,
+      "milestones.length": 2,
+      "milestones.0.amount": 90000,
+      "milestones.0.percent": 50,
+      "milestones.0.dueDate": "2027-03-31",
+      "milestones.0.triggerType": "DATE",
+      "milestones.1.amount": 90000,
+      "milestones.1.percent": 50,
+      "milestones.1.dueDate": "2027-09-30"
+    },
+    "status": {
+      "customer.vatNumber": "confirmed",
+      "totalValue": "confirmed"
+    }
   }
 ]

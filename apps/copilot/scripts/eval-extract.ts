@@ -59,6 +59,8 @@ interface ExpectedDoc {
   fields: Record<string, string | number | null | (string | number)[]>;
   /** How `scripts/eval-extract-photos.ts` renders a `.jpg` entry (tilt in degrees, JPEG quality 1-100). */
   photo?: { rotateDeg?: number; quality?: number };
+  /** How `scripts/eval-extract-scans.ts` builds a scanned (image-only) PDF from a text PDF of the same flow (T-36). */
+  scan?: { source: string; rotateDeg?: number; quality?: number };
   status?: Record<string, 'confirmed' | 'unconfirmed'>;
 }
 
