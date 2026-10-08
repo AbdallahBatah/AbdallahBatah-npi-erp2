@@ -12,6 +12,7 @@
 import type { ModelProvider, ModelResponse, RedactedMessage, RedactedRequest } from './provider';
 import { costUsdMicro, isPriced } from './pricing';
 import { writeLlmAudit, type LlmAuditData } from '../audit/log';
+import { CAP_REACHED_MESSAGE_AR, capStatus, riyadhDay } from '../audit/cost';
 import { auditViewOfMessages } from './vision';
 
 export type { LlmAuditData } from '../audit/log';
@@ -28,7 +29,7 @@ export type LlmErrorKind =
 
 const MESSAGES_AR: Record<LlmErrorKind, string> = {
   not_configured: 'مزوّد النماذج غير مهيّأ. راجع مدير النظام.',
-  cap_reached: 'بلغت حد الاستخدام اليومي. يتجدد الحد غداً.',
+  cap_reached: CAP_REACHED_MESSAGE_AR,
   timeout: 'تأخر الرد أكثر من المهلة. حاول مرة أخرى.',
   rate_limited: 'الطلبات كثيرة الآن. حاول بعد قليل.',
   network: 'تعذر الوصول إلى مزوّد النماذج.',
@@ -97,12 +98,6 @@ const DEFAULT_ADVANCED_MODEL = 'claude-sonnet-5';
 const ECONOMY_TIMEOUT_MS = 20_000;
 const ADVANCED_TIMEOUT_MS = 60_000;
 const DEFAULT_DAILY_TOKEN_CAP = 600_000;
-const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000; // Asia/Riyadh: UTC+3, no DST
-
-function riyadhDateOnly(now: Date): Date {
-  const shifted = new Date(now.getTime() + RIYADH_OFFSET_MS);
-  return new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()));
-}
 
 function modelIdForTier(env: NodeJS.ProcessEnv, tier: RedactedRequest['tier']): string {
   if (tier === 'advanced') {
@@ -115,7 +110,11 @@ function timeoutForTier(tier: RedactedRequest['tier']): number {
   return tier === 'advanced' ? ADVANCED_TIMEOUT_MS : ECONOMY_TIMEOUT_MS;
 }
 
-function dailyCap(env: NodeJS.ProcessEnv): number {
+/** The per-user daily token cap (02 §10): `COPILOT_DAILY_TOKEN_CAP`, or
+ *  600,000 when unset or not a positive number. Exported so the usage
+ *  counter (`src/queries/usage.ts` callers) reports the same figure the
+ *  gate enforces; the environment is read here and nowhere else. */
+export function dailyTokenCap(env: NodeJS.ProcessEnv): number {
   const raw = env.COPILOT_DAILY_TOKEN_CAP;
   if (!raw) return DEFAULT_DAILY_TOKEN_CAP;
   const parsed = Number(raw);
@@ -187,15 +186,16 @@ export function createLlmClient(deps: {
     const singleConsentEventId = consentEventIds.size === 1 ? [...consentEventIds][0] : null;
 
     const timeoutMs = timeoutForTier(req.tier);
-    const day = riyadhDateOnly(now());
-    const cap = dailyCap(env);
+    const day = riyadhDay(now());
+    const cap = dailyTokenCap(env);
 
     const existing = await deps.db.dailyUsage.findUnique({
       where: { npiUserId_day: { npiUserId: ctx.npiUserId, day } },
     });
-    const existingTotal = existing ? existing.tokensIn + existing.tokensOut : 0;
 
-    if (existingTotal >= cap) {
+    // The same arithmetic the usage counter reports (src/audit/cost.ts), so
+    // «reached» on a screen and «refused» here can never disagree.
+    if (capStatus(existing, cap, day).reached) {
       await writeLlmAudit(deps.db, {
         npiOrgId: ctx.npiOrgId,
         npiUserId: ctx.npiUserId,

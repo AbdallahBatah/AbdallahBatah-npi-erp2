@@ -726,6 +726,17 @@ export const ar = {
   'trust.event.intake_execution_failed': 'فشل التنفيذ في NPI',
   'trust.event.position_reassigned': 'إعادة إسناد موقع',
   'trust.event.other': 'حدث آخر',
+
+  // ── T-34 additions (the usage counter and the daily cap, F-18; not in 03 §4;
+  // app-authored, logged in PROGRESS.md). The five document flows reuse
+  // `flow.*`; the tiers reuse `trust.tier.*`. `usage.cap.reached` is the one
+  // text of `LlmError('cap_reached')` (src/audit/cost.ts). ──
+  'usage.cap.reached': 'بلغت حد الاستخدام اليومي. يتجدد الحد غداً.',
+  'usage.flow.chat': 'محادثة',
+  'usage.flow.setup': 'التأسيس',
+  'usage.flow.memory': 'الذاكرة',
+  'usage.flow.handover': 'دليل الاستلام',
+  'usage.flow.other': 'أخرى',
 } as const;
 
 export type ArKey = keyof typeof ar;

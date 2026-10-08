@@ -16,6 +16,7 @@
 //    may see. A refusal from NPI is handed to the model as a failed tool
 //    result and relayed; it is never worked around (BR-02).
 //  - Every model call is audited by `src/llm/client.ts`.
+import { riyadhDay } from '../audit/cost';
 import { decrypt, encrypt } from '../crypto/aead';
 import { t } from '../i18n/ar';
 import { LlmError, type LlmContext } from '../llm/client';
@@ -43,7 +44,6 @@ export const MAX_MESSAGE_LENGTH = 4000;
 const MAX_MODEL_CALLS = 6;
 const HISTORY_MESSAGES = 12;
 const REDACTION_TTL_MS = 24 * 60 * 60 * 1000;
-const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000;
 
 export interface TurnUser {
   npiOrgId: string;
@@ -124,11 +124,6 @@ const FLOW_LABEL_KEYS = {
   grn: 'flow.grn',
   vendor_bill: 'flow.vendor_bill',
 } as const;
-
-function riyadhDay(now: Date): Date {
-  const shifted = new Date(now.getTime() + RIYADH_OFFSET_MS);
-  return new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()));
-}
 
 async function openConversation(deps: TurnDeps, user: TurnUser, input: TurnInput, text: string): Promise<string> {
   if (input.conversationId) {
