@@ -100,7 +100,156 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-32 | done | `feat/copilot` | 2026-10-06, two Sonnet agents from closed briefs (A: the 100 sentences + `scripts/eval-pii.ts`; B: `tests/no-bypass-llm.spec.ts` + closing the one laundering cast), reviewed by the main model by running everything and probing the gate with fresh sentences. `eval/pii-sentences.json`: NPI's demo dictionary verbatim (11 customers, 7 vendors, 13 projects from the memory snapshot, the seed's 5 users) and 100 sentences in NPI vocabulary — 20 dictionary names in full, 15 bare cores («للنخيل», «بالخليج»), 23 persons by title or given name, 7 unknown organizations, 24 structured identifiers (VAT incl. Arabic-Indic digits, phones in five forms, emails, IBANs with spaces/lowercase, national/iqama/CR ids), 6 mixed contract-header sentences, 5 honest hard cases (foreign name in Arabic letters, family name alone, unknown given name, organization without a legal-form word, «أبو فهد»); 81 name and 41 structured expectations, 155 report-only `keep` words. `scripts/eval-pii.ts` measures `Pseudonymizer.redact` cold, one fresh instance per sentence, no model and no NPI (D-T32-1/2); leak = normalized output still contains the surface (digits/spaces compacted for identifiers); report `test-results/pii/<stamp>.json`, `eval_runs` kind `pii`. **First run 75/81 names (92.6 %), 41/41 structured (100 %)**: the six leaks were the five hard cases plus «م. سلطان» — the abbreviation dot was a span boundary; the probe also showed «وافقنا على الجدول الزمني الجديد» → «وافقنا ⟦شخص_1⟧» (the preposition «على» normalizes to the given name «علي» and opened a capture that swallowed four words). Both fixed in the gate (E.7): a function word never opens rule F; the first word after an honorific may follow an abbreviation dot and may be «علي». **After the fix 76/81 (93.8 %) / 41/41 (100 %)**, keeps 149/155, round trip 100/100, the five remaining leaks are the hard cases. `tests/no-bypass-llm.spec.ts` (23 tests, R1–R10) proves by grep what the types promise: the `RedactedText` brand is cast in five lines of the pseudonymizer and nowhere else (three unit-test fixtures allowlisted by exact text), `ConsentedBase64` only in `vision.ts`, no `redact()` signature returns a string, one SDK import / one `messages.create` / one `provider.complete`, `createAnthropicProvider` only where it feeds `createLlmClient`, no model host literal, every model call is `llm.complete(RedactedRequest)` from exactly five files, audit rows only from the client and `writeAuditEvent`, `documentVisionBlocks` only after `requireConsent`, `imageBlock`/`pdfBlock` only inside `vision.ts`, block literals / `'base64'` only in the three llm files, `fromModelOutput(response.text)` only, every `staticPrompt` argument a literal / `loadPrompt` / named constant except two listed exceptions (setup `system`; the our-party hint → D-20). Finding closed on the way: `ParseDeps.pseudonymizer.redact` was typed `string` and cast `as unknown as RedactedText` — a second producer of the brand; now typed `RedactedText`, cast gone, test fakes use `staticPrompt`. AT-09 live (admin, real model, local NPI :4000 / copilot :3110): the turn «راجع لي حالة العميل مصنع الرياض للصناعات، رقمه الضريبي 310000000000003 وجوال مندوبهم أحمد العتيبي +966500000000 … المورد شركة الخليج للألواح الشمسية» left as «⟦عميل_1⟧ … ⟦رقم_ضريبي_1⟧ … ⟦شخص_1⟧ ⟦هاتف_1⟧ … ⟦مورد_1⟧», the tool result masked (`nameAr`/`vatNumber`/`phone`/`email` → placeholders), zero clear-text in both `llm_audit` rows. jest 47 suites / **1,944** green, tsc, eslint clean, invariants 23/23, `npm test -w apps/copilot -- no-bypass-llm` 23/23 from the root |
 | T-33 | done | `feat/copilot` | 2026-10-08, M4. Contract written by the main model first (`src/audit/types.ts` — the view shapes, `KNOWN_AUDIT_EVENTS`, cursor/page constants; the «T-33 additions» block in `ar.ts`; `formatDateTime`/`formatUsdMicro` in `format.ts`), then three Sonnet agents from closed briefs — A: `src/audit/query.ts` (`TRUST_PERMISSION` = `admin.user.manage`, every read filtered by `npiOrgId` in the `where`, keyset pagination `(ts, id) desc` with an opaque `ts|id` cursor, filters event/imageSent/npiUserId, two batched joins per page for consent events and documents, user names from NPI's department directory with `forbidden`/network tolerated → names null, `parseOutbound` of `{system, messages}` with text/image/document blocks else `raw`, placeholder count over the stored text, org-wide `auditSummary` incl. `imageSentWithoutConsent`) and `GET /copilot/api/audit` (list, `?id=` detail → 404 for another org, zod-validated query, 401/403/400/404, no POST); B: `src/app/trust/page.tsx` (settings-page skeleton), `src/components/AuditTable.tsx` (03 §2, column «صورة أُرسلت» + consent id, table scrolls inside the card), `src/components/trust/{api,TrustPanel,AuditFilters,AuditDetail}.tsx` (summary chips with the G-M4-2 integrity line, three selects, «المزيد», detail with «ما أُرسل خارجياً»: system prompt collapsed, messages, vision blocks as `صورة (type، size بايت) — موافقة id`, never bytes), nav flag `/trust` ready; C: `e2e/trust.spec.ts` + `e2e/fixtures/trust-db.ts` (seeds six rows incl. an image send under a real consent row and a foreign-org row, deletes only its own ids). Reviewed by the main model: route probed live (401/403/400/404/405/200, page 2 no overlap), screen walked on the real log (77 rows, 6 image sends all with consent, detail of a photo send shows the consent id and the image block), 390 px no page scroll; the main model fixed the root cause B had worked around (`min-w-0` on the shell's `<main>`) and the guard hit in its own contract (`AuditVisionBlockType`). Tests: audit-query 51, audit-db (real DB) 7, audit-api 24, format +11; copilot suite **50 suites / 2,069 tests**; `tsc` and `eslint .` clean; **`npx playwright test e2e/trust.spec.ts` 11 passed + 1 skipped (the 390 px test runs on the mobile project only)** — G-M4-2 met: every `imageSent=true` row in the whole log carries a consent id (asserted over every page). |
 | T-34 | done | `feat/copilot` | 2026-10-08, M4. Contract and the pure module written by the main model first (`src/audit/usage-types.ts` — `UsageRowLike`, `UsageReport`/`*View`, `CapStatus`, `USAGE_FLOWS`/`USAGE_TIERS`; `src/audit/cost.ts` — `riyadhDay`/`riyadhDayPeriod`/`riyadhTrailingPeriod`/`riyadhDayCount`, `flowOfEvent` (`extract_<flow>[_edit]` → the five flows; `chat`/`setup`/`memory`/`handover`; else `other`, never dropped), `aggregateUsage` (per Riyadh day / tier / flow / document / user; a row with a `modelId` is a call, system rows count in `totals.errors`/`capReached` only; monthly projection = the window's calendar-day average × 30), `serializeUsageReport`, `capStatus` (the gate's own `used >= cap`), `CAP_REACHED_MESSAGE_AR` = `t('usage.cap.reached')`), the gate `src/llm/client.ts` rewired to take `riyadhDay`/`capStatus` and its cap message from it (one arithmetic for the refusal and the counter; `dailyTokenCap` exported; the chat turn's duplicate `riyadhDay` removed), six strings under «T-34 additions». Then two Sonnet agents from closed briefs — A: `tests/cost.spec.ts` (83: day boundaries at 21:00Z, the flow map, a 15-row fixture incl. the Riyadh-midnight pair, failed call = call + error, unknown tier in totals only, ordering ties, integer projection, serialization round trip, `capStatus` edges, **G-M4-3**: a `FakeDb` at 600,000 → `complete` rejects `cap_reached` with `messageAr` = «بلغت حد الاستخدام اليومي. يتجدد الحد غداً.» = `t('usage.cap.reached')`, zero provider calls, one `cap_reached` row, and `capStatus` on the same row says reached; one below → passes and the grown row now reads reached; a fresh Riyadh day passes); B: `src/queries/usage.ts` (`UsageDb` structural — the real client satisfies it **without a cast**; `loadUsageReport` with `npiOrgId` + `ts` range (+ `npiUserId`) in the `where`, `loadDocumentUsage` whole-life with first/last attempt, `loadCapStatus` (cap as a parameter, no env read), `loadDailyUsage` of the accumulator rows) + `tests/cost-queries.spec.ts` 25 (the recorded `where` args deep-equal, org B never in org A's report) + `tests/cost-db.spec.ts` 8 (real DB: 2 users × 2 days × both tiers, cap row, other org, cleanup). Reviewed by the main model by reading the module and running everything: copilot suite **53 suites / 2,185 tests**, `tsc` and `eslint .` clean, invariants 23/23, no-bypass-llm 23/23; live probe on the dev `npi_copilot` log (`org_npi_root`, trailing 30 days): `loadUsageReport` 51 calls / 282,115 in / 46,777 out / 957,944 micro-USD = Postgres's own `aggregate` and = the sum of the 11 `daily_usage` rows to the micro-USD; 2 tiers (25 economy $0.074, 26 advanced $0.884) and 7 flows each sum to the totals; the top user scoped = its bucket (31 calls); the top document = its bucket (5 calls, $0.1748, all `customer_contract`) and 0 under another org; `loadCapStatus` today 0/600,000 for both users. No screen or route in this task (the plan row names the three files; T-35's a3 card and the document page consume the readers). |
-| T-35 | todo | | M4 |
+| T-35 | done | `feat/copilot` | 2026-10-08, M4. Contract and strings by the main model first (`src/metrics/types.ts` — `AssumptionId`, `MetricVerdict` met/not_met/no_data/measured, `MetricCardView`/`MetricSecondaryView`/`MetricsView`, the raw-row shapes `EvalRunLike`/`IntakeJobLike`/`BaselineLike`, `MetricsInput`, the targets of `01` §1 as constants, `WORKING_WEEKDAYS` Sun–Thu, `METRICS_CSV_HEADER`/`METRICS_CSV_FILENAME`/`METRICS_PERMISSION`; 58 strings under «T-35 additions»), then three Sonnet agents in parallel from closed briefs — A: `src/metrics/compute.ts` (pure: `workingDayKeys`, `computeDailyReturn` a1 = Σ working-day hits / (active users × working days) over the trailing 14 Riyadh days, `latestRunOfKind`, `computeMemoryAccuracy` a2, `computeInferenceCost` a3 = cost per document (per day when no call carried a document) with the per-day secondary and the projection, `computePiiEffectiveness` a4 names + structured secondary, `computeChatEntry` a5 = Σcorrect/Σtotal over the five flows' latest `extract:<flow>` runs + the time ratio Σ(median approval minutes)/Σ(baseline minutes) over the flows that have both, `computeOnboardingCard` a6 over `computeOnboardingMetric`, `computeMetrics` → six cards) + `src/metrics/csv.ts` (BOM + header + six CRLF rows, RFC 4180 cells) + `tests/metrics-compute.spec.ts` 58 / `metrics-csv.spec.ts` 12; B: `src/metrics/load.ts` (`MetricsDb` structural, extends `UsageDb` + `OnboardingMetricsDb`; the real client satisfies it **without a cast**; `loadMetricsInput` = five parallel reads with `npiOrgId` in every `where` except `eval_runs`, which has no organization column; `loadMetrics`) + `GET /copilot/api/metrics/export` (`admin.user.manage`, 401/403/503, `text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="copilot-metrics.csv"`, no-store) + `tests/metrics-load.spec.ts` 8 / `metrics-db.spec.ts` 6 (real DB, scratch org, cleanup); C: `src/app/metrics/page.tsx` (server component as `/trust`: session, `NpiError` card, forbidden card, computes `loadMetrics(getDb(), …)` on the server — no client fetch, no `api.ts`; header + export `<a download>` + `metrics-grid`) + `src/components/MetricCard.tsx` (label, verdict badge, headline, target, secondary block, detail lines, measured-at; `data-testid`s `metric-card`/`metric-value`/…) + the `/metrics` nav flag. Then D: `e2e/metrics.spec.ts` + `e2e/fixtures/metrics-db.ts` — 
+Running 4 tests using 1 worker
+
+  x  1 apps\copilot\e2e\metrics.spec.ts:120:7 › metrics screen (T-35) › admin sees the nav item and six cards in order with the seeded figures (56ms)
+  x  2 apps\copilot\e2e\metrics.spec.ts:207:7 › metrics screen (T-35) › the CSV has the fixed header and six assumption rows (74ms)
+  x  3 apps\copilot\e2e\metrics.spec.ts:254:7 › metrics screen (T-35) › a non-administrator sees metrics.forbidden, no nav item, and 403 from the export; no session is 401 (55ms)
+  x  4 apps\copilot\e2e\metrics.spec.ts:275:7 › metrics screen (T-35) › at 390 px the page itself does not scroll horizontally (54ms)
+
+
+  1) apps\copilot\e2e\metrics.spec.ts:120:7 › metrics screen (T-35) › admin sees the nav item and six cards in order with the seeded figures 
+
+    AggregateError: apiRequestContext.post: connect ECONNREFUSED ::1:4077
+    connect ECONNREFUSED 127.0.0.1:4077
+    Call log:
+      - → POST http://localhost:4077/api/auth/login
+        - user-agent: Playwright/1.63.0 (x64; windows 10.0) node/24.19
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 47
+
+        at apiRequestContext.post: connect ECONNREFUSED ::1:4077
+        at npiIdentity (C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:50:29)
+        at C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:108:25
+
+    TypeError: Cannot read properties of undefined (reading 'evalRunIds')
+
+       at apps\copilot\e2e\fixtures\metrics-db.ts:238
+
+      236 | export async function cleanupMetricsFixture(fixture: MetricsFixture): Promise<void> {
+      237 |   const db = getClient();
+    > 238 |   await db.evalRun.deleteMany({ where: { id: { in: Object.values(fixture.evalRunIds) } } });
+          |                                                                          ^
+      239 |   await db.intakeJob.deleteMany({ where: { id: { in: fixture.jobIds } } });
+      240 |   await db.dailyUsage.deleteMany({ where: { id: { in: fixture.dailyUsageIds } } });
+      241 |   await db.onboardingSession.deleteMany({ where: { id: fixture.sessionId } });
+        at cleanupMetricsFixture (C:\dev\npi-erp\apps\copilot\e2e\fixtures\metrics-db.ts:238:74)
+        at C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:113:32
+
+    Error Context: test-results\apps-copilot-e2e-metrics-m-e8323-der-with-the-seeded-figures\error-context.md
+
+    Error Context: test-results\apps-copilot-e2e-metrics-m-e8323-der-with-the-seeded-figures\error-context.md
+
+  2) apps\copilot\e2e\metrics.spec.ts:207:7 › metrics screen (T-35) › the CSV has the fixed header and six assumption rows 
+
+    AggregateError: apiRequestContext.post: connect ECONNREFUSED ::1:4077
+    connect ECONNREFUSED 127.0.0.1:4077
+    Call log:
+      - → POST http://localhost:4077/api/auth/login
+        - user-agent: Playwright/1.63.0 (x64; windows 10.0) node/24.19
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 47
+
+        at apiRequestContext.post: connect ECONNREFUSED ::1:4077
+        at npiIdentity (C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:50:29)
+        at C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:108:25
+
+    TypeError: Cannot read properties of undefined (reading 'evalRunIds')
+
+       at apps\copilot\e2e\fixtures\metrics-db.ts:238
+
+      236 | export async function cleanupMetricsFixture(fixture: MetricsFixture): Promise<void> {
+      237 |   const db = getClient();
+    > 238 |   await db.evalRun.deleteMany({ where: { id: { in: Object.values(fixture.evalRunIds) } } });
+          |                                                                          ^
+      239 |   await db.intakeJob.deleteMany({ where: { id: { in: fixture.jobIds } } });
+      240 |   await db.dailyUsage.deleteMany({ where: { id: { in: fixture.dailyUsageIds } } });
+      241 |   await db.onboardingSession.deleteMany({ where: { id: fixture.sessionId } });
+        at cleanupMetricsFixture (C:\dev\npi-erp\apps\copilot\e2e\fixtures\metrics-db.ts:238:74)
+        at C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:113:32
+
+    Error Context: test-results\apps-copilot-e2e-metrics-m-1ec7e-der-and-six-assumption-rows\error-context.md
+
+    Error Context: test-results\apps-copilot-e2e-metrics-m-1ec7e-der-and-six-assumption-rows\error-context.md
+
+  3) apps\copilot\e2e\metrics.spec.ts:254:7 › metrics screen (T-35) › a non-administrator sees metrics.forbidden, no nav item, and 403 from the export; no session is 401 
+
+    AggregateError: apiRequestContext.post: connect ECONNREFUSED ::1:4077
+    connect ECONNREFUSED 127.0.0.1:4077
+    Call log:
+      - → POST http://localhost:4077/api/auth/login
+        - user-agent: Playwright/1.63.0 (x64; windows 10.0) node/24.19
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 47
+
+        at apiRequestContext.post: connect ECONNREFUSED ::1:4077
+        at npiIdentity (C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:50:29)
+        at C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:108:25
+
+    TypeError: Cannot read properties of undefined (reading 'evalRunIds')
+
+       at apps\copilot\e2e\fixtures\metrics-db.ts:238
+
+      236 | export async function cleanupMetricsFixture(fixture: MetricsFixture): Promise<void> {
+      237 |   const db = getClient();
+    > 238 |   await db.evalRun.deleteMany({ where: { id: { in: Object.values(fixture.evalRunIds) } } });
+          |                                                                          ^
+      239 |   await db.intakeJob.deleteMany({ where: { id: { in: fixture.jobIds } } });
+      240 |   await db.dailyUsage.deleteMany({ where: { id: { in: fixture.dailyUsageIds } } });
+      241 |   await db.onboardingSession.deleteMany({ where: { id: fixture.sessionId } });
+        at cleanupMetricsFixture (C:\dev\npi-erp\apps\copilot\e2e\fixtures\metrics-db.ts:238:74)
+        at C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:113:32
+
+    Error Context: test-results\apps-copilot-e2e-metrics-m-f4387-he-export-no-session-is-401\error-context.md
+
+    Error Context: test-results\apps-copilot-e2e-metrics-m-f4387-he-export-no-session-is-401\error-context.md
+
+  4) apps\copilot\e2e\metrics.spec.ts:275:7 › metrics screen (T-35) › at 390 px the page itself does not scroll horizontally 
+
+    AggregateError: apiRequestContext.post: connect ECONNREFUSED ::1:4077
+    connect ECONNREFUSED 127.0.0.1:4077
+    Call log:
+      - → POST http://localhost:4077/api/auth/login
+        - user-agent: Playwright/1.63.0 (x64; windows 10.0) node/24.19
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 47
+
+        at apiRequestContext.post: connect ECONNREFUSED ::1:4077
+        at npiIdentity (C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:50:29)
+        at C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:108:25
+
+    TypeError: Cannot read properties of undefined (reading 'evalRunIds')
+
+       at apps\copilot\e2e\fixtures\metrics-db.ts:238
+
+      236 | export async function cleanupMetricsFixture(fixture: MetricsFixture): Promise<void> {
+      237 |   const db = getClient();
+    > 238 |   await db.evalRun.deleteMany({ where: { id: { in: Object.values(fixture.evalRunIds) } } });
+          |                                                                          ^
+      239 |   await db.intakeJob.deleteMany({ where: { id: { in: fixture.jobIds } } });
+      240 |   await db.dailyUsage.deleteMany({ where: { id: { in: fixture.dailyUsageIds } } });
+      241 |   await db.onboardingSession.deleteMany({ where: { id: fixture.sessionId } });
+        at cleanupMetricsFixture (C:\dev\npi-erp\apps\copilot\e2e\fixtures\metrics-db.ts:238:74)
+        at C:\dev\npi-erp\apps\copilot\e2e\metrics.spec.ts:113:32
+
+    Error Context: test-results\apps-copilot-e2e-metrics-m-d1259-oes-not-scroll-horizontally\error-context.md
+
+    Error Context: test-results\apps-copilot-e2e-metrics-m-d1259-oes-not-scroll-horizontally\error-context.md
+
+  4 failed
+    apps\copilot\e2e\metrics.spec.ts:120:7 › metrics screen (T-35) › admin sees the nav item and six cards in order with the seeded figures 
+    apps\copilot\e2e\metrics.spec.ts:207:7 › metrics screen (T-35) › the CSV has the fixed header and six assumption rows 
+    apps\copilot\e2e\metrics.spec.ts:254:7 › metrics screen (T-35) › a non-administrator sees metrics.forbidden, no nav item, and 403 from the export; no session is 401 
+    apps\copilot\e2e\metrics.spec.ts:275:7 › metrics screen (T-35) › at 390 px the page itself does not scroll horizontally  **7 passed + 1 skipped** (the mobile-only test on desktop; both projects; run by agent D and again by the main model, 1.4 min); the fixture seeds `memory` 0.92 / `pii` 0.95 / `extract:po` 35/36 eval runs, two approved `po` jobs (3 and 5 min → median 4), the `po` baseline 30 min with save-and-restore, ten working-day `daily_usage` rows and one 12.5-minute completed onboarding session, and removes only what it created; the spec asserts the six cards in order with the seeded figures (a2 92 %, a4 93.8 % / 100 %, a5's po line «وسيط 4 دقيقة مقابل 30 يدوياً (2 مستند)» and 35/36, a6 12.5 دقيقة), the CSV bytes (`EF BB BF`, the G-M4-4 header, six rows, `0.9200`/`0.9375`/`po:4.0/30`), the forbidden card + 403/401, and no horizontal scroll at 390 px. Reviewed by the main model by reading every file and running everything: copilot suite **57 suites / 2,269 tests**, `tsc` and `eslint .` clean; live on the dev `npi_copilot` DB (`org_npi_root`, read-only `ts-node` probe and the running screen on :3110 as the seeded admin): a1 20 % (5 active users, 10 working days) not met, a2 96 % met (48/50 answered, 50/50 derived), a3 $0.1597 per document / $0.0319 per day over 51 calls and 6 documents (= T-34's $0.9579), a4 93.8 % names / 100 % identifiers met, a5 99.3 % fields (422/425 over the five flows) and time ratio 2.5 % (customer_contract median 0.6 min vs 25 manual, 8 documents) met, a6 no data (the demo org has one open session); the CSV over the real route = BOM `EF BB BF` + the G-M4-4 header + six rows (`0.2000`, `0.9600`, `159657`, `0.9383`, `0.9929`, empty for a6); at 375 px the page does not scroll horizontally. |
 | T-36 | todo | | M4 |
 | T-37 | todo | | M4 gate |
 | T-38 | todo | | M5 |
@@ -121,6 +270,7 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 - T-32 (PII eval + no-bypass-llm guard, F-16) 2026-10-06: the gate is now measured — 100 NPI-vocabulary sentences, names 93.8 % and structured identifiers 100 % against 90/95 — and the two defects the measurement found are fixed («على» opening a person capture; abbreviated honorifics). The structural guard makes the type-level promise greppable: nothing reaches the model except through the pseudonymizer and, for images, through consent → `vision.ts`. One laundering cast in the setup parser closed. Next: T-33 (`/trust` audit table incl. images with the consent id).
 - T-33 (the trust screen `/trust`, F-17) 2026-10-08: the administrator now sees every `llm_audit` row of the organization — what left the building (redacted, with the placeholders counted), the tier, tokens and cost, and for every photo/scan send the consent event that authorised it; the events that never called a model (refusal, cap, execution, reassignment) sit in the same table. The integrity line «كل إرسال صورة مسجَّل برقم موافقة» is computed over the whole log (G-M4-2). Verified on the real local log and by the e2e gate. Next: T-34 (`src/audit/cost.ts`, `src/queries/usage.ts`, per document/flow/day/tier + cap).
 - T-34 (the usage counter, F-18) 2026-10-08: the cost of every model call is now countable — per Riyadh day, tier, flow, document and user over `llm_audit`, with a monthly projection — and the daily cap is a queryable status that uses the gate's own arithmetic (`capStatus` is what `src/llm/client.ts` calls before refusing, and `t('usage.cap.reached')` is the one text of the refusal). G-M4-3 met: `cost` tests 116 green, the cap test refuses with the cap message exactly where the counter says reached. Verified on the real log: the counter reproduces the `daily_usage` accumulator to the micro-USD. Next: T-35 (`/metrics`, a1–a6 cards incl. a3 from `loadUsageReport`, CSV export).
+- T-35 (the metrics screen `/metrics`, F-19) 2026-10-08: the six assumptions of `01` §1 are now measured from Madar's own records on one screen — daily return (`daily_usage` over the Riyadh working week), memory accuracy and PII effectiveness (the latest `eval_runs` of each kind), inference cost per document and per day with the projection (T-34's readers), chat entry (fields correct without edit over the five flows' latest extraction evals, and the approval time against the manual baseline entered in /settings) and onboarding time (T-20's metric) — each with its target, verdict and detail lines, and one `copilot-metrics.csv` with the G-M4-4 header and six assumption rows. G-M4-4 met: `e2e/metrics.spec.ts` green. Verified on the real local data and the running screen. Next: T-36 (`eval:extract` over all 20 documents, `docs/COPILOT_EVAL_AR.md`, `eval:behaviour`, tag `copilot-v0.4.0`).
 ### M5
 
 ## NPI API gaps found (from onboarding apply and execution)
@@ -303,6 +453,11 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 | T-34 | the pure module `src/audit/cost.ts` was written by the main model, not by a Sonnet agent; the agents wrote the tests and the readers | both agents build against it and run its code — a second author in parallel would have blocked one of them; the T-33 method (contract by the main model, implementation by agents) is kept for the readers and the suites | 2026-10-08 |
 | T-34 | the gate `src/llm/client.ts` now imports `riyadhDay`/`capStatus`/`CAP_REACHED_MESSAGE_AR` from `src/audit/cost.ts`, exports `dailyTokenCap`, and `src/agents/run.ts` drops its own copy of `riyadhDay` | «a day» and «reached» must be one definition for the refusal and the counter (G-M4-3 «cap test triggers cap message» is only meaningful if they cannot drift); behaviour unchanged — `llm` 38/38 and `agents` as before; `COPILOT_DAILY_TOKEN_CAP` is still read only in `client.ts` (invariant 3's allowlist text stays true) | 2026-10-08 |
 | T-34 | six app-authored strings under «T-34 additions» (`usage.cap.reached` — the existing cap text, now the one source — and `usage.flow.{chat,setup,memory,handover,other}`); the five document flows reuse `flow.*`, the tiers reuse `trust.tier.*` | `03` §4 has no usage strings; the counter needs flow labels for the non-document flows | 2026-10-08 |
+| T-35 (D-7) | the six metrics' shapes are derived — a1 counts Riyadh **working** days (Sunday–Thursday; `01` §1 says «أيام العمل») and averages the per-user share over the users who sent at least one message in the trailing 14 days; a3 has no target (`01` §1 «يُقاس») and its headline is the cost per document (per day when no call carried a document); a4 reads `detailsJson.rates` of the latest `pii` run; a5's fields share is Σcorrect/Σtotal over the latest `extract:<flow>` run of each flow (weighted by fields, not an average of five scores) and its time ratio is Σ(median `createdAt→approvedAt` minutes)/Σ(baseline minutes) over the flows that have both a baseline and an approved job (one ratio weighted by the manual time); `met` for a5 needs both halves, a missing baseline makes it `not_met` with the line «لم يُدخَل زمن يدوي مرجعي بعد»; the CSV `value` is the machine figure (a share as a 4-decimal string, minutes to 1 decimal, USD micro as an integer) and `details` is `key=value;…` ASCII | `01` §1/§7 name the sources and the targets but no arithmetic; `07` G-M4-4 fixes only the header and the row count | 2026-10-08 |
+| T-35 | `eval_runs` is read without an organization filter | the table has no organization column (the evals run on fixtures, `01` §7), so the latest run of each kind is the same for every organization; documented in `load.ts` and below | 2026-10-08 |
+| T-35 | the page is a server component that calls `loadMetrics(getDb(), …)` directly — no `GET /api/metrics` JSON route and no `src/components/metrics/api.ts`, unlike `/trust` and `/settings` | the screen is read-only with no filters or pagination: one server render is the whole load; the only HTTP surface the plan names is the CSV export (`05` row T-35), which exists | 2026-10-08 |
+| T-35 | 58 app-authored strings under «T-35 additions» (`metrics.a1`…`a4`, the targets, verdicts, the per-card detail lines, `metrics.export`, `metrics.forbidden`); `03` §4 gives only `metrics.title`/`a5`/`a6`/`baseline` | the screen needs labels for all six cards and their details | 2026-10-08 |
+| T-35 | the contract and the strings were written by the main model; the pure module, the readers, the screen and the e2e by four Sonnet agents (three in parallel, the e2e after) | the T-33/T-34 method; `compute.ts` could go to an agent this time because B and C build against a fixed signature, not against its code | 2026-10-08 |
 | T-34 | no screen, route or agent tool: the task ends at the readers and their tests | `05` row T-34 names `cost.ts`, `usage.ts`, `cost.spec.ts` only; F-18 has no screen in `01` §5 and AT-13 measures it through `/metrics` (T-35) | 2026-10-08 |
 
 ## Known limits (measured later)
@@ -370,6 +525,11 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 - Usage counter (T-34): the projection divides by the calendar days the window touches, not by the days with traffic — a 30-day window over a firm that started last week under-states its run rate, a one-day window over a heavy day over-states it; `01` §7 asks for a monthly projection and gives no rule, so the simple one is documented in `UsageProjection`.
 - Usage counter (T-34): `loadCapStatus` is keyed by user only (`daily_usage` is unique per user and day); a caller must pass the session's own user id — there is no organization check to catch a wrong id.
 - Usage counter (T-34): the cap is checked against `daily_usage`, which is written after a successful call, so two concurrent calls of one user just below the cap both pass (the T-09 design, unchanged); the counter shows the overshoot afterwards.
+- Metrics (T-35): a2/a4/a5-fields come from `eval_runs`, which has no organization column — every organization sees the same latest eval; a run started by anyone (including the e2e fixture, which seeds and removes its own `memory`/`pii`/`extract:po` rows) is «the latest» until the next one.
+- Metrics (T-35): a1 counts a user as active from one message in the window and counts only Sunday–Thursday; public holidays are working days to it, and a firm with a different week needs `WORKING_WEEKDAYS` changed (one constant).
+- Metrics (T-35): a5's approval time is `intake_jobs.createdAt → approvedAt` — the dev log's 0.6-minute median is test traffic, not a measurement of a real employee; the ratio becomes meaningful with the pilot's own jobs, and it needs a baseline per flow in /settings (today only `customer_contract` has one).
+- Metrics (T-35): `loadMetricsInput` reads every `eval_runs` row (newest first) and every approved job of the organization into memory; both are small today, a `take`/date bound if they ever are not.
+- Metrics (T-35): the page computes on every request (`force-dynamic`, five reads + the T-34 fold); no cache — fine for an administrator's occasional visit.
 
 ## Suggestions (not implemented)
 - ~~Execution (T-27): read `previewJson.choices` with the resolution's candidates … write `executionLogJson` step by step …~~ — done in T-27 (`pickedId`, `buildPlan` mirrors `previewSteps`, step-by-step persistence).
@@ -416,9 +576,11 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 - Handover (T-30, A's finding): chat-learned vendor facts carry no NPI id (`npiEntityId` null) — resolving the vendor at extraction time (T-11) would make the handover's grouping exact instead of name-based.
 - Trust screen (T-33): two more `AuditOutboundBlock` shapes (`tool_use`, `tool_result`) in `src/audit/types.ts` and the guards, so chat rows render structured; a «نص المستخدم فقط» placeholder count beside the total; a date range filter and a CSV export of the log (T-35 exports metrics, not the log); link a row's `conversationId` to a read-only transcript (the handover's predecessor view already renders one).
 - Usage counter (T-34): T-35's a3 card = `serializeUsageReport(await loadUsageReport(db, { npiOrgId }, riyadhTrailingPeriod(now, 30)))` with `byDay`/`byTier`/`byFlow` and the projection, plus `loadCapStatus(db, { npiUserId, cap: dailyTokenCap(process.env), now })` for the signed-in user; a «الاستهلاك» line on `/documents/[id]` from `loadDocumentUsage`; a `usage_today` read tool (copilot DB, like `memory_search`) so «كم استهلكنا اليوم؟» (`06` behaviour scenario 16, T-37) answers with figures — the readers exist, the tool is one `ReadTool` entry.
+- Metrics (T-35): a `?days=` window on the page and the export (the windows are constants today: 14 for a1, 30 for a3); a per-flow a5 table instead of detail lines once the pilot has jobs in every flow; a «run the evals» note with the command next to a2/a4/a5 when the latest run is older than N days; an `eval_runs.npiOrgId` column if evals ever run on a firm's own data.
 - Usage counter (T-34): a `GET /copilot/api/usage` for the administrator (`admin.user.manage`, org-scoped, `?days=7|30`, `?documentId=`) once a screen needs it; today nothing fetches usage over HTTP.
 
 ## Pending live verification
+- **T-35 (2026-10-08)**: `loadMetrics` run read-only on the dev `npi_copilot` DB (`org_npi_root`) through a scratchpad `ts-node` probe and the running screen on :3110 as the seeded admin: a1 20 % (5 active users / 10 working days / 14 days), a2 96 %, a3 $0.1597 per document and $0.0319 per day (51 calls, 6 documents, total $0.9579 = T-34's figure), a4 93.8 % / 100 %, a5 99.3 % (422/425) with the time ratio 2.5 % (customer_contract 0.6 min median vs 25, 8 jobs), a6 no data; the CSV through the real route: 200, `text/csv; charset=utf-8`, the attachment header, bytes `EF BB BF` then the G-M4-4 header and six rows; 375 px: no horizontal scroll. Not exercised live: a non-administrator against the screen on :3110 (covered by the e2e), a real completed onboarding session of the demo organization (a6 shows «لا بيانات بعد» there; the e2e seeds one).
 - **T-34 (2026-10-08)**: the readers run against the dev `npi_copilot` log through a scratchpad `ts-node` probe (read only): `org_npi_root`, trailing 30 days — 77 rows, 51 model calls, 3 errors, 0 cap hits, 282,115 in / 46,777 out, 957,944 micro-USD ($0.958; projection $0.958/month), which equals Postgres's `aggregate` over the same `where` and the sum of the 11 `daily_usage` rows; by day 2026-10-03…10-06, by tier 25 economy ($0.074) / 26 advanced ($0.884), by flow customer_contract 12 / pr 7 / grn 3 / vendor_bill 3 / chat 20 / setup 5 / handover 1 (sums = totals), 6 documents, 5 users; the top user scoped = its bucket; the top document = its bucket and 0 under another org; today's cap 0/600,000 for both users. Not exercised live: a real `cap_reached` through the running copilot (unit-covered through the gate; the T-25 eval hit it for real on 2026-10-05), the readers over HTTP (no route in this task).
 - **T-32 (2026-10-06)**: AT-09 through the real chat on :3110 (admin, `claude-haiku-4-5` economy tier) against the local NPI api on :4000 — the text turn named the seed customer, its VAT and phone, a contact person and the seed vendor; `llm_audit.outboundRedactedText` of both calls (the turn and the tool round) carries only placeholders (⟦عميل_1⟧ ⟦رقم_ضريبي_1⟧ ⟦شخص_1⟧ ⟦هاتف_1⟧ ⟦مورد_1⟧ ⟦بريد_1⟧), no clear-text name or number. `npm run eval:pii` 93.8 % / 100 % — `test-results/pii/2026-10-06T18-47-46-166Z.json`, `eval_runs` kind `pii` (the first run before the gate fix, 92.6 % / 100 %, is also in the table). Not exercised live: a document turn (covered by T-31's extraction audit assertion) and the handover/memory-extract/setup-parse paths with real names (unit-covered; the guard proves they share the one gate).
 - **T-31 (2026-10-06)**: `npm run e2e:live-flows` (= `dotenv -e ../../.env -v COPILOT_LIVE=1 -- playwright test e2e/scenarios.spec.ts --project desktop`, the e2e's own NPI :4077 and copilot :3177 on the local databases, `claude-sonnet-5` for every extraction). Run 1: 6/11 — AT-06, AT-03 (a,b), AT-05, AT-04 (a,b) green (PR-00032 in the matrix; GRN-00008 DRAFT on a fixture PO; BILL-00008 «مسجّلة» on an accepted fixture receipt; every photo call `imageSent=true` with its consent id; `extract_grn` 28.6 s, `extract_vendor_bill` 15.4 s, `extract_pr` 6.2 s); AT-01/AT-02 404 at the chat — the dedupe defect (D-T31-11). Run 2, after the fix: 8/11 — AT-02 green (CTR-00009 with `contract-02.pdf` attached, customer matched, `extract_customer_contract` 18.0 s); AT-01 (a) failed on the card's name «للمقاوالت» (the ligature limit, now corrected inline by the spec) and on the 25 s clause by 0.96 s (25.96 s; model 24.6 s). Run 3 (`--grep AT-01`): 3/3 — `extract_customer_contract` 14.5 s, the card within 25 s, edit 11.5 s, approve → **CUS-00002** + **CTR-00010** (DRAFT, 3 milestones, retention 10) + `contract-01.pdf` attached, read back as the sales user. Run 4 (whole file, repeat state — the customer now exists): **11/11 in 3.8 min**, AT-01 on the «matched» branch (CTR-00011), AT-02 CTR-00012, PR-00034, GRN-00012, BILL-00010; model times 19.1 s / 12.2 s (edit) / **58.1 s** (AT-02's contract — the slowest call seen, 6,105 output tokens; the 120 s wait held) / 7.6 s / 12.1 s / 16.5 s. Not exercised live: the `mobile` project (skipped by design); a refused step on grn/vendor_bill against real NPI; the WBS clause of AT-03 (the fixture's project has one element «عام»; not asserted); a scanned (rasterised) PDF through vision (every photo was a JPEG; `grn-04.pdf`/`bill-04.pdf` are text PDFs); a HEIC photo; AT-01 on a cold `next dev` (the first-paint waits are 60–90 s).
@@ -440,6 +602,8 @@ Registry lookups (`npm view`) on 2026-09-27. Exact versions, no ranges, in `apps
 - The demo server runs build `4756ba6`; `main` is ahead by deploy scripts and comments only.
 
 ## Owner-facing summary (Arabic)
+**2026-10-08 (ليلاً) — T-35 (شاشة القياس) منجزة.** على `feat/copilot`. الطريقة نفسها: العقد والنصوص كتبهما النموذج الرئيسي، ثم ثلاثة وكلاء Sonnet بالتوازي من بريفات مغلقة (الحساب النقي وملف CSV / القارئات ومسار التصدير / الشاشة والبطاقة) ثم وكيل رابع لاختبار المتصفح، ثم مراجعة بالتشغيل الفعلي على بياناتك المحلية وعلى الشاشة نفسها. صارت لمدير النظام شاشة «القياس» بست بطاقات هي افتراضات النموذج الستة، كلٌّ منها من سجلات مَدار نفسها: العودة اليومية (نسبة أيام العمل، الأحد إلى الخميس، التي كتب فيها الموظف خلال 14 يوماً)، دقة الذاكرة وفاعلية الإخفاء (آخر تشغيل لتقييميهما)، كلفة الاستدلال لكل مستند ولكل يوم مع الإسقاط الشهري (من عدّاد T-34)، الإدخال بالمحادثة (نسبة الحقول الصحيحة بلا تعديل في آخر تقييم استخراج لكل تدفق، وزمن الإدخال من الإرفاق إلى الاعتماد مقارنةً بالزمن اليدوي الذي أدخلته في الإعدادات)، والتشكّل الذاتي (زمن التأسيس). كل بطاقة تعرض الهدف والحكم (تحقق / لم يتحقق / لا بيانات بعد / مُقاس) وسطوراً تفصيلية وتاريخ القياس، وزر «تصدير النتائج» ينزّل `copilot-metrics.csv` بست صفوف. على بياناتك اليوم: العودة اليومية 20% (لم تتحقق — بيانات تجريبية)، الذاكرة 96%، الكلفة 0.16 دولار للمستند، الإخفاء 93.8% / 100%، الحقول 99.3% والزمن 2.5% من اليدوي، والتشكّل بلا بيانات (منشأتك ليس فيها جلسة تأسيس مكتملة). ملاحظتان: نتائج التقييمات (الذاكرة والإخفاء والاستخراج) عامة لكل المنشآت لأنها تُشغَّل على بيانات تجريبية لا على بيانات منشأة بعينها؛ ونسبة الزمن تحتاج زمناً يدوياً لكل تدفق من الإعدادات (المدخل اليوم: عقد العميل فقط). تجربتك (`09` 4.5 و4.6): افتح «القياس» وانزّل الملف. التالية: T-36 (تقييم الاستخراج على المستندات العشرين وتقرير التقييم بالعربية ووسم `copilot-v0.4.0`).
+
 **2026-10-08 (مساءً) — T-34 (عدّاد الكلفة والسقف) منجزة.** على `feat/copilot`. الطريقة: العقد والوحدة النقية كتبهما النموذج الرئيسي (لأن الوكيلين يبنيان عليهما معاً)، ثم وكيلا Sonnet بالتوازي من بريفين مغلقين (الاختبارات / القارئات من قاعدة البيانات)، ثم مراجعة بالتشغيل الفعلي على السجل الحقيقي. صار لمَدار عدّاد يحسب رموز النماذج وكلفتها لكل يوم (بتقويم الرياض) ولكل مستوى (اقتصادي/متقدم) ولكل تدفق (عقد عميل، طلب شراء، أمر شراء، استلام، فاتورة مورّد، محادثة، تأسيس، ذاكرة، دليل استلام) ولكل مستند ولكل موظف، مع إسقاط شهري، كله من سجل التدقيق نفسه. والسقف اليومي (600,000 رمز لكل موظف) صار حالةً تُقرأ: المستخدَم والمتبقي وهل بُلغ — بالحساب نفسه الذي يرفض به مَدار الاستدعاء، فلا يمكن أن تقول الشاشة شيئاً ويفعل النظام غيره؛ ورسالة الرفض «بلغت حد الاستخدام اليومي. يتجدد الحد غداً.» صارت نصاً واحداً في مكان واحد. البوابة G-M4-3: 116 اختباراً خضراء، واختبار السقف يرفض بالرسالة حيث يقول العدّاد «بُلغ». التحقق الحي على سجلك المحلي: 51 استدعاءً خلال 30 يوماً بكلفة 0.958 دولار، تطابق جدول الاستهلاك اليومي إلى الميكرو-دولار. لا شاشة في هذه المهمة بقصد: بطاقة «كلفة الاستدلال» تأتي في T-35 (شاشة القياس) من هذه القارئات نفسها. مقترح لك: أداة محادثة «كم استهلكنا اليوم؟» ترد بالأرقام (سيناريو 16 في تقييم السلوك) — نضيفها في T-37 إن وافقت. التالية: T-35 (شاشة القياس بالبطاقات الست وتصدير CSV).
 
 **2026-10-08 — T-33 (شاشة الثقة) منجزة.** على `feat/copilot` (محلي، بلا دفع). الطريقة نفسها: عقد كتبه النموذج الرئيسي، ثلاثة وكلاء Sonnet من بريفات مغلقة (القارئ والمسار / الشاشة / اختبار المتصفح)، ثم مراجعة بالتشغيل الفعلي على السجل الحقيقي. صار لمدير النظام في «الثقة» جدول بكل أحداث مَدار في منشأته: ما أُرسل خارجياً بعد الإخفاء (مع عدد الرموز المخفاة)، المستوى والنموذج والرموز والكلفة، وعمود «صورة أُرسلت» مع رقم الموافقة لكل صورة أو مسح أُرسل، والأحداث التي امتنع فيها مَدار عن الإرسال (رفض مستند سري، بلوغ السقف) والتنفيذ في NPI. ثلاثة مرشّحات (الحدث، الصور، الموظف)، و«المزيد» للصفحات، وتفصيل لكل حدث يعرض الرسائل والصور وصفاً لا بيانات. السطر الأخضر «كل إرسال صورة مسجَّل برقم موافقة» يُحسب على السجل كله (G-M4-2). الشاشة للمدير وحده، والسجل محصور بالمنشأة. بوابة المتصفح `e2e/trust.spec.ts`: 11 ناجحة. تجربتك (`09` 4.1 و4.2): افتح «الثقة»، اضغط «عرض» على صف «استخراج عقد عميل» لترى ⟦عميل_1⟧ بلا اسم حقيقي، وعلى صف «استخراج فاتورة مورّد» لترى «نعم» ورقم الموافقة. التالية: T-34 (عدّاد الكلفة والسقف).
