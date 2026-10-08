@@ -27,6 +27,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/leads', key: 'nav.leads', icon: 'target', perm: 'crm.lead.read' },
       { href: '/customers', key: 'nav.customers', icon: 'users', perm: 'crm.customer.read' },
       { href: '/opportunities', key: 'nav.opportunities', icon: 'lightbulb', perm: 'crm.opportunity.read' },
+      // CRM Step 5: the team's follow-up tasks (the inbox shows only the caller's own, due today or late).
+      { href: '/tasks', key: 'nav.tasks', icon: 'square-check', perm: 'crm.customer.read' },
       { href: '/proposals', key: 'nav.proposals', icon: 'file-text', perm: 'commercial.proposal.read' },
       { href: '/contracts', key: 'nav.contracts', icon: 'file-signature', perm: 'commercial.contract.read' },
     ],

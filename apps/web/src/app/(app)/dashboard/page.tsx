@@ -16,6 +16,9 @@ interface Summary {
   totalContracts: number;
   activeContracts: number;
   pipelineValue: number | string;
+  /** CRM Step 5: the caller's own open follow-up tasks due today / already late. */
+  myTasksDueToday?: number;
+  myTasksOverdue?: number;
 }
 interface FinSummary {
   issuedInvoices: number;
@@ -81,6 +84,28 @@ export default function DashboardPage() {
       <PageHeader title={t('dash.title')} subtitle={t('app.tagline')} />
 
       <QuickActions />
+
+      {/* The caller's own follow-ups: due today and already late. Same key as the page it links to. */}
+      {canCrm && can('crm.customer.read') && data && (
+        <Link href="/tasks" className="stat group mb-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Icon name="square-check" className="h-5 w-5 text-slate-500 transition group-hover:text-brand-500" />
+            <p className="text-sm font-semibold text-slate-700">{t('dash.myTasks')}</p>
+          </div>
+          <div className="flex items-center gap-8">
+            <p className="text-sm text-slate-600">
+              {t('dash.myTasks.today')}{' '}
+              <span className="ms-1 text-xl font-bold tabular-nums text-warning-700">{num(data.myTasksDueToday)}</span>
+            </p>
+            <p className="text-sm text-slate-600">
+              {t('dash.myTasks.overdue')}{' '}
+              <span className={`ms-1 text-xl font-bold tabular-nums ${(data.myTasksOverdue ?? 0) > 0 ? 'text-danger-700' : 'text-success-700'}`}>
+                {num(data.myTasksOverdue)}
+              </span>
+            </p>
+          </div>
+        </Link>
+      )}
 
       {/* Row 1: sales KPIs */}
       {kpis.length > 0 && (

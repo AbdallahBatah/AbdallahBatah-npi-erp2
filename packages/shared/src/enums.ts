@@ -56,6 +56,20 @@ export const OPPORTUNITY_TYPES: EnumOption[] = [
   { value: 'TENDER', labelAr: 'مناقصة', labelEn: 'Tender' },
 ];
 
+/** CRM Phase 1 · Step 5 (spec 4.4): the kinds of communication-log entry. Files are attachments on any entry, not a kind. */
+export const ACTIVITY_TYPES: EnumOption[] = [
+  { value: 'NOTE', labelAr: 'ملاحظة', labelEn: 'Note' },
+  { value: 'CALL', labelAr: 'مكالمة', labelEn: 'Call' },
+  { value: 'MEETING', labelAr: 'اجتماع', labelEn: 'Meeting' },
+];
+
+/** CRM Phase 1 · Step 5: the life of a follow-up task. A finished or cancelled task is not re-opened. */
+export const FOLLOWUP_TASK_STATUSES: EnumOption[] = [
+  { value: 'OPEN', labelAr: 'مفتوحة', labelEn: 'Open' },
+  { value: 'DONE', labelAr: 'منجزة', labelEn: 'Done' },
+  { value: 'CANCELLED', labelAr: 'ملغاة', labelEn: 'Cancelled' },
+];
+
 export const ITEM_CATEGORIES: EnumOption[] = [
   { value: 'MODULE', labelAr: 'لوح شمسي', labelEn: 'PV Module' },
   { value: 'INVERTER', labelAr: 'عاكس', labelEn: 'Inverter' },

@@ -321,13 +321,74 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   },
   {
     re: /setting value out of range/i,
-    ar: 'القيمة خارج المدى المسموح — أدخل عدداً صحيحاً من 1 إلى 365',
-    en: 'The value is out of range - enter a whole number from 1 to 365',
+    ar: 'القيمة خارج المدى المسموح — أدخل عدداً صحيحاً ضمن الحدود المبيَّنة بجوار الحقل',
+    en: 'The value is out of range - enter a whole number within the limits shown beside the field',
+  },
+  // the communication log and the follow-up tasks (CRM Step 5)
+  {
+    re: /opportunity does not belong to this customer/i,
+    ar: 'هذه الفرصة تخص عميلاً آخر — اختر فرصة من فرص هذا العميل',
+    en: "That opportunity belongs to another customer - pick one of this customer's opportunities",
+  },
+  {
+    re: /contact does not belong to this customer/i,
+    ar: 'جهة الاتصال هذه ليست من جهات اتصال هذا العميل',
+    en: "That contact is not one of this customer's contacts",
+  },
+  {
+    re: /activity date cannot be in the future/i,
+    ar: 'تاريخ التواصل لا يمكن أن يكون في المستقبل',
+    en: 'The date of a communication cannot be in the future',
+  },
+  {
+    re: /^body is required|^body must be at most/i,
+    ar: 'نص القيد إلزامي (حتى 4000 حرف)',
+    en: 'The entry text is required (up to 4000 characters)',
+  },
+  {
+    re: /^title is required|^title must be at most/i,
+    ar: 'عنوان المهمة إلزامي (حتى 200 حرف)',
+    en: 'The task title is required (up to 200 characters)',
+  },
+  {
+    re: /due date cannot be in the past/i,
+    ar: 'تاريخ الاستحقاق لا يمكن أن يسبق اليوم',
+    en: 'The due date cannot be before today',
+  },
+  {
+    re: /(dueAt|occurredAt|remindAt) must be a valid date/i,
+    ar: 'التاريخ غير صالح — اختره من التقويم',
+    en: 'The date is not valid - pick it from the calendar',
+  },
+  {
+    re: /reminder cannot be after the due date/i,
+    ar: 'وقت التذكير لا يمكن أن يقع بعد يوم الاستحقاق',
+    en: 'The reminder cannot be after the due date',
+  },
+  {
+    re: /assignee not found/i,
+    ar: 'المكلَّف غير موجود أو غير نشط — اختر مستخدماً نشطاً',
+    en: 'The assignee was not found or is inactive - pick an active user',
+  },
+  {
+    re: /task is not open/i,
+    ar: 'المهمة لم تعد مفتوحة (أُنجزت أو أُلغيت) — حدّث الصفحة',
+    en: 'The task is no longer open (done or cancelled) - refresh the page',
+  },
+  {
+    re: /cancellation reason is required/i,
+    ar: 'سبب الإلغاء إلزامي — اكتب سبباً',
+    en: 'A cancellation reason is required',
   },
 ];
 
 // 403s that deserve a specific sentence instead of the generic "no permission".
 const FORBIDDEN_PATTERNS: Array<{ re: RegExp; ar: string; en: string }> = [
+  {
+    re: /only the author can edit this entry/i,
+    ar: 'لا يعدّل القيد إلا كاتبه — أضف قيداً جديداً إن لزم',
+    en: 'Only the author can edit an entry - add a new entry if needed',
+  },
   {
     re: /customer merge is disabled/i,
     ar: 'الدمج معطَّل حتى اعتماد قائمة المكررات من المالك',

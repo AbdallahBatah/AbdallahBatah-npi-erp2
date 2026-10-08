@@ -21,6 +21,7 @@ import { ApprovalMatrixCard } from '@/components/approval-matrix';
 import { CustomerMergeCard } from '@/components/customer-merge';
 import { LossReasonsCard } from '@/components/loss-reasons';
 import { ProposalSettingsCard } from '@/components/proposal-settings';
+import { TaskSettingsCard } from '@/components/task-settings';
 
 interface RoleRow {
   id: string;
@@ -511,6 +512,7 @@ export default function AdminPage() {
           )}
         </div>
         <ProposalSettingsCard />
+        <TaskSettingsCard />
         </div>
       ) : tab === 'users' ? (
         <div className="card overflow-hidden">

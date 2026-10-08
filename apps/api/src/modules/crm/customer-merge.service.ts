@@ -41,7 +41,16 @@ export interface DuplicateMember {
   vatNumber: string | null;
   mobile: string | null;
   createdAt: Date;
-  counts: { leads: number; opportunities: number; contracts: number; invoices: number; contacts: number };
+  counts: {
+    leads: number;
+    opportunities: number;
+    contracts: number;
+    invoices: number;
+    contacts: number;
+    /** CRM Step 5: communication-log entries and follow-up tasks travel with the customer. */
+    activities: number;
+    followUpTasks: number;
+  };
   totalDocuments: number;
 }
 
@@ -193,15 +202,17 @@ export class CustomerMergeService {
       return { mergeEnabled, threshold, truncated, groups: [] as DuplicateGroup[] };
     }
 
-    // Document counts for every member of every group, in five grouped queries.
+    // Document counts for every member of every group, in seven grouped queries.
     const memberIds = multi.flat().map((i) => customers[i].id);
     const where = { organizationId: org, customerId: { in: memberIds } };
-    const [leads, opps, contracts, invoices, contacts] = await Promise.all([
+    const [leads, opps, contracts, invoices, contacts, activities, followUpTasks] = await Promise.all([
       this.prisma.lead.groupBy({ by: ['customerId'], where, _count: { _all: true } }),
       this.prisma.opportunity.groupBy({ by: ['customerId'], where, _count: { _all: true } }),
       this.prisma.contract.groupBy({ by: ['customerId'], where, _count: { _all: true } }),
       this.prisma.invoice.groupBy({ by: ['customerId'], where, _count: { _all: true } }),
       this.prisma.customerContact.groupBy({ by: ['customerId'], where, _count: { _all: true } }),
+      this.prisma.activity.groupBy({ by: ['customerId'], where, _count: { _all: true } }),
+      this.prisma.followUpTask.groupBy({ by: ['customerId'], where, _count: { _all: true } }),
     ]);
     const tally = (rowsIn: Array<{ customerId: string | null; _count: { _all: number } }>) =>
       new Map(rowsIn.map((r) => [r.customerId, r._count._all]));
@@ -210,6 +221,8 @@ export class CustomerMergeService {
     const tc = tally(contracts);
     const ti = tally(invoices);
     const tk = tally(contacts);
+    const ta = tally(activities);
+    const tt = tally(followUpTasks);
 
     const groups: DuplicateGroup[] = multi.map((idx, n) => {
       const members: DuplicateMember[] = idx.map((i) => {
@@ -220,6 +233,8 @@ export class CustomerMergeService {
           contracts: tc.get(c.id) ?? 0,
           invoices: ti.get(c.id) ?? 0,
           contacts: tk.get(c.id) ?? 0,
+          activities: ta.get(c.id) ?? 0,
+          followUpTasks: tt.get(c.id) ?? 0,
         };
         return {
           id: c.id,
@@ -231,7 +246,14 @@ export class CustomerMergeService {
           mobile: c.mobile,
           createdAt: c.createdAt,
           counts,
-          totalDocuments: counts.leads + counts.opportunities + counts.contracts + counts.invoices + counts.contacts,
+          totalDocuments:
+            counts.leads +
+            counts.opportunities +
+            counts.contracts +
+            counts.invoices +
+            counts.contacts +
+            counts.activities +
+            counts.followUpTasks,
         };
       });
       // The record that already carries the most documents survives; on a tie
@@ -342,6 +364,15 @@ export class CustomerMergeService {
           data: { entityId: survivor.id },
         })
       ).count;
+
+      // CRM Step 5: the communication log and the follow-up tasks follow the customer.
+      // (Files attached to a log entry hang off the ENTRY, whose id does not change.)
+      // Reported only when there was something to move, so the shape of every earlier
+      // merge — and of the rows already written to the merge log — is unchanged.
+      const activities = (await tx.activity.updateMany({ where: { ...scope, customerId: merged.id }, data: moveTo })).count;
+      if (activities > 0) moved.Activity = activities;
+      const followUps = (await tx.followUpTask.updateMany({ where: { ...scope, customerId: merged.id }, data: moveTo })).count;
+      if (followUps > 0) moved.FollowUpTask = followUps;
 
       // Fill the survivor's EMPTY fields from the duplicate; never overwrite.
       const empty = (v: string | null | undefined) => v === null || v === undefined || v.trim() === '';

@@ -28,7 +28,7 @@ interface Member {
   vatNumber: string | null;
   mobile: string | null;
   createdAt: string;
-  counts: Record<'leads' | 'opportunities' | 'contracts' | 'invoices' | 'contacts', number>;
+  counts: Record<'leads' | 'opportunities' | 'contracts' | 'invoices' | 'contacts' | 'activities' | 'followUpTasks', number>;
   totalDocuments: number;
 }
 type Reason = { kind: 'CR' | 'VAT' | 'MOBILE'; value: string } | { kind: 'NAME'; score: number };
@@ -45,7 +45,7 @@ interface DuplicatesResponse {
   groups: Group[];
 }
 
-const COUNT_KEYS = ['leads', 'opportunities', 'contracts', 'invoices', 'contacts'] as const;
+const COUNT_KEYS = ['leads', 'opportunities', 'contracts', 'invoices', 'contacts', 'activities', 'followUpTasks'] as const;
 
 export function CustomerMergeCard() {
   const { t, locale, pick } = useI18n();

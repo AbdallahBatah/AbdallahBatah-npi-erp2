@@ -27,6 +27,8 @@ import { CustomersService } from '../src/modules/crm/customers.service';
 import { OpportunitiesService } from '../src/modules/crm/opportunities.service';
 import { LossReasonsService } from '../src/modules/crm/loss-reasons.service';
 import { CustomerContactsService } from '../src/modules/crm/customer-contacts.service';
+import { ActivitiesService } from '../src/modules/crm/activities.service';
+import { FollowUpTasksService } from '../src/modules/crm/follow-up-tasks.service';
 import { AttachmentsService } from '../src/modules/platform/attachments.service';
 import type { AuthUser } from '../src/common/auth-user';
 import { buildProposalStack } from './support/proposal-stack';
@@ -46,6 +48,9 @@ const contracts = new ContractsService(prisma, numbering, audit, notifications, 
 const customers = new CustomersService(prisma, numbering, audit, new OrgSettingsService(prisma, audit));
 const customerContacts = new CustomerContactsService(prisma, audit);
 const attachments = new AttachmentsService(prisma, audit);
+// CRM Step 5: the communication log and the follow-up tasks.
+const followUpTasks = new FollowUpTasksService(prisma, numbering, audit, notifications, new OrgSettingsService(prisma, audit));
+const activities = new ActivitiesService(prisma, audit, followUpTasks);
 // CRM Step 4: the proposal service with the real kernel behind it.
 const proposals = buildProposalStack(prisma).proposals;
 
@@ -65,6 +70,9 @@ const B = {
   itemId: '',
   proposalId: '',
   revisionId: '',
+  contactId: '',
+  activityId: '',
+  taskId: '',
 };
 let ATTACKER: AuthUser;
 
@@ -250,6 +258,22 @@ beforeAll(async () => {
     })
   ).id;
 
+  // CRM Step 5: org B owns a contact, a log entry and an open follow-up task (written directly: no sequence is needed).
+  B.contactId = (await prisma.customerContact.create({ data: { organizationId: orgB.id, customerId: customerB.id, name: 'جهة اتصال الجارة' } })).id;
+  B.activityId = (
+    await prisma.activity.create({
+      data: { organizationId: orgB.id, customerId: customerB.id, activityType: 'CALL', occurredAt: new Date(), body: 'مكالمة سرية للجارة', createdById: userB.id },
+    })
+  ).id;
+  B.taskId = (
+    await prisma.followUpTask.create({
+      data: {
+        organizationId: orgB.id, code: `TSK-B-${suffix}`, customerId: customerB.id, title: 'مهمة سرية للجارة',
+        dueAt: new Date('2099-01-01T00:00:00Z'), assigneeId: userB.id, createdById: userB.id,
+      },
+    })
+  ).id;
+
   // The attacker: a legitimate user of org A, holding every permission.
   const attackerOrg = orgA!.id;
   const attacker = await prisma.user.findFirstOrThrow({ where: { organizationId: attackerOrg } });
@@ -261,6 +285,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // CRM Step 5: the neighbour's task and log entry were written by hand; take them out again
+  // so a later rollback of the activity migration is not blocked by test data.
+  await prisma.followUpTask.deleteMany({ where: { id: B.taskId || '-' } });
+  await prisma.activity.deleteMany({ where: { id: B.activityId || '-' } });
   await prisma.$disconnect();
 });
 
@@ -291,6 +319,57 @@ describe('a tenant cannot reach another tenant by id', () => {
     it('expireBySystem for another organization’s proposal does nothing', async () => {
       await expect(proposals.expireBySystem(ATTACKER.organizationId, B.proposalId)).resolves.toBe(false);
       expect((await prisma.proposalRevision.findUniqueOrThrow({ where: { id: B.revisionId } })).status).toBe('SENT');
+    });
+  });
+
+  describe('CRM Step 5 — the communication log and the follow-up tasks', () => {
+    const ATTACKER_CRM = () => ({ ...ATTACKER, permissions: [...ATTACKER.permissions, 'crm.customer.read', 'crm.customer.write'] }) as AuthUser;
+    const dueTomorrow = () => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+
+    it('lists nothing of the neighbour’s log, by customer or by opportunity', async () => {
+      const byCustomer = (await activities.list(ATTACKER_CRM(), { customerId: B.customerId })) as { items: unknown[] };
+      expect(byCustomer.items).toEqual([]);
+      const byOpportunity = (await activities.list(ATTACKER_CRM(), { opportunityId: B.opportunityId })) as { items: unknown[] };
+      expect(byOpportunity.items).toEqual([]);
+    });
+    it('never lists the neighbour’s tasks, not even for all customers and all statuses', async () => {
+      const rows = (await followUpTasks.list(ATTACKER_CRM(), { status: 'ALL' })) as Array<{ id: string }>;
+      expect(rows.map((r) => r.id)).not.toContain(B.taskId);
+      expect(await followUpTasks.list(ATTACKER_CRM(), { customerId: B.customerId, status: 'ALL' })).toEqual([]);
+    });
+    it('cannot read the task', () => must404('followUpTask.get', () => followUpTasks.get(ATTACKER_CRM(), B.taskId)));
+    it('cannot complete, cancel, edit or re-assign the task (404, and it stays open)', async () => {
+      await must404('followUpTask.complete', () => followUpTasks.complete(ATTACKER_CRM(), B.taskId));
+      await must404('followUpTask.cancel', () => followUpTasks.cancel(ATTACKER_CRM(), B.taskId, 'x'));
+      await must404('followUpTask.update', () => followUpTasks.update(ATTACKER_CRM(), B.taskId, { title: 'Owned' }));
+      await must404('followUpTask.reassign', () => followUpTasks.update(ATTACKER_CRM(), B.taskId, { assigneeId: ATTACKER.userId }));
+      const after = await prisma.followUpTask.findUniqueOrThrow({ where: { id: B.taskId } });
+      expect(after.status).toBe('OPEN');
+      expect(after.title).toBe('مهمة سرية للجارة');
+    });
+    it('cannot edit the entry', () => must404('activity.update', () => activities.update(ATTACKER_CRM(), B.activityId, { body: 'Owned' })));
+    it('cannot write an entry or a task against the neighbour’s customer, opportunity or contact', async () => {
+      await must404('activity.create(customer)', () =>
+        activities.create(ATTACKER_CRM(), { customerId: B.customerId, activityType: 'NOTE', body: 'x' }));
+      await must404('followUpTask.create(customer)', () =>
+        followUpTasks.create(ATTACKER_CRM(), { customerId: B.customerId, title: 'x', dueAt: dueTomorrow() }));
+      const mine = await prisma.customer.findFirstOrThrow({ where: { organizationId: ATTACKER.organizationId, mergedIntoId: null } });
+      await must404('activity.create(foreign opportunity)', () =>
+        activities.create(ATTACKER_CRM(), { customerId: mine.id, opportunityId: B.opportunityId, activityType: 'NOTE', body: 'x' }));
+      // a contact of another tenant is "not this customer's" — 400, not a hint that it exists elsewhere
+      await expect(
+        activities.create(ATTACKER_CRM(), { customerId: mine.id, contactId: B.contactId, activityType: 'NOTE', body: 'x' }),
+      ).rejects.toThrow('Contact does not belong to this customer');
+    });
+    it('cannot give the neighbour’s user a task of its own organization', async () => {
+      const mine = await prisma.customer.findFirstOrThrow({ where: { organizationId: ATTACKER.organizationId, mergedIntoId: null } });
+      await expect(
+        followUpTasks.create(ATTACKER_CRM(), { customerId: mine.id, title: 'x', dueAt: dueTomorrow(), assigneeId: B.userId }),
+      ).rejects.toThrow('Assignee not found');
+    });
+    it('cannot attach a file to the neighbour’s log entry (404 from the entity check)', async () => {
+      const files = { buffer: Buffer.from('x'), size: 1, originalname: 'a.pdf', mimetype: 'application/pdf' } as Express.Multer.File;
+      await must404('attachment.upload(ACTIVITY)', () => attachments.upload(ATTACKER_CRM(), 'ACTIVITY', B.activityId, files));
     });
   });
 

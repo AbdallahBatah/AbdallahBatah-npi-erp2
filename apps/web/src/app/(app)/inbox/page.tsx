@@ -22,7 +22,7 @@ import { Btn, EmptyRow, LoadError, PageHeader, TableSkeleton } from '@/component
 import { Icon } from '@/components/icons';
 
 interface InboxTask {
-  source: 'APPROVAL' | 'WORKFLOW';
+  source: 'APPROVAL' | 'WORKFLOW' | 'FOLLOWUP';
   id: string;
   documentType: string;
   documentId: string;
@@ -153,7 +153,7 @@ export default function InboxPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 font-medium text-slate-800">
                       <Icon
-                        name={task.source === 'APPROVAL' ? 'stamp' : 'file-text'}
+                        name={task.source === 'APPROVAL' ? 'stamp' : task.source === 'FOLLOWUP' ? 'square-check' : 'file-text'}
                         className="h-4 w-4 text-slate-400"
                       />
                       {ar ? task.titleAr : task.titleEn}

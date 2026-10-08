@@ -21,6 +21,8 @@ import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatDate, formatMoney, formatNumber } from '@/lib/format';
 import { AttachmentsCard } from '@/components/attachments';
+import { ActivityTimeline } from '@/components/activity-timeline';
+import { FollowUpTasksPanel } from '@/components/follow-up-tasks';
 import { OppTypeBadge, daysUntil } from '@/components/opportunity-bits';
 import {
   Btn,
@@ -207,6 +209,13 @@ export default function OpportunityPage() {
   const tabs = [
     { key: 'proposals', label: t('opps.tab.proposals'), count: o.proposals.length },
     { key: 'contracts', label: t('opps.tab.contracts'), count: o.contracts.length },
+    // CRM Step 5: the log and the tasks of this opportunity (the customer's own keys guard them).
+    ...(can('crm.customer.read')
+      ? [
+          { key: 'activities', label: t('opps.tab.activities') },
+          { key: 'tasks', label: t('opps.tab.tasks') },
+        ]
+      : []),
     ...(can('platform.attachment.read') ? [{ key: 'files', label: t('opps.tab.files') }] : []),
   ];
   const activeTab = tabs.some((x) => x.key === tab) ? tab : 'proposals';
@@ -432,6 +441,14 @@ export default function OpportunityPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {activeTab === 'activities' && (
+        <ActivityTimeline customerId={o.customer.id} opportunityId={id} writable={can('crm.customer.write')} />
+      )}
+
+      {activeTab === 'tasks' && (
+        <FollowUpTasksPanel customerId={o.customer.id} opportunityId={id} writable={can('crm.customer.write')} />
       )}
 
       {activeTab === 'files' && <AttachmentsCard entityType="OPPORTUNITY" entityId={id} />}

@@ -11,6 +11,8 @@ import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatDate, formatMoney, formatNumber } from '@/lib/format';
 import { AttachmentsCard } from '@/components/attachments';
+import { ActivityTimeline, type ActivityRow } from '@/components/activity-timeline';
+import { FollowUpTasksPanel, type TaskRow } from '@/components/follow-up-tasks';
 import { OppTypeBadge } from '@/components/opportunity-bits';
 import {
   Btn,
@@ -105,9 +107,14 @@ interface Overview {
   contracts?: ContractRow[];
   projects?: ProjectRow[];
   claims?: ClaimRow[];
+  /** CRM Step 5: the latest log entries and the OPEN follow-up tasks. */
+  activities?: ActivityRow[];
+  tasks?: TaskRow[];
 }
 
 const LIST_LIMIT = 50;
+const NO_ENTRIES: ActivityRow[] = [];
+const NO_TASKS: TaskRow[] = [];
 
 export default function CustomerPage() {
   const { t, locale, pick } = useI18n();
@@ -131,6 +138,12 @@ export default function CustomerPage() {
       .catch((e) => setLoadErr(translateError(e, locale)));
   }, [id, locale]);
   useEffect(load, [load]);
+
+  // A notification links here with ?tab=tasks — open that tab (read once, on arrival).
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('tab');
+    if (wanted) setTab(wanted);
+  }, []);
 
   if (loadErr) return <LoadError message={loadErr} onRetry={load} />;
   if (!data) return <PageSkeleton />;
@@ -204,6 +217,8 @@ export default function CustomerPage() {
 
   const tabs = [
     { key: 'contacts', label: t('cust.tab.contacts'), count: data.counts.contacts },
+    { key: 'activities', label: t('cust.tab.activities'), count: data.counts.activities },
+    { key: 'tasks', label: t('cust.tab.tasks'), count: data.counts.tasks },
     ...(data.opportunities ? [{ key: 'opportunities', label: t('cust.tab.opportunities'), count: data.counts.opportunities }] : []),
     ...(data.proposals ? [{ key: 'proposals', label: t('cust.tab.proposals'), count: data.counts.proposals }] : []),
     ...(data.contracts ? [{ key: 'contracts', label: t('cust.tab.contracts'), count: data.counts.contracts }] : []),
@@ -334,6 +349,28 @@ export default function CustomerPage() {
             )),
           )}
         </div>
+      )}
+
+      {activeTab === 'activities' && (
+        <ActivityTimeline
+          customerId={id}
+          initial={data.activities ?? NO_ENTRIES}
+          total={data.counts.activities ?? 0}
+          contacts={data.contacts.map((k) => ({ id: k.id, name: k.name }))}
+          opportunities={data.opportunities}
+          writable={writable}
+          onChanged={load}
+        />
+      )}
+
+      {activeTab === 'tasks' && (
+        <FollowUpTasksPanel
+          customerId={id}
+          openTasks={data.tasks ?? NO_TASKS}
+          opportunities={data.opportunities?.map((o) => ({ id: o.id, code: o.code, name: o.name }))}
+          writable={writable}
+          onChanged={load}
+        />
       )}
 
       {activeTab === 'opportunities' &&

@@ -9,9 +9,21 @@ import { OpportunitiesController } from './opportunities.controller';
 import { OpportunitiesService } from './opportunities.service';
 import { LossReasonsController } from './loss-reasons.controller';
 import { LossReasonsService } from './loss-reasons.service';
+import { ActivitiesController } from './activities.controller';
+import { ActivitiesService } from './activities.service';
+import { FollowUpTasksController } from './follow-up-tasks.controller';
+import { FollowUpTasksService } from './follow-up-tasks.service';
+import { FollowUpReminderScheduler } from './follow-up-reminder.scheduler';
 
 @Module({
-  controllers: [CustomersController, LeadsController, OpportunitiesController, LossReasonsController],
+  controllers: [
+    CustomersController,
+    LeadsController,
+    OpportunitiesController,
+    LossReasonsController,
+    ActivitiesController,
+    FollowUpTasksController,
+  ],
   providers: [
     CustomersService,
     CustomerContactsService,
@@ -19,6 +31,9 @@ import { LossReasonsService } from './loss-reasons.service';
     LeadsService,
     OpportunitiesService,
     LossReasonsService,
+    ActivitiesService,
+    FollowUpTasksService,
+    FollowUpReminderScheduler,
   ],
   exports: [OpportunitiesService],
 })

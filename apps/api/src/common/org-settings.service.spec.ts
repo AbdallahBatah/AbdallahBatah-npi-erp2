@@ -30,15 +30,59 @@ describe('the proposal settings and their defaults', () => {
     expect(ORG_SETTING_DEFAULTS[ORG_SETTING_KEYS.PROPOSAL_COST_AGE_WARN_DAYS]).toBe(30);
   });
 
-  it('lists exactly the three editable keys — the merge switch is not among them', () => {
+  it('lists exactly the five editable keys (Step 5 added the two task-reminder ones) — the merge switch is not among them', () => {
     expect(Object.keys(ORG_SETTING_EDITABLE).sort()).toEqual(
       [
         ORG_SETTING_KEYS.CUSTOMER_SIMILARITY_THRESHOLD,
         ORG_SETTING_KEYS.PROPOSAL_COST_AGE_WARN_DAYS,
         ORG_SETTING_KEYS.PROPOSAL_VALIDITY_DAYS,
+        ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE,
+        ORG_SETTING_KEYS.TASK_REMINDER_HOUR,
       ].sort(),
     );
     expect(Object.keys(ORG_SETTING_EDITABLE)).not.toContain(ORG_SETTING_KEYS.CUSTOMER_MERGE_ENABLED);
+  });
+});
+
+describe('the follow-up task settings (Step 5)', () => {
+  it('has the two keys, defaulting to 1 day before and 08:00 Riyadh', () => {
+    expect(ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE).toBe('crm.task.reminderDaysBefore');
+    expect(ORG_SETTING_KEYS.TASK_REMINDER_HOUR).toBe('crm.task.reminderHour');
+    expect(ORG_SETTING_DEFAULTS[ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE]).toBe(1);
+    expect(ORG_SETTING_DEFAULTS[ORG_SETTING_KEYS.TASK_REMINDER_HOUR]).toBe(8);
+  });
+
+  it.each([
+    [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE, -1],
+    [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE, 31],
+    [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE, 1.5],
+    [ORG_SETTING_KEYS.TASK_REMINDER_HOUR, -1],
+    [ORG_SETTING_KEYS.TASK_REMINDER_HOUR, 24],
+    [ORG_SETTING_KEYS.TASK_REMINDER_HOUR, '8'],
+  ])('refuses %s = %p as out of range (400)', async (key, value) => {
+    const { svc, tx } = setup();
+    await expect(svc.setEditable('org1', { [key]: value } as never, 'admin1')).rejects.toThrow(
+      new BadRequestException('Setting value out of range'),
+    );
+    expect(tx.orgSetting.upsert).not.toHaveBeenCalled();
+  });
+
+  it('accepts the edges: 0 and 30 days, hour 0 and 23', async () => {
+    const { svc } = setup();
+    await expect(
+      svc.setEditable(
+        'org1',
+        { [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE]: 0, [ORG_SETTING_KEYS.TASK_REMINDER_HOUR]: 23 },
+        'admin1',
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      svc.setEditable(
+        'org1',
+        { [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE]: 30, [ORG_SETTING_KEYS.TASK_REMINDER_HOUR]: 0 },
+        'admin1',
+      ),
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -49,6 +93,8 @@ describe('OrgSettingsService.getEditable', () => {
       [ORG_SETTING_KEYS.PROPOSAL_VALIDITY_DAYS]: 45,
       [ORG_SETTING_KEYS.PROPOSAL_COST_AGE_WARN_DAYS]: 30,
       [ORG_SETTING_KEYS.CUSTOMER_SIMILARITY_THRESHOLD]: 0.8,
+      [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE]: 1,
+      [ORG_SETTING_KEYS.TASK_REMINDER_HOUR]: 8,
     });
   });
 

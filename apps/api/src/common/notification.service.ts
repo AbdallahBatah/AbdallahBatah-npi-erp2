@@ -23,6 +23,18 @@ interface NotifyInput {
   linkPath?: string;
 }
 
+/** CRM Step 5: one named person instead of a permission's audience. */
+interface NotifyUserInput {
+  organizationId: string;
+  userId: string;
+  type: string;
+  titleAr: string;
+  titleEn: string;
+  bodyAr?: string;
+  bodyEn?: string;
+  linkPath?: string;
+}
+
 /**
  * Writes in-app notifications. Fan-out is permission-based: "everyone who can
  * read invoices" rather than a hand-kept recipient list, so new users/roles
@@ -50,6 +62,46 @@ export class NotificationService {
     } catch (err) {
       this.logger.error(
         `Notification fan-out failed (type=${input.type}, org=${input.organizationId})`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      return 0;
+    }
+  }
+
+  /**
+   * Tell ONE person — a follow-up task is assigned to a user, not to a role. Writes
+   * nothing (returns 0) for a user who is inactive or belongs to another organization:
+   * a leaver's bell is not read, and a stranger's must never be written to.
+   */
+  async notifyUser(input: NotifyUserInput, tx?: Prisma.TransactionClient): Promise<number> {
+    const client = tx ?? this.prisma;
+    const recipient = await client.user.findFirst({
+      where: { id: input.userId, organizationId: input.organizationId, isActive: true },
+      select: { id: true },
+    });
+    if (!recipient) return 0;
+    await client.notification.create({
+      data: {
+        organizationId: input.organizationId,
+        userId: recipient.id,
+        type: input.type,
+        titleAr: input.titleAr,
+        titleEn: input.titleEn,
+        bodyAr: input.bodyAr ?? null,
+        bodyEn: input.bodyEn ?? null,
+        linkPath: input.linkPath ?? null,
+      },
+    });
+    return 1;
+  }
+
+  /** The after-commit variant of `notifyUser`: a hiccup here must not undo the business act. */
+  async notifyUserBestEffort(input: NotifyUserInput): Promise<number> {
+    try {
+      return await this.notifyUser(input);
+    } catch (err) {
+      this.logger.error(
+        `User notification failed (type=${input.type}, org=${input.organizationId})`,
         err instanceof Error ? err.stack : String(err),
       );
       return 0;

@@ -2,12 +2,21 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApprovalService } from '../../common/approval.service';
 import { WorkflowEngine } from '../../common/workflow/workflow.engine';
-import { APPROVAL_DOCUMENT_META, type ApprovalDocumentType } from '@npi/shared';
+import {
+  APPROVAL_DOCUMENT_META,
+  daysOverdue,
+  riyadhDayStart,
+  taskDueState,
+  type ApprovalDocumentType,
+} from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 
 export interface InboxTask {
-  /** Where the task came from — the two are acted on through different routes. */
-  source: 'APPROVAL' | 'WORKFLOW';
+  /**
+   * Where the task came from — acted on through different routes. FOLLOWUP (CRM Step 5)
+   * is the odd one out: it belongs to a PERSON (the assignee), not to a role.
+   */
+  source: 'APPROVAL' | 'WORKFLOW' | 'FOLLOWUP';
   id: string;
   documentType: string;
   documentId: string;
@@ -35,7 +44,20 @@ export interface InboxTask {
  * what the workflow engine has parked on it. Both are role-scoped for the same
  * reason: a task box built on named people empties itself the first time
  * somebody leaves, and then nobody knows the document is stuck.
+ *
+ * The one deliberate exception (CRM Step 5): the user's OWN follow-up tasks that are
+ * due today or already late. A follow-up is given to a person ("call Mr Ahmad
+ * tomorrow"), not to whoever holds a role, so this source is personal — and when its
+ * assignee leaves, the task stays visible on /tasks for the team to re-assign.
+ * A task due tomorrow or later is not an inbox item yet; a colleague's never is.
  */
+/** «متأخرة يوم / يومين / ٣ أيام / ١١ يوماً» — the Arabic counted noun. */
+function overdueAr(days: number): string {
+  if (days === 1) return 'متأخرة يوم';
+  if (days === 2) return 'متأخرة يومين';
+  return days <= 10 ? `متأخرة ${days} أيام` : `متأخرة ${days} يوماً`;
+}
+
 @Injectable()
 export class InboxService {
   constructor(
@@ -45,9 +67,10 @@ export class InboxService {
   ) {}
 
   async tasks(user: AuthUser): Promise<InboxTask[]> {
-    const [approvals, workflow] = await Promise.all([
+    const [approvals, workflow, followUps] = await Promise.all([
       this.approvals.inbox(user),
       this.engine.tasksFor(user),
+      this.followUpTasks(user),
     ]);
     const now = Date.now();
     const hoursSince = (d: Date) => Math.round(((now - d.getTime()) / 3_600_000) * 10) / 10;
@@ -103,9 +126,54 @@ export class InboxService {
       }));
 
     // Oldest first: the point of a task box is that nothing rots at the bottom.
-    return [...approvalTasks, ...workflowTasks].sort(
+    return [...approvalTasks, ...workflowTasks, ...followUps].sort(
       (a, b) => a.waitingSince.getTime() - b.waitingSince.getTime(),
     );
+  }
+
+  /** The caller's own open follow-up tasks whose due DAY is today or earlier (Riyadh). */
+  private async followUpTasks(user: AuthUser): Promise<InboxTask[]> {
+    const nowDate = new Date();
+    const rows = await this.prisma.followUpTask.findMany({
+      where: {
+        organizationId: user.organizationId,
+        assigneeId: user.userId,
+        status: 'OPEN',
+        // Due today or earlier = due before tomorrow began in Riyadh.
+        dueAt: { lt: new Date(riyadhDayStart(nowDate).getTime() + 86_400_000) },
+      },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        dueAt: true,
+        createdAt: true,
+        customer: { select: { nameAr: true, nameEn: true } },
+      },
+      orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    return rows.map((t): InboxTask => {
+      const late = taskDueState(t.dueAt, nowDate) === 'OVERDUE';
+      const days = daysOverdue(t.dueAt, nowDate);
+      return {
+        source: 'FOLLOWUP',
+        id: t.id,
+        documentType: 'FOLLOWUP_TASK',
+        documentId: t.id,
+        documentCode: t.code,
+        titleAr: `مهمة متابعة: ${t.title} — ${t.customer.nameAr}`,
+        titleEn: `Follow-up: ${t.title} — ${t.customer.nameEn}`,
+        stateAr: late ? overdueAr(days) : 'مستحقة اليوم',
+        stateEn: late ? `Overdue by ${days} day${days === 1 ? '' : 's'}` : 'Due today',
+        amount: null,
+        waitingSince: t.createdAt,
+        ageHours: Math.round(((nowDate.getTime() - t.createdAt.getTime()) / 3_600_000) * 10) / 10,
+        overdue: late,
+        actionable: true,
+        linkPath: `/tasks?focus=${t.id}`,
+      };
+    });
   }
 
   /** What the sidebar badge counts — only what this user can actually do. */

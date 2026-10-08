@@ -10,9 +10,12 @@ import {
   IsOptional,
   IsString,
   Matches,
+  MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { SAUDI_VAT_OR_EMPTY_RE } from '@npi/shared';
 
 const VAT_MESSAGE = {
@@ -186,4 +189,67 @@ export class MergeCustomersDto {
   @IsArray() @ArrayNotEmpty() @ArrayMaxSize(50) @IsString({ each: true }) mergedIds!: string[];
   /** File name of the backup the administrator took before merging. */
   @IsString() @MinLength(8) backupRef!: string;
+}
+
+// ── CRM Phase 1 · Step 5: the communication log and the follow-up tasks ───────
+
+const ACTIVITY_TYPES = ['NOTE', 'CALL', 'MEETING'] as const;
+
+/**
+ * The follow-up that may be created together with a log entry. The customer and the
+ * opportunity are the entry's; the title defaults to the start of the entry's text.
+ * Dates arrive as yyyy-mm-dd (or ISO) strings; the service validates them (a bad date
+ * is a 400 there).
+ */
+export class ActivityFollowUpDto {
+  @IsOptional() @IsString() @MaxLength(200) title?: string;
+  @IsOptional() @IsString() @MaxLength(4000) details?: string;
+  @IsString() dueAt!: string;
+  @IsOptional() @IsString() remindAt?: string;
+  @IsOptional() @IsString() assigneeId?: string;
+}
+
+export class CreateActivityDto {
+  @IsString() @MinLength(1) customerId!: string;
+  @IsOptional() @IsString() opportunityId?: string;
+  @IsOptional() @IsString() contactId?: string;
+  @IsOptional() @IsString() projectId?: string;
+  @IsEnum(ACTIVITY_TYPES) activityType!: (typeof ACTIVITY_TYPES)[number];
+  /** When it happened; default now; not more than 5 minutes ahead. */
+  @IsOptional() @IsString() occurredAt?: string;
+  @IsString() @MinLength(1) @MaxLength(4000) body!: string;
+  @IsOptional() @ValidateNested() @Type(() => ActivityFollowUpDto) followUp?: ActivityFollowUpDto;
+}
+
+/** Only these fields of an entry change; its customer and opportunity never do. There is no delete. */
+export class UpdateActivityDto {
+  @IsOptional() @IsEnum(ACTIVITY_TYPES) activityType?: (typeof ACTIVITY_TYPES)[number];
+  @IsOptional() @IsString() occurredAt?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(4000) body?: string;
+  /** null clears the contact. */
+  @IsOptional() @IsString() contactId?: string | null;
+}
+
+export class CreateTaskDto {
+  @IsString() @MinLength(1) customerId!: string;
+  @IsOptional() @IsString() opportunityId?: string;
+  @IsOptional() @IsString() projectId?: string;
+  @IsString() @MinLength(1) @MaxLength(200) title!: string;
+  @IsOptional() @IsString() @MaxLength(4000) details?: string;
+  @IsString() dueAt!: string;
+  @IsOptional() @IsString() remindAt?: string;
+  @IsOptional() @IsString() assigneeId?: string;
+}
+
+export class UpdateTaskDto {
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) title?: string;
+  @IsOptional() @IsString() @MaxLength(4000) details?: string;
+  @IsOptional() @IsString() dueAt?: string;
+  @IsOptional() @IsString() remindAt?: string;
+  @IsOptional() @IsString() assigneeId?: string;
+}
+
+export class CancelTaskDto {
+  /** Mandatory — the service answers a blank one with 400 "Cancellation reason is required". */
+  @IsOptional() @IsString() @MaxLength(1000) reason?: string;
 }

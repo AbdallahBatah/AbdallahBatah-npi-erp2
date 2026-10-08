@@ -237,6 +237,8 @@ async function main() {
     { documentType: 'PAYMENT', prefix: 'RCPT' },
     { documentType: 'VENDOR_PAYMENT', prefix: 'VPAY' },
     { documentType: 'CREDIT_NOTE', prefix: 'CN' },
+    // CRM Step 5: follow-up tasks (TSK-00001 …).
+    { documentType: 'FOLLOWUP_TASK', prefix: 'TSK' },
   ];
   for (const s of seqDefs) {
     await prisma.numberingSequence.upsert({
@@ -406,12 +408,75 @@ async function main() {
     // CRM Step 4: default proposal validity and the cost-age warning limit, in days.
     ['crm.proposal.validityDays', 30],
     ['crm.proposal.costAgeWarnDays', 30],
+    // CRM Step 5: a follow-up reminder goes this many days before the due day, at this Riyadh hour.
+    ['crm.task.reminderDaysBefore', 1],
+    ['crm.task.reminderHour', 8],
   ] as const) {
     await prisma.orgSetting.upsert({
       where: { organizationId_key: { organizationId: org.id, key } },
       update: {},
       create: { organizationId: org.id, key, valueJson: value },
     });
+  }
+
+  // CRM Step 5: one example of the communication log and one open follow-up on the demo
+  // customer, so the new tabs are not empty on a fresh database. Idempotent: each is
+  // created only if its text / title is not there yet, so re-seeding never duplicates
+  // and never touches one that was edited or finished.
+  {
+    const salesUser = await prisma.user.findUniqueOrThrow({ where: { email: 'sales@npi.sa' } });
+    const DAY = 86_400_000;
+    const callText =
+      'اتصلت بالأستاذ أحمد العتيبي (مدير المشتريات) وأكّد اهتمام المصنع بمحطة سقفية بقدرة 500 ك.و.ذ، وطلب عرضاً فنياً ومالياً قبل نهاية الشهر.';
+    const hasCall = await prisma.activity.findFirst({
+      where: { organizationId: org.id, customerId: customer.id, body: callText },
+      select: { id: true },
+    });
+    if (!hasCall) {
+      await prisma.activity.create({
+        data: {
+          organizationId: org.id,
+          customerId: customer.id,
+          activityType: 'CALL',
+          occurredAt: new Date(Date.now() - DAY),
+          body: callText,
+          createdById: salesUser.id,
+        },
+      });
+    }
+
+    const taskTitle = 'إرسال العرض الفني المبدئي لمصنع الرياض';
+    const hasTask = await prisma.followUpTask.findFirst({
+      where: { organizationId: org.id, customerId: customer.id, title: taskTitle },
+      select: { id: true },
+    });
+    if (!hasTask) {
+      // The due DAY is stored as UTC midnight of its Riyadh date (Riyadh = UTC+3), the
+      // reminder at 08:00 Riyadh the day before — the defaults the application applies.
+      const todayRiyadh = new Date(Date.now() + 3 * 3_600_000).toISOString().slice(0, 10);
+      const dueAt = new Date(Date.parse(`${todayRiyadh}T00:00:00Z`) + 3 * DAY);
+      const remindAt = new Date(dueAt.getTime() - 3 * 3_600_000 - DAY + 8 * 3_600_000);
+      // The same atomic increment NumberingService uses.
+      const seq = await prisma.numberingSequence.update({
+        where: {
+          organizationId_documentType_fiscalYear: { organizationId: org.id, documentType: 'FOLLOWUP_TASK', fiscalYear },
+        },
+        data: { nextValue: { increment: 1 } },
+      });
+      await prisma.followUpTask.create({
+        data: {
+          organizationId: org.id,
+          code: `${seq.prefix}-${String(seq.nextValue - 1).padStart(seq.padding, '0')}`,
+          customerId: customer.id,
+          title: taskTitle,
+          details: 'يشمل الجدول الزمني للتركيب وملخص العائد المتوقع.',
+          dueAt,
+          remindAt,
+          assigneeId: salesUser.id,
+          createdById: salesUser.id,
+        },
+      });
+    }
   }
 
   // CRM Phase 1 (Step 3): the six default reasons an opportunity is lost, in the

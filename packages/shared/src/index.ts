@@ -7,3 +7,4 @@ export * from './workflow';
 export * from './arabic';
 export * from './opportunity-stages';
 export * from './proposal-dates';
+export * from './follow-up-dates';

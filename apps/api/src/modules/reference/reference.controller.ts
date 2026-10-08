@@ -15,6 +15,9 @@ import {
   OPPORTUNITY_STAGES,
   OPPORTUNITY_TYPES,
   OPPORTUNITY_STAGE_FLOW,
+  ACTIVITY_TYPES,
+  FOLLOWUP_TASK_STATUSES,
+  normalizeValidUntil,
   ITEM_CATEGORIES,
   PROPOSAL_STATUSES,
   COST_SOURCES,
@@ -64,6 +67,8 @@ export class ReferenceController {
       leadStatuses: LEAD_STATUSES,
       opportunityStages: OPPORTUNITY_STAGES,
       opportunityTypes: OPPORTUNITY_TYPES,
+      activityTypes: ACTIVITY_TYPES,
+      followUpTaskStatuses: FOLLOWUP_TASK_STATUSES,
       itemCategories: ITEM_CATEGORIES,
       proposalStatuses: PROPOSAL_STATUSES,
       costSources: COST_SOURCES,
@@ -110,7 +115,17 @@ export class ReferenceController {
   @Get('dashboard')
   async dashboard(@CurrentUser() user: AuthUser) {
     const org = user.organizationId;
-    const [leads, openOpps, contracts, activeContracts, pipeline] = await Promise.all([
+    // CRM Step 5: the caller's OWN open follow-up tasks due today / already late (Riyadh
+    // days; a due day is stored as UTC midnight of its Riyadh date). 0 for anyone who may
+    // not see customers, so the card never counts what its link would refuse to show.
+    const today = normalizeValidUntil(new Date()) as Date;
+    const mine = {
+      organizationId: org,
+      assigneeId: user.userId,
+      status: 'OPEN' as const,
+    };
+    const canSeeTasks = user.permissions.includes(PERMISSIONS.CUSTOMER_READ);
+    const [leads, openOpps, contracts, activeContracts, pipeline, myTasksDueToday, myTasksOverdue] = await Promise.all([
       this.prisma.lead.count({ where: { organizationId: org, status: { not: 'CONVERTED' } } }),
       this.prisma.opportunity.count({
         where: { organizationId: org, stage: { in: [...OPPORTUNITY_STAGE_FLOW] } },
@@ -121,6 +136,12 @@ export class ReferenceController {
         where: { organizationId: org, stage: { in: [...OPPORTUNITY_STAGE_FLOW] } },
         _sum: { estimatedValue: true },
       }),
+      canSeeTasks
+        ? this.prisma.followUpTask.count({ where: { ...mine, dueAt: today } })
+        : Promise.resolve(0),
+      canSeeTasks
+        ? this.prisma.followUpTask.count({ where: { ...mine, dueAt: { lt: today } } })
+        : Promise.resolve(0),
     ]);
     return {
       openLeads: leads,
@@ -128,6 +149,8 @@ export class ReferenceController {
       totalContracts: contracts,
       activeContracts,
       pipelineValue: pipeline._sum.estimatedValue ?? 0,
+      myTasksDueToday,
+      myTasksOverdue,
     };
   }
 }

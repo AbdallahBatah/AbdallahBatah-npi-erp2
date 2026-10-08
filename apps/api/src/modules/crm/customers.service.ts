@@ -24,6 +24,7 @@ import {
 } from '../../common/org-settings.service';
 import type { AuthUser } from '../../common/auth-user';
 import { CreateCustomerDto, UpdateCustomerDto } from './dto';
+import { ACTIVITY_INCLUDE, TASK_INCLUDE, withAttachmentCounts, withDueState } from './crm-rows';
 
 /** The three unique keys of a customer (§4.1). */
 export type CustomerKeyField = 'crNumber' | 'vatNumber' | 'mobile';
@@ -32,6 +33,9 @@ export interface CustomerKeys {
   vatNumber?: string | null;
   mobile?: string | null;
 }
+
+/** The customer page shows the latest 20 log entries; GET /activities pages the rest (CRM Step 5). */
+const ACTIVITY_TAKE = 20;
 
 /** Rows read for the in-memory similarity scan (see `similar`). */
 const SIMILARITY_SCAN_LIMIT = 5000;
@@ -356,6 +360,36 @@ export class CustomersService {
     const counts: Record<string, number> = { contacts: contactsCount };
 
     const tasks: Array<Promise<void>> = [];
+
+    // CRM Step 5: the communication log (the latest entries; the rest is paged by
+    // GET /activities) and the OPEN follow-up tasks. The page itself needs the customer
+    // read key, which every caller of this method has.
+    const logWhere = { organizationId: org, customerId: id };
+    const openTasksWhere = { organizationId: org, customerId: id, status: 'OPEN' as const };
+    tasks.push(
+      Promise.all([
+        this.prisma.activity.findMany({
+          where: logWhere,
+          include: ACTIVITY_INCLUDE,
+          orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+          take: ACTIVITY_TAKE,
+        }),
+        this.prisma.activity.count({ where: logWhere }),
+        this.prisma.followUpTask.findMany({
+          where: openTasksWhere,
+          include: TASK_INCLUDE,
+          orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }],
+          take: TAKE,
+        }),
+        this.prisma.followUpTask.count({ where: openTasksWhere }),
+      ]).then(async ([entries, entriesCount, openTasks, openTasksCount]) => {
+        const now = new Date();
+        out.activities = await withAttachmentCounts(this.prisma, org, entries);
+        out.tasks = openTasks.map((t) => withDueState(t, now));
+        counts.activities = entriesCount;
+        counts.tasks = openTasksCount;
+      }),
+    );
 
     if (has(PERMISSIONS.OPPORTUNITY_READ)) {
       const where = { organizationId: org, customerId: id };

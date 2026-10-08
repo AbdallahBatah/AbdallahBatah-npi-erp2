@@ -16,6 +16,8 @@ export interface EnumSets {
   leadStatuses: EnumOption[];
   opportunityStages: EnumOption[];
   opportunityTypes: EnumOption[];
+  activityTypes: EnumOption[];
+  followUpTaskStatuses: EnumOption[];
   itemCategories: EnumOption[];
   proposalStatuses: EnumOption[];
   costSources: EnumOption[];

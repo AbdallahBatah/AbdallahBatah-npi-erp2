@@ -76,6 +76,21 @@ enum OpportunityType {
   TENDER
 }
 
+/// CRM Phase 1 · Step 5: the kinds of communication-log entry.
+enum ActivityType {
+  NOTE
+  CALL
+  MEETING
+}
+
+/// CRM Phase 1 · Step 5: the life of a follow-up task. No re-opening: a finished or
+/// cancelled task stays so, and a new one is created instead.
+enum FollowUpTaskStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
 enum ItemCategory {
   MODULE
   INVERTER
@@ -276,6 +291,9 @@ model Organization {
   customerMergeLogs   CustomerMergeLog[]
   orgSettings         OrgSetting[]
   lossReasons         LossReason[]
+  // CRM Phase 1 (Step 5)
+  activities          Activity[]
+  followUpTasks       FollowUpTask[]
 
   @@index([parentOrganizationId])
 }
@@ -342,6 +360,11 @@ model User {
   extraRoles          UserRole[]
   // CRM Phase 1 · Step 4: proposal revisions this person created.
   proposalRevisionsCreated ProposalRevision[] @relation("ProposalRevisionCreator")
+  // CRM Phase 1 · Step 5: the communication log and the follow-up tasks.
+  activitiesCreated      Activity[]     @relation("ActivityCreator")
+  assignedFollowUpTasks  FollowUpTask[] @relation("TaskAssignee")
+  followUpTasksCreated   FollowUpTask[] @relation("TaskCreator")
+  followUpTasksCompleted FollowUpTask[] @relation("TaskCompleter")
 
   @@index([organizationId])
   @@index([organizationId, departmentId])
@@ -429,6 +452,9 @@ model Customer {
   contracts      Contract[]
   invoices       Invoice[]
   contacts       CustomerContact[]
+  // CRM Phase 1 · Step 5
+  activities     Activity[]
+  followUpTasks  FollowUpTask[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -457,6 +483,9 @@ model CustomerContact {
   notes          String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  // CRM Phase 1 · Step 5: entries logged against this person.
+  activities     Activity[]
 
   @@index([organizationId, customerId])
 }
@@ -562,6 +591,9 @@ model Opportunity {
   designVersions DesignVersion[]
   proposals      Proposal[]
   contracts      Contract[]
+  // CRM Phase 1 · Step 5
+  activities     Activity[]
+  followUpTasks  FollowUpTask[]
 
   @@unique([organizationId, code])
   @@index([organizationId, stage])
@@ -1096,6 +1128,81 @@ model Vendor {
   @@index([organizationId])
 }
 
+/// CRM Phase 1 · Step 5 (migration 0028): what happened with a customer — a note, a
+/// call, a meeting. Always tied to a customer, optionally to an opportunity, a
+/// project and the person at the customer. Edited by its author only and never
+/// deleted: the communication log is historical evidence, like the audit trail.
+/// Files are `Attachment` rows of entityType ACTIVITY.
+model Activity {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  opportunityId  String?
+  opportunity    Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  contactId      String?
+  contact        CustomerContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  activityType   ActivityType
+  /// When it happened (not when it was typed in).
+  occurredAt     DateTime
+  body           String   @db.Text
+  createdById    String?
+  createdBy      User?    @relation("ActivityCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, customerId, occurredAt(sort: Desc)])
+  @@index([organizationId, opportunityId])
+  @@index([createdById])
+}
+
+/// CRM Phase 1 · Step 5 (migration 0028): what must happen next. `dueAt` is a DAY
+/// (UTC midnight of its Riyadh date, the convention of a proposal's validUntil); a
+/// task is late once a Riyadh day has begun after it. Shared by the team: anyone who
+/// may edit customers completes, cancels or re-assigns it. Reminders and the overdue
+/// notice are in-system notifications, each sent once (`reminderSentAt`,
+/// `overdueNotifiedAt`).
+model FollowUpTask {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// TSK-00001 … from the FOLLOWUP_TASK numbering sequence.
+  code           String
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  opportunityId  String?
+  opportunity    Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  title          String
+  details        String?  @db.Text
+  dueAt          DateTime
+  remindAt       DateTime?
+  assigneeId     String
+  assignee       User     @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+  status         FollowUpTaskStatus @default(OPEN)
+  completedAt    DateTime?
+  completedById  String?
+  completedBy    User?    @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  cancelReason   String?
+  reminderSentAt DateTime?
+  overdueNotifiedAt DateTime?
+  createdById    String?
+  createdBy      User?    @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId, assigneeId, status, dueAt])
+  @@index([organizationId, customerId, status])
+  @@index([organizationId, opportunityId])
+  @@index([status, remindAt])
+  @@index([status, dueAt])
+}
+
 // PRJ-01/02/03: the execution container born from a contract.
 model Project {
   id               String   @id @default(cuid())
@@ -1129,6 +1236,9 @@ model Project {
   journalEntries JournalEntry[]
   requisitions   PurchaseRequisition[]
   commitments    ProjectCommitment[]
+  // CRM Phase 1 · Step 5 (optional link; the screens do not offer it yet)
+  activities     Activity[]
+  followUpTasks  FollowUpTask[]
 
   @@unique([organizationId, code])
   @@index([organizationId, stage])
@@ -2040,6 +2150,8 @@ enum AttachmentEntity {
   WORK_ORDER
   CUSTOMER
   OPPORTUNITY
+  // CRM Phase 1 · Step 5 (migration 0028): a file hangs off a log entry.
+  ACTIVITY
 }
 
 model Attachment {

@@ -33,9 +33,12 @@ function formatBytes(n: number): string {
 export function AttachmentsCard({
   entityType,
   entityId,
+  onChange,
 }: {
-  entityType: 'CONTRACT' | 'INVOICE' | 'PROJECT' | 'WORK_ORDER' | 'CUSTOMER' | 'OPPORTUNITY';
+  entityType: 'CONTRACT' | 'INVOICE' | 'PROJECT' | 'WORK_ORDER' | 'CUSTOMER' | 'OPPORTUNITY' | 'ACTIVITY';
   entityId: string;
+  /** Called after a file was added or removed (the log entry shows a count). */
+  onChange?: () => void;
 }) {
   const { t, locale } = useI18n();
   const { can } = useAuth();
@@ -53,13 +56,17 @@ export function AttachmentsCard({
   useEffect(load, [load]);
 
   if (!can('platform.attachment.read')) return null;
-  const canWrite = can('platform.attachment.write');
+  // A file on a log entry is added by whoever may edit customers (the server enforces it too).
+  const canWrite = can('platform.attachment.write') && (entityType !== 'ACTIVITY' || can('crm.customer.write'));
 
   async function onPick(file: File | undefined | null) {
     if (!file) return;
     const ok = await act('upload', () => apiUpload(`/attachments/${entityType}/${entityId}`, file));
     if (fileRef.current) fileRef.current.value = '';
-    if (ok) load();
+    if (ok) {
+      load();
+      onChange?.();
+    }
   }
 
   async function onDelete(row: AttachmentRow) {
@@ -71,7 +78,10 @@ export function AttachmentsCard({
       }))
     )
       return;
-    if (await act('deleteAtt', () => api.del(`/attachments/${row.id}`))) load();
+    if (await act('deleteAtt', () => api.del(`/attachments/${row.id}`))) {
+      load();
+      onChange?.();
+    }
   }
 
   return (
