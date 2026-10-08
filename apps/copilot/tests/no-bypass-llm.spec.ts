@@ -479,6 +479,13 @@ describe('no-bypass-llm R6: model audit rows are written by the client and the a
   };
   const AUDIT_CREATE_ALLOWED: Record<string, string> = {
     'src/audit/log.ts': 'writeLlmAudit itself: the one place the llmAudit table is inserted into',
+    // T-33 (reviewer's decision): the trust-screen e2e seeds the rows the
+    // screen must show — the table is read-only, so no product path can put a
+    // known row there. The fixture writes through the real Prisma client,
+    // under the DB CHECK `llm_audit_image_requires_consent_check` (I4 is still
+    // enforced by Postgres), and deletes only the ids it created. Test data
+    // only; never a production path.
+    'e2e/fixtures/trust-db.ts': 'e2e/trust.spec.ts fixture: seeds and removes its own llm_audit rows',
   };
 
   it('writeLlmAudit( is called only in src/llm/client.ts and src/audit/log.ts; scripts and e2e never call it', () => {

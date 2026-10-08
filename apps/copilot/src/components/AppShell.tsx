@@ -21,11 +21,11 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: '/', key: 'nav.home', Icon: Home, adminOnly: false, ready: true },
   // Setup arrived with T-18, settings with T-19, handover with T-30. Trust
-  // arrives with T-33 and metrics with T-35: each flips its flag in the task
-  // that builds it.
+  // arrived with T-33; metrics arrives with T-35: each flips its flag in the
+  // task that builds it.
   { href: '/setup', key: 'nav.setup', Icon: ClipboardList, adminOnly: true, ready: true },
   { href: '/settings', key: 'nav.settings', Icon: Settings, adminOnly: true, ready: true },
-  { href: '/trust', key: 'nav.trust', Icon: Shield, adminOnly: true, ready: false },
+  { href: '/trust', key: 'nav.trust', Icon: Shield, adminOnly: true, ready: true },
   { href: '/metrics', key: 'nav.metrics', Icon: BarChart3, adminOnly: true, ready: false },
   { href: '/handover', key: 'nav.handover', Icon: BookUser, adminOnly: false, ready: true },
 ];
@@ -125,7 +125,7 @@ export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProp
           </a>
         </nav>
 
-        <main id="main" className="flex-1 px-4 pb-20 pt-4 md:pb-8 md:pt-6">
+        <main id="main" className="min-w-0 flex-1 px-4 pb-20 pt-4 md:pb-8 md:pt-6">
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>

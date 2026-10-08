@@ -23,3 +23,28 @@ export function formatDate(d: Date | string): string {
     day: '2-digit',
   }).format(date);
 }
+
+/** Date plus a 24-hour time (`HH:mm`), same locale pin as `formatDate` — the
+ *  trust log (T-33) needs the minute, not just the day. Rendered in the
+ *  caller's own time zone (the browser's, for a client component). */
+export function formatDateTime(d: Date | string): string {
+  const date = typeof d === 'string' ? new Date(d) : d;
+  return new Intl.DateTimeFormat(LOCALE, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date);
+}
+
+/** Formats `llm_audit.costUsdMicro` (micro-dollars, a bigint carried over
+ *  JSON as a decimal string) as dollars with four decimals and Latin digits:
+ *  `48236` → `"0.0482"`. An unparsable value renders as `"0.0000"` rather
+ *  than throwing inside a table cell. */
+export function formatUsdMicro(micro: bigint | number | string): string {
+  const n = typeof micro === 'bigint' ? Number(micro) : Number(micro);
+  const dollars = Number.isFinite(n) ? n / 1_000_000 : 0;
+  return dollars.toLocaleString(LOCALE, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+}
