@@ -54,3 +54,6 @@ deploy/.deploy_history
 # TestSprite scratch: tunnel config, session keys, and a multi-MB run log.
 # The generated tests and the report next to it are kept.
 testsprite_tests/tmp/
+
+# Runtime upload store of the api (per-organization files), never committed
+apps/api/uploads/
