@@ -209,6 +209,16 @@ describe('a contract wins the opportunity', () => {
     const e = (await opportunities.changeStage(USER, o.id, { stage: 'LOST', lossReasonId: REASON_ACTIVE }).catch((x) => x)) as ConflictException;
     expect(e).toBeInstanceOf(ConflictException);
     expect(e.getResponse()).toMatchObject({ reason: 'TERMINAL', from: 'WON' });
+
+    // CRM-S3-b: a won opportunity takes no second contract either — the
+    // refusal happens before anything is written, and the single won event stays single.
+    const rev2 = await prisma.proposalRevision.create({
+      data: { proposalId: p.id, revisionNo: 2, status: 'ACCEPTED', isWinning: false, subtotal: 1, totalAmount: 1 },
+    });
+    const before = await prisma.contract.count({ where: { organizationId: ORG } });
+    await expect(contracts.create(USER, { proposalRevisionId: rev2.id, contractType: 'EPC' } as never)).rejects.toThrow('Opportunity is closed');
+    expect(await prisma.contract.count({ where: { organizationId: ORG } })).toBe(before);
+    expect(await events('opportunity.won', o.id)).toHaveLength(1);
   });
 
   it('winning by hand is allowed from NEGOTIATION only, clearing loss data', async () => {

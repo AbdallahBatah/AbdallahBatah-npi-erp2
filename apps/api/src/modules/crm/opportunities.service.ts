@@ -326,8 +326,10 @@ export class OpportunitiesService {
   async markWonViaContract(tx: Tx, user: AuthUser, opportunityId: string): Promise<void> {
     const opp = await tx.opportunity.findFirst({ where: { id: opportunityId, organizationId: user.organizationId } });
     if (!opp) throw new NotFoundException('Opportunity not found');
-    if (opp.stage === 'LOST') throw new ConflictException('Opportunity is closed');
-    if (opp.stage === 'WON') return;
+    // CRM-S3-b (2026-10-08): a closed opportunity, WON or LOST, takes no further
+    // contract (decision 10-3). A second contract on a won deal is a new
+    // opportunity, not a second win.
+    if (opp.stage === 'LOST' || opp.stage === 'WON') throw new ConflictException('Opportunity is closed');
     await this.applyStageChange(tx, user, opp, 'WON', { via: 'contract' });
   }
 

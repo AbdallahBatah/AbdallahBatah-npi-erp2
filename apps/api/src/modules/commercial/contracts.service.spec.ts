@@ -99,9 +99,12 @@ describe('ContractsService.create — proposal revision guard', () => {
     expect(outbox.emit).not.toHaveBeenCalled();
   });
 
-  it('a second contract on an already WON opportunity is allowed and does not touch it', async () => {
+  it('refuses a second contract on an already WON opportunity (409, CRM-S3-b) — nothing is created', async () => {
     const { svc, tx } = service(acceptedRevision, 'WON');
-    await expect(svc.create(user, dto)).resolves.toMatchObject({ id: 'c1' });
+    const e = await svc.create(user, dto).catch((x) => x);
+    expect(e).toBeInstanceOf(ConflictException);
+    expect((e as Error).message).toBe('Opportunity is closed');
+    expect(tx.contract.create).not.toHaveBeenCalled();
     expect(tx.opportunity.updateMany).not.toHaveBeenCalled();
   });
 });

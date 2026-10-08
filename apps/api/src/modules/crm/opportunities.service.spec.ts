@@ -341,10 +341,12 @@ describe('OpportunitiesService.markWonViaContract (the contract path)', () => {
     }
   });
 
-  it('a second contract on an already-won opportunity changes nothing and is not refused', async () => {
+  it('refuses a second contract on an already-won opportunity (409 "Opportunity is closed", CRM-S3-b) and changes nothing', async () => {
     const tx = makeTx({ row: opp({ stage: 'WON' }) });
     const { svc, outbox } = setup(tx);
-    await expect(svc.markWonViaContract(tx as never, USER, 'o1')).resolves.toBeUndefined();
+    const e = await thrown(svc.markWonViaContract(tx as never, USER, 'o1'));
+    expect(e).toBeInstanceOf(ConflictException);
+    expect((e as Error).message).toBe('Opportunity is closed');
     expect(tx.opportunity.updateMany).not.toHaveBeenCalled();
     expect(outbox.emit).not.toHaveBeenCalled();
   });

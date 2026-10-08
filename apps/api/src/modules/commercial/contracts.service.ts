@@ -100,9 +100,10 @@ export class ContractsService {
 
     return this.prisma.$transaction(async (tx) => {
       // CRM Step 3 — the one rule for winning an opportunity through a contract:
-      // refuses a LOST opportunity (409) before anything is written, guards
-      // against a concurrent stage change, audits via: contract and emits
-      // opportunity.won. A second contract on a WON opportunity passes untouched.
+      // refuses a closed opportunity, WON or LOST, (409) before anything is
+      // written, guards against a concurrent stage change, audits via: contract
+      // and emits opportunity.won (CRM-S3-b: a second contract on a won deal is
+      // refused too).
       if (opportunityId) await this.opportunities.markWonViaContract(tx, user, opportunityId);
 
       const code = await this.numbering.next(user.organizationId, 'CONTRACT', tx);
