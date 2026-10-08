@@ -28,11 +28,17 @@ const JSON_OUT = flag('--json', null);
 const TAG = `UAT-${Date.now().toString(36).toUpperCase()}`;
 
 // ── database (time tricks + cleanup only) ─────────────────────────────────────
-const envLine = readFileSync(new URL('../.env', import.meta.url), 'utf8')
-  .split(/\r?\n/)
-  .find((l) => l.startsWith('DATABASE_URL=') && l.includes('npi_erp'));
-if (!envLine) throw new Error('DATABASE_URL for npi_erp not found in .env');
-process.env.DATABASE_URL = envLine.slice('DATABASE_URL='.length).replace(/^"|"$/g, '');
+// Locally the URL comes from the repo's .env. Inside the api image (the script
+// ships under /app/scripts, no .env there) it is already in the environment,
+// so a set DATABASE_URL wins and the file is never read:
+//   docker compose ... run --rm --no-deps api node scripts/crm-phase-1-acceptance.mjs --base http://api:4000/api
+if (!process.env.DATABASE_URL) {
+  const envLine = readFileSync(new URL('../.env', import.meta.url), 'utf8')
+    .split(/\r?\n/)
+    .find((l) => l.startsWith('DATABASE_URL=') && l.includes('npi_erp'));
+  if (!envLine) throw new Error('DATABASE_URL for npi_erp not found in .env');
+  process.env.DATABASE_URL = envLine.slice('DATABASE_URL='.length).replace(/^"|"$/g, '');
+}
 const { PrismaClient } = require('@npi/db');
 const prisma = new PrismaClient();
 
