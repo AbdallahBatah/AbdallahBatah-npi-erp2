@@ -1,22 +1,27 @@
 'use client';
 
-import { forwardRef, useId, useRef, type ChangeEvent, type KeyboardEvent } from 'react';
-import { Mic, Paperclip, SendHorizontal } from 'lucide-react';
-import { t } from '@/i18n/ar';
+import { forwardRef, useId, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { Paperclip, SendHorizontal } from 'lucide-react';
+import { t, type ArKey } from '@/i18n/ar';
+import type { SpeechErrorKind } from '@/voice/speech';
 import { formatNumber } from '@/i18n/format';
 import { Button } from '@/components/ui/Button';
 import { MAX_MESSAGE_LENGTH, COUNTER_THRESHOLD } from './api';
+import { CameraButton } from './CameraButton';
+import { MicButton, type MicState } from './MicButton';
 
 export interface ComposerProps {
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
   /** Called with the chosen file once the browser's file picker returns
-   *  (T-22). The input is reset right after so the same file can be
-   *  re-chosen (e.g. after a refusal). */
+   *  (T-22), or with the prepared photo when the camera button is used
+   *  (T-38) — both take the same upload -> consent -> intake path. The
+   *  picker's input is reset right after so the same file can be re-chosen
+   *  (e.g. after a refusal). */
   onAttach: (file: File) => void;
   disabled?: boolean;
-  /** Disables only the attach button — set while a previous attachment is
+  /** Disables only the attach and camera buttons — set while a previous attachment is
    *  still uploading or while a `ConsentCard` is pending, independent of
    *  the composer's own `disabled` (which gates sending text). */
   attachDisabled?: boolean;
@@ -25,21 +30,46 @@ export interface ComposerProps {
 /**
  * The message input: a labelled textarea (Enter sends, Shift+Enter inserts a
  * newline), a send button, a character counter that only appears once the
- * message is getting long, and the attach/mic buttons.
+ * message is getting long, and the attach, camera and mic buttons.
  *
  * The attach button (T-22) is live: it opens the browser's file picker
  * through a visually hidden `<input type="file">` and calls `onAttach` with
  * the chosen file — the upload itself, and everything that follows it
- * (consent, notices), is `Chat.tsx`'s job. The mic button stays disabled:
- * voice input belongs to a later milestone (spec/madar/03 §2 lists it; the
- * flow behind it is not built yet).
+ * (consent, notices), is `Chat.tsx`'s job.
+ *
+ * T-38 added two more inputs, both feeding paths that already existed:
+ *  - `CameraButton` (phones only) opens the OS camera and hands the photo,
+ *    downscaled if it is too big, to the same `onAttach`.
+ *  - `MicButton` dictates into the textarea. The words are an ordinary draft:
+ *    the user reviews them and presses send, so they are redacted and
+ *    answered like typed text. The line under the box reports the mic's
+ *    state (listening, unsupported, or why dictation failed) in a polite
+ *    live region; it is empty when idle but keeps its height so the composer
+ *    does not jump.
  */
+
+/** Which `chat.mic_error.*` string explains a dictation failure. */
+function micErrorKey(kind: SpeechErrorKind | undefined): ArKey {
+  switch (kind) {
+    case 'not-allowed':
+      return 'chat.mic_error.not_allowed';
+    case 'no-speech':
+      return 'chat.mic_error.no_speech';
+    case 'network':
+      return 'chat.mic_error.network';
+    default:
+      return 'chat.mic_error.other';
+  }
+}
+
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
   { value, onChange, onSend, onAttach, disabled = false, attachDisabled = false },
   ref,
 ) {
   const textareaId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [micState, setMicState] = useState<MicState>('idle');
+  const [micErrorKind, setMicErrorKind] = useState<SpeechErrorKind | undefined>(undefined);
   const trimmed = value.trim();
   const tooLong = value.length > MAX_MESSAGE_LENGTH;
   const canSend = !disabled && trimmed.length > 0 && !tooLong;
@@ -51,6 +81,20 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
       if (canSend) onSend();
     }
   }
+
+  function handleMicStateChange(state: MicState, errorKind?: SpeechErrorKind) {
+    setMicState(state);
+    setMicErrorKind(state === 'error' ? errorKind : undefined);
+  }
+
+  const micStatus =
+    micState === 'listening'
+      ? t('chat.mic_listening')
+      : micState === 'unsupported'
+        ? t('chat.mic_unsupported')
+        : micState === 'error'
+          ? t(micErrorKey(micErrorKind))
+          : '';
 
   function handleAttachClick() {
     fileInputRef.current?.click();
@@ -95,6 +139,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         >
           <Paperclip className="h-5 w-5" aria-hidden="true" />
         </button>
+        <CameraButton onCapture={onAttach} disabled={attachButtonDisabled} />
         <textarea
           id={textareaId}
           ref={ref}
@@ -106,15 +151,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           rows={1}
           className="max-h-40 min-h-11 flex-1 resize-none bg-transparent py-2 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none disabled:text-slate-400"
         />
-        <button
-          type="button"
-          disabled
-          title={t('chat.later')}
-          aria-label={t('chat.mic')}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-400 disabled:cursor-not-allowed"
-        >
-          <Mic className="h-5 w-5" aria-hidden="true" />
-        </button>
+        <MicButton value={value} onChange={onChange} disabled={disabled} onStateChange={handleMicStateChange} />
         <Button
           type="button"
           onClick={onSend}
@@ -125,11 +162,17 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           <SendHorizontal className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
         </Button>
       </div>
-      {/* The mic button above has no hover state worth relying on for "why
-          can't I click this" — this line explains it up front, in addition
-          to its `title`. The attach button went live in T-22, so this hint
-          now covers only what remains disabled: voice input. */}
-      <p className="px-1 text-xs text-slate-500">{t('chat.later_hint')}</p>
+      {/* Live region for the mic's state. It is always mounted (a live region
+          must exist before its text changes to be announced) and keeps a
+          minimum height so the composer does not jump when text appears. */}
+      <p
+        role="status"
+        aria-live="polite"
+        data-testid="mic-status"
+        className={`min-h-4 px-1 text-xs ${micState === 'error' ? 'text-danger-600' : 'text-slate-500'}`}
+      >
+        {micStatus}
+      </p>
       {value.length >= COUNTER_THRESHOLD ? (
         <p dir="rtl" className={`px-1 text-xs ${tooLong ? 'text-danger-600' : 'text-slate-500'}`}>
           <bdi>{formatNumber(value.length)}</bdi> / <bdi>{formatNumber(MAX_MESSAGE_LENGTH)}</bdi>

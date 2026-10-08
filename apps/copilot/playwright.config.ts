@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
@@ -14,9 +15,34 @@ const COPILOT_BASE = `http://localhost:${COPILOT_PORT}`;
 
 // `dotenv -v` puts the values on the process itself. Passing them through
 // Playwright's `env` and two nested npm scripts lost them on Windows.
+// The e2e api reads its own copy of NPI's database, `npi_erp_e2e`, prepared
+// by packages/db/prisma/madar-e2e-db.mjs before the api starts (T-38): the
+// developer's `npi_erp` is shared by every worktree of this repository, and a
+// newer branch's rows (an enum value this checkout does not know) break the
+// api started from here. `COPILOT_E2E_SHARED_NPI_DB=1` keeps the old
+// behaviour (run against `npi_erp` itself).
+const E2E_DB_SCRIPT = path.join(REPO_ROOT, 'packages', 'db', 'prisma', 'madar-e2e-db.mjs');
+const npiDatabaseUrl = process.env.COPILOT_E2E_SHARED_NPI_DB ? null : e2eNpiDatabaseUrl();
+
+/** DATABASE_URL from the repository's .env with the database swapped for the e2e copy. */
+function e2eNpiDatabaseUrl(): string {
+  const envFile = path.join(REPO_ROOT, '.env');
+  const line = fs
+    .readFileSync(envFile, 'utf8')
+    .split(/\r?\n/)
+    .find((l) => /^\s*DATABASE_URL\s*=/.test(l));
+  if (!line) throw new Error(`playwright.config.ts: ${envFile} has no DATABASE_URL line`);
+  const url = new URL(line.replace(/^\s*DATABASE_URL\s*=\s*/, '').trim().replace(/^["']|["']$/g, ''));
+  if (url.pathname !== '/npi_erp') throw new Error(`playwright.config.ts: DATABASE_URL names ${url.pathname.slice(1)}, expected npi_erp`);
+  url.pathname = '/npi_erp_e2e';
+  return url.toString();
+}
+
 const apiCommand = [
+  ...(npiDatabaseUrl ? [`node "${E2E_DB_SCRIPT}" &&`] : []),
   'npx dotenv -e ../../.env',
   `-v API_PORT=${API_PORT}`,
+  ...(npiDatabaseUrl ? [`-v DATABASE_URL=${npiDatabaseUrl}`] : []),
   // NPI throttles logins per IP (5 a minute). The rate-limit test has to
   // reach the copilot's own limit first.
   '-v AUTH_THROTTLE_LIMIT=1000',

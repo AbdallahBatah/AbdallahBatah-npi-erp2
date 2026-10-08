@@ -174,7 +174,7 @@ function FieldBody({ field, readOnly, busy, onConfirm, onSet }: FieldBodyProps) 
             />
           )}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" onClick={save} disabled={busy}>
+            <Button type="button" size="sm" className="flex-1 md:flex-none" onClick={save} disabled={busy}>
               {t('preview.save_field')}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>
@@ -527,6 +527,7 @@ export function PreviewCard({
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
+                  className="flex-1 md:flex-none"
                   disabled={!preview.canApprove || busy}
                   loading={busy && lastAction === 'approve'}
                   onClick={() => {

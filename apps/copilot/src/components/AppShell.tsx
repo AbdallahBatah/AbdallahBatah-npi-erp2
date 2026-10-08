@@ -85,7 +85,7 @@ export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProp
       <div className="flex flex-1 flex-col md:flex-row">
         <nav
           aria-label={t('nav.main')}
-          className="fixed inset-x-0 bottom-0 z-30 flex min-h-[var(--copilot-tabbar-h)] items-stretch justify-around border-t border-white/10 bg-ink-900 pb-[env(safe-area-inset-bottom)] text-slate-300 md:static md:inset-auto md:z-auto md:min-h-0 md:w-56 md:shrink-0 md:flex-col md:items-stretch md:justify-start md:gap-1 md:border-e md:border-t-0 md:p-3"
+          className="fixed inset-x-0 bottom-0 z-30 flex min-h-[var(--copilot-tabbar-h)] items-stretch justify-around overflow-hidden border-t border-white/10 bg-ink-900 pb-[env(safe-area-inset-bottom)] text-slate-300 md:static md:inset-auto md:overflow-visible md:z-auto md:min-h-0 md:w-56 md:shrink-0 md:flex-col md:items-stretch md:justify-start md:gap-1 md:border-e md:border-t-0 md:p-3"
         >
           {items.map(({ href, key, Icon }) => {
             const active = isActive(href);
@@ -95,9 +95,12 @@ export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProp
                 href={href}
                 aria-current={active ? 'page' : undefined}
                 className={[
-                  'relative flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-xs font-medium transition',
+                  // Below `md` the bar is a fixed row of equal cells: `min-w-0` lets a cell shrink below its label's
+                  // width, and the smaller `px-0.5 text-[10px]` makes the longest Arabic label fit without an ellipsis
+                  // (measured: seven tabs overflowed a 390 px bar by 25 px with `px-2 text-xs`, and by 3 px still with `px-1 text-[11px]`).
+                  'relative flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium leading-4 transition',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400',
-                  'md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-lg md:px-3 md:py-2.5 md:text-sm',
+                  'md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-lg md:px-3 md:py-2.5 md:text-sm md:leading-5',
                   active
                     ? 'text-brand-300 md:bg-gradient-to-r md:from-brand-500/[0.16] md:to-brand-500/[0.05] md:font-semibold md:text-brand-200 md:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:rtl:bg-gradient-to-l'
                     : 'text-slate-400 hover:text-slate-100',
@@ -118,7 +121,7 @@ export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProp
               from `sm` up) — this is their way out to NPI's own app. */}
           <a
             href={npiHomeUrl}
-            className="flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-xs font-medium text-slate-400 transition hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 md:hidden"
+            className="flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium leading-4 text-slate-400 transition hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 md:hidden"
           >
             <ExternalLink className="h-5 w-5 shrink-0 rtl:-scale-x-100" aria-hidden="true" />
             <span className="truncate">{t('nav.back_to_npi')}</span>

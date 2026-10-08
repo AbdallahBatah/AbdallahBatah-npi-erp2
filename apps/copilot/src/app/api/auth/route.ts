@@ -1,5 +1,6 @@
-// Login/session/logout endpoint. Node runtime (not edge): it needs Prisma
-// (via getDb()) and the AEAD key parsing, neither of which run on the edge.
+// Login/session endpoint (logout is POST ./logout since D-16, so this file
+// has no DELETE). Node runtime (not edge): it needs Prisma (via getDb()) and
+// the AEAD key parsing, neither of which run on the edge.
 export const runtime = 'nodejs';
 
 import { cookies } from 'next/headers';
@@ -7,10 +8,10 @@ import { NextResponse } from 'next/server';
 import { createNpiClient } from '@/npi/client';
 import { NpiError } from '@/npi/errors';
 import { readLogin, type NpiLogin } from '@/npi/responses';
-import { createSession, destroySession, readSession } from '@/auth/session';
+import { createSession, readSession } from '@/auth/session';
 import { isBlocked, rateLimitKey, recordAttempt } from '@/auth/ratelimit';
-import { clearedSessionCookieAttributes, sessionCookieAttributes, SESSION_COOKIE_NAME } from '@/auth/cookie';
-import { buildDeps, json, NO_STORE_HEADERS, originMismatch } from './shared';
+import { sessionCookieAttributes, SESSION_COOKIE_NAME } from '@/auth/cookie';
+import { buildDeps, json, originMismatch } from './shared';
 
 const MAX_EMAIL_LENGTH = 254;
 const MAX_PASSWORD_LENGTH = 200;
@@ -121,16 +122,4 @@ export async function GET(): Promise<NextResponse> {
     },
     200,
   );
-}
-
-export async function DELETE(): Promise<NextResponse> {
-  if (originMismatch()) return json({ error: 'forbidden' }, 403);
-
-  const deps = buildDeps();
-  const cookieValue = cookies().get(SESSION_COOKIE_NAME)?.value;
-  await destroySession(deps, cookieValue);
-
-  cookies().set(SESSION_COOKIE_NAME, '', clearedSessionCookieAttributes());
-
-  return new NextResponse(null, { status: 204, headers: NO_STORE_HEADERS });
 }

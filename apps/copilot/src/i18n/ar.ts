@@ -211,10 +211,6 @@ export const ar = {
 
   'chat.error.generic': 'تعذر إكمال الطلب. حاول مرة أخرى.',
   'chat.error.too_long': 'الرسالة أطول من الحد المسموح. اختصرها وأعد الإرسال.',
-  // Attachments and voice input belong to later milestones (F-02/F-03's
-  // intake flows); the composer shows this as the tooltip on their disabled
-  // buttons rather than pretending they work.
-  'chat.later': 'يُفعَّل في مرحلة لاحقة',
   // Until the intake flows of milestone 3 are built, a message that asks for
   // one is answered with this fixed text instead of a promise the app
   // cannot keep.
@@ -223,7 +219,16 @@ export const ar = {
   'chat.flow_pending.unknown':
     'إدخال المستندات بالمحادثة يُفعَّل في مرحلة لاحقة؛ أستطيع الآن الإجابة عن أسئلتك من بيانات NPI.',
   'chat.flow_unavailable': 'إدخال «{flow}» غير مفعّل لمنشأتك في إعدادات مَدار.',
-  'chat.later_hint': 'الإدخال الصوتي يُفعَّل في مرحلة لاحقة.',
+  // T-38 additions (app-authored, not from the spec): dictation states shown
+  // by the composer's mic button and its status line. The error keys are the
+  // four buckets of `micErrorKey` in Composer.tsx.
+  'chat.mic_stop': 'أوقف الإملاء',
+  'chat.mic_listening': 'أستمع… تحدّث الآن، وراجع النص قبل الإرسال.',
+  'chat.mic_unsupported': 'الإدخال الصوتي غير متاح في هذا المتصفح.',
+  'chat.mic_error.not_allowed': 'لم يُسمح باستخدام الميكروفون. فعّل الإذن من إعدادات المتصفح.',
+  'chat.mic_error.no_speech': 'لم أسمع شيئاً. حاول مرة أخرى.',
+  'chat.mic_error.network': 'تعذر الإملاء الآن (خدمة التعرف على الكلام غير متاحة).',
+  'chat.mic_error.other': 'تعذر الإملاء. اكتب رسالتك أو حاول مرة أخرى.',
 
   'notfound.title': 'الصفحة غير موجودة',
   'notfound.body': 'تحقق من العنوان أو عد إلى الرئيسية.',

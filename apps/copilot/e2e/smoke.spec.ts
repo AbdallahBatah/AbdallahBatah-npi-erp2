@@ -1,8 +1,11 @@
 // Milestone 1 smoke (T-13): one pass through everything an employee can do
 // today, against the real local NPI API and the real copilot, with nothing
-// intercepted. The two chat turns used here are answered without a model
-// (the HR guard and the fixed reply to an entry request), so the run needs
-// no API key.
+// intercepted. The first chat turn is answered without a model (the HR
+// guard). The second — an entry request — was a fixed reply until T-26
+// registered the five flows; since then the sentence is read by the real
+// model and answered with an intake card (updated in T-38, see PROGRESS.md),
+// so this spec needs the copilot server's ANTHROPIC_API_KEY like the rest of
+// the app.
 import { test, expect, type Page } from '@playwright/test';
 import { t } from '../src/i18n/ar';
 import { readAdminCredentials } from './fixtures/accounts';
@@ -49,10 +52,12 @@ test.describe('milestone 1 smoke (T-13)', () => {
     await expect(log).toContainText(question);
     await expect(log.getByText(t('hr.refusal')).last()).toBeVisible();
 
-    // Chat: an entry request gets the fixed reply and the flow as a badge.
+    // Chat: an entry request is read by the model (T-26) and answered with the
+    // intake reply, the flow as a badge and a preview card under it.
     await send(page, 'أبي 40 لوح 550 واط للمشروع PRJ-00012 قبل الخميس');
-    await expect(log.getByText(t('chat.flow_pending', { flow: t('flow.pr') })).last()).toBeVisible();
+    await expect(log.getByText(t('chat.intake_ready', { flow: t('flow.pr') })).last()).toBeVisible({ timeout: 60_000 });
     await expect(log.getByText(t('flow.pr'), { exact: true }).last()).toBeVisible();
+    await expect(log.getByTestId('preview-card').last()).toBeVisible();
 
     // The conversation is still there after a reload.
     await page.reload();

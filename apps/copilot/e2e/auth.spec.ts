@@ -75,7 +75,7 @@ test.describe('login (T-05)', () => {
     await page.getByRole('button', { name: t('login.submit') }).click();
     await page.waitForURL('**/copilot');
 
-    const res = await page.request.delete('/copilot/api/auth');
+    const res = await page.request.post('/copilot/api/auth/logout');
     expect(res.status()).toBe(204);
 
     await page.goto('/copilot');

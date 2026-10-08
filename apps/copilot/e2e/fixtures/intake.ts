@@ -281,3 +281,214 @@ export function cancelledView(): IntakeView {
 export function failedView(reason: string = t('extract.failed.model_error')): IntakeView {
   return { ...contractView(), status: 'failed', preview: null, failureAr: reason };
 }
+
+// ─── T-38: the phone specs (e2e/mobile.spec.ts) ─────────────────────────────
+// A vendor bill read from a photographed invoice, and a purchase requisition
+// read from a dictated sentence: the two flows AT-16 drives by camera and by
+// voice. Same builders as the contract above, so the card and the execution
+// card render exactly what the server would send.
+
+export const VENDOR = 'شركة الأفق للتوريدات';
+export const VENDOR_VAT = '310987654300003';
+export const BILL_NUMBER = 'INV-2041';
+export const GRN_CODE = 'GRN-00005';
+export const PROJECT_CODE = 'PRJ-00012';
+export const PR_ITEM = 'لوح شمسي 550 واط';
+export const PR_QTY = 40;
+
+export interface RequestOptions {
+  status?: IntakeStatus;
+}
+
+/** A vendor bill read from a photo: every value confirmed, the vendor matched, approve enabled. */
+export function billView(options: RequestOptions = {}, overrides: Partial<IntakeView> = {}): IntakeView {
+  const lineRow = (index: number, itemName: string, qty: number, unitPrice: number): PreviewLineRow => {
+    const p = (name: string) => `lines.${index}.${name}`;
+    return {
+      index,
+      titleAr: t('preview.line_title', { n: index + 1 }),
+      fields: [
+        field(p('itemName'), { value: itemName, displayAr: itemName, kind: 'text' }),
+        field(p('qty'), { value: qty, displayAr: String(qty), kind: 'number' }),
+        field(p('unitPrice'), { value: unitPrice, displayAr: amountText(unitPrice), kind: 'amount' }),
+        field(p('lineTotal'), { value: qty * unitPrice, displayAr: amountText(qty * unitPrice), kind: 'amount' }),
+      ],
+    };
+  };
+  const rows = [lineRow(0, 'لوح شمسي 550 واط', 4, 600), lineRow(1, 'محول جهد 10 كيلو واط', 1, 600)];
+  const subtotal = 3000;
+  const vatAmount = 450;
+  const total = 3450;
+
+  const sections: PreviewModel['sections'] = [
+    {
+      key: 'vendor',
+      titleAr: t('preview.section.vendor'),
+      fields: [
+        field('vendor.nameAr', { value: VENDOR, displayAr: VENDOR, kind: 'text', required: true, evidence: `المورد: ${VENDOR}`, page: 1 }),
+        field('vendor.vatNumber', { value: VENDOR_VAT, displayAr: VENDOR_VAT, kind: 'code', evidence: `الرقم الضريبي ${VENDOR_VAT}`, page: 1 }),
+      ],
+    },
+    {
+      key: 'invoice',
+      titleAr: t('preview.section.invoice'),
+      fields: [
+        field('invoiceNumber', { value: BILL_NUMBER, displayAr: BILL_NUMBER, kind: 'code', required: true }),
+        field('invoiceDate', { value: '2026-10-03', displayAr: '2026-10-03', kind: 'date' }),
+        field('goodsReceiptCode', { value: GRN_CODE, displayAr: GRN_CODE, kind: 'code', required: true }),
+      ],
+    },
+    {
+      key: 'totals',
+      titleAr: t('preview.section.totals'),
+      fields: [
+        field('subtotal', { value: subtotal, displayAr: amountText(subtotal), kind: 'amount' }),
+        field('vatAmount', { value: vatAmount, displayAr: amountText(vatAmount), kind: 'amount' }),
+        field('total', { value: total, displayAr: amountText(total), kind: 'amount', required: true }),
+      ],
+    },
+  ];
+
+  const all = [...sections.flatMap((s) => s.fields), ...rows.flatMap((r) => r.fields)];
+  const choice: PreviewChoice = {
+    target: 'vendor',
+    promptAr: t('preview.vendor_match', { name: VENDOR }),
+    options: [
+      { id: 'ven-3', labelAr: VENDOR },
+      { id: 'new', labelAr: t('preview.option_new') },
+    ],
+    chosen: 'ven-3',
+  };
+  const steps: PreviewStep[] = [
+    { n: 1, labelAr: t('preview.step.vendor_use', { name: VENDOR }) },
+    { n: 2, labelAr: t('preview.step.bill_create', { ref: BILL_NUMBER, code: GRN_CODE }) },
+    { n: 3, labelAr: t('preview.step.bill_match_npi') },
+  ];
+  const preview: PreviewModel = {
+    flow: 'vendor_bill',
+    flowLabelAr: t('flow.vendor_bill'),
+    sections,
+    lines: { titleAr: t('preview.lines.items'), rows },
+    choices: [choice],
+    notesAr: [t('preview.vendor_match', { name: VENDOR })],
+    steps,
+    incompleteAr: null,
+    blockersAr: [],
+    canApprove: true,
+    summary: { total: all.length, confirmed: all.length, unconfirmed: 0 },
+  };
+  return {
+    id: JOB_ID,
+    flow: 'vendor_bill',
+    flowLabelAr: t('flow.vendor_bill'),
+    status: options.status ?? 'preview',
+    conversationId: 'conv-1',
+    document: { id: DOCUMENT_ID, fileName: 'فاتورة.jpg', kind: 'image', pageCount: 1 },
+    preview,
+    failureAr: null,
+    execution: null,
+    createdAt: '2026-10-05T09:00:00.000Z',
+    approvedAt: null,
+    ...overrides,
+  };
+}
+
+/** The bill after «اعتمد»: the vendor reused, the bill recorded as BILL-00007, the three-way match left for NPI. */
+export function billExecutedView(): IntakeView {
+  const view = billView({ status: 'done' });
+  const [first, second, third] = view.preview!.steps;
+  const execution: ExecutionLog = {
+    status: 'done',
+    startedAt: STARTED_AT,
+    finishedAt: FINISHED_AT,
+    steps: [
+      { n: first.n, labelAr: first.labelAr, state: 'done', entity: created('vendor', 'ven-3', 'VEN-00003', '/vendors') },
+      { n: second.n, labelAr: second.labelAr, state: 'done', entity: created('vendor_bill', 'bill-1', 'BILL-00007', '/procurement/bills/bill-1') },
+      { n: third.n, labelAr: third.labelAr, state: 'manual' },
+    ],
+  };
+  return { ...view, status: 'done', execution, approvedAt: STARTED_AT };
+}
+
+/** A purchase requisition read from one dictated sentence: no document, the project matched, approve enabled. */
+export function prView(options: RequestOptions = {}, overrides: Partial<IntakeView> = {}): IntakeView {
+  const p = (name: string) => `lines.0.${name}`;
+  const rows: PreviewLineRow[] = [
+    {
+      index: 0,
+      titleAr: t('preview.line_title', { n: 1 }),
+      fields: [
+        field(p('itemName'), { value: PR_ITEM, displayAr: PR_ITEM, kind: 'text', evidence: null, page: null }),
+        field(p('qty'), { value: PR_QTY, displayAr: String(PR_QTY), kind: 'number', evidence: null, page: null }),
+        field(p('unit'), { value: 'لوح', displayAr: 'لوح', kind: 'text', evidence: null, page: null }),
+        field(p('estimatedUnitPrice'), { value: 420, displayAr: amountText(420), kind: 'amount', evidence: null, page: null }),
+      ],
+    },
+  ];
+  const sections: PreviewModel['sections'] = [
+    {
+      key: 'request',
+      titleAr: t('preview.section.request'),
+      fields: [
+        field('projectCode', { value: PROJECT_CODE, displayAr: PROJECT_CODE, kind: 'code', required: true, evidence: null, page: null }),
+        field('projectName', { value: 'محطة الواحة الشمسية', displayAr: 'محطة الواحة الشمسية', kind: 'text', evidence: null, page: null }),
+        field('neededBy', { value: '2026-10-15', displayAr: '2026-10-15', kind: 'date', evidence: null, page: null }),
+        field('justification', { value: 'توريد ألواح لمحطة الواحة', displayAr: 'توريد ألواح لمحطة الواحة', kind: 'text', evidence: null, page: null }),
+      ],
+    },
+  ];
+  const all = [...sections.flatMap((s) => s.fields), ...rows.flatMap((r) => r.fields)];
+  const choice: PreviewChoice = {
+    target: 'project',
+    promptAr: t('preview.project_choose'),
+    options: [{ id: 'prj-12', labelAr: PROJECT_CODE }],
+    chosen: 'prj-12',
+  };
+  const steps: PreviewStep[] = [
+    { n: 1, labelAr: t('preview.step.pr_create', { n: 1 }) },
+    { n: 2, labelAr: t('preview.step.pr_submit') },
+  ];
+  const preview: PreviewModel = {
+    flow: 'pr',
+    flowLabelAr: t('flow.pr'),
+    sections,
+    lines: { titleAr: t('preview.lines.items'), rows },
+    choices: [choice],
+    notesAr: [],
+    steps,
+    incompleteAr: null,
+    blockersAr: [],
+    canApprove: true,
+    summary: { total: all.length, confirmed: all.length, unconfirmed: 0 },
+  };
+  return {
+    id: JOB_ID,
+    flow: 'pr',
+    flowLabelAr: t('flow.pr'),
+    status: options.status ?? 'preview',
+    conversationId: 'conv-1',
+    document: null,
+    preview,
+    failureAr: null,
+    execution: null,
+    createdAt: '2026-10-05T09:00:00.000Z',
+    approvedAt: null,
+    ...overrides,
+  };
+}
+
+/** The requisition after «اعتمد»: PR-00031 created and submitted into NPI's approval matrix. */
+export function prExecutedView(): IntakeView {
+  const view = prView({ status: 'done' });
+  const [first, second] = view.preview!.steps;
+  const execution: ExecutionLog = {
+    status: 'done',
+    startedAt: STARTED_AT,
+    finishedAt: FINISHED_AT,
+    steps: [
+      { n: first.n, labelAr: first.labelAr, state: 'done', entity: created('requisition', 'pr-1', 'PR-00031', '/procurement/requisitions/pr-1') },
+      { n: second.n, labelAr: second.labelAr, state: 'done' },
+    ],
+  };
+  return { ...view, status: 'done', execution, approvedAt: STARTED_AT };
+}

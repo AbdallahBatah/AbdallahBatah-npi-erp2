@@ -204,7 +204,7 @@ test.describe('setup screens (T-18)', () => {
 
     const hasRemoval = preview.plan.steps.some((s) => s.kind === 'role' && (s.permissionsRemoved?.length ?? 0) > 0);
     if (hasRemoval) {
-      await expect(page.getByTestId('setup-diff-card').getByText(t('setup.diff.removed'))).toBeVisible();
+      await expect(page.getByTestId('setup-diff-card').getByText(t('setup.diff.removed')).first()).toBeVisible();
     }
   });
 
