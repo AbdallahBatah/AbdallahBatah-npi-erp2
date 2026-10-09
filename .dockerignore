@@ -9,3 +9,15 @@ docs
 .env
 .env.*
 deploy/.env
+# Copilot (apps/copilot): local uploads, the generated Prisma client (rebuilt
+# inside the image for linux-musl), gate and e2e outputs, large eval fixtures.
+apps/copilot/data
+apps/copilot/src/generated
+apps/copilot/test-results
+apps/copilot/perf-results
+apps/copilot/playwright-report
+apps/copilot/eval
+# Not part of any image.
+.claude
+testsprite_tests
+perf

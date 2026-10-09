@@ -616,8 +616,9 @@ describe('invariant 7: docker-compose.prod.yml gives the copilot none of NPI\'s 
     const start = services.findIndex((l) => /^ {2}copilot:\s*$/.test(l));
     const hasCopilotService = start !== -1;
 
-    // T-40 adds the service; flip this assertion then, so the file is revisited and never silently passes.
-    expect(hasCopilotService).toBe(false);
+    // T-40 (2026-10-09) added the service; this assertion was flipped from
+    // `false` then, as its original comment asked, so the file was revisited.
+    expect(hasCopilotService).toBe(true);
 
     if (hasCopilotService) {
       const block: string[] = [];
@@ -625,6 +626,10 @@ describe('invariant 7: docker-compose.prod.yml gives the copilot none of NPI\'s 
         if (/^ {2}\S/.test(services[i])) break; // next service
         block.push(services[i]);
       }
+      // No `env_file:` either — in development the process sees NPI's secrets
+      // through the shared root .env (Known limits); the deployed service must
+      // name every variable it gets, so a shared file can never hand them over.
+      expect(block.filter((l) => /^ {4}env_file:/.test(l))).toEqual([]);
       const envAt = block.findIndex((l) => /^ {4}environment:/.test(l));
       const envBlock: string[] = [];
       if (envAt !== -1) {

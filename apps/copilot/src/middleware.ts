@@ -7,8 +7,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE_NAME } from './auth/cookie';
 
 // `/brand` holds NPI's logo files from `public/`: the login page shows them
-// to a visitor who has no session yet.
-const PUBLIC_PATHS = ['/login', '/api/auth', '/brand'];
+// to a visitor who has no session yet. `/api/health` is the container's
+// probe (T-40): Docker and the rolling deploy call it without a session.
+const PUBLIC_PATHS = ['/login', '/api/auth', '/api/health', '/brand'];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
