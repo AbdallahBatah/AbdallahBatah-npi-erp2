@@ -1,10 +1,11 @@
+import { memo } from 'react';
 import { AssistantBadge } from '@/components/AssistantBadge';
 import { MemoryNote } from '@/components/MemoryNote';
 import { IntakePanel } from '@/components/intake/IntakePanel';
 import { Button } from '@/components/ui/Button';
 import { t, type ArKey } from '@/i18n/ar';
 import { FLOW_TYPES } from '@/onboarding/profile.schema';
-import type { FlowType } from '@/intake/types';
+import type { FlowType, IntakeView } from '@/intake/types';
 import type { ChatMessage } from './api';
 
 const NOTICE_TONE: Record<string, string> = {
@@ -36,9 +37,11 @@ export interface MessageProps {
   onChooseFlow?: (flow: FlowType, documentId: string) => void;
   /** Disables the flow chips while any intake read is in flight. */
   chipsDisabled?: boolean;
+  /** The intake job already read with the history, so the card renders at its final height at once (T-39). */
+  intakeView?: IntakeView;
 }
 
-export function Message({ message, onChooseFlow, chipsDisabled = false }: MessageProps) {
+function MessageView({ message, onChooseFlow, chipsDisabled = false, intakeView }: MessageProps) {
   const isUser = message.role === 'user';
   const hasIntake = !isUser && message.kind === 'intake' && message.intakeJobId !== undefined;
   const showChips =
@@ -74,7 +77,7 @@ export function Message({ message, onChooseFlow, chipsDisabled = false }: Messag
             ))}
           </div>
         ) : null}
-        {hasIntake ? <IntakePanel id={message.intakeJobId!} compact /> : null}
+        {hasIntake ? <IntakePanel id={message.intakeJobId!} compact initialView={intakeView} /> : null}
         {!isUser && message.badges.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {message.badges.map((label, i) => (
@@ -95,3 +98,11 @@ export function Message({ message, onChooseFlow, chipsDisabled = false }: Messag
     </div>
   );
 }
+
+/**
+ * Memoised (T-39): the chat keeps the draft in its own state, so without this
+ * every keystroke re-rendered every bubble and card of the thread — 250 ms a
+ * key on a throttled phone. Props are stable between keystrokes: `message`
+ * and `intakeView` come from state, `onChooseFlow` is a stable callback.
+ */
+export const Message = memo(MessageView);

@@ -5,7 +5,8 @@ import { t } from '@/i18n/ar';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States';
 import { Button } from '@/components/ui/Button';
 import { ConsentCard } from '@/components/ConsentCard';
-import type { FlowType } from '@/intake/types';
+import { loadIntake } from '@/components/intake/api';
+import type { FlowType, IntakeView } from '@/intake/types';
 import {
   consentNeeded,
   loadConversation,
@@ -48,6 +49,12 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
   const [errorMessage, setErrorMessage] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // The intake jobs of the loaded history, read before the thread renders so
+  // every card appears at its final height with the messages (T-39: each
+  // card's skeleton → card swap after the scroll to the bottom was a layout
+  // shift of ~0.9 on this screen). A card whose read failed is simply absent
+  // here and loads itself as before.
+  const [intakeViews, setIntakeViews] = useState<ReadonlyMap<string, IntakeView>>(new Map());
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [attaching, setAttaching] = useState(false);
@@ -63,6 +70,14 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // `submitIntake` closes over state and is a new function every render; the
+  // memoised `Message` needs one stable callback, so the chips call through
+  // this ref (T-39).
+  const submitIntakeRef = useRef<(input: { documentId: string; forcedFlow: FlowType }) => void>(() => {});
+  const handleChooseFlow = useCallback((flow: FlowType, documentId: string) => {
+    submitIntakeRef.current({ documentId, forcedFlow: flow });
+  }, []);
 
   const load = useCallback(async () => {
     setPhase('loading');
@@ -83,6 +98,15 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
       setPhase('error');
       return;
     }
+    const jobIds = [...new Set(result.messages.flatMap((m) => (m.intakeJobId ? [m.intakeJobId] : [])))];
+    const views = new Map<string, IntakeView>();
+    await Promise.all(
+      jobIds.map(async (id) => {
+        const job = await loadIntake(id);
+        if (job.ok) views.set(id, job.job);
+      }),
+    );
+    setIntakeViews(views);
     setConversationId(result.conversationId);
     setMessages(result.messages);
     setPhase('ready');
@@ -95,6 +119,11 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, sending, attaching, pendingConsent, intakeBusy]);
+
+  // Keep the ref on the latest `submitIntake` (a hoisted function declaration below).
+  useEffect(() => {
+    submitIntakeRef.current = submitIntake;
+  });
 
   function fillComposer(text: string) {
     setDraft(text);
@@ -327,8 +356,9 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
             <Message
               key={message.id}
               message={message}
+              intakeView={message.intakeJobId ? intakeViews.get(message.intakeJobId) : undefined}
               chipsDisabled={sending || intakeBusy !== null}
-              onChooseFlow={(flow, documentId) => submitIntake({ documentId, forcedFlow: flow })}
+              onChooseFlow={handleChooseFlow}
             />
           ))
         )}

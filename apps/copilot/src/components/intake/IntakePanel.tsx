@@ -16,6 +16,15 @@ export interface IntakePanelProps {
   id: string;
   /** Inside a chat bubble: adds the link to the document's own page. */
   compact?: boolean;
+  /**
+   * The job as the parent already read it (T-39): the panel renders it at
+   * once, with no loading skeleton and no fetch of its own. The chat passes
+   * the cards of a loaded history this way so they appear at their final
+   * height in the same frame as the messages, instead of each skeleton
+   * swapping to a taller card a moment later and pushing the visible
+   * messages down (measured CLS 0.9 on the home screen before this).
+   */
+  initialView?: IntakeView;
 }
 
 type Phase = 'loading' | 'error' | 'ready';
@@ -26,11 +35,11 @@ type Phase = 'loading' | 'error' | 'ready';
  * one `POST /copilot/api/intake` whose answer replaces the view. Used by the
  * document page (`/documents/[id]`) and, `compact`, under a chat bubble.
  */
-export function IntakePanel({ id, compact = false }: IntakePanelProps) {
-  const [phase, setPhase] = useState<Phase>('loading');
+export function IntakePanel({ id, compact = false, initialView }: IntakePanelProps) {
+  const [phase, setPhase] = useState<Phase>(initialView ? 'ready' : 'loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [errorKind, setErrorKind] = useState<IntakeErrorKind | null>(null);
-  const [view, setView] = useState<IntakeView | null>(null);
+  const [view, setView] = useState<IntakeView | null>(initialView ?? null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -53,8 +62,10 @@ export function IntakePanel({ id, compact = false }: IntakePanelProps) {
   }, [id]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    // A pre-read view skips the first fetch; `load` still serves retries and
+    // the «state» refresh below.
+    if (initialView === undefined) load();
+  }, [load, initialView]);
 
   async function run(action: IntakeAction) {
     if (busy) return;

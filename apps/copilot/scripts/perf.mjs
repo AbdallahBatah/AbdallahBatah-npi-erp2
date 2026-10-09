@@ -70,13 +70,8 @@ const PROFILES = {
 // happened before the observer was created.
 const OBSERVER_SCRIPT = `
 (() => {
-  const perf = { lcp: null, shifts: [], events: [] };
+  const perf = { lcp: null, lcpElement: null, shifts: [], events: [] };
   window.__madarPerf = perf;
-  try {
-    new PerformanceObserver((list) => {
-      for (const e of list.getEntries()) perf.lcp = e.startTime;
-    }).observe({ type: 'largest-contentful-paint', buffered: true });
-  } catch {}
   const describe = (node) => {
     if (!node || !node.tagName) return String(node && node.nodeName || '?');
     const id = node.id ? '#' + node.id : '';
@@ -85,6 +80,15 @@ const OBSERVER_SCRIPT = `
     return node.tagName.toLowerCase() + id + (testId ? '[' + testId + ']' : '') + cls;
   };
   const rect = (r) => (r ? [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)] : null);
+  try {
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        perf.lcp = e.startTime;
+        // The element that is the LCP candidate, its painted area and (for an image) its URL.
+        perf.lcpElement = { node: describe(e.element), size: e.size, url: e.url || null, text: (e.element && e.element.textContent || '').trim().slice(0, 60) };
+      }
+    }).observe({ type: 'largest-contentful-paint', buffered: true });
+  } catch {}
   try {
     new PerformanceObserver((list) => {
       for (const e of list.getEntries()) {
@@ -113,12 +117,33 @@ function readMetricsInPage() {
   const scripts = performance
     .getEntriesByType('resource')
     .filter((r) => r.initiatorType === 'script' || /\.js(\?|$)/.test(r.name));
-  const perf = window.__madarPerf ?? { lcp: null, shifts: [], events: [] };
+  const perf = window.__madarPerf ?? { lcp: null, lcpElement: null, shifts: [], events: [] };
+  // Bytes by kind, so a slow LCP can be read against what the page downloaded.
+  const byKind = {};
+  for (const r of performance.getEntriesByType('resource')) {
+    const kind = /\.(woff2?|ttf|otf)(\?|$)/.test(r.name) ? 'font' : r.initiatorType === 'link' || /\.css(\?|$)/.test(r.name) ? 'css' : r.initiatorType === 'script' || /\.js(\?|$)/.test(r.name) ? 'script' : r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest' ? 'fetch' : r.initiatorType === 'img' ? 'image' : 'other';
+    const entry = (byKind[kind] ??= { count: 0, bytes: 0, lastEndMs: 0 });
+    entry.count += 1;
+    entry.bytes += r.transferSize || r.encodedBodySize || 0;
+    entry.lastEndMs = Math.max(entry.lastEndMs, Math.round(r.responseEnd));
+  }
+  // The page's own data requests in time order (Next's route prefetches included), for reading a waterfall.
+  const fetches = performance
+    .getEntriesByType('resource')
+    .filter((r) => r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest')
+    .sort((a, b) => a.startTime - b.startTime)
+    .slice(0, 20)
+    .map((r) => ({ url: r.name.replace(location.origin, ''), startMs: Math.round(r.startTime), endMs: Math.round(r.responseEnd), bytes: r.transferSize || r.encodedBodySize || 0 }));
   return {
     lcp: perf.lcp,
+    lcpElement: perf.lcpElement,
     shifts: perf.shifts,
     events: perf.events,
     ttfb: nav ? nav.responseStart : null,
+    htmlBytes: nav ? nav.transferSize || nav.encodedBodySize || null : null,
+    domContentLoadedMs: nav ? Math.round(nav.domContentLoadedEventEnd) : null,
+    resources: byKind,
+    fetches,
     jsTransferBytes: scripts.reduce((sum, r) => sum + (r.transferSize || r.encodedBodySize || 0), 0),
     scriptCount: scripts.length,
     finalPath: location.pathname + location.search,
@@ -261,16 +286,27 @@ async function measureOnce(context, profile, url) {
   const started = Date.now();
   try {
     await page.goto(url, { waitUntil: 'load', timeout: 120_000 });
+    // Interact once the screen has finished loading: network quiet, every
+    // `aria-busy` loading state gone (the copilot's skeletons all carry it),
+    // network quiet again (the data those states were waiting for), then an
+    // idle main thread. INP then reports the handlers' own cost rather than
+    // the input delay of a render still in progress — load time is the LCP
+    // and JS budgets' business.
+    const idle = () =>
+      page.evaluate(
+        () =>
+          new Promise((r) =>
+            'requestIdleCallback' in window ? requestIdleCallback(() => r(undefined), { timeout: 10_000 }) : setTimeout(r, 1_000),
+          ),
+      );
     await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
-    // Interact once the main thread is idle (hydration done), so INP reports
-    // the handlers' own cost rather than the input delay of a script still
-    // loading — the latter is the LCP/JS budgets' business.
-    await page.evaluate(
-      () =>
-        new Promise((r) =>
-          'requestIdleCallback' in window ? requestIdleCallback(() => r(undefined), { timeout: 10_000 }) : setTimeout(r, 1_000),
-        ),
-    );
+    await page
+      .locator('[aria-busy="true"]')
+      .first()
+      .waitFor({ state: 'detached', timeout: 15_000 })
+      .catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+    await idle();
     await interact(page);
     // Two frames and a pause so the last layout shift and event entries are delivered.
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 600)))));
@@ -286,9 +322,14 @@ async function measureOnce(context, profile, url) {
       .map((s) => ({ atMs: Math.round(s.t), value: Math.round(s.v * 1000) / 1000, sources: s.src }));
     return {
       lcpMs: raw.lcp,
+      lcpElement: raw.lcpElement,
       inpMs: lib.inpFromEvents(raw.events),
       cls: lib.clsFromShifts(raw.shifts),
       ttfbMs: raw.ttfb,
+      htmlBytes: raw.htmlBytes,
+      domContentLoadedMs: raw.domContentLoadedMs,
+      resources: raw.resources,
+      fetches: raw.fetches,
       jsTransferBytes: raw.jsTransferBytes,
       scriptCount: raw.scriptCount,
       interactions: new Set(raw.events.filter((e) => e.id).map((e) => e.id)).size,
