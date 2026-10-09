@@ -24,6 +24,7 @@
     "eval:memory": "dotenv -e ../../.env -- ts-node --transpile-only -P tsconfig.jest.json scripts/eval-memory.ts",
     "eval:pii": "dotenv -e ../../.env -- ts-node --transpile-only -P tsconfig.jest.json scripts/eval-pii.ts",
     "eval:behaviour": "dotenv -e ../../.env -- ts-node --transpile-only -P tsconfig.jest.json scripts/eval-behaviour.ts",
+    "perf": "node scripts/perf.mjs",
     "scan:secrets": "gitleaks git ../.. --no-banner --redact"
   },
   "dependencies": {

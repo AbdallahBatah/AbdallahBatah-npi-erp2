@@ -94,6 +94,10 @@ model HandoverDoc {
   position    Position             @relation(fields: [positionId], references: [id])
   assignments PositionAssignment[]
 
+  // T-39 (migration 0009_indexes): the position's documents and the
+  // predecessor check (`conversationReadableBy`), and the successor's list.
+  @@index([positionId, fromUserId])
+  @@index([toUserId])
   @@map("handover_docs")
 }
 
@@ -326,6 +330,9 @@ model IntakeJob {
 
   @@index([npiUserId, createdAt])
   @@index([status])
+  // T-39 (migration 0009_indexes): /metrics reads the organization's approved
+  // jobs; there was no index starting with npiOrgId.
+  @@index([npiOrgId, approvedAt])
   @@map("intake_jobs")
 }
 
@@ -363,6 +370,9 @@ model MemoryFact {
   @@index([npiOrgId, scope])
   @@index([positionId])
   @@index([npiOrgId, entityType, npiEntityId])
+  // T-39 (migration 0009_indexes): the refresh gate (`latestNpiFactAt`, max
+  // updatedAt of the organization's npi facts) and the rewrite's read.
+  @@index([npiOrgId, sourceType, updatedAt])
   @@map("memory_facts")
 }
 
@@ -413,6 +423,13 @@ model LlmAudit {
 
   @@index([npiOrgId, ts])
   @@index([npiUserId, ts])
+  // T-39 (migration 0009_indexes): /trust filtered by event, and the
+  // document counter (`loadDocumentUsage`). Two partial indexes that Prisma
+  // cannot express live only in the migration: the image rows
+  // (`WHERE "imageSent"`) and the error rows (`WHERE "error" IS NOT NULL`),
+  // both read by the /trust summary on every load.
+  @@index([npiOrgId, event, ts])
+  @@index([npiOrgId, documentId, ts])
   @@map("llm_audit")
 }
 
