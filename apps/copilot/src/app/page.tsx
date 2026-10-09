@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { buildEditDeps } from '@/agents/context';
 import { Chat, type ChatFirstData } from '@/components/chat/Chat';
@@ -109,6 +110,8 @@ export default async function HomePage() {
 
   const npi = createNpiClient({ token: session.npiToken });
   const chatFirstData = await readChatFirstData(session);
+  // Set by the middleware (T-44): the inline scroll script in `Chat` needs it to run under the CSP.
+  const scriptNonce = headers().get('x-nonce') ?? undefined;
 
   return (
     <ShellFrame userName={session.user.nameAr} isAdmin={session.user.isAdmin}>
@@ -119,7 +122,7 @@ export default async function HomePage() {
         <Suspense fallback={<HomeTilesSkeleton />}>
           <HomeTilesGrid npi={npi} />
         </Suspense>
-        <Chat userName={session.user.nameAr} initialData={chatFirstData} />
+        <Chat userName={session.user.nameAr} initialData={chatFirstData} scriptNonce={scriptNonce} />
       </div>
     </ShellFrame>
   );

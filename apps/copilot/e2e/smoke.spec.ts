@@ -107,4 +107,30 @@ test.describe('milestone 1 smoke (T-13)', () => {
       expect(await res.text(), path).not.toMatch(JWT_SHAPE);
     }
   });
+
+  test('the home page carries a nonce CSP and no page in the tour breaks it (T-44)', async ({ page }) => {
+    const violations: string[] = [];
+    page.on('console', (message) => {
+      const text = message.text();
+      if (/Content Security Policy|Refused to/i.test(text)) violations.push(text);
+    });
+
+    await signIn(page);
+    const home = await page.goto('/copilot');
+    const csp = home?.headers()['content-security-policy'] ?? '';
+    expect(csp).toContain("'nonce-");
+    expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+    expect(home?.headers()['x-content-type-options']).toBe('nosniff');
+    expect(home?.headers()['x-frame-options']).toBe('DENY');
+    await expect(page.getByRole('log')).toBeVisible();
+
+    await page.goto('/copilot/settings');
+    await expect(page.getByRole('heading').first()).toBeVisible();
+    await page.goto('/copilot/trust');
+    await expect(page.getByRole('heading').first()).toBeVisible();
+    await page.goto('/copilot');
+    await expect(page.getByRole('log')).toBeVisible();
+
+    expect(violations).toEqual([]);
+  });
 });

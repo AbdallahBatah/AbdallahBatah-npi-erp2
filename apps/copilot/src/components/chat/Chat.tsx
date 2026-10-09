@@ -79,7 +79,11 @@ export interface ChatFirstData {
  * tell what the document is, the reply carries five flow chips; picking one
  * sends the same document again with `forcedFlow`.
  */
-export function Chat({ userName: _userName, initialData }: { userName?: string; initialData?: ChatFirstData } = {}) {
+export function Chat({
+  userName: _userName,
+  initialData,
+  scriptNonce,
+}: { userName?: string; initialData?: ChatFirstData; scriptNonce?: string } = {}) {
   const [phase, setPhase] = useState<Phase>(initialData ? 'ready' : 'loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(initialData?.conversationId ?? null);
@@ -451,8 +455,9 @@ export function Chat({ userName: _userName, initialData }: { userName?: string; 
           (so the page already has its final height), and before the first
           paint — a scroll after hydration moves painted content and counts
           as a layout shift. A fixed string with no user data in it; React
-          keeps the element on hydration and never runs it again. */}
-      {scrolledByServer.current ? <script dangerouslySetInnerHTML={{ __html: SCROLL_TO_BOTTOM_SCRIPT }} /> : null}
+          keeps the element on hydration and never runs it again. It carries the
+          request's CSP nonce (T-44); without one the policy would block it. */}
+      {scrolledByServer.current ? <script nonce={scriptNonce} dangerouslySetInnerHTML={{ __html: SCROLL_TO_BOTTOM_SCRIPT }} /> : null}
     </div>
   );
 }

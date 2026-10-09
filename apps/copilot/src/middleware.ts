@@ -5,6 +5,7 @@
 // imports nothing Node-only (see the note at the top of that file).
 import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE_NAME } from './auth/cookie';
+import { generateNonce, securityHeaders } from './security/headers';
 
 // `/brand` holds NPI's logo files from `public/`: the login page shows them
 // to a visitor who has no session yet. `/api/health` is the container's
@@ -15,7 +16,30 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+/** Hands the nonce and the policy to the page render: Next 14 reads the nonce from the request's own `content-security-policy` header to tag the scripts it emits. */
+function passThrough(request: NextRequest, nonce: string, csp: string): NextResponse {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('content-security-policy', csp);
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
 export function middleware(request: NextRequest): NextResponse {
+  // Security headers (T-44) go on every response this middleware returns,
+  // including the 401 and the redirect: a refusal is a response too.
+  const nonce = generateNonce();
+  const options = {
+    nonce,
+    isDev: process.env.NODE_ENV !== 'production',
+    // Caddy terminates TLS and tells us so; a direct https request counts too.
+    isHttps: request.headers.get('x-forwarded-proto') === 'https' || request.nextUrl.protocol === 'https:',
+  };
+  const headers = securityHeaders(options);
+  const withSecurityHeaders = (response: NextResponse): NextResponse => {
+    for (const [name, value] of Object.entries(headers)) response.headers.set(name, value);
+    return response;
+  };
+
   const { pathname } = request.nextUrl;
   const hasCookie = Boolean(request.cookies.get(SESSION_COOKIE_NAME)?.value);
 
@@ -24,22 +48,21 @@ export function middleware(request: NextRequest): NextResponse {
   // session: a cookie may outlive its session, and redirecting on its mere
   // presence would loop between the login page and the home page.
   if (isPublicPath(pathname)) {
-    return NextResponse.next();
+    return withSecurityHeaders(passThrough(request, nonce, headers['Content-Security-Policy']));
   }
 
   if (!hasCookie) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
-        { error: 'unauthenticated' },
-        { status: 401, headers: { 'Cache-Control': 'no-store' } },
+      return withSecurityHeaders(
+        NextResponse.json({ error: 'unauthenticated' }, { status: 401, headers: { 'Cache-Control': 'no-store' } }),
       );
     }
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    return NextResponse.redirect(url);
+    return withSecurityHeaders(NextResponse.redirect(url));
   }
 
-  return NextResponse.next();
+  return withSecurityHeaders(passThrough(request, nonce, headers['Content-Security-Policy']));
 }
 
 export const config = {
