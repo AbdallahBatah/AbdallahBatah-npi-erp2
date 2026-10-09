@@ -10,8 +10,12 @@ $tarball = Join-Path $root 'npi-erp-deploy.tar.gz'
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Path $stage | Out-Null
 
+# The copilot's local artefacts (T-41): uploads under apps/copilot/data, the
+# generated Prisma client (rebuilt inside the image for linux-musl), Playwright
+# and perf outputs. None is read by the build (see .dockerignore) and the
+# uploads can be large and are a developer's own documents.
 robocopy $root $stage /E `
-  /XD node_modules .next dist .git .claude docs `
+  /XD node_modules .next dist .git .claude docs data generated test-results perf-results playwright-report `
   /XF npi-erp-deploy.tar.gz .env .deploy_history *.log *.tsbuildinfo | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
 

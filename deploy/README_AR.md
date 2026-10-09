@@ -38,8 +38,13 @@ cd /opt && mkdir -p npi-erp && tar -xzf npi-erp-deploy.tar.gz -C npi-erp && cd n
 ```bash
 cp deploy/.env.example deploy/.env
 openssl rand -hex 32   # انسخ الناتج إلى JWT_SECRET
-nano deploy/.env       # عدّل POSTGRES_PASSWORD و JWT_SECRET
+openssl rand -hex 32   # ناتج ثانٍ مستقل → COPILOT_SESSION_KEY (مفتاح تشفير جلسات الكوبايلوت)
+nano deploy/.env       # عدّل POSTGRES_PASSWORD و JWT_SECRET و ANTHROPIC_API_KEY و COPILOT_SESSION_KEY
 ```
+
+المتغيران الأخيران للكوبايلوت «مَدار» (`apps/copilot`) وحده ولا يصلان إلى
+`api` أو `web`؛ بدونهما لا تبدأ خدمة `copilot` أصلاً (`docker compose` يرفض
+التشغيل ويسمّي المتغير الناقص).
 
 اترك `SITE_ADDRESS=:80` الآن (عمل على IP مباشرة).
 
@@ -50,7 +55,11 @@ docker compose -f docker-compose.prod.yml --env-file deploy/.env up -d --build
 docker compose -f docker-compose.prod.yml -f deploy/docker-compose.demo-reset.yml --env-file deploy/.env run --rm demo-reset
 ```
 
-الأمر الأول يبني ويشغّل (قاعدة البيانات + API + الواجهة + البوابة). الثاني يملأ البيانات التجريبية الغنية (51 سيناريو).
+الأمر الأول يبني ويشغّل (قاعدة البيانات + API + الواجهة + الكوبايلوت + البوابة). الثاني يملأ البيانات التجريبية الغنية (51 سيناريو).
+
+الكوبايلوت «مَدار» يُفتح من القائمة الجانبية أو مباشرة على `http://SERVER_IP/copilot`
+(يسجّل الدخول بحسابات NPI نفسها). قاعدته `npi_copilot` تُنشأ تلقائياً عند أول
+إقلاع لحاويته.
 
 **افتح المتصفح على** `http://SERVER_IP` **وسجّل الدخول بحسابات العرض** (admin@npi.sa / Admin@123 وبقية الأدوار الخمسة).
 
@@ -76,14 +85,17 @@ crontab -e
 أضف السطر (3 فجراً بتوقيت الرياض):
 
 ```
-0 3 * * * cd /opt/npi-erp && docker compose -f docker-compose.prod.yml -f deploy/docker-compose.demo-reset.yml --env-file deploy/.env run --rm demo-reset >> /var/log/npi-reset.log 2>&1
+0 3 * * * cd /opt/npi-erp && docker compose -f docker-compose.prod.yml -f deploy/docker-compose.demo-reset.yml --env-file deploy/.env run --rm demo-reset >> /var/log/npi-reset.log 2>&1; docker compose -f docker-compose.prod.yml -f deploy/docker-compose.demo-reset.yml --env-file deploy/.env run --rm demo-reset-copilot >> /var/log/npi-reset.log 2>&1
 ```
+
+المهمة الثانية (`demo-reset-copilot`) تصفّر قاعدة الكوبايلوت `npi_copilot` وتفرغ
+مجلد مستنداته المرفوعة؛ المهمتان مستقلتان عمداً فلا يمنع فشل إحداهما الأخرى.
 
 وتأكد أن توقيت الخادم `timedatectl set-timezone Asia/Riyadh`.
 
 ## 8) النسخ الاحتياطي الآلي (إلزامي على أي خادم ببيانات حقيقية)
 
-السكربت الجاهز `deploy/backup.sh` يأخذ نسخة `pg_dump` بصيغة قابلة للاسترجاع، يحتفظ بأحدث 14 نسخة، ويدعم رفعها خارج الخادم:
+السكربت الجاهز `deploy/backup.sh` يأخذ نسخة `pg_dump` بصيغة قابلة للاسترجاع، يحتفظ بأحدث 14 نسخة، ويدعم رفعها خارج الخادم. ومنذ T-41 يأخذ في الليلة نفسها نسخة `npi_copilot` (قاعدة الكوبايلوت) وأرشيف مستنداته المرفوعة (`copilot_docs_*.tar.gz`) بالفحوص والدورة نفسها:
 
 ```bash
 chmod +x deploy/backup.sh
@@ -91,7 +103,7 @@ crontab -e
 # أضف: 0 2 * * * cd /opt/npi-erp && sh deploy/backup.sh >> /var/log/npi-backup.log 2>&1
 ```
 
-**اختبر الاسترجاع فور التثبيت** — نسخة احتياطية لم تُختبر ليست نسخة احتياطية. خطوات الاسترجاع كاملة مكتوبة داخل `deploy/backup.sh` نفسه (أوقف api/web → أعد إنشاء القاعدة → `pg_restore` → شغّل من جديد).
+**اختبر الاسترجاع فور التثبيت** — نسخة احتياطية لم تُختبر ليست نسخة احتياطية. خطوات الاسترجاع كاملة مكتوبة داخل `deploy/backup.sh` نفسه (أوقف api/web → أعد إنشاء القاعدة → `pg_restore` → شغّل من جديد)، ومثلها للكوبايلوت (أوقف copilot → أعد إنشاء `npi_copilot` → `pg_restore` → أفرغ مجلد المستندات وفكّ الأرشيف فيه → شغّل). استعد الجانبين من ليلة واحدة.
 
 للنسخ خارج الخادم (موصى به بشدة): اضبط متغير `OFFSITE_CMD` في السطر نفسه، مثلاً `rclone` إلى Backblaze B2 أو `scp` إلى خادم ثانٍ — أمثلة جاهزة داخل السكربت.
 
@@ -101,9 +113,11 @@ crontab -e
 |---|---|
 | حالة الخدمات | `docker compose -f docker-compose.prod.yml --env-file deploy/.env ps` |
 | سجلات API | `docker compose -f docker-compose.prod.yml --env-file deploy/.env logs -f api` |
-| تحديث بعد تعديل الكود | ارفع tar.gz جديداً وفك الضغط ثم `up -d --build` |
+| تحديث بعد تعديل الكود | ارفع tar.gz جديداً وفك الضغط ثم `sh deploy/deploy.sh` (نشر متدرّج بلا انقطاع: يبني الصور الثلاث، يرحّل القاعدتين، يبدّل الحاويات، يعيد تحميل مسارات Caddy، ويتحقق من `/api/health` و`/copilot/api/health`) — `--dry-run` يطبع الخطة فقط، و`--rollback` يعيد النسخة السابقة |
 | نسخة احتياطية يدوية فورية | `sh deploy/backup.sh` (الآلية في §8) |
 | فحص صحة النظام | `curl https://YOUR_ADDRESS/api/health` — يتحقق من الوصول لقاعدة البيانات فعلياً |
+| فحص صحة الكوبايلوت | `curl https://YOUR_ADDRESS/copilot/api/health` — يتحقق من قاعدة `npi_copilot` عبر Caddy |
+| سجلات الكوبايلوت | `docker compose -f docker-compose.prod.yml --env-file deploy/.env logs -f copilot` |
 | إيقاف كامل | `docker compose -f docker-compose.prod.yml --env-file deploy/.env down` |
 
 ## المرحلة التالية — نسخة خاصة لكل عميل جاد
