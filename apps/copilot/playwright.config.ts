@@ -13,6 +13,10 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const API_BASE = `http://localhost:${API_PORT}/api`;
 const COPILOT_BASE = `http://localhost:${COPILOT_PORT}`;
 
+// T-43 (@live-demo): a deployed stack — the demo server, or a local
+// production build — serves the tests; nothing is started here.
+const LIVE_BASE = process.env.COPILOT_LIVE_BASE?.replace(/\/$/, '');
+
 // `dotenv -v` puts the values on the process itself. Passing them through
 // Playwright's `env` and two nested npm scripts lost them on Windows.
 // The e2e api reads its own copy of NPI's database, `npi_erp_e2e`, prepared
@@ -70,7 +74,7 @@ export default defineConfig({
   // `npm run e2e:live-setup` (COPILOT_LIVE=1) executes it.
   grepInvert: process.env.COPILOT_LIVE ? undefined : /@live/,
   use: {
-    baseURL: COPILOT_BASE,
+    baseURL: LIVE_BASE ?? COPILOT_BASE,
   },
   projects: [
     {
@@ -82,20 +86,22 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } },
     },
   ],
-  webServer: [
-    {
-      command: apiCommand,
-      cwd: path.join(REPO_ROOT, 'apps', 'api'),
-      url: `${API_BASE}/health`,
-      reuseExistingServer: false,
-      timeout: 180_000,
-    },
-    {
-      command: copilotCommand,
-      cwd: path.join(REPO_ROOT, 'apps', 'copilot'),
-      url: `${COPILOT_BASE}/copilot/login`,
-      reuseExistingServer: false,
-      timeout: 180_000,
-    },
-  ],
+  webServer: LIVE_BASE
+    ? undefined
+    : [
+        {
+          command: apiCommand,
+          cwd: path.join(REPO_ROOT, 'apps', 'api'),
+          url: `${API_BASE}/health`,
+          reuseExistingServer: false,
+          timeout: 180_000,
+        },
+        {
+          command: copilotCommand,
+          cwd: path.join(REPO_ROOT, 'apps', 'copilot'),
+          url: `${COPILOT_BASE}/copilot/login`,
+          reuseExistingServer: false,
+          timeout: 180_000,
+        },
+      ],
 });

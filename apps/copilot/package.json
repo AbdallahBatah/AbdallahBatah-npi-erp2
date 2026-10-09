@@ -13,6 +13,7 @@
     "test": "jest",
     "e2e": "playwright test",
     "e2e:live-setup": "dotenv -v COPILOT_LIVE=1 -- playwright test --grep @live-setup --project desktop",
+    "e2e:live-demo": "dotenv -v COPILOT_LIVE=1 -- playwright test --grep @live-demo --project desktop",
     "e2e:live-flows": "dotenv -e ../../.env -v COPILOT_LIVE=1 -- playwright test e2e/scenarios.spec.ts --project desktop",
     "prebuild": "prisma generate",
     "pretypecheck": "prisma generate",

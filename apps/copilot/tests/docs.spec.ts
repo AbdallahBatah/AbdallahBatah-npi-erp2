@@ -332,11 +332,12 @@ describe('docs/COPILOT_CHANGELOG.md: one section per tag, newest first', () => {
     expect(section).toContain('لم يُنفَّذ بعد');
     // The unfinished tasks sit AFTER that marker, each named as a code span.
     const afterMarker = section.slice(section.indexOf('لم يُنفَّذ بعد'));
-    for (const task of ['T-43', 'T-44', 'T-45', 'T-46']) expect(afterMarker).toContain(`\`${task}\``);
+    for (const task of ['T-43', 'T-46']) expect(afterMarker).toContain(`\`${task}\``);
     // and none of them is claimed as delivered before it.
     // (the heading itself names the whole range T-38…T-46, so it is skipped)
     const beforeMarker = section.slice(section.indexOf('\n'), section.indexOf('لم يُنفَّذ بعد'));
-    for (const task of ['T-43', 'T-44', 'T-45', 'T-46']) expect(beforeMarker).not.toContain(`\`${task}\``);
+    // T-43's local half, T-44 and T-45 are done (2026-10-09): only T-46 may not appear above the marker.
+    for (const task of ['T-46']) expect(beforeMarker).not.toContain(`\`${task}\``);
   });
 });
 

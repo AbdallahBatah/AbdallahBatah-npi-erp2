@@ -261,6 +261,7 @@ describe('invariant 3: the environment the copilot reads is an exact, justified 
     COPILOT_DOCS_DIR: 'where uploaded documents are stored (docsRoot(env) in src/intake/upload.ts; tests/intake.spec.ts overrides it)',
     COPILOT_E2E_API_PORT: 'port of the e2e run\'s NPI api, used by e2e fixtures to log in (e2e/*)',
     COPILOT_LIVE: 'switches on the @live e2e (e2e/setup-live.spec.ts); real-model runs only',
+    COPILOT_LIVE_BASE: 'origin of a deployed stack for the @live-demo e2e (e2e/deploy.spec.ts, T-43); no local servers are started',
     COPILOT_MODEL_ADVANCED: 'model id for the advanced tier (modelIdForTier in src/llm/client.ts)',
     COPILOT_MODEL_ECONOMY: 'model id for the economy tier (modelIdForTier in src/llm/client.ts)',
     COPILOT_PORT: 'the port `next dev/start` listens on (scripts/run-next.mjs)',
