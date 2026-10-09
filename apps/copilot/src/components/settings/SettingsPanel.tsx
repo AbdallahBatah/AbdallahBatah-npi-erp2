@@ -26,11 +26,16 @@ export type SaveOutcome = { ok: true } | { ok: false; messageAr: string };
  * `SetupWizard` (`loadSeq`). A `rerun` of any step is a full navigation to
  * the wizard — there is no partial state to reconcile here, the setup
  * session itself holds it.
+ *
+ * T-39b (D-23): the page reads the view on the server and passes it as
+ * `initialData`, so the cards are in the first HTML; the component then
+ * starts `ready` and makes no GET on mount. Without it (the server read
+ * failed) it loads itself as before.
  */
-export function SettingsPanel() {
-  const [phase, setPhase] = useState<Phase>('loading');
+export function SettingsPanel({ initialData }: { initialData?: SettingsView } = {}) {
+  const [phase, setPhase] = useState<Phase>(initialData ? 'ready' : 'loading');
   const [errorMessage, setErrorMessage] = useState('');
-  const [view, setView] = useState<SettingsView | null>(null);
+  const [view, setView] = useState<SettingsView | null>(initialData ?? null);
 
   const loadSeq = useRef(0);
   const load = useCallback(async () => {
@@ -51,9 +56,11 @@ export function SettingsPanel() {
     setPhase('ready');
   }, []);
 
+  // With server-provided first data (T-39b, D-23) the mount needs no GET;
+  // `load` stays for the error state's retry. Same pattern as `IntakePanel`.
   useEffect(() => {
-    load();
-  }, [load]);
+    if (initialData === undefined) load();
+  }, [load, initialData]);
 
   async function handleSaveModules(modules: ModuleKey[]): Promise<SaveOutcome> {
     const result = await saveVisibleModules(modules);

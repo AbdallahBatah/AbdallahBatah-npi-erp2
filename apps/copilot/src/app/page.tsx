@@ -1,24 +1,86 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { Chat } from '@/components/chat/Chat';
+import { buildEditDeps } from '@/agents/context';
+import { Chat, type ChatFirstData } from '@/components/chat/Chat';
 import { HomeTilesGrid, HomeTilesSkeleton } from '@/components/HomeTiles';
 import { ShellFrame } from '@/components/ShellFrame';
-import { getServerSession } from '@/auth/session';
+import { getServerSession, type ActiveSession } from '@/auth/session';
+import { loadConversationHistory } from '@/chat/history';
+import { getDb } from '@/db';
 import { t } from '@/i18n/ar';
+import { getIntakeView } from '@/intake/job';
+import type { IntakeView } from '@/intake/types';
 import { createNpiClient } from '@/npi/client';
 import { NpiError } from '@/npi/errors';
 
 export const dynamic = 'force-dynamic';
 
 /**
+ * The chat's first data (T-39b, D-23): the caller's latest conversation and
+ * the views of the intake cards in it, read here on the server and put in
+ * the page's own HTML — not streamed through a `<Suspense>` boundary like the
+ * tiles. Fetched after hydration instead, the thread reached a phone on a
+ * slow link 2 s past the LCP budget; streamed as a later chunk it was
+ * painted at the top of the page and then jumped to its end once hydration
+ * ran the scroll (a layout shift of 0.58 on desktop). In the first HTML, the
+ * inline script at the end of `Chat` scrolls to the newest message while the
+ * document is still being parsed, before anything has been painted. The
+ * cost is the read's time on the TTFB (a local database read).
+ *
+ * The history is the same read `GET /copilot/api/chat` makes
+ * (`src/chat/history.ts`) and each card's view the same one
+ * `GET /copilot/api/intake` makes, with the same deps (`buildEditDeps`,
+ * including the document store that decides a page count) — what `Chat.load`
+ * did from the browser. A card whose read threw or found nothing is simply
+ * absent and loads itself as before. When the history read itself fails the
+ * chat renders without `initialData` and loads from the browser. The NPI
+ * token never reaches `Chat`.
+ */
+async function readChatFirstData(session: ActiveSession): Promise<ChatFirstData | undefined> {
+  let initialData: ChatFirstData | undefined;
+  try {
+    const caller = { npiOrgId: session.user.npiOrgId, npiUserId: session.user.npiUserId };
+    const history = await loadConversationHistory(getDb(), { ...caller, permissions: session.user.permissions }, null);
+    if (history !== null) {
+      const jobIds = [...new Set(history.messages.flatMap((m) => (m.intakeJobId ? [m.intakeJobId] : [])))];
+      const intakeViews: Record<string, IntakeView> = {};
+      if (jobIds.length > 0) {
+        // Built only when a card needs it, and isolated like each read: a
+        // failure here costs the cards their head start, never the thread.
+        try {
+          const intakeDeps = buildEditDeps({ npiToken: session.npiToken, user: session.user });
+          await Promise.all(
+            jobIds.map(async (id) => {
+              try {
+                const view = await getIntakeView(intakeDeps, caller, id);
+                if (view !== null) intakeViews[id] = view;
+              } catch (err) {
+                console.error('[copilot] first data for an intake card failed', id, err instanceof Error ? err.message : err);
+              }
+            }),
+          );
+        } catch (err) {
+          console.error('[copilot] first data for the intake cards failed', err instanceof Error ? err.message : err);
+        }
+      }
+      initialData = { conversationId: history.conversationId, messages: history.messages, intakeViews };
+    }
+  } catch (err) {
+    console.error('[copilot] first data for the chat failed', err instanceof Error ? err.message : err);
+  }
+  return initialData;
+}
+
+/**
  * The home screen (T-08): greeting, the four NPI tiles, and the chat panel
  * (T-12) — per spec/madar/03-DESIGN-SPEC.md §3's "Home+Chat" row.
  *
  * The tiles are read on the server, inside a `<Suspense>` boundary, so a slow
- * NPI response never blocks the chat from rendering; `Chat` itself fetches
- * its own conversation client-side. The NPI token is only ever handed to
- * `createNpiClient` here, on the server — it never reaches a client
- * component or the rendered HTML.
+ * NPI response never blocks the chat from rendering; the chat's history is
+ * read on the server too (above), before the HTML is sent, and handed to
+ * `Chat`, which keeps its own fetch for a retry. The NPI token is only ever
+ * handed to `createNpiClient` here, on the server — it never reaches a
+ * client component or the rendered HTML.
  */
 export default async function HomePage() {
   let session;
@@ -46,6 +108,7 @@ export default async function HomePage() {
   if (!session) redirect('/login');
 
   const npi = createNpiClient({ token: session.npiToken });
+  const chatFirstData = await readChatFirstData(session);
 
   return (
     <ShellFrame userName={session.user.nameAr} isAdmin={session.user.isAdmin}>
@@ -56,7 +119,7 @@ export default async function HomePage() {
         <Suspense fallback={<HomeTilesSkeleton />}>
           <HomeTilesGrid npi={npi} />
         </Suspense>
-        <Chat userName={session.user.nameAr} />
+        <Chat userName={session.user.nameAr} initialData={chatFirstData} />
       </div>
     </ShellFrame>
   );

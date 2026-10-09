@@ -4,10 +4,23 @@
 // the real model, and the backend's consent route does not need to exist for
 // this spec to run, since it is never actually hit). Runs on both the
 // `desktop` and `mobile` Playwright projects.
-import type { Route } from '@playwright/test';
+//
+// T-39b (D-23): the chat history is read on the server, not fetched by the
+// browser, so the "always an empty conversation" this spec needs is now seeded
+// in the copilot's database (`fixtures/chat-db.ts`) before the login and
+// removed after each test, instead of being mocked through a GET.
+import type { APIRequestContext, Page, Route } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { t } from '../src/i18n/ar';
 import { readAdminCredentials } from './fixtures/accounts';
+import { waitForHydration } from './fixtures/hydration';
+import {
+  disconnectChatDb,
+  npiIdentity,
+  restoreChatFixture,
+  seedLatestConversation,
+  type ChatFixtureHandle,
+} from './fixtures/chat-db';
 
 const CHAT_PATH = '**/copilot/api/chat';
 const DOCUMENTS_PATH = '**/copilot/api/documents';
@@ -24,17 +37,21 @@ function jsonRoute(route: Route, status: number, body: unknown) {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
 
-/** Registers the chat-route mock (always an empty conversation — this spec
- *  is only about the attach/consent flow, not chat history), then signs the
- *  seeded admin in and lands on the home page. Mocks must be registered
- *  before the login's navigation to `/copilot`, since `Chat` fires its GET
- *  the moment it mounts (same pattern as `e2e/chat-ui.spec.ts`). */
-async function gotoHomeMocked(page: import('@playwright/test').Page) {
+/** What the running test seeded, for `afterEach` to remove. */
+let handle: ChatFixtureHandle | undefined;
+
+/** Seeds an empty conversation for the admin (this spec is only about the
+ *  attach/consent flow, not chat history), registers the chat-route mock for
+ *  the POST, then signs the admin in and lands on the home page. The seed must
+ *  exist before the login's navigation to `/copilot`, since the server reads
+ *  it while rendering that page (same pattern as `e2e/chat-ui.spec.ts`). */
+async function gotoHomeMocked(page: Page, request: APIRequestContext) {
+  const admin = readAdminCredentials();
+  handle = await seedLatestConversation(await npiIdentity(request, admin), { messages: [] });
+
   await page.goto('/copilot/login');
   await page.route(CHAT_PATH, (route) => {
-    if (route.request().method() === 'GET') {
-      return jsonRoute(route, 200, { conversationId: null, messages: [] });
-    }
+    if (route.request().method() !== 'POST') return route.fallback();
     return jsonRoute(route, 200, {
       conversationId: 'c1',
       messageId: 'm1',
@@ -45,11 +62,11 @@ async function gotoHomeMocked(page: import('@playwright/test').Page) {
     });
   });
 
-  const { email, password } = readAdminCredentials();
-  await page.getByLabel(t('login.email')).fill(email);
-  await page.getByLabel(t('login.password')).fill(password);
+  await page.getByLabel(t('login.email')).fill(admin.email);
+  await page.getByLabel(t('login.password')).fill(admin.password);
   await page.getByRole('button', { name: t('login.submit') }).click();
   await page.waitForURL('**/copilot');
+  await waitForHydration(page);
 }
 
 function documentBody(kind: 'image' | 'pdf_scanned' | 'pdf_text', overrides: Record<string, unknown> = {}) {
@@ -68,7 +85,7 @@ function documentBody(kind: 'image' | 'pdf_scanned' | 'pdf_text', overrides: Rec
   };
 }
 
-async function attachPng(page: import('@playwright/test').Page, fileName = 'فاتورة.png') {
+async function attachPng(page: Page, fileName = 'فاتورة.png') {
   await page.locator('[data-testid="attach-input"]').setInputFiles({
     name: fileName,
     mimeType: 'image/png',
@@ -77,11 +94,20 @@ async function attachPng(page: import('@playwright/test').Page, fileName = 'فا
 }
 
 test.describe('attach + consent flow (T-22)', () => {
-  test('image attachment shows the consent card before any consent call; approve records it', async ({ page }) => {
+  test.afterEach(async () => {
+    await restoreChatFixture(handle);
+    handle = undefined;
+  });
+
+  test.afterAll(async () => {
+    await disconnectChatDb();
+  });
+
+  test('image attachment shows the consent card before any consent call; approve records it', async ({ page, request }) => {
     let consentCalls = 0;
     let consentBody: unknown;
 
-    await gotoHomeMocked(page);
+    await gotoHomeMocked(page, request);
     await page.route(DOCUMENTS_PATH, (route) => {
       if (route.request().method() !== 'POST') return route.fallback();
       return jsonRoute(route, 201, documentBody('image'));
@@ -121,11 +147,11 @@ test.describe('attach + consent flow (T-22)', () => {
     await expect(log.getByText(t('chat.consent_recorded'))).toBeVisible();
   });
 
-  test('cancel records a cancelled decision and shows the cancellation notice', async ({ page }) => {
+  test('cancel records a cancelled decision and shows the cancellation notice', async ({ page, request }) => {
     let consentCalls = 0;
     let consentBody: unknown;
 
-    await gotoHomeMocked(page);
+    await gotoHomeMocked(page, request);
     await page.route(DOCUMENTS_PATH, (route) => {
       if (route.request().method() !== 'POST') return route.fallback();
       return jsonRoute(route, 201, documentBody('image'));
@@ -153,10 +179,10 @@ test.describe('attach + consent flow (T-22)', () => {
     await expect(page.getByRole('log').getByText(t('chat.consent_cancelled'))).toBeVisible();
   });
 
-  test('a pdf_text document needs no consent card and never calls the consent endpoint', async ({ page }) => {
+  test('a pdf_text document needs no consent card and never calls the consent endpoint', async ({ page, request }) => {
     let consentCalls = 0;
 
-    await gotoHomeMocked(page);
+    await gotoHomeMocked(page, request);
     await page.route(DOCUMENTS_PATH, (route) => {
       if (route.request().method() !== 'POST') return route.fallback();
       const body = documentBody('pdf_text');
@@ -176,11 +202,11 @@ test.describe('attach + consent flow (T-22)', () => {
     expect(consentCalls).toBe(0);
   });
 
-  test('a refused_confidential upload shows an error bubble with no card and no consent call', async ({ page }) => {
+  test('a refused_confidential upload shows an error bubble with no card and no consent call', async ({ page, request }) => {
     let consentCalls = 0;
     const refusalMessage = t('intake.refused_confidential');
 
-    await gotoHomeMocked(page);
+    await gotoHomeMocked(page, request);
     await page.route(DOCUMENTS_PATH, (route) => {
       if (route.request().method() !== 'POST') return route.fallback();
       return jsonRoute(route, 422, { error: 'refused_confidential', messageAr: refusalMessage });
@@ -197,10 +223,10 @@ test.describe('attach + consent flow (T-22)', () => {
     expect(consentCalls).toBe(0);
   });
 
-  test('a failed consent call keeps the card up with an error, and a retry succeeds', async ({ page }) => {
+  test('a failed consent call keeps the card up with an error, and a retry succeeds', async ({ page, request }) => {
     let consentCalls = 0;
 
-    await gotoHomeMocked(page);
+    await gotoHomeMocked(page, request);
     await page.route(DOCUMENTS_PATH, (route) => {
       if (route.request().method() !== 'POST') return route.fallback();
       return jsonRoute(route, 201, documentBody('image'));
@@ -234,8 +260,8 @@ test.describe('attach + consent flow (T-22)', () => {
     await expect(page.getByRole('log').getByText(t('chat.consent_recorded'))).toBeVisible();
   });
 
-  test('no horizontal scroll at the configured viewport while the consent card is shown', async ({ page }) => {
-    await gotoHomeMocked(page);
+  test('no horizontal scroll at the configured viewport while the consent card is shown', async ({ page, request }) => {
+    await gotoHomeMocked(page, request);
     await page.route(DOCUMENTS_PATH, (route) => {
       if (route.request().method() !== 'POST') return route.fallback();
       return jsonRoute(route, 201, documentBody('image'));

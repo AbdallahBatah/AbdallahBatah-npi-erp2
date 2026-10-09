@@ -167,6 +167,7 @@ describe('perf-lib: command line', () => {
       profiles: ['desktop', 'mobile'],
       out: null,
       pages: null,
+      block: null,
       help: false,
     });
   });
@@ -174,7 +175,7 @@ describe('perf-lib: command line', () => {
   it('reads every flag and strips trailing slashes from addresses', () => {
     const args = lib.parseArgs([
       '--runs', '5', '--api', 'http://localhost:4077/api/', '--url', 'http://localhost:3177/', '--skip-build',
-      '--profile', 'mobile', '--out', 'r.json', '--pages', '/copilot, /copilot/trust',
+      '--profile', 'mobile', '--out', 'r.json', '--pages', '/copilot, /copilot/trust', '--block', '.woff2',
     ]);
     expect(args).toEqual({
       runs: 5,
@@ -184,6 +185,7 @@ describe('perf-lib: command line', () => {
       profiles: ['mobile'],
       out: 'r.json',
       pages: ['/copilot', '/copilot/trust'],
+      block: '.woff2',
       help: false,
     });
   });
@@ -194,6 +196,7 @@ describe('perf-lib: command line', () => {
     expect(() => lib.parseArgs(['--runs'])).toThrow(/needs a value/);
     expect(() => lib.parseArgs(['--profile', 'tablet'])).toThrow(/desktop, mobile or both/);
     expect(() => lib.parseArgs(['--pages', 'copilot'])).toThrow(/starting with \//);
+    expect(() => lib.parseArgs(['--block', ' '])).toThrow(/non-empty/);
   });
 });
 

@@ -30,6 +30,8 @@ apps/copilot/data/
 # Playwright output of the copilot e2e runs
 apps/copilot/test-results/
 apps/copilot/playwright-report/
+# Reports of the copilot perf gate (npm run perf), kept out of test-results/ which Playwright wipes
+apps/copilot/perf-results/
 
 # Packed deploy artifacts
 *.tar.gz

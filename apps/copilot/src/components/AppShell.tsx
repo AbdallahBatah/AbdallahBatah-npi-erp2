@@ -93,6 +93,12 @@ export function AppShell({ userName, isAdmin, onLogout, children }: AppShellProp
               <Link
                 key={href}
                 href={href}
+                // No viewport prefetch (T-39b): on a phone the seven tabs' RSC
+                // prefetches start the moment the browser goes idle and their
+                // processing at 4x CPU landed under the first key press (an
+                // input delay of 300 ms on /trust). Hover still prefetches on
+                // desktop; a tap fetches on the tap.
+                prefetch={false}
                 aria-current={active ? 'page' : undefined}
                 className={[
                   // Below `md` the bar is a fixed row of equal cells: `min-w-0` lets a cell shrink below its label's

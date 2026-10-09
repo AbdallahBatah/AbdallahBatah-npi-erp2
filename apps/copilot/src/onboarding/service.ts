@@ -89,6 +89,18 @@ export interface SetupDeps {
   now?: () => Date;
 }
 
+/**
+ * What reading the current step needs (`getSetupState`, and the `buildView` /
+ * `loadOrCreateSession` it runs): the database, NPI and the pack loader — no
+ * model and no pseudonymizer, which only the answer, preview and apply
+ * actions use. The setup page (T-39b, D-23) reads with exactly these so it
+ * never constructs an LLM client or a pseudonymizer just to show the state:
+ * `tests/no-bypass-llm.spec.ts` R4d keeps an exact allowlist of the files that
+ * may construct a provider, and that list must not grow for a page.
+ * `SetupDeps` is assignable to this, so the route keeps passing its own.
+ */
+export type SetupReadDeps = Pick<SetupDeps, 'db' | 'npi' | 'loadPack'>;
+
 export interface SetupCaller {
   npiOrgId: string;
   npiUserId: string;
@@ -179,7 +191,7 @@ function parseStoredState(json: unknown): SetupState {
   return parsed.success ? parsed.data : initialState();
 }
 
-async function loadOrCreateSession(deps: SetupDeps, caller: SetupCaller): Promise<OnboardingSessionRow> {
+async function loadOrCreateSession(deps: SetupReadDeps, caller: SetupCaller): Promise<OnboardingSessionRow> {
   const existing = await deps.db.onboardingSession.findFirst({
     where: { npiOrgId: caller.npiOrgId, completedAt: null },
     orderBy: { startedAt: 'desc' },
@@ -207,7 +219,7 @@ async function saveState(
  * to show", same discipline as `loadNpiSnapshot`; any other `NpiError`
  * propagates to the route, which maps it to an HTTP response.
  */
-async function buildView(deps: SetupDeps, caller: SetupCaller, state: SetupState): Promise<SetupStateView> {
+async function buildView(deps: SetupReadDeps, caller: SetupCaller, state: SetupState): Promise<SetupStateView> {
   const loadPack = deps.loadPack ?? loadProfilePack;
   const pack = state.answers.profileKey !== undefined ? loadPack(state.answers.profileKey) : null;
   const key = questionKey(state.step);
@@ -249,13 +261,50 @@ function buildPermissionLabels(plan: OnboardingPlan): Record<string, string> {
   return labels;
 }
 
+/** Step 7's content: the dry run of the plan against NPI, as the route's
+ *  `preview` action answers it (a read — nothing is written). */
+async function buildPreview(
+  deps: SetupReadDeps,
+  pack: ProfilePack,
+  answers: ReturnType<typeof toAnswers>,
+  planCaller: { roleKey: string; permissions: readonly string[] },
+): Promise<SetupPreviewResult> {
+  const plan = await dryRun({ npi: deps.npi }, pack, answers, planCaller);
+  const roleNameAr = (key: string) => pack.rolePermissionSets[key]?.nameAr ?? key;
+  const stepTitlesAr: Record<string, string> = {};
+  for (const step of plan.steps) stepTitlesAr[step.id] = describeStepAr(step, roleNameAr);
+  return {
+    plan: withoutPermissionLabel(plan),
+    summary: summarizePlanAr(plan, pack),
+    permissionLabels: buildPermissionLabels(plan),
+    stepTitlesAr,
+  };
+}
+
 // ─── Entry points ───────────────────────────────────────────────────────────
 
-export async function getSetupState(deps: SetupDeps, caller: SetupCaller): Promise<SetupStateView> {
+export async function getSetupState(deps: SetupReadDeps, caller: SetupCaller): Promise<SetupStateView> {
   requireAdmin(caller);
   const row = await loadOrCreateSession(deps, caller);
   const state = parseStoredState(row.stepsJson);
   return buildView(deps, caller, state);
+}
+
+/**
+ * Step 7's diff for the setup page's server render (T-39b): the same dry run
+ * the wizard otherwise requests after hydration (`action: 'preview'`), so the
+ * card is in the first HTML. Null when the open session is not on step 7.
+ * Read-only, like `getSetupState`; the `MachineError` of an incomplete
+ * session propagates like the route's.
+ */
+export async function previewSetupState(deps: SetupReadDeps, caller: SetupCaller): Promise<SetupPreviewResult | null> {
+  requireAdmin(caller);
+  const loadPack = deps.loadPack ?? loadProfilePack;
+  const row = await loadOrCreateSession(deps, caller);
+  const state = parseStoredState(row.stepsJson);
+  if (state.step !== 7) return null;
+  const answers = toAnswers(state);
+  return buildPreview(deps, loadPack(answers.profileKey), answers, { roleKey: caller.roleKey, permissions: caller.permissions });
 }
 
 /**
@@ -308,18 +357,7 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
   const pack = loadPack(answers.profileKey);
   const planCaller = { roleKey: caller.roleKey, permissions: caller.permissions };
 
-  if (body.action === 'preview') {
-    const plan = await dryRun({ npi: deps.npi }, pack, answers, planCaller);
-    const roleNameAr = (key: string) => pack.rolePermissionSets[key]?.nameAr ?? key;
-    const stepTitlesAr: Record<string, string> = {};
-    for (const step of plan.steps) stepTitlesAr[step.id] = describeStepAr(step, roleNameAr);
-    return {
-      plan: withoutPermissionLabel(plan),
-      summary: summarizePlanAr(plan, pack),
-      permissionLabels: buildPermissionLabels(plan),
-      stepTitlesAr,
-    };
-  }
+  if (body.action === 'preview') return buildPreview(deps, pack, answers, planCaller);
 
   // 'apply': re-reads NPI and rebuilds the plan rather than trusting a plan
   // the client may have cached from an earlier preview (spec/madar/02 §7:

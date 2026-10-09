@@ -19,7 +19,12 @@
 // has neither — the file input is fed with `setInputFiles` and the recognizer
 // is a stand-in installed before the page loads), nor any model call or NPI
 // write. Runs on the `mobile` Playwright project only (390 x 844).
-import type { Page, Route } from '@playwright/test';
+//
+// T-39b (D-23): the chat history is read on the server, not fetched by the
+// browser, so the empty conversation these tests start from is seeded in the
+// copilot's database (`fixtures/chat-db.ts`) before the login and removed after
+// each test, instead of being mocked through a GET.
+import type { APIRequestContext, Page, Route } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { createCanvas } from '@napi-rs/canvas';
 import { randomFillSync } from 'node:crypto';
@@ -27,6 +32,14 @@ import { t } from '../src/i18n/ar';
 import { PHOTO_MAX_BYTES } from '../src/components/chat/photo';
 import type { IntakeView } from '../src/intake/types';
 import { readAdminCredentials } from './fixtures/accounts';
+import { waitForHydration } from './fixtures/hydration';
+import {
+  disconnectChatDb,
+  npiIdentity,
+  restoreChatFixture,
+  seedLatestConversation,
+  type ChatFixtureHandle,
+} from './fixtures/chat-db';
 import {
   billExecutedView,
   billView,
@@ -117,20 +130,27 @@ function intakeReply(flowLabel: string, withDocument: boolean) {
   };
 }
 
+/** What the running test seeded, for `afterEach` to remove. */
+let handle: ChatFixtureHandle | undefined;
+
 /**
- * Registers every mock, then signs the seeded admin in and lands on the home
- * page. Mocks go in before the login's navigation, since `Chat` fires its GET
- * the moment it mounts. Any `addInitScript` the test needs must be installed
- * before calling this (it navigates first).
+ * Seeds an empty conversation for the admin, registers every mock, then signs
+ * the admin in and lands on the home page. The seed goes in before the login's
+ * navigation, since the server reads it while rendering `/copilot`. Any
+ * `addInitScript` the test needs must be installed before calling this (it
+ * navigates first).
  */
-async function setup(page: Page, scenario: Scenario = {}): Promise<Mocks> {
+async function setup(page: Page, request: APIRequestContext, scenario: Scenario = {}): Promise<Mocks> {
   const mocks: Mocks = { chatPosts: [], documentPosts: [], consentPosts: [], intakePosts: [] };
   let chatCalls = 0;
+
+  const admin = readAdminCredentials();
+  handle = await seedLatestConversation(await npiIdentity(request, admin), { messages: [] });
 
   await page.goto('/copilot/login');
 
   await page.route(CHAT_PATH, (route) => {
-    if (route.request().method() === 'GET') return jsonRoute(route, 200, { conversationId: null, messages: [] });
+    if (route.request().method() !== 'POST') return route.fallback();
     mocks.chatPosts.push(route.request().postDataJSON() as Record<string, unknown>);
     const replies = scenario.chatReplies ?? [intakeReply(BILL_FLOW_AR, true)];
     const reply = replies[Math.min(chatCalls, replies.length - 1)];
@@ -180,11 +200,11 @@ async function setup(page: Page, scenario: Scenario = {}): Promise<Mocks> {
     return jsonRoute(route, 200, ok(scenario.approved ?? billExecutedView()));
   });
 
-  const { email, password } = readAdminCredentials();
-  await page.getByLabel(t('login.email')).fill(email);
-  await page.getByLabel(t('login.password')).fill(password);
+  await page.getByLabel(t('login.email')).fill(admin.email);
+  await page.getByLabel(t('login.password')).fill(admin.password);
   await page.getByRole('button', { name: t('login.submit') }).click();
   await page.waitForURL('**/copilot');
+  await waitForHydration(page);
   return mocks;
 }
 
@@ -378,8 +398,17 @@ async function expectFits(page: Page, stage: string) {
 // ─── The tests ─────────────────────────────────────────────────────────────
 
 test.describe('phone: camera, voice and layout (T-38, AT-16)', () => {
-  test('AT-04 by camera: a photo goes through upload, consent and the card, to the record in NPI', async ({ page }) => {
-    const mocks = await setup(page, { job: billView(), approved: billExecutedView() });
+  test.afterEach(async () => {
+    await restoreChatFixture(handle);
+    handle = undefined;
+  });
+
+  test.afterAll(async () => {
+    await disconnectChatDb();
+  });
+
+  test('AT-04 by camera: a photo goes through upload, consent and the card, to the record in NPI', async ({ page, request }) => {
+    const mocks = await setup(page, request, { job: billView(), approved: billExecutedView() });
     await expectFits(page, 'home');
 
     // The camera is a phone affordance: visible here, and the input asks the OS for the rear camera.
@@ -410,9 +439,9 @@ test.describe('phone: camera, voice and layout (T-38, AT-16)', () => {
     expect(mocks.consentPosts[0]).toEqual({ documentId: DOCUMENT_ID, decision: 'approved' });
     await expect(log.getByText(t('chat.consent_recorded'))).toBeVisible();
 
-    // Then the document goes to the chat on its own: no text, the document id, nothing else.
+    // Then the document goes to the chat on its own: no text, the document id and the seeded conversation it continues, nothing else.
     await expect.poll(() => mocks.chatPosts.length).toBe(1);
-    expect(mocks.chatPosts[0]).toEqual({ documentId: DOCUMENT_ID });
+    expect(mocks.chatPosts[0]).toEqual({ conversationId: 'conv-1', documentId: DOCUMENT_ID });
 
     await expect(card(page)).toBeVisible();
     await expect(card(page).getByText(BILL_FLOW_AR, { exact: true })).toBeVisible();
@@ -432,13 +461,13 @@ test.describe('phone: camera, voice and layout (T-38, AT-16)', () => {
     await expectFits(page, 'execution card');
   });
 
-  test('a large phone photo is downscaled before it is uploaded', async ({ page }) => {
+  test('a large phone photo is downscaled before it is uploaded', async ({ page, request }) => {
     test.setTimeout(90_000);
     const original = largeNoiseJpeg();
     // The premise: this is the kind of photo that used to exceed the server's limits.
     expect(original.byteLength).toBeGreaterThan(PHOTO_MAX_BYTES);
 
-    const mocks = await setup(page, { document: { fileName: 'photo-large.jpg' } });
+    const mocks = await setup(page, request, { document: { fileName: 'photo-large.jpg' } });
     await page.getByTestId('camera-input').setInputFiles({ name: 'photo-large.jpeg', mimeType: 'image/jpeg', buffer: original });
 
     await expect.poll(() => mocks.documentPosts.length, { timeout: 45_000 }).toBe(1);
@@ -455,9 +484,9 @@ test.describe('phone: camera, voice and layout (T-38, AT-16)', () => {
     await expectFits(page, 'consent card after a large photo');
   });
 
-  test('AT-03 by voice: the dictated sentence lands in the composer, is sent by the user, and becomes a purchase requisition', async ({ page }) => {
+  test('AT-03 by voice: the dictated sentence lands in the composer, is sent by the user, and becomes a purchase requisition', async ({ page, request }) => {
     await page.addInitScript(FAKE_SPEECH_SCRIPT);
-    const mocks = await setup(page, {
+    const mocks = await setup(page, request, {
       chatReplies: [intakeReply(PR_FLOW_AR, false)],
       job: prView(),
       approved: prExecutedView(),
@@ -512,9 +541,9 @@ test.describe('phone: camera, voice and layout (T-38, AT-16)', () => {
     await expectFits(page, 'execution card');
   });
 
-  test('a browser without speech recognition: the mic is disabled, says why, and typing still works', async ({ page }) => {
+  test('a browser without speech recognition: the mic is disabled, says why, and typing still works', async ({ page, request }) => {
     await page.addInitScript(NO_SPEECH_SCRIPT);
-    const mocks = await setup(page, {
+    const mocks = await setup(page, request, {
       chatReplies: [{ conversationId: 'conv-1', messageId: 'm-answer', kind: 'answer', textAr: 'تم استلام رسالتك', badges: [], memoryNotes: [] }],
     });
 
@@ -532,8 +561,8 @@ test.describe('phone: camera, voice and layout (T-38, AT-16)', () => {
     await expectFits(page, 'after sending typed text');
   });
 
-  test("the administrator's seven tabs fit inside the bottom bar", async ({ page }) => {
-    await setup(page);
+  test("the administrator's seven tabs fit inside the bottom bar", async ({ page, request }) => {
+    await setup(page, request);
     await expectFits(page, 'home');
 
     const nav = page.getByRole('navigation', { name: t('nav.main') });
@@ -550,8 +579,8 @@ test.describe('phone: camera, voice and layout (T-38, AT-16)', () => {
     expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 0.5);
   });
 
-  test('the composer at 390 px: four controls, each a 44 px target inside the viewport', async ({ page }) => {
-    await setup(page);
+  test('the composer at 390 px: four controls, each a 44 px target inside the viewport', async ({ page, request }) => {
+    await setup(page, request);
     await expectFits(page, 'home');
 
     const viewport = page.viewportSize()!;

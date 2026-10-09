@@ -1,6 +1,11 @@
 // End-to-end coverage for T-08 (the home screen). Real local NPI API + real
-// copilot; only `/copilot/api/chat`'s GET is intercepted (an empty
-// conversation), since this file is about the tiles and the shell, not chat.
+// copilot; the signed-in user starts from an empty conversation, since this
+// file is about the tiles and the shell, not chat.
+//
+// T-39b (D-23): the chat history is read on the server, not fetched by the
+// browser, so that empty conversation is seeded in the copilot's database
+// (`fixtures/chat-db.ts`) before each sign-in and removed after each test —
+// the same isolation the intercepted GET used to give, now real.
 //
 // Every tile's expected number is computed independently, in this file, by
 // calling NPI's own API directly with the same seeded account — never
@@ -12,6 +17,14 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { t } from '../src/i18n/ar';
 import { readAdminCredentials, readSiteEngineerCredentials, type SeededAccount } from './fixtures/accounts';
+import { waitForHydration } from './fixtures/hydration';
+import {
+  disconnectChatDb,
+  npiIdentity,
+  restoreChatFixture,
+  seedLatestConversation,
+  type ChatFixtureHandle,
+} from './fixtures/chat-db';
 
 const API_PORT = process.env.COPILOT_E2E_API_PORT ?? '4077';
 const API_BASE = `http://localhost:${API_PORT}/api`;
@@ -92,22 +105,20 @@ async function computeExpectedTiles(
   return { inbox, contracts_draft, pr_pending, bills_unmatched };
 }
 
-/** Registers the chat-GET mock, then signs the given account in through the
- *  real login form. */
-async function signIn(page: Page, account: SeededAccount): Promise<void> {
+/** What the running test seeded, for `afterEach` to remove. */
+let handle: ChatFixtureHandle | undefined;
+
+/** Seeds an empty conversation as the account's latest (so its real history,
+ *  if any, cannot change what the screen shows), then signs the account in
+ *  through the real login form. */
+async function signIn(page: Page, request: APIRequestContext, account: SeededAccount): Promise<void> {
+  handle = await seedLatestConversation(await npiIdentity(request, account), { messages: [] });
   await page.goto('/copilot/login');
-  await page.route('**/copilot/api/chat', (route) => {
-    if (route.request().method() !== 'GET') return route.continue();
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ conversationId: null, messages: [] }),
-    });
-  });
   await page.getByLabel(t('login.email')).fill(account.email);
   await page.getByLabel(t('login.password')).fill(account.password);
   await page.getByRole('button', { name: t('login.submit') }).click();
   await page.waitForURL('**/copilot');
+  await waitForHydration(page);
 }
 
 async function assertTilesMatch(page: Page, expected: Record<TileKey, TileExpectation>): Promise<void> {
@@ -122,20 +133,29 @@ async function assertTilesMatch(page: Page, expected: Record<TileKey, TileExpect
 }
 
 test.describe('home screen (T-08)', () => {
+  test.afterEach(async () => {
+    await restoreChatFixture(handle);
+    handle = undefined;
+  });
+
+  test.afterAll(async () => {
+    await disconnectChatDb();
+  });
+
   test('the greeting carries the admin\'s Arabic name and each tile matches NPI', async ({ page, request }) => {
     const admin = readAdminCredentials();
     const token = await npiLogin(request, admin);
     const expected = await computeExpectedTiles(request, token);
 
-    await signIn(page, admin);
+    await signIn(page, request, admin);
 
     await expect(page.getByRole('heading', { name: t('home.greeting', { name: admin.nameAr }) })).toBeVisible();
     await assertTilesMatch(page, expected);
   });
 
-  test('the user name and the logout control are in the shell', async ({ page }) => {
+  test('the user name and the logout control are in the shell', async ({ page, request }) => {
     const admin = readAdminCredentials();
-    await signIn(page, admin);
+    await signIn(page, request, admin);
 
     // The header hides the name/label text below the `sm` breakpoint (an
     // existing AppShell behaviour, unchanged by T-08), so presence in the
@@ -145,9 +165,9 @@ test.describe('home screen (T-08)', () => {
     await expect(page.locator('header button')).toBeVisible();
   });
 
-  test('logout clears the session and returns to the login page', async ({ page }) => {
+  test('logout clears the session and returns to the login page', async ({ page, request }) => {
     const admin = readAdminCredentials();
-    await signIn(page, admin);
+    await signIn(page, request, admin);
 
     await page.locator('header button').click();
     await page.waitForURL('**/copilot/login');
@@ -162,14 +182,14 @@ test.describe('home screen (T-08)', () => {
     const token = await npiLogin(request, engineer);
     const expected = await computeExpectedTiles(request, token);
 
-    await signIn(page, engineer);
+    await signIn(page, request, engineer);
     await assertTilesMatch(page, expected);
   });
 
-  test('no horizontal scroll at 390px', async ({ page }) => {
+  test('no horizontal scroll at 390px', async ({ page, request }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const admin = readAdminCredentials();
-    await signIn(page, admin);
+    await signIn(page, request, admin);
 
     await expect(page.getByRole('heading', { name: t('home.greeting', { name: admin.nameAr }) })).toBeVisible();
     const hasHorizontalScroll = await page.evaluate(
@@ -180,18 +200,18 @@ test.describe('home screen (T-08)', () => {
 
   // Fix 4 (design-critique pass): a way back to NPI on a phone, and a named
   // logout button.
-  test('at 390px a "back to NPI" link is visible in the bottom bar', async ({ page }) => {
+  test('at 390px a "back to NPI" link is visible in the bottom bar', async ({ page, request }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const admin = readAdminCredentials();
-    await signIn(page, admin);
+    await signIn(page, request, admin);
 
     const nav = page.getByRole('navigation', { name: t('nav.main') });
     await expect(nav.getByRole('link', { name: t('nav.back_to_npi') })).toBeVisible();
   });
 
-  test('the logout button has an accessible name', async ({ page }) => {
+  test('the logout button has an accessible name', async ({ page, request }) => {
     const admin = readAdminCredentials();
-    await signIn(page, admin);
+    await signIn(page, request, admin);
 
     await expect(page.getByRole('button', { name: t('logout') })).toBeVisible();
   });
@@ -200,7 +220,7 @@ test.describe('home screen (T-08)', () => {
     const admin = readAdminCredentials();
     const token = await npiLogin(request, admin);
     const expected = await computeExpectedTiles(request, token);
-    await signIn(page, admin);
+    await signIn(page, request, admin);
 
     for (const key of TILE_KEYS) {
       if (expected[key].forbidden) continue; // no link on a "no access" tile

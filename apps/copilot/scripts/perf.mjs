@@ -20,7 +20,8 @@
 // 4. Budgets come from next.config.js (`perfBudgets`): LCP, INP, CLS, TTFB and
 //    first-load JS. Exit 0 when every median and every route is within budget,
 //    1 when one is not, 2 when the run could not be set up. The full report
-//    (every run, every file) is written to test-results/perf/<timestamp>.json.
+//    (every run, every file) is written to perf-results/<timestamp>.json — its own
+//    directory, not Playwright's test-results/, which every e2e run wipes.
 //
 // Credentials: the seeded administrator, read from packages/db/prisma/seed.ts
 // like the e2e fixtures do — never printed. Requires a production build to be
@@ -41,7 +42,7 @@ const APP = path.resolve(HERE, '..');
 const REPO_ROOT = path.resolve(APP, '..', '..');
 const NEXT_DIR = path.join(APP, '.next');
 const SEED = path.join(REPO_ROOT, 'packages', 'db', 'prisma', 'seed.ts');
-const OUT_DIR = path.join(APP, 'test-results', 'perf');
+const OUT_DIR = path.join(APP, 'perf-results');
 
 const PERF_PORT = 3179;
 const UNAUTH_PAGES = ['/copilot/login'];
@@ -70,7 +71,7 @@ const PROFILES = {
 // happened before the observer was created.
 const OBSERVER_SCRIPT = `
 (() => {
-  const perf = { lcp: null, lcpElement: null, shifts: [], events: [] };
+  const perf = { lcp: null, lcpElement: null, shifts: [], events: [], longTasks: [] };
   window.__madarPerf = perf;
   const describe = (node) => {
     if (!node || !node.tagName) return String(node && node.nodeName || '?');
@@ -105,9 +106,19 @@ const OBSERVER_SCRIPT = `
   try {
     new PerformanceObserver((list) => {
       for (const e of list.getEntries()) {
-        perf.events.push({ d: e.duration, id: e.interactionId || 0, n: e.name, target: describe(e.target), delay: Math.round(e.processingStart - e.startTime) });
+        perf.events.push({ t: Math.round(e.startTime), d: e.duration, id: e.interactionId || 0, n: e.name, target: describe(e.target), delay: Math.round(e.processingStart - e.startTime) });
       }
     }).observe({ type: 'event', buffered: true, durationThreshold: 16 });
+  } catch {}
+  try {
+    // Every main-thread task over 50 ms with when it ran — the diagnosis of a
+    // high input delay (the key arrived while one of these was running).
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        const a = (e.attribution && e.attribution[0]) || null;
+        perf.longTasks.push({ t: Math.round(e.startTime), d: Math.round(e.duration), src: a ? [a.containerType, a.containerName || a.containerSrc || ''].filter(Boolean).join(':') : null });
+      }
+    }).observe({ type: 'longtask', buffered: true });
   } catch {}
 })();
 `;
@@ -117,7 +128,7 @@ function readMetricsInPage() {
   const scripts = performance
     .getEntriesByType('resource')
     .filter((r) => r.initiatorType === 'script' || /\.js(\?|$)/.test(r.name));
-  const perf = window.__madarPerf ?? { lcp: null, lcpElement: null, shifts: [], events: [] };
+  const perf = window.__madarPerf ?? { lcp: null, lcpElement: null, shifts: [], events: [], longTasks: [] };
   // Bytes by kind, so a slow LCP can be read against what the page downloaded.
   const byKind = {};
   for (const r of performance.getEntriesByType('resource')) {
@@ -139,6 +150,7 @@ function readMetricsInPage() {
     lcpElement: perf.lcpElement,
     shifts: perf.shifts,
     events: perf.events,
+    longTasks: perf.longTasks,
     ttfb: nav ? nav.responseStart : null,
     htmlBytes: nav ? nav.transferSize || nav.encodedBodySize || null : null,
     domContentLoadedMs: nav ? Math.round(nav.domContentLoadedEventEnd) : null,
@@ -157,13 +169,15 @@ function usage() {
     [
       'usage: node scripts/perf.mjs [--runs N] [--api <npi api base>] [--url <copilot base>]',
       '                             [--skip-build] [--profile desktop|mobile|both] [--out <file>]',
+      '                             [--pages </a,/b>] [--block <text>]',
       '',
       '  --runs N        loads per screen and profile (default 3; the median is judged)',
       '  --api URL       NPI api the started copilot talks to (default http://localhost:4000/api)',
       '  --url URL       measure a copilot that is already running; no build, no start',
       '  --skip-build    reuse the production build in .next (BUILD_ID must exist)',
       '  --profile P     desktop, mobile or both (default both)',
-      '  --out FILE      where to write the JSON report (default test-results/perf/<timestamp>.json)',
+      '  --out FILE      where to write the JSON report (default perf-results/<timestamp>.json)',
+      '  --block TEXT    diagnosis: abort every request whose URL contains TEXT (e.g. .woff2)',
       '  --pages LIST    comma-separated screens to measure (e.g. /copilot,/copilot/trust); default all',
     ].join('\n'),
   );
@@ -273,8 +287,9 @@ async function interact(page) {
   await page.waitForTimeout(200);
 }
 
-async function measureOnce(context, profile, url) {
+async function measureOnce(context, profile, url, block) {
   const page = await context.newPage();
+  if (block) await page.route((u) => u.href.includes(block), (route) => route.abort());
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
   // Every run is a cold load (the session cookie stays; the HTTP cache does
@@ -315,7 +330,7 @@ async function measureOnce(context, profile, url) {
       .filter((e) => e.id)
       .sort((a, b) => b.d - a.d)
       .slice(0, 3)
-      .map((e) => ({ name: e.n, target: e.target, durationMs: e.d, inputDelayMs: e.delay }));
+      .map((e) => ({ atMs: e.t, name: e.n, target: e.target, durationMs: e.d, inputDelayMs: e.delay }));
     const largestShifts = [...raw.shifts]
       .sort((a, b) => b.v - a.v)
       .slice(0, 3)
@@ -336,6 +351,8 @@ async function measureOnce(context, profile, url) {
       shifts: raw.shifts.length,
       worstEvents,
       largestShifts,
+      // Main-thread tasks over 50 ms, in time order (the last 40), to read an input delay against.
+      longTasks: (raw.longTasks || []).slice(-40).map((l) => ({ atMs: l.t, durationMs: l.d, source: l.src })),
       finalPath: raw.finalPath,
       wallMs: Date.now() - started,
     };
@@ -361,7 +378,7 @@ function summarize(runs) {
   };
 }
 
-async function measureProfile(browser, name, base, runs, account, only) {
+async function measureProfile(browser, name, base, runs, account, only, block) {
   const profile = PROFILES[name];
   const context = await browser.newContext({ ...profile.device, locale: 'ar-SA' });
   await context.addInitScript(OBSERVER_SCRIPT);
@@ -370,7 +387,7 @@ async function measureProfile(browser, name, base, runs, account, only) {
     const measurePath = async (pathName) => {
       if (only && !only.includes(pathName)) return;
       const samples = [];
-      for (let i = 0; i < runs; i += 1) samples.push(await measureOnce(context, profile, `${base}${pathName}`));
+      for (let i = 0; i < runs; i += 1) samples.push(await measureOnce(context, profile, `${base}${pathName}`, block));
       const summary = summarize(samples);
       pages.push({ path: pathName, profile: name, ...summary, runs: samples });
       console.log(
@@ -439,7 +456,7 @@ async function main() {
     browser = await chromium.launch();
     for (const name of args.profiles) {
       console.log(`[perf] profile ${name}: ${PROFILES[name].note}; ${args.runs} run(s) per screen`);
-      pages.push(...(await measureProfile(browser, name, base, args.runs, account, args.pages)));
+      pages.push(...(await measureProfile(browser, name, base, args.runs, account, args.pages, args.block)));
     }
   } finally {
     if (browser) await browser.close().catch(() => {});

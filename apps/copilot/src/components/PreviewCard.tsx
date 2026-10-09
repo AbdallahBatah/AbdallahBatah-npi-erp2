@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { DocumentChip } from '@/components/DocumentChip';
 import { WaitingIndicator } from '@/components/chat/WaitingIndicator';
+import { useServerDesktopHint } from '@/components/ViewportHint';
 import type { IntakeView, PreviewChoice, PreviewField, PreviewLineRow } from '@/intake/types';
 
 export interface PreviewCardProps {
@@ -40,10 +41,12 @@ function desktopSnapshot(): boolean {
 }
 
 /** One layout is rendered, never both (a hidden duplicate would double every
- *  field in the DOM — and in the accessibility tree). The card only mounts on
- *  the client after its data arrived, so the server snapshot is never shown. */
+ *  field in the DOM). Since T-39b the card is in the server's HTML, so the
+ *  server snapshot IS the first paint: it comes from the request's user agent
+ *  (`ViewportHint`), and `matchMedia` takes over from hydration on. */
 function useIsDesktop(): boolean {
-  return useSyncExternalStore(subscribeDesktop, desktopSnapshot, () => false);
+  const serverHint = useServerDesktopHint();
+  return useSyncExternalStore(subscribeDesktop, desktopSnapshot, () => serverHint);
 }
 
 // ─── One field ──────────────────────────────────────────────────────────────

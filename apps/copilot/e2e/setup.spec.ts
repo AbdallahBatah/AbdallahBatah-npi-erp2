@@ -9,6 +9,7 @@ import { test, expect } from '@playwright/test';
 import { t } from '../src/i18n/ar';
 import { formatNumber } from '../src/i18n/format';
 import { readAdminCredentials, readSiteEngineerCredentials, type SeededAccount } from './fixtures/accounts';
+import { waitForHydration } from './fixtures/hydration';
 import { disconnectSetupDb, resetOpenSetupSessions } from './fixtures/setup-db';
 
 const API_PORT = process.env.COPILOT_E2E_API_PORT ?? '4077';
@@ -28,6 +29,7 @@ async function signIn(page: Page, account: SeededAccount): Promise<void> {
   await page.getByLabel(t('login.password')).fill(account.password);
   await page.getByRole('button', { name: t('login.submit') }).click();
   await page.waitForURL('**/copilot');
+  await waitForHydration(page);
 }
 
 function jsonRoute(route: Route, status: number, body: unknown) {
@@ -108,6 +110,8 @@ test.describe('setup screens (T-18)', () => {
     await expect(nav.getByRole('link', { name: t('nav.setup') })).toBeVisible();
 
     await page.goto('/copilot/setup');
+
+    await waitForHydration(page);
     await expect(page.getByRole('heading', { name: t('setup.title') })).toBeVisible();
     await expect(page.getByRole('heading', { name: t('setup.q1') })).toBeVisible();
     await expect(page.getByText(t('setup.step_of', { n: 1, total: 7 }))).toBeVisible();
@@ -122,6 +126,8 @@ test.describe('setup screens (T-18)', () => {
     await expect(nav.getByRole('link', { name: t('nav.setup') })).toHaveCount(0);
 
     await page.goto('/copilot/setup');
+
+    await waitForHydration(page);
     await expect(page.getByText(t('setup.forbidden'))).toBeVisible();
   });
 
@@ -129,6 +135,7 @@ test.describe('setup screens (T-18)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/setup');
+    await waitForHydration(page);
 
     await sendFreeText(page, 'إحنا مقاول EPC');
 
@@ -146,6 +153,7 @@ test.describe('setup screens (T-18)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/setup');
+    await waitForHydration(page);
 
     await sendFreeText(page, 'إحنا مقاول EPC');
     await expect(page.getByRole('heading', { name: t('setup.q2') })).toBeVisible();
@@ -173,6 +181,7 @@ test.describe('setup screens (T-18)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/setup');
+    await waitForHydration(page);
 
     await sendFreeText(page, 'إحنا مقاول EPC');
     await expect(page.getByRole('heading', { name: t('setup.q2') })).toBeVisible();
@@ -212,6 +221,7 @@ test.describe('setup screens (T-18)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/setup');
+    await waitForHydration(page);
 
     await page.route(SETUP_PATH, async (route) => {
       const body = await postedBody(route);
@@ -234,6 +244,7 @@ test.describe('setup screens (T-18)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/setup');
+    await waitForHydration(page);
 
     await sendFreeText(page, 'إحنا مقاول EPC');
     await page.getByRole('button', { name: t('setup.save_step') }).click();
@@ -282,6 +293,7 @@ test.describe('setup screens (T-18)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/setup');
+    await waitForHydration(page);
 
     await sendFreeText(page, 'إحنا مقاول EPC');
     await page.getByRole('button', { name: t('setup.save_step') }).click();
@@ -334,6 +346,7 @@ test.describe('setup screens (T-18)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/setup');
+    await waitForHydration(page);
 
     async function assertNoScroll() {
       const hasHorizontalScroll = await page.evaluate(

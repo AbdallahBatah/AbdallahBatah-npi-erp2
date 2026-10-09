@@ -12,6 +12,7 @@ import { loadProfilePack } from '../src/onboarding/catalog';
 import { APPROVAL_DOCUMENT_LABEL_AR } from '../src/onboarding/plan';
 import { FLOW_TYPES } from '../src/onboarding/profile.schema';
 import { readAdminCredentials, readSiteEngineerCredentials, type SeededAccount } from './fixtures/accounts';
+import { waitForHydration } from './fixtures/hydration';
 import { disconnectSetupDb } from './fixtures/setup-db';
 import {
   deleteFirmConfig,
@@ -37,6 +38,7 @@ async function signIn(page: Page, account: SeededAccount): Promise<void> {
   await page.getByLabel(t('login.password')).fill(account.password);
   await page.getByRole('button', { name: t('login.submit') }).click();
   await page.waitForURL('**/copilot');
+  await waitForHydration(page);
 }
 
 const epcPack = loadProfilePack('epc');
@@ -73,6 +75,8 @@ test.describe('settings screen (T-19)', () => {
     await expect(nav.getByRole('link', { name: t('nav.settings') })).toBeVisible();
 
     await page.goto('/copilot/settings');
+
+    await waitForHydration(page);
     await expect(page.getByRole('heading', { name: t('settings.title') })).toBeVisible();
     await expect(page.getByText(t('profile.epc'))).toBeVisible();
 
@@ -107,6 +111,8 @@ test.describe('settings screen (T-19)', () => {
     await expect(nav.getByRole('link', { name: t('nav.settings') })).toHaveCount(0);
 
     await page.goto('/copilot/settings');
+
+    await waitForHydration(page);
     await expect(page.getByText(t('settings.forbidden'))).toBeVisible();
   });
 
@@ -114,6 +120,7 @@ test.describe('settings screen (T-19)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/settings');
+    await waitForHydration(page);
 
     const procurementCheckbox = page.getByTestId('settings-module-procurement');
     await expect(procurementCheckbox).toBeChecked();
@@ -146,6 +153,7 @@ test.describe('settings screen (T-19)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/settings');
+    await waitForHydration(page);
 
     const row = page.getByTestId('settings-baseline-customer_contract');
     await expect(row.getByText(t('settings.baselines.none'))).toBeVisible();
@@ -176,6 +184,7 @@ test.describe('settings screen (T-19)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/settings');
+    await waitForHydration(page);
 
     await page.getByTestId('settings-doctypes-card').getByRole('button', { name: t('settings.rerun') }).click();
 
@@ -194,6 +203,7 @@ test.describe('settings screen (T-19)', () => {
     const admin = readAdminCredentials();
     await signIn(page, admin);
     await page.goto('/copilot/settings');
+    await waitForHydration(page);
 
     await expect(page.getByText(t('settings.no_config'))).toBeVisible();
     await expect(page.getByRole('link', { name: t('settings.go_setup') })).toBeVisible();

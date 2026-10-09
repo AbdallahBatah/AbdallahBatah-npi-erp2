@@ -137,16 +137,30 @@ function finalizeAnswer(draft: Draft): StepAnswer | null {
  * components (`SetupStep`, the step editors, `DiffCard`) are controlled —
  * they report edits up through a callback rather than holding their own copy
  * of the answer.
+ *
+ * T-39b (D-23): the page reads the current step on the server and passes it
+ * as `initialData`, so the step is in the first HTML; the component then
+ * starts `ready` with that step's draft and makes no GET on mount. Without it
+ * (the server read failed) it loads itself as before.
  */
-export function SetupWizard() {
-  const [phase, setPhase] = useState<Phase>('loading');
+export function SetupWizard({
+  initialData,
+  initialPreview = null,
+}: {
+  initialData?: SetupStateView;
+  /** Step 7's diff, when the page already ran the dry run on the server
+   *  (T-39b): the card is then in the first HTML and the step-7 effect below
+   *  has nothing to fetch. Null means «fetch it as before». */
+  initialPreview?: SetupPreviewResult | null;
+} = {}) {
+  const [phase, setPhase] = useState<Phase>(initialData ? 'ready' : 'loading');
   const [errorMessage, setErrorMessage] = useState('');
-  const [view, setView] = useState<SetupStateView | null>(null);
-  const [draft, setDraft] = useState<Draft>(null);
+  const [view, setView] = useState<SetupStateView | null>(initialData ?? null);
+  const [draft, setDraft] = useState<Draft>(() => (initialData ? buildInitialDraft(initialData) : null));
   const [freeText, setFreeText] = useState('');
   const [unclear, setUnclear] = useState<string | null>(null);
   const [invalid, setInvalid] = useState<{ messageAr: string; issues: SetupIssue[] } | null>(null);
-  const [preview, setPreview] = useState<SetupPreviewResult | null>(null);
+  const [preview, setPreview] = useState<SetupPreviewResult | null>(initialData ? initialPreview : null);
   const [applyResult, setApplyResult] = useState<SetupApplyResult | null>(null);
 
   const npiUsersByRole: Record<string, StepDefaultsNpiUser[]> = {};
@@ -188,9 +202,11 @@ export function SetupWizard() {
     applyView(result.view);
   }, [applyView]);
 
+  // With server-provided first data (T-39b, D-23) the mount needs no GET;
+  // `load` stays for the error state's retry. Same pattern as `IntakePanel`.
   useEffect(() => {
-    load();
-  }, [load]);
+    if (initialData === undefined) load();
+  }, [load, initialData]);
 
   // Step 7 is never answered; its content comes from a live `preview`,
   // fetched automatically the moment the wizard lands there.

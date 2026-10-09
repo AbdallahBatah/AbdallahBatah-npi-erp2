@@ -28,11 +28,46 @@ const SUGGESTION_KEYS = ['chat.suggest.3', 'chat.suggest.1', 'chat.suggest.2'] a
 
 type Phase = 'loading' | 'error' | 'ready';
 
+/** The marker after the newest message; one chat per page. */
+const BOTTOM_ID = 'copilot-chat-bottom';
+/** Runs during parsing of a server-rendered thread (see the end of `Chat`). */
+const SCROLL_TO_BOTTOM_SCRIPT = `var b=document.getElementById(${JSON.stringify(BOTTOM_ID)});if(b)b.scrollIntoView({block:'end'});`;
+
+/** The loading phase's placeholder (three bars, `aria-busy`). Also the home
+ *  page's `<Suspense>` fallback while the server reads the history (T-39b,
+ *  D-23), so the same markup holds the same space until the thread replaces
+ *  it. */
+export function ChatSkeleton() {
+  return (
+    <div className="flex flex-col gap-3" aria-busy="true">
+      <Skeleton className="h-16 w-2/3" />
+      <Skeleton className="h-16 w-1/2 self-end" />
+      <Skeleton className="h-16 w-3/5" />
+    </div>
+  );
+}
+
+/** What the home page reads on the server and hands the chat (T-39b, D-23):
+ *  the latest conversation, its messages and the views of its intake cards
+ *  keyed by job id — a plain record, not a Map, so it crosses the
+ *  server-to-client prop boundary. */
+export interface ChatFirstData {
+  conversationId: string | null;
+  messages: ChatMessage[];
+  intakeViews: Record<string, IntakeView>;
+}
+
 /**
- * The home page's chat panel: loads the signed-in user's latest conversation
- * on mount, then lets them send more. `userName` is accepted for the page to
+ * The home page's chat panel: shows the signed-in user's latest conversation,
+ * then lets them send more. `userName` is accepted for the page to
  * pass through (spec/madar/03 §3) but this component has nothing of its own
  * to show with it today — the greeting lives on the page, not in here.
+ *
+ * T-39b (D-23): the page reads the history on the server and passes it as
+ * `initialData`, so the thread is in the first HTML instead of arriving after
+ * hydration; with it the component starts `ready` and makes no GET on mount.
+ * Without it (the server read failed) it loads itself as before; `load` also
+ * stays the error state's retry.
  *
  * T-22 adds the attach + consent flow on top of that: attaching a file
  * uploads it, shows it as a user bubble, and then either asks for consent
@@ -44,17 +79,19 @@ type Phase = 'loading' | 'error' | 'ready';
  * tell what the document is, the reply carries five flow chips; picking one
  * sends the same document again with `forcedFlow`.
  */
-export function Chat({ userName: _userName }: { userName?: string } = {}) {
-  const [phase, setPhase] = useState<Phase>('loading');
+export function Chat({ userName: _userName, initialData }: { userName?: string; initialData?: ChatFirstData } = {}) {
+  const [phase, setPhase] = useState<Phase>(initialData ? 'ready' : 'loading');
   const [errorMessage, setErrorMessage] = useState('');
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(initialData?.conversationId ?? null);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialData?.messages ?? []);
   // The intake jobs of the loaded history, read before the thread renders so
   // every card appears at its final height with the messages (T-39: each
   // card's skeleton → card swap after the scroll to the bottom was a layout
   // shift of ~0.9 on this screen). A card whose read failed is simply absent
   // here and loads itself as before.
-  const [intakeViews, setIntakeViews] = useState<ReadonlyMap<string, IntakeView>>(new Map());
+  const [intakeViews, setIntakeViews] = useState<ReadonlyMap<string, IntakeView>>(
+    () => new Map(Object.entries(initialData?.intakeViews ?? {})),
+  );
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [attaching, setAttaching] = useState(false);
@@ -112,11 +149,24 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
     setPhase('ready');
   }, []);
 
+  // With server-provided first data (T-39b, D-23) the mount needs no GET;
+  // `load` stays for the error state's retry. Same pattern as `IntakePanel`.
   useEffect(() => {
-    load();
-  }, [load]);
+    if (initialData === undefined) load();
+  }, [load, initialData]);
 
+  // A server-rendered thread was already scrolled to its end by the inline
+  // script below, while the HTML was being parsed — before anything had been
+  // painted. Scrolling it again here, after hydration, moved every painted
+  // message by a viewport (a layout shift of 0.58 on desktop), so the first
+  // run of this effect is skipped in that case; every later change still
+  // scrolls as before.
+  const scrolledByServer = useRef(initialData !== undefined && initialData.messages.length > 0);
   useEffect(() => {
+    if (scrolledByServer.current) {
+      scrolledByServer.current = false;
+      return;
+    }
     bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, sending, attaching, pendingConsent, intakeBusy]);
 
@@ -318,13 +368,7 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
   }
 
   if (phase === 'loading') {
-    return (
-      <div className="flex flex-col gap-3" aria-busy="true">
-        <Skeleton className="h-16 w-2/3" />
-        <Skeleton className="h-16 w-1/2 self-end" />
-        <Skeleton className="h-16 w-3/5" />
-      </div>
-    );
+    return <ChatSkeleton />;
   }
 
   if (phase === 'error') {
@@ -379,7 +423,7 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
             sticky composer below: Element.scrollIntoView respects
             scroll-margin, so a plain `block: 'end'` lands above the
             composer/tab-bar stack instead of behind it. */}
-        <div ref={bottomRef} className="scroll-mb-56" />
+        <div ref={bottomRef} id={BOTTOM_ID} className="scroll-mb-56" />
       </div>
       {/* Sticky, not fixed: it scrolls with the page until it reaches the
           bottom of the viewport, then holds there — above the fixed mobile
@@ -402,6 +446,13 @@ export function Chat({ userName: _userName }: { userName?: string } = {}) {
           attachDisabled={attaching || pendingConsent !== null}
         />
       </div>
+      {/* Server-rendered thread (T-39b): scroll to the newest message while
+          the document is still being parsed, after the composer above exists
+          (so the page already has its final height), and before the first
+          paint — a scroll after hydration moves painted content and counts
+          as a layout shift. A fixed string with no user data in it; React
+          keeps the element on hydration and never runs it again. */}
+      {scrolledByServer.current ? <script dangerouslySetInnerHTML={{ __html: SCROLL_TO_BOTTOM_SCRIPT }} /> : null}
     </div>
   );
 }

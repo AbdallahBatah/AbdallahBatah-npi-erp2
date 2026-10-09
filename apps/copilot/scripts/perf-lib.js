@@ -148,6 +148,7 @@ function parseArgs(argv) {
     profiles: ['desktop', 'mobile'],
     out: null,
     pages: null,
+    block: null,
     help: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -190,6 +191,14 @@ function parseArgs(argv) {
           .filter(Boolean);
         if (list.length === 0 || list.some((p) => !p.startsWith('/'))) throw new Error('--pages takes comma-separated paths starting with /');
         out.pages = list;
+        break;
+      }
+      case '--block': {
+        // Diagnosis only: abort every request whose URL contains this text (e.g.
+        // `.woff2` to measure without the web font) — never part of the gate.
+        const text = next().trim();
+        if (!text) throw new Error('--block needs a non-empty text');
+        out.block = text;
         break;
       }
       case '--help':

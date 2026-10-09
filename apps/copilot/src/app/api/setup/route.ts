@@ -16,6 +16,7 @@ import { createLlmClient } from '@/llm/client';
 import { createAnthropicProvider } from '@/llm/providers/anthropic';
 import { createNpiClient } from '@/npi/client';
 import { NpiError } from '@/npi/errors';
+import { buildSetupReadDeps } from '@/onboarding/deps';
 import { MachineError } from '@/onboarding/machine';
 import { PlanError } from '@/onboarding/plan';
 import { getSetupState, handleSetupAction, SetupForbiddenError, type SetupDeps } from '@/onboarding/service';
@@ -96,7 +97,9 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
-    const deps = await buildDeps(session.npiToken, session.user);
+    // A read needs no model and no dictionary (T-39b): the same deps the
+    // setup page builds for its server render.
+    const deps = buildSetupReadDeps(session.npiToken);
     const view = await getSetupState(deps, {
       npiOrgId: session.user.npiOrgId,
       npiUserId: session.user.npiUserId,

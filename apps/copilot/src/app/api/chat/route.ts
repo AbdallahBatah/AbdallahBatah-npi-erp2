@@ -12,17 +12,16 @@ import { buildTurn } from '@/agents/context';
 import type { FlowType } from '@/agents/router';
 import { MAX_MESSAGE_LENGTH, TurnInputError, runTurn } from '@/agents/run';
 import { getServerSession } from '@/auth/session';
+import { loadConversationHistory } from '@/chat/history';
 import { getDb } from '@/db';
 import { t } from '@/i18n/ar';
 import { NpiError } from '@/npi/errors';
 import { FLOW_TYPES } from '@/onboarding/profile.schema';
-import { conversationReadableBy } from '@/positions/reassign';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
-const HISTORY_LIMIT = 50;
 
 function json(body: unknown, status: number): NextResponse {
   return NextResponse.json(body, { status, headers: NO_STORE });
@@ -121,58 +120,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (npiDown) return json({ error: 'npi_down', messageAr: t('home.error.npi') }, 503);
   if (!session) return json({ error: 'unauthenticated' }, 401);
 
-  const db = getDb();
-  const requested = request.nextUrl.searchParams.get('conversationId');
-  const owner = { npiUserId: session.user.npiUserId, npiOrgId: session.user.npiOrgId };
-
   // A named conversation is the owner's — or, for an administrator, a
   // predecessor's in the position they left (BR-07, T-30 D-T30-5); anyone else
   // gets the same 404 as a conversation that does not exist. Without an id,
-  // only the caller's own latest conversation is ever returned.
-  const conversation = requested
-    ? await conversationReadableBy(
-        db,
-        { npiOrgId: session.user.npiOrgId, npiUserId: session.user.npiUserId, permissions: session.user.permissions },
-        requested,
-      )
-    : await db.conversation.findFirst({ where: owner, orderBy: { updatedAt: 'desc' }, select: { id: true } });
-
-  if (!conversation) {
-    return requested ? json({ error: 'not_found' }, 404) : json({ conversationId: null, messages: [] }, 200);
-  }
-
-  const rows = await db.message.findMany({
-    where: { conversationId: conversation.id },
-    orderBy: { createdAt: 'desc' },
-    take: HISTORY_LIMIT,
-    select: {
-      id: true,
-      role: true,
-      contentAr: true,
-      badge: true,
-      kind: true,
-      memoryNoteJson: true,
-      intakeJobId: true,
-      documentId: true,
-      createdAt: true,
-    },
-  });
-
-  return json(
-    {
-      conversationId: conversation.id,
-      messages: rows.reverse().map((row) => ({
-        id: row.id,
-        role: row.role,
-        textAr: row.contentAr,
-        ...(row.kind ? { kind: row.kind } : {}),
-        badges: row.badge ? row.badge.split('، ') : [],
-        memoryNotes: Array.isArray(row.memoryNoteJson) ? row.memoryNoteJson : [],
-        ...(row.intakeJobId ? { intakeJobId: row.intakeJobId } : {}),
-        ...(row.documentId ? { documentId: row.documentId } : {}),
-        createdAt: row.createdAt.toISOString(),
-      })),
-    },
-    200,
+  // only the caller's own latest conversation is ever returned. The read
+  // itself lives in `src/chat/history.ts`, shared with the home page's server
+  // render (T-39b, D-23).
+  const history = await loadConversationHistory(
+    getDb(),
+    { npiOrgId: session.user.npiOrgId, npiUserId: session.user.npiUserId, permissions: session.user.permissions },
+    request.nextUrl.searchParams.get('conversationId'),
   );
+  if (history === null) return json({ error: 'not_found' }, 404);
+  return json(history, 200);
 }

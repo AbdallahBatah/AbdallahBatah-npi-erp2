@@ -9,12 +9,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { ZodError } from 'zod';
 import { getServerSession } from '@/auth/session';
-import { getDb } from '@/db';
 import { t } from '@/i18n/ar';
-import { createNpiClient } from '@/npi/client';
 import { NpiError } from '@/npi/errors';
 import { SetupForbiddenError } from '@/onboarding/service';
-import { getSettingsView, handleSettingsAction, SettingsError, type SettingsDb, type SettingsDeps } from '@/settings/service';
+import { buildSettingsDeps as buildDeps } from '@/settings/deps';
+import { getSettingsView, handleSettingsAction, SettingsError } from '@/settings/service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,18 +45,6 @@ async function sessionOrNull() {
     if (err instanceof NpiError) return { session: null, npiDown: true };
     throw err;
   }
-}
-
-function buildDeps(npiToken: string): SettingsDeps {
-  const db = getDb();
-  return {
-    // Prisma's generated client types `firmConfig`/`position`/`manualBaseline`
-    // more strictly than the structural `SettingsDb` this file (and
-    // `src/settings/service.ts`) is written against — the same friction
-    // `api/setup/route.ts` works around with its own `db` cast.
-    db: db as unknown as SettingsDb,
-    npi: createNpiClient({ token: npiToken }),
-  };
 }
 
 function npiErrorStatus(err: NpiError): number {

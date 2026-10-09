@@ -1,11 +1,27 @@
 // End-to-end coverage for T-12 (the chat UI). Real local NPI API + real
-// copilot, real login — only `/copilot/api/chat` is intercepted, per the
+// copilot, real login — only `/copilot/api/chat`'s POST is intercepted, per the
 // task brief ("no test may call the real chat model"). Runs on both the
 // `desktop` and `mobile` Playwright projects.
-import type { Route } from '@playwright/test';
+//
+// T-39b (D-23): the history no longer arrives through a browser-side GET —
+// `/copilot` reads the caller's latest conversation on the server and renders
+// it in the first HTML. So each test seeds that conversation in the copilot's
+// database (`fixtures/chat-db.ts`; an empty one by default) before it signs in,
+// instead of mocking the GET, and removes it afterwards.
+import type { APIRequestContext, Page, Route } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { t } from '../src/i18n/ar';
 import { readAdminCredentials } from './fixtures/accounts';
+import { waitForHydration } from './fixtures/hydration';
+import {
+  disconnectChatDb,
+  npiIdentity,
+  restoreChatFixture,
+  seedLatestConversation,
+  type ChatFixtureHandle,
+  type ChatSeed,
+  type HistoryMessage,
+} from './fixtures/chat-db';
 
 const CHAT_PATH = '**/copilot/api/chat';
 
@@ -13,29 +29,50 @@ function jsonRoute(route: Route, status: number, body: unknown) {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
 
-/** Registers the chat-route mock, then signs the seeded admin in and lands
- *  on the home page. The mock must be registered before the login's
- *  navigation to `/copilot`, since `Chat` fires its GET the moment it mounts. */
+/** What the running test seeded, for `afterEach` to remove. */
+let handle: ChatFixtureHandle | undefined;
+
+/** Seeds the admin's latest conversation (empty unless `seed` says otherwise),
+ *  registers the chat-route mock for the POST, then signs the admin in and
+ *  lands on the home page. The seed must exist before the login's navigation
+ *  to `/copilot`, since the server reads it while rendering that page. The
+ *  mock must not answer a GET: the page does not send one any more, and a
+ *  handler that sees one lets it through to the network. */
 async function gotoHomeMocked(
-  page: import('@playwright/test').Page,
+  page: Page,
+  request: APIRequestContext,
   onRequest: (route: Route) => Promise<void> | void,
+  seed: ChatSeed = { messages: [] },
 ) {
+  const admin = readAdminCredentials();
+  handle = await seedLatestConversation(await npiIdentity(request, admin), seed);
+
   await page.goto('/copilot/login');
   await page.route(CHAT_PATH, async (route) => onRequest(route));
 
-  const { email, password } = readAdminCredentials();
-  await page.getByLabel(t('login.email')).fill(email);
-  await page.getByLabel(t('login.password')).fill(password);
+  await page.getByLabel(t('login.email')).fill(admin.email);
+  await page.getByLabel(t('login.password')).fill(admin.password);
   await page.getByRole('button', { name: t('login.submit') }).click();
   await page.waitForURL('**/copilot');
+  await waitForHydration(page);
 }
 
 test.describe('chat UI (T-12)', () => {
+  test.afterEach(async () => {
+    await restoreChatFixture(handle);
+    handle = undefined;
+  });
+
+  test.afterAll(async () => {
+    await disconnectChatDb();
+  });
+
   test('empty state shows home.empty and three chips; a chip fills the composer without sending', async ({
     page,
+    request,
   }) => {
     let postCalls = 0;
-    await gotoHomeMocked(page, (route) => {
+    await gotoHomeMocked(page, request, (route) => {
       if (route.request().method() === 'POST') {
         postCalls += 1;
         return jsonRoute(route, 200, {
@@ -47,7 +84,7 @@ test.describe('chat UI (T-12)', () => {
           memoryNotes: [],
         });
       }
-      return jsonRoute(route, 200, { conversationId: null, messages: [] });
+      return route.fallback();
     });
 
     const log = page.getByRole('log');
@@ -63,27 +100,27 @@ test.describe('chat UI (T-12)', () => {
     expect(postCalls).toBe(0);
   });
 
-  test('the loading state is shown while the initial GET is pending', async ({ page }) => {
-    await gotoHomeMocked(page, async (route) => {
-      if (route.request().method() === 'GET') {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-      }
-      return jsonRoute(route, 200, { conversationId: null, messages: [] });
+  test('the history arrives with the page: the empty state is in the first paint and the browser sends no history GET', async ({
+    page,
+    request,
+  }) => {
+    let historyGets = 0;
+    await gotoHomeMocked(page, request, (route) => {
+      if (route.request().method() === 'GET') historyGets += 1;
+      return route.fallback();
     });
 
-    // The skeleton renders synchronously on mount, independent of the
-    // artificial GET delay above, so it must already be visible here.
-    await expect(page.locator('[aria-busy="true"]')).toBeVisible();
+    // Server-rendered: no skeleton to wait out, the empty state is simply there.
     await expect(page.getByRole('log').getByText(t('home.empty'))).toBeVisible();
+    expect(historyGets).toBe(0);
   });
 
   test('a sent message appears, the waiting indicator shows, then the mocked answer with its badge and memory note', async ({
     page,
+    request,
   }) => {
-    await gotoHomeMocked(page, async (route) => {
-      if (route.request().method() === 'GET') {
-        return jsonRoute(route, 200, { conversationId: null, messages: [] });
-      }
+    await gotoHomeMocked(page, request, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
       await new Promise((resolve) => setTimeout(resolve, 800));
       return jsonRoute(route, 200, {
         conversationId: 'c1',
@@ -109,11 +146,9 @@ test.describe('chat UI (T-12)', () => {
     await expect(log.getByText('يفضل التواصل صباحاً')).toBeVisible();
   });
 
-  test('an hr_refusal reply is shown as a notice with the text of hr.refusal', async ({ page }) => {
-    await gotoHomeMocked(page, (route) => {
-      if (route.request().method() === 'GET') {
-        return jsonRoute(route, 200, { conversationId: null, messages: [] });
-      }
+  test('an hr_refusal reply is shown as a notice with the text of hr.refusal', async ({ page, request }) => {
+    await gotoHomeMocked(page, request, (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
       return jsonRoute(route, 200, {
         conversationId: 'c1',
         messageId: 'm1',
@@ -131,12 +166,10 @@ test.describe('chat UI (T-12)', () => {
     await expect(page.getByRole('log').getByText(t('hr.refusal'))).toBeVisible();
   });
 
-  test('a 500 shows the Arabic error and gives the typed text back to the composer', async ({ page }) => {
+  test('a 500 shows the Arabic error and gives the typed text back to the composer', async ({ page, request }) => {
     const serverMessage = 'تعذر إكمال الطلب الآن';
-    await gotoHomeMocked(page, (route) => {
-      if (route.request().method() === 'GET') {
-        return jsonRoute(route, 200, { conversationId: null, messages: [] });
-      }
+    await gotoHomeMocked(page, request, (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
       return jsonRoute(route, 500, { error: 'server', messageAr: serverMessage });
     });
 
@@ -148,34 +181,13 @@ test.describe('chat UI (T-12)', () => {
     await expect(textarea).toHaveValue('طلب شراء جديد');
   });
 
-  test('a GET 503 shows the error state, and retry loads the conversation', async ({ page }) => {
-    // Keyed on an explicit "has retry been clicked yet" flag rather than a
-    // raw call counter: React's dev-mode Strict Mode double-invokes mount
-    // effects, so the initial GET can legitimately fire more than once
-    // before the first assertion runs. Every GET before the click must stay
-    // 503 (whichever of those duplicate calls resolves last still lands on
-    // the error state), and the click itself only ever fires one GET.
-    let retried = false;
-    await gotoHomeMocked(page, (route) => {
-      if (route.request().method() !== 'GET') return jsonRoute(route, 200, {});
-      if (!retried) {
-        return jsonRoute(route, 503, { error: 'npi_down', messageAr: 'تعذر الوصول إلى NPI الآن' });
-      }
-      return jsonRoute(route, 200, { conversationId: null, messages: [] });
-    });
+  // The former "a GET 503 shows the error state, and retry loads the conversation"
+  // test cannot be driven any more: the first load never goes through the client
+  // GET. `loadConversation`'s 503 mapping stays unit-tested in tests/chat-api.spec.ts.
 
-    await expect(page.getByRole('alert').getByText('تعذر الوصول إلى NPI الآن')).toBeVisible();
-    retried = true;
-    await page.getByRole('button', { name: t('action.retry') }).click();
-
-    await expect(page.getByRole('log').getByText(t('home.empty'))).toBeVisible();
-  });
-
-  test('Enter sends the message; Shift+Enter only inserts a new line', async ({ page }) => {
-    await gotoHomeMocked(page, (route) => {
-      if (route.request().method() === 'GET') {
-        return jsonRoute(route, 200, { conversationId: null, messages: [] });
-      }
+  test('Enter sends the message; Shift+Enter only inserts a new line', async ({ page, request }) => {
+    await gotoHomeMocked(page, request, (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
       return jsonRoute(route, 200, {
         conversationId: 'c1',
         messageId: 'm1',
@@ -198,7 +210,7 @@ test.describe('chat UI (T-12)', () => {
     await expect(page.getByRole('log').getByText('السطر الأول')).toBeVisible();
   });
 
-  test('an answer containing a raw image tag is shown as literal text and opens no dialog', async ({ page }) => {
+  test('an answer containing a raw image tag is shown as literal text and opens no dialog', async ({ page, request }) => {
     const payload = '<img src=x onerror=alert(1)>';
     let dialogSeen = false;
     page.on('dialog', (dialog) => {
@@ -206,10 +218,8 @@ test.describe('chat UI (T-12)', () => {
       void dialog.dismiss();
     });
 
-    await gotoHomeMocked(page, (route) => {
-      if (route.request().method() === 'GET') {
-        return jsonRoute(route, 200, { conversationId: null, messages: [] });
-      }
+    await gotoHomeMocked(page, request, (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
       return jsonRoute(route, 200, {
         conversationId: 'c1',
         messageId: 'm1',
@@ -229,15 +239,13 @@ test.describe('chat UI (T-12)', () => {
     expect(dialogSeen).toBe(false);
   });
 
-  test('no horizontal scroll at 390px with a long message and a long unbroken code', async ({ page }) => {
+  test('no horizontal scroll at 390px with a long message and a long unbroken code', async ({ page, request }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const longCode = 'PRJ-' + '0'.repeat(300);
     const longMessage = 'رسالة طويلة جداً '.repeat(40) + longCode;
 
-    await gotoHomeMocked(page, (route) => {
-      if (route.request().method() === 'GET') {
-        return jsonRoute(route, 200, { conversationId: null, messages: [] });
-      }
+    await gotoHomeMocked(page, request, (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
       return jsonRoute(route, 200, {
         conversationId: 'c1',
         messageId: 'm1',
@@ -263,7 +271,7 @@ test.describe('chat UI (T-12)', () => {
   // and end up hidden behind the fixed bottom tab bar on a phone. Eight
   // messages is enough to make the page taller than either viewport below,
   // so the sticky composer actually has to engage.
-  function eightMessages() {
+  function eightMessages(): HistoryMessage[] {
     const roles = ['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant'] as const;
     return roles.map((role, i) => ({
       id: `m${i}`,
@@ -274,8 +282,8 @@ test.describe('chat UI (T-12)', () => {
           : role === 'user'
             ? `سؤال رقم ${i} عن حالة الطلب`
             : `رد رقم ${i} على استفسارك، ومعه تفاصيل إضافية عن الحالة الحالية`,
-      badges: [] as string[],
-      memoryNotes: [] as unknown[],
+      badges: [],
+      memoryNotes: [],
       createdAt: new Date(2026, 0, 1, 0, i).toISOString(),
     }));
   }
@@ -286,14 +294,18 @@ test.describe('chat UI (T-12)', () => {
   ] as const) {
     test(`composer stays clear of the tab bar and the last message at ${viewport.width}x${viewport.height}`, async ({
       page,
+      request,
     }) => {
       await page.setViewportSize(viewport);
-      await gotoHomeMocked(page, (route) => {
-        if (route.request().method() === 'GET') {
-          return jsonRoute(route, 200, { conversationId: 'c1', messages: eightMessages() });
-        }
-        return jsonRoute(route, 200, {});
-      });
+      await gotoHomeMocked(
+        page,
+        request,
+        (route) => {
+          if (route.request().method() !== 'POST') return route.fallback();
+          return jsonRoute(route, 200, {});
+        },
+        { conversationId: 'c1', messages: eightMessages() },
+      );
 
       const composer = page.getByTestId('composer-wrapper');
       const tabBar = page.getByRole('navigation', { name: t('nav.main') });
@@ -320,13 +332,17 @@ test.describe('chat UI (T-12)', () => {
 
   test('a message starting with a document code stays right-to-left, and the assistant sits nearer the inline-start edge', async ({
     page,
+    request,
   }) => {
-    await gotoHomeMocked(page, (route) => {
-      if (route.request().method() === 'GET') {
-        return jsonRoute(route, 200, { conversationId: 'c1', messages: eightMessages() });
-      }
-      return jsonRoute(route, 200, {});
-    });
+    await gotoHomeMocked(
+      page,
+      request,
+      (route) => {
+        if (route.request().method() !== 'POST') return route.fallback();
+        return jsonRoute(route, 200, {});
+      },
+      { conversationId: 'c1', messages: eightMessages() },
+    );
 
     const log = page.getByRole('log');
     const codeMessage = log.getByText('PRJ-00012', { exact: false });
