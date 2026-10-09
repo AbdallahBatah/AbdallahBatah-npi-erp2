@@ -149,6 +149,87 @@ describe('perf-lib: budgets', () => {
     expect(verdict.rows.find((r) => r.metric === 'INP ms')).toMatchObject({ value: null, ok: false });
   });
 
+  describe('known limits (D-25)', () => {
+    const withLimit = {
+      ...budgets,
+      knownLimits: [{ path: '/copilot/trust', profile: 'mobile', metric: 'inpMs', ceiling: 500, decision: 'D-25' }],
+    };
+    const page = (inpMs: number | null, overrides: Record<string, unknown> = {}) => ({
+      path: '/copilot/trust',
+      profile: 'mobile',
+      lcpMs: 1000,
+      inpMs,
+      cls: 0,
+      ttfbMs: 100,
+      ...overrides,
+    });
+
+    it('keeps the gate green for the accepted line between its budget and its ceiling, marked as accepted', () => {
+      const verdict = lib.evaluateBudgets(withLimit, { pages: [page(248)], js: [] });
+      expect(verdict.ok).toBe(true);
+      expect(verdict.rows.find((r) => r.metric === 'INP ms')).toEqual({
+        kind: 'vital',
+        metric: 'INP ms',
+        page: '/copilot/trust',
+        profile: 'mobile',
+        value: 248,
+        budget: 200,
+        ok: true,
+        accepted: { decision: 'D-25', ceiling: 500 },
+      });
+    });
+
+    it('fails the accepted line beyond its ceiling, and says which ceiling', () => {
+      const verdict = lib.evaluateBudgets(withLimit, { pages: [page(501)], js: [] });
+      expect(verdict.ok).toBe(false);
+      expect(verdict.rows.find((r) => r.metric === 'INP ms')).toMatchObject({
+        value: 501,
+        ok: false,
+        accepted: { decision: 'D-25', ceiling: 500 },
+      });
+    });
+
+    it('does not mark the line when it is within budget, and never accepts an unobserved value', () => {
+      const within = lib.evaluateBudgets(withLimit, { pages: [page(48)], js: [] });
+      expect(within.rows.find((r) => r.metric === 'INP ms')).toEqual(
+        expect.not.objectContaining({ accepted: expect.anything() }),
+      );
+      const unobserved = lib.evaluateBudgets(withLimit, { pages: [page(null)], js: [] });
+      expect(unobserved.ok).toBe(false);
+      expect(unobserved.rows.find((r) => r.metric === 'INP ms')).toMatchObject({ value: null, ok: false });
+      expect(unobserved.rows.find((r) => r.metric === 'INP ms')).not.toHaveProperty('accepted');
+    });
+
+    it('applies to that screen, profile and metric only', () => {
+      const other = lib.evaluateBudgets(withLimit, {
+        pages: [
+          page(248, { profile: 'desktop' }),
+          page(248, { path: '/copilot/metrics' }),
+          page(100, { lcpMs: 2600 }),
+        ],
+        js: [],
+      });
+      expect(other.ok).toBe(false);
+      const failed = other.rows.filter((r) => !r.ok).map((r) => [r.page, r.profile, r.metric]);
+      expect(failed).toEqual([
+        ['/copilot/trust', 'desktop', 'INP ms'],
+        ['/copilot/metrics', 'mobile', 'INP ms'],
+        ['/copilot/trust', 'mobile', 'LCP ms'],
+      ]);
+      expect(other.rows.some((r) => 'accepted' in r)).toBe(false);
+    });
+
+    it('is declared in next.config.js for the one line D-25 accepted, with a ceiling and the task that re-decides it', () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { perfBudgets } = require(path.join(APP_ROOT, 'next.config.js'));
+      expect(perfBudgets.knownLimits).toEqual([
+        expect.objectContaining({ path: '/copilot/trust', profile: 'mobile', metric: 'inpMs', ceiling: 500, decision: 'D-25' }),
+      ]);
+      expect(perfBudgets.knownLimits[0].until).toMatch(/T-43/);
+      expect(perfBudgets.knownLimits[0].ceiling).toBeGreaterThan(perfBudgets.inpMs);
+    });
+  });
+
   it('reports first-load JS in KB to one decimal against the per-route budget', () => {
     const verdict = lib.evaluateBudgets(budgets, { pages: [], js: [{ route: '/page', gzipBytes: 205_000 }] });
     expect(verdict.rows).toEqual([
@@ -204,14 +285,21 @@ describe('perf gate wiring', () => {
   it('next.config.js exposes positive budgets for the five metrics without adding a Next option', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const config = require(path.join(APP_ROOT, 'next.config.js')) as Record<string, unknown> & {
-      perfBudgets: Record<string, number>;
+      perfBudgets: Record<string, number> & { knownLimits: unknown[] };
     };
     expect(Object.keys(config)).not.toContain('perfBudgets');
     for (const key of ['lcpMs', 'inpMs', 'cls', 'ttfbMs', 'firstLoadJsKb']) {
       expect(typeof config.perfBudgets[key]).toBe('number');
       expect(config.perfBudgets[key]).toBeGreaterThan(0);
     }
-    expect(config.perfBudgets).toEqual({ lcpMs: 2500, inpMs: 200, cls: 0.1, ttfbMs: 800, firstLoadJsKb: 200 });
+    expect(config.perfBudgets).toMatchObject({ lcpMs: 2500, inpMs: 200, cls: 0.1, ttfbMs: 800, firstLoadJsKb: 200 });
+    // The only other key is the known-limits list (D-25); every limit names a
+    // decision, a ceiling above the metric's budget and the task that re-decides it.
+    expect(Object.keys(config.perfBudgets).sort()).toEqual(['cls', 'firstLoadJsKb', 'inpMs', 'knownLimits', 'lcpMs', 'ttfbMs']);
+    for (const limit of config.perfBudgets.knownLimits as Array<Record<string, unknown>>) {
+      expect(limit).toMatchObject({ decision: expect.stringMatching(/^D-\d+$/), until: expect.stringMatching(/T-\d+/) });
+      expect(limit.ceiling).toBeGreaterThan(config.perfBudgets[limit.metric as string]);
+    }
   });
 
   it('package.json runs scripts/perf.mjs as `npm run perf`', () => {

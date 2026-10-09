@@ -102,20 +102,33 @@ function evaluateBudgets(budgets, { pages, js }) {
     ['cls', 'CLS'],
     ['ttfbMs', 'TTFB ms'],
   ];
+  // Known limits (next.config.js `perfBudgets.knownLimits`, each one an owner
+  // decision): a matching line that is over budget but within its ceiling keeps
+  // the gate green and is marked `accepted` — printed and recorded as over
+  // budget, never as a pass; beyond the ceiling it fails like any other line.
+  const limits = Array.isArray(budgets.knownLimits) ? budgets.knownLimits : [];
   for (const page of pages) {
     for (const [key, label] of vitals) {
       const budget = budgets[key];
       if (typeof budget !== 'number') continue;
       const value = page[key];
-      rows.push({
+      const observed = typeof value === 'number';
+      /** @type {{ kind: string, metric: string, page: string, profile: string, value: number | null, budget: number, ok: boolean, accepted?: { decision: string, ceiling: number } }} */
+      const row = {
         kind: 'vital',
         metric: label,
         page: page.path,
         profile: page.profile,
         value,
         budget,
-        ok: typeof value === 'number' && value <= budget,
-      });
+        ok: observed && value <= budget,
+      };
+      const limit = limits.find((l) => l.path === page.path && l.profile === page.profile && l.metric === key);
+      if (limit && observed && !row.ok) {
+        row.ok = value <= limit.ceiling;
+        row.accepted = { decision: limit.decision, ceiling: limit.ceiling };
+      }
+      rows.push(row);
     }
   }
   if (typeof budgets.firstLoadJsKb === 'number') {

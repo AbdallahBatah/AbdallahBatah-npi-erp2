@@ -10,6 +10,24 @@ const PERF_BUDGETS = {
   cls: 0.1, // cumulative layout shift (largest session window)
   ttfbMs: 800, // time to first byte — the server side: queries and indexes (migration 0009)
   firstLoadJsKb: 200, // JavaScript a route downloads on first load, gzip, from the build manifests
+  // Lines the owner accepted as a known limit of the lab profile (PROGRESS.md
+  // decisions). Such a line may sit between its budget and the ceiling without
+  // failing the gate — it is still printed and recorded as over budget, never
+  // as a pass — and beyond the ceiling it fails like any other line, so a real
+  // regression on it is still caught. Each entry names the decision that
+  // allows it and the task that re-decides it.
+  knownLimits: [
+    {
+      path: '/copilot/trust',
+      profile: 'mobile',
+      metric: 'inpMs',
+      ceiling: 500, // the top of web.dev's «needs improvement» band; «poor» above it
+      decision: 'D-25',
+      reason:
+        'the arrival of the eight web-font files on the throttled link occupies the main thread once per cold visit (INP 48 with the fonts blocked); on this screen alone it coincides with the gate\'s key presses',
+      until: 'T-43 — the live gate on the demo server re-measures this line',
+    },
+  ],
 };
 
 /** @type {import('next').NextConfig} */

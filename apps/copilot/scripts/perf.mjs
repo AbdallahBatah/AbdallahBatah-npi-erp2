@@ -19,7 +19,10 @@
 //    TTFB and the JS bytes transferred. The median of the runs is judged.
 // 4. Budgets come from next.config.js (`perfBudgets`): LCP, INP, CLS, TTFB and
 //    first-load JS. Exit 0 when every median and every route is within budget,
-//    1 when one is not, 2 when the run could not be set up. The full report
+//    1 when one is not, 2 when the run could not be set up. A line the owner
+//    accepted as a known limit (`perfBudgets.knownLimits`, e.g. D-25) may sit
+//    between its budget and its ceiling without failing the gate; it is still
+//    printed and recorded as over budget. The full report
 //    (every run, every file) is written to perf-results/<timestamp>.json — its own
 //    directory, not Playwright's test-results/, which every e2e run wipes.
 //
@@ -492,14 +495,22 @@ async function main() {
   fs.writeFileSync(outPath, JSON.stringify(report, null, 2) + '\n', 'utf8');
 
   const failures = verdict.rows.filter((r) => !r.ok);
+  const accepted = verdict.rows.filter((r) => r.ok && r.accepted);
   console.log('');
+  for (const a of accepted) {
+    console.log(
+      `[perf] accepted ${a.profile} ${a.page} ${a.metric}: ${a.value} > ${a.budget} — over budget, within the ${a.accepted.decision} ceiling ${a.accepted.ceiling} (a known limit, not a pass)`,
+    );
+  }
   if (failures.length === 0) {
-    console.log(`[perf] PASS — ${verdict.rows.length} budget lines within budget. Report ${path.relative(APP, outPath)}`);
+    const note = accepted.length ? ` (${accepted.length} of them accepted as known limits)` : '';
+    console.log(`[perf] PASS — ${verdict.rows.length} budget lines within budget${note}. Report ${path.relative(APP, outPath)}`);
     return 0;
   }
   console.log(`[perf] FAIL — ${failures.length} of ${verdict.rows.length} budget lines over budget:`);
   for (const f of failures) {
-    console.log(`         ${f.profile.padEnd(7)} ${f.page.padEnd(18)} ${f.metric}: ${f.value ?? 'not observed'} > ${f.budget}`);
+    const beyond = f.accepted ? ` and beyond the ${f.accepted.decision} ceiling ${f.accepted.ceiling}` : '';
+    console.log(`         ${f.profile.padEnd(7)} ${f.page.padEnd(18)} ${f.metric}: ${f.value ?? 'not observed'} > ${f.budget}${beyond}`);
   }
   console.log(`[perf] Report ${path.relative(APP, outPath)}`);
   return 1;
