@@ -9,16 +9,18 @@
 -- شرط التشغيل: أن يكون الترحيل 0022 قد طُبّق (يضيف الأعمدة mobile و
 -- nameNormalized و mergedIntoId). لا يحتاج 0023 ولا أداة الدمج.
 --
--- كيف يُشغَّل (على الخادم، عبر SSH، وبموافقة إياد فقط):
+-- كيف يُشغَّل (من جهاز إياد في Git Bash، وبموافقته فقط). الملف لا يوجد على
+-- الخادم لأن deploy/pack.ps1 يستثني مجلد docs من الحزمة، فيُمرَّر من الجهاز عبر
+-- المدخل القياسي لـ ssh، وتُحفظ النتيجة محلياً في census-live.txt (غير متتبَّع):
 --
---   ssh root@204.168.182.109
---   cd /opt/npi-erp            # مجلد المشروع على الخادم (حيث docker-compose.prod.yml)
---   docker compose -f docker-compose.prod.yml exec -T postgres \
---     psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
---     < docs/crm-phase-1/customer-duplicates-census.sql
+--   cd /c/dev/npi-erp-crm && ssh root@204.168.182.109 "cd /opt/npi-erp && \
+--     docker compose -f docker-compose.prod.yml --env-file deploy/.env exec -T postgres \
+--     psql -U npi -d npi_erp -v ON_ERROR_STOP=1" \
+--     < docs/crm-phase-1/customer-duplicates-census.sql > census-live.txt 2>&1
 --
--- (اسم الخدمة والمستخدم وقاعدة البيانات كما في docker-compose.prod.yml و .env
--- على الخادم؛ راجعها قبل التشغيل.)
+-- (اسم الخدمة postgres والمستخدم npi وقاعدة البيانات npi_erp كما في
+-- docker-compose.prod.yml. لا يصلح من PowerShell 5.1 لأنه لا يدعم «<» ويُفسد
+-- الترميز العربي عند التمرير.)
 --
 -- كيف تُقرأ النتائج:
 --   * القسم 0 صورة عامة. الأقسام 1 إلى 3 هي المفاتيح الفريدة: كل صف فيها
