@@ -91,6 +91,8 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   { re: /cannot deactivate your own account/i, ar: 'لا يمكنك إيقاف حسابك أنت — اطلب من مسؤول آخر' },
   { re: /last active administrator/i, ar: 'لا يمكن إزالة آخر مسؤول نشط — عيّن مسؤولاً آخر أولاً' },
   { re: /last administrator role/i, ar: 'لا يمكن سحب إدارة المستخدمين من دور المسؤول الأخير' },
+  { re: /primary role cannot also be an extra role/i, ar: 'الدور الأساسي لا يُضاف كدور إضافي — اختر أدواراً إضافية مختلفة' },
+  { re: /extra roles must not contain duplicates/i, ar: 'الأدوار الإضافية تحتوي على تكرار — اختر كل دور مرة واحدة' },
   { re: /role still has users assigned/i, ar: 'الدور مسند إلى مستخدمين — انقلهم إلى دور آخر أولاً' },
   { re: /role key already in use/i, ar: 'المعرّف التقني مستخدم مسبقاً — اختر معرّفاً آخر' },
   { re: /key must be a lowercase slug/i, ar: 'المعرّف التقني: حروف إنجليزية صغيرة وأرقام و _ فقط' },
@@ -130,6 +132,278 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
     ar: 'يوجد تفويض ساري بين الشخصين نفسيهما يتقاطع مع هذه الفترة',
   },
   { re: /delegation is already revoked/i, ar: 'هذا التفويض مُنهى بالفعل' },
+  // unified customer record (CRM Step 2). The specific "Duplicate customer
+  // key" sentence, which names the existing record, is built in translateError;
+  // this pattern is only the fallback when the message cannot be parsed.
+  {
+    re: /duplicate customer key/i,
+    ar: 'يوجد عميل آخر بنفس السجل التجاري أو الرقم الضريبي أو الجوال',
+    en: 'Another customer already has the same CR number, VAT number or mobile',
+  },
+  {
+    re: /customer already merged/i,
+    ar: 'هذا العميل دُمج في سجل آخر — استخدم السجل الباقي',
+    en: 'This customer was merged into another record — use the surviving record',
+  },
+  {
+    re: /requires a CR number or a VAT number/i,
+    ar: 'المنشأة تتطلب سجلاً تجارياً أو رقماً ضريبياً — أدخل أحدهما على الأقل',
+    en: 'A company needs a CR number or a VAT number — enter at least one',
+  },
+  {
+    re: /individual customer requires a mobile/i,
+    ar: 'الفرد يتطلب رقم جوال',
+    en: 'An individual needs a mobile number',
+  },
+  {
+    re: /mobile must be a Saudi mobile/i,
+    ar: 'رقم الجوال غير صحيح — مثال: 0501234567 أو +966501234567',
+    en: 'The mobile number is not valid — e.g. 0501234567 or +966501234567',
+  },
+  {
+    re: /backupRef/i,
+    ar: 'اكتب اسم ملف النسخة الاحتياطية (8 أحرف على الأقل) قبل الدمج',
+    en: 'Enter the backup file name (at least 8 characters) before merging',
+  },
+  {
+    re: /cannot also be merged into itself/i,
+    ar: 'لا يمكن دمج السجل الباقي في نفسه',
+    en: 'The surviving record cannot be merged into itself',
+  },
+  // opportunities and the sales funnel (CRM Step 3). "Invalid stage transition"
+  // is translated per reason in translateError (it needs the response body);
+  // this pattern is only the fallback.
+  {
+    re: /invalid stage transition/i,
+    ar: 'لا يمكن نقل الفرصة إلى هذه المرحلة — حدّث الصفحة وحاول مجدداً',
+    en: 'The opportunity cannot be moved to that stage - refresh the page and try again',
+  },
+  {
+    re: /loss reason is required/i,
+    ar: 'سبب الخسارة إلزامي — اختر سبباً من القائمة',
+    en: 'A loss reason is required - pick one from the list',
+  },
+  {
+    re: /tender close date is required/i,
+    ar: 'تاريخ إقفال المناقصة إلزامي للفرصة من نوع مناقصة',
+    en: 'The tender close date is required for a tender opportunity',
+  },
+  {
+    re: /opportunity is closed/i,
+    ar: 'الفرصة مقفلة (رابحة أو خاسرة) — لا تقبل تعديلاً ولا عروضاً جديدة؛ أنشئ فرصة جديدة',
+    en: 'The opportunity is closed (won or lost) - it takes no edits or new proposals; create a new opportunity',
+  },
+  {
+    re: /stage changes go through/i,
+    ar: 'تُغيَّر المرحلة من شريط المراحل في صفحة الفرصة',
+    en: 'Change the stage from the stepper on the opportunity page',
+  },
+  {
+    re: /loss reason name already in use/i,
+    ar: 'اسم السبب موجود في القائمة مسبقاً',
+    en: 'A loss reason with that name already exists',
+  },
+  {
+    re: /must be a valid date/i,
+    ar: 'تاريخ غير صالح — اختر التاريخ من التقويم',
+    en: 'Not a valid date - pick it from the calendar',
+  },
+  // proposals, their revisions and their approval (CRM Step 4)
+  {
+    re: /cost override reason is required/i,
+    ar: 'تعديل التكلفة يلزمه سبب — اكتب سبب التغيير في خانة «سبب التعديل»',
+    en: 'A changed cost needs a reason - write it in the "Reason for the change" field',
+  },
+  {
+    re: /validity date must be in the future/i,
+    ar: 'تاريخ صلاحية العرض يجب أن يكون بعد اليوم',
+    en: 'The proposal validity date must be after today',
+  },
+  {
+    re: /validity date must be a valid date/i,
+    ar: 'تاريخ الصلاحية غير صالح — اختر التاريخ من التقويم',
+    en: 'The validity date is not valid - pick it from the calendar',
+  },
+  {
+    re: /selling price is required/i,
+    ar: 'أدخل سعر البيع لكل بند',
+    en: 'Enter the selling price of every line',
+  },
+  {
+    re: /previous revision is awaiting approval/i,
+    ar: 'النسخة الحالية بانتظار الاعتماد — لا تُضاف نسخة جديدة ولا يُعدَّل العرض حتى يُبتّ فيه',
+    en: 'The current revision is awaiting approval - it cannot be changed or replaced until it is decided',
+  },
+  {
+    re: /proposal is accepted/i,
+    ar: 'العرض مقبول — لا يُعدَّل إلا بأمر تغيير',
+    en: 'The proposal is accepted - it can only be changed by a change order',
+  },
+  {
+    re: /still a draft/i,
+    ar: 'النسخة الحالية ما زالت مسودة — عدّلها مباشرة بدل إنشاء نسخة جديدة',
+    en: 'The current revision is still a draft - edit it instead of adding a new one',
+  },
+  {
+    re: /only a draft revision can be edited/i,
+    ar: 'تُعدَّل المسودة فقط — أنشئ نسخة جديدة لتغيير نسخة أُرسلت أو اعتُمدت',
+    en: 'Only a draft can be edited - add a new revision to change one that was approved or sent',
+  },
+  {
+    re: /only a draft revision can be submitted/i,
+    ar: 'يُرفع للاعتماد المسودة فقط',
+    en: 'Only a draft can be submitted for approval',
+  },
+  {
+    re: /proposal needs at least one line/i,
+    ar: 'أضف بنداً واحداً على الأقل قبل رفع العرض للاعتماد',
+    en: 'Add at least one line before submitting the proposal',
+  },
+  {
+    re: /no other approver is available/i,
+    ar: 'لا يوجد معتمِد آخر غيرك لهذا العرض — لا يعتمد أحد عرضاً رفعه بنفسه. يلزم حامل آخر لدور الإدارة العليا، أو تفويض مؤقت من غيرك',
+    en: 'There is no other approver for this proposal - nobody approves what they raised themselves. Another holder of the executive role, or a temporary delegation from someone else, is needed',
+  },
+  {
+    re: /proposal revision has expired/i,
+    ar: 'انتهت صلاحية هذه النسخة — أنشئ نسخة جديدة بتاريخ صلاحية جديد',
+    en: 'This revision has expired - add a new revision with a new validity date',
+  },
+  {
+    re: /only an approved revision can be sent/i,
+    ar: 'يُرسل للعميل العرض المعتمد فقط',
+    en: 'Only an approved revision can be sent to the customer',
+  },
+  {
+    re: /only the current sent revision can be accepted/i,
+    ar: 'يُسجَّل قبول العميل للنسخة الحالية المُرسَلة فقط — حدّث الصفحة',
+    en: 'Only the current, sent revision can be accepted - refresh the page',
+  },
+  {
+    re: /only a sent revision can be rejected/i,
+    ar: 'يُسجَّل رفض العميل للنسخة المُرسَلة فقط',
+    en: 'Only a sent revision can be rejected by the customer',
+  },
+  {
+    re: /rejection reason is required/i,
+    ar: 'سبب رفض العميل إلزامي',
+    en: 'The customer\'s reason for refusing is required',
+  },
+  {
+    re: /another revision was added at the same moment/i,
+    ar: 'أضاف مستخدم آخر نسخة في اللحظة نفسها — حدّث الصفحة وحاول مجدداً',
+    en: 'Another user added a revision at the same moment - refresh and try again',
+  },
+  {
+    re: /is not a legal action on/i,
+    ar: 'هذا الإجراء غير متاح في الحالة الحالية للمستند — حدّث الصفحة',
+    en: 'That action is not available in the document\'s current state - refresh the page',
+  },
+  {
+    re: /already awaiting approval/i,
+    ar: 'المستند بانتظار الاعتماد بالفعل',
+    en: 'The document is already awaiting approval',
+  },
+  {
+    re: /moved while this action was in flight/i,
+    ar: 'تغيّرت حالة المستند أثناء التنفيذ — حدّث الصفحة وحاول مجدداً',
+    en: 'The document changed state while this was happening - refresh and try again',
+  },
+  {
+    re: /does not meet the condition/i,
+    ar: 'المستند لا يستوفي شرط هذا الإجراء — تأكد أن الإجمالي أكبر من صفر',
+    en: 'The document does not meet the condition for this action - check that the total is above zero',
+  },
+  {
+    re: /unknown setting key/i,
+    ar: 'إعداد غير معروف',
+    en: 'Unknown setting',
+  },
+  {
+    re: /setting value out of range/i,
+    ar: 'القيمة خارج المدى المسموح — أدخل عدداً صحيحاً ضمن الحدود المبيَّنة بجوار الحقل',
+    en: 'The value is out of range - enter a whole number within the limits shown beside the field',
+  },
+  // the communication log and the follow-up tasks (CRM Step 5)
+  {
+    re: /opportunity does not belong to this customer/i,
+    ar: 'هذه الفرصة تخص عميلاً آخر — اختر فرصة من فرص هذا العميل',
+    en: "That opportunity belongs to another customer - pick one of this customer's opportunities",
+  },
+  {
+    re: /contact does not belong to this customer/i,
+    ar: 'جهة الاتصال هذه ليست من جهات اتصال هذا العميل',
+    en: "That contact is not one of this customer's contacts",
+  },
+  {
+    re: /activity date cannot be in the future/i,
+    ar: 'تاريخ التواصل لا يمكن أن يكون في المستقبل',
+    en: 'The date of a communication cannot be in the future',
+  },
+  {
+    re: /^body is required|^body must be at most/i,
+    ar: 'نص القيد إلزامي (حتى 4000 حرف)',
+    en: 'The entry text is required (up to 4000 characters)',
+  },
+  {
+    re: /^title is required|^title must be at most/i,
+    ar: 'عنوان المهمة إلزامي (حتى 200 حرف)',
+    en: 'The task title is required (up to 200 characters)',
+  },
+  {
+    re: /due date cannot be in the past/i,
+    ar: 'تاريخ الاستحقاق لا يمكن أن يسبق اليوم',
+    en: 'The due date cannot be before today',
+  },
+  {
+    re: /(dueAt|occurredAt|remindAt) must be a valid date/i,
+    ar: 'التاريخ غير صالح — اختره من التقويم',
+    en: 'The date is not valid - pick it from the calendar',
+  },
+  {
+    re: /reminder cannot be after the due date/i,
+    ar: 'وقت التذكير لا يمكن أن يقع بعد يوم الاستحقاق',
+    en: 'The reminder cannot be after the due date',
+  },
+  {
+    re: /assignee not found/i,
+    ar: 'المكلَّف غير موجود أو غير نشط — اختر مستخدماً نشطاً',
+    en: 'The assignee was not found or is inactive - pick an active user',
+  },
+  {
+    re: /task is not open/i,
+    ar: 'المهمة لم تعد مفتوحة (أُنجزت أو أُلغيت) — حدّث الصفحة',
+    en: 'The task is no longer open (done or cancelled) - refresh the page',
+  },
+  {
+    re: /cancellation reason is required/i,
+    ar: 'سبب الإلغاء إلزامي — اكتب سبباً',
+    en: 'A cancellation reason is required',
+  },
+];
+
+// 403s that deserve a specific sentence instead of the generic "no permission".
+const FORBIDDEN_PATTERNS: Array<{ re: RegExp; ar: string; en: string }> = [
+  {
+    re: /only the author can edit this entry/i,
+    ar: 'لا يعدّل القيد إلا كاتبه — أضف قيداً جديداً إن لزم',
+    en: 'Only the author can edit an entry - add a new entry if needed',
+  },
+  {
+    re: /customer merge is disabled/i,
+    ar: 'الدمج معطَّل حتى اعتماد قائمة المكررات من المالك',
+    en: 'Merging is disabled until the owner approves the list of duplicates',
+  },
+  {
+    re: /cost and margin fields/i,
+    ar: 'لا يحق لدورك تحديد التكلفة أو الهامش أو مخطط التسعير — احذف هذه الحقول أو اطلب صلاحية «عرض التكاليف والهوامش»',
+    en: 'Your role may not set costs, margins or pricing schemes — remove those fields or ask for the "View costs & margins" permission',
+  },
+  {
+    re: /requires the approve permission/i,
+    ar: 'هذا المستند لا تنطبق عليه مصفوفة اعتماد، واعتماده يحتاج صلاحية «اعتماد» لا يملكها دورك — اطلب من مدير النظام إضافة قاعدة اعتماد أو منح الصلاحية',
+    en: 'No approval rule routes this document, and approving it needs an "approve" permission your role lacks — ask the administrator to add an approval rule or grant the permission',
+  },
 ];
 
 export function translateError(e: unknown, locale: Locale): string {
@@ -141,6 +415,10 @@ export function translateError(e: unknown, locale: Locale): string {
         : 'Could not reach the server — check your connection and try again';
     if (e.status === 401)
       return ar ? 'انتهت الجلسة — سجّل الدخول مجدداً' : 'Session expired — please sign in again';
+    if (e.status === 403) {
+      const specific = FORBIDDEN_PATTERNS.find((p) => p.re.test(e.message));
+      if (specific) return ar ? specific.ar : specific.en;
+    }
     if (e.status === 403)
       return ar ? 'لا تملك صلاحية لتنفيذ هذا الإجراء' : 'You do not have permission for this action';
     if (e.status === 404)
@@ -150,6 +428,36 @@ export function translateError(e: unknown, locale: Locale): string {
       return ar
         ? `البند الإلزامي «${checklistMiss[1]}» لم يُنجز بعد`
         : e.message;
+    // A refused duplicate key names the record that already has it.
+    const dup = e.message.match(
+      /^Duplicate customer key: (crNumber|vatNumber|mobile) already used by (\S+) \(([\s\S]*)\)$/,
+    );
+    if (dup) {
+      const field = {
+        crNumber: ar ? 'السجل التجاري' : 'CR number',
+        vatNumber: ar ? 'الرقم الضريبي' : 'VAT number',
+        mobile: ar ? 'الجوال' : 'mobile number',
+      }[dup[1] as 'crNumber' | 'vatNumber' | 'mobile'];
+      return ar
+        ? `يوجد عميل بنفس ${field}: ${dup[2]} — ${dup[3]}`
+        : `A customer with the same ${field} already exists: ${dup[2]} — ${dup[3]}`;
+    }
+    // A refused stage move says WHY in the body (TERMINAL / SKIP / CONCURRENT).
+    if (e.status === 409 && /^Invalid stage transition/i.test(e.message)) {
+      const reason = e.body?.reason as string | undefined;
+      if (reason === 'TERMINAL')
+        return ar
+          ? 'الفرصة مقفلة (رابحة أو خاسرة) ولا يمكن إعادة فتحها — أنشئ فرصة جديدة'
+          : 'The opportunity is closed (won or lost) and cannot be reopened - create a new opportunity';
+      if (reason === 'SKIP')
+        return ar
+          ? 'لا يمكن القفز فوق مرحلة — انتقل إلى المرحلة التالية مباشرة'
+          : 'A stage cannot be skipped - move to the next stage';
+      if (reason === 'CONCURRENT')
+        return ar
+          ? 'غيّر مستخدم آخر مرحلة هذه الفرصة قبل لحظات — حدّث الصفحة'
+          : 'Another user just changed this opportunity - refresh the page';
+    }
     for (const p of PATTERNS)
       if (p.re.test(e.message)) return ar ? p.ar : (p.en ?? e.message);
     if (e.status >= 500)

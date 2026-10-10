@@ -19,6 +19,8 @@ export const WF_FLOWS = {
   PURCHASE_ORDER: 'PURCHASE_ORDER',
   GOODS_RECEIPT: 'GOODS_RECEIPT',
   VENDOR_BILL: 'VENDOR_BILL',
+  // CRM Phase 1 · Step 4: the numbered, approved proposal.
+  PROPOSAL: 'PROPOSAL',
 } as const;
 
 export type WfFlowCode = (typeof WF_FLOWS)[keyof typeof WF_FLOWS];
@@ -33,6 +35,7 @@ export const WF_FLOW_DOCUMENT_TYPE: Record<WfFlowCode, string> = {
   PURCHASE_ORDER: 'PurchaseOrder',
   GOODS_RECEIPT: 'GoodsReceipt',
   VENDOR_BILL: 'VendorBill',
+  PROPOSAL: 'Proposal',
 };
 
 export interface WfFlowMeta {
@@ -73,6 +76,13 @@ export const WF_FLOWS_META: WfFlowMeta[] = [
     labelEn: 'Vendor bill',
     linkPattern: '/payables',
   },
+  {
+    code: 'PROPOSAL',
+    documentType: 'Proposal',
+    labelAr: 'عرض سعر',
+    labelEn: 'Proposal',
+    linkPattern: '/proposals/:id',
+  },
 ];
 
 export const WF_FLOW_META_BY_DOCUMENT: Record<string, WfFlowMeta> = Object.fromEntries(
@@ -102,6 +112,10 @@ export const WF_ACTIONS = {
   RECEIVE: 'RECEIVE',
   CLOSE: 'CLOSE',
   CONVERT: 'CONVERT',
+  // CRM Phase 1 · Step 4: a proposal's validity ran out (done by the system, never a person)…
+  EXPIRE: 'EXPIRE',
+  // …and a change to an approved / sent / refused / expired proposal is a new numbered revision.
+  REVISE: 'REVISE',
 } as const;
 
 export type WfActionCode = (typeof WF_ACTIONS)[keyof typeof WF_ACTIONS];
@@ -119,6 +133,13 @@ export const WF_ACTIONS_REQUIRING_COMMENT: readonly string[] = [
   WF_ACTIONS.CANCEL,
 ];
 
+/**
+ * The only actions a system actor (no person) may perform. The engine refuses
+ * every other action from one: "the system approved it" is not a statement the
+ * audit trail may ever contain.
+ */
+export const WF_SYSTEM_ACTIONS: readonly string[] = [WF_ACTIONS.EXPIRE];
+
 // ── events ──────────────────────────────────────────────────────────────────
 
 /**
@@ -133,6 +154,21 @@ export const WF_EVENTS = {
   INVOICE_MATCHED: 'invoice.matched',
   INVOICE_APPROVED: 'invoice.approved',
   INVOICE_PAID: 'invoice.paid',
+  // CRM Phase 1 (Step 2): a duplicate customer was merged into the surviving
+  // record. Nothing subscribes yet; later steps (notifications, reports) may.
+  CUSTOMER_MERGED: 'customer.merged',
+  // CRM Phase 1 (Step 3): an opportunity closed. Payload: { opportunityId, code,
+  // customerId, stage, lossReasonId?, estimatedValue }. Moves between OPEN stages
+  // are audited, not announced.
+  OPPORTUNITY_WON: 'opportunity.won',
+  OPPORTUNITY_LOST: 'opportunity.lost',
+  // CRM Phase 1 · Step 4: payload { proposalId, code, revisionNo, opportunityId, totalAmount }
+  // (plus the engine's documentType / documentId / documentCode / fromState / toState / actorId).
+  // Nothing subscribes yet; later steps (notifications, reports) may.
+  PROPOSAL_APPROVED: 'proposal.approved',
+  PROPOSAL_SENT: 'proposal.sent',
+  PROPOSAL_ACCEPTED: 'proposal.accepted',
+  PROPOSAL_EXPIRED: 'proposal.expired',
 } as const;
 
 export type WfEventCode = (typeof WF_EVENTS)[keyof typeof WF_EVENTS];
@@ -145,6 +181,13 @@ export const WF_EVENT_LABELS: Record<string, { ar: string; en: string }> = {
   'invoice.matched': { ar: 'طوبقت الفاتورة ثلاثياً', en: 'Invoice three-way matched' },
   'invoice.approved': { ar: 'اعتُمدت الفاتورة', en: 'Invoice approved' },
   'invoice.paid': { ar: 'سُددت الفاتورة', en: 'Invoice paid' },
+  'customer.merged': { ar: 'دُمج عميل مكرر في السجل الباقي', en: 'Duplicate customer merged' },
+  'opportunity.won': { ar: 'رُبحت فرصة بيع', en: 'Opportunity won' },
+  'opportunity.lost': { ar: 'خُسرت فرصة بيع', en: 'Opportunity lost' },
+  'proposal.approved': { ar: 'اعتُمد عرض السعر', en: 'Proposal approved' },
+  'proposal.sent': { ar: 'أُرسل عرض السعر للعميل', en: 'Proposal sent to the customer' },
+  'proposal.accepted': { ar: 'قبل العميل عرض السعر', en: 'Proposal accepted by the customer' },
+  'proposal.expired': { ar: 'انتهت صلاحية عرض السعر', en: 'Proposal expired' },
 };
 
 // ── retry policy ────────────────────────────────────────────────────────────

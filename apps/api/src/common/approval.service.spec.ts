@@ -9,9 +9,16 @@ const user = (over: Partial<AuthUser> = {}): AuthUser => ({
   email: 'a@b.c',
   roleId: 'role-pm',
   roleKey: 'pm',
-  permissions: ['scm.procurement.write', 'projects.project.write'],
+  permissions: [
+    'scm.procurement.write',
+    'scm.procurement.approve',
+    'projects.project.write',
+    'projects.project.approve',
+  ],
   locale: 'AR',
   ...over,
+  // The primary role is always one of the user's roles unless a test says otherwise.
+  roleIds: over.roleIds ?? [over.roleId ?? 'role-pm'],
 });
 
 const audit = { record: jest.fn().mockResolvedValue(undefined) };
@@ -334,6 +341,39 @@ describe('ApprovalService.decide', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
+  it('refuses a caller who can write procurement but lacks the approve key', async () => {
+    // CRM Phase 1: writing and approving are separate keys now.
+    const prisma = withRequest(pendingRequest(), {});
+    await expect(
+      make(prisma).decide(user({ permissions: ['scm.procurement.write'] }), 'req1', 'APPROVE'),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('lets a user sign through an EXTRA role even when the primary role is not the step', async () => {
+    const prisma = withRequest(pendingRequest(), { currentStep: 2, status: 'PENDING' });
+    const svc = make(prisma);
+    svc.register('PURCHASE_ORDER', jest.fn());
+    // primary = role-sales (not the step), extra = role-pm (the current step)
+    const res = await svc.decide(
+      user({ roleId: 'role-sales', roleIds: ['role-sales', 'role-pm'] }),
+      'req1',
+      'APPROVE',
+    );
+    expect(res.applied).toBe(false);
+    expect(prisma.approvalRequest.update).toHaveBeenCalled();
+  });
+
+  it('still refuses when none of the roles the user holds is the current step', async () => {
+    const prisma = withRequest(pendingRequest(), {});
+    await expect(
+      make(prisma).decide(
+        user({ roleId: 'role-sales', roleIds: ['role-sales', 'role-hr'] }),
+        'req1',
+        'APPROVE',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
   it('advances to the next step without applying the document', async () => {
     const prisma = withRequest(pendingRequest(), { currentStep: 2, status: 'PENDING' });
     const svc = make(prisma);
@@ -498,6 +538,20 @@ describe('ApprovalService.inbox', () => {
     expect(item.blockedReason).toBeUndefined();
   });
 
+  it('shows a row waiting on an EXTRA role of the caller', async () => {
+    const prisma = prismaWith();
+    prisma.approvalRequest.findMany.mockResolvedValue([row()]);
+    const items = await make(prisma).inbox(
+      user({ roleId: 'role-sales', roleIds: ['role-sales', 'role-pm'] }),
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].canDecide).toBe(true);
+    expect(items[0].viaDelegationFrom).toBeUndefined();
+    // the query asked for every role the user holds
+    const where = prisma.approvalRequest.findMany.mock.calls[0][0].where;
+    expect(where.steps.some.roleId.in).toEqual(expect.arrayContaining(['role-sales', 'role-pm']));
+  });
+
   it('keeps a self-raised row visible but unsignable', async () => {
     // Hiding it would make a one-person-role chain vanish silently instead of
     // showing the organization that it is stuck.
@@ -510,5 +564,44 @@ describe('ApprovalService.inbox', () => {
     const prisma = prismaWith();
     prisma.approvalRequest.findMany.mockResolvedValue([row(), row({ id: 'r2', raisedById: 'u1' })]);
     await expect(make(prisma).inboxCount(user())).resolves.toBe(1);
+  });
+});
+
+// ── CRM Phase 1 · Step 4: the proposal joins the matrix ─────────────────────
+
+describe('PROPOSAL in the approval matrix', () => {
+  it('is an advertised document type, decided with the proposal approve key', () => {
+    const meta = APPROVAL_DOCUMENTS.find((d) => d.value === 'PROPOSAL');
+    expect(meta).toMatchObject({
+      value: 'PROPOSAL',
+      labelAr: 'عرض سعر',
+      permission: 'commercial.proposal.approve',
+    });
+    expect(meta!.amountLabelAr).toContain('سعر البيع');
+  });
+
+  it('the boot gate demands an applier for it — forgetting the registration fails the start', () => {
+    const svc = make(prismaWith());
+    for (const d of APPROVAL_DOCUMENTS) if (d.value !== 'PROPOSAL') svc.register(d.value, jest.fn());
+    expect(() => svc.onApplicationBootstrap()).toThrow(/PROPOSAL/);
+    svc.register('PROPOSAL', jest.fn(), jest.fn());
+    expect(() => svc.onApplicationBootstrap()).not.toThrow();
+  });
+
+  it('a procurement approver cannot sign a proposal — the key is the proposal’s own', async () => {
+    const prisma = prismaWith();
+    const req = {
+      id: 'req9', organizationId: 'org1', documentType: 'PROPOSAL', documentId: 'p1', documentCode: 'PRP-1 R1',
+      amount: 90_000, status: 'PENDING', currentStep: 1, currentStepAt: new Date(), createdAt: new Date(), closedAt: null,
+      raisedById: 'u-sales', raisedBy: null,
+      steps: [{
+        id: 's1', sequence: 1, roleId: 'role-pm', status: 'PENDING',
+        role: { id: 'role-pm', nameAr: 'م', nameEn: 'M' }, decidedById: null, decidedBy: null, decidedAt: null, note: null, escalatedAt: null,
+      }],
+    };
+    (prisma.approvalRequest.findFirst as jest.Mock).mockResolvedValue(req);
+    (prisma.approvalRequest.update as jest.Mock).mockResolvedValue({ ...req, status: 'PENDING' });
+    (prisma.approvalRequest.findUnique as jest.Mock).mockResolvedValue({ ...req, status: 'PENDING' });
+    await expect(make(prisma).decide(user(), 'req9', 'APPROVE')).rejects.toThrow(ForbiddenException);
   });
 });

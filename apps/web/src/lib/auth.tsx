@@ -20,6 +20,9 @@ export interface AuthUser {
   roleKey: string;
   roleNameAr?: string;
   roleNameEn?: string;
+  /** Every role the user holds, primary first (CRM Phase 1). Optional for older API builds. */
+  roles?: Array<{ id: string; key: string; nameAr: string; nameEn: string }>;
+  /** Union of the permissions of all the user's roles. */
   permissions: string[];
   organization: { id: string; nameAr: string; nameEn: string; baseCurrency: string };
 }

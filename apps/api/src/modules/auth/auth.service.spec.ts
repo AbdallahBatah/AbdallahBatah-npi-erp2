@@ -14,7 +14,8 @@ const baseUser = {
   nameAr: 'مدير',
   nameEn: 'Admin',
   locale: 'ar',
-  role: { key: 'admin', permissions: ['crm.lead.read'] },
+  role: { id: 'r-admin', key: 'admin', nameAr: 'مدير', nameEn: 'Admin', permissions: ['crm.lead.read'] },
+  extraRoles: [] as Array<{ role: Record<string, unknown> }>,
   organization: {
     id: 'org1',
     legalNameAr: 'شركة',
@@ -78,5 +79,32 @@ describe('AuthService.login', () => {
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'LOGIN', ip: '5.6.7.8' }),
     );
+    expect(res.user.roles).toEqual([
+      { id: 'r-admin', key: 'admin', nameAr: 'مدير', nameEn: 'Admin' },
+    ]);
+  });
+
+  it('returns every role (primary first) and the union of their permissions', async () => {
+    const withExtra = {
+      ...baseUser,
+      role: { ...baseUser.role, permissions: ['crm.lead.read', 'finance.ledger.read'] },
+      extraRoles: [
+        {
+          role: {
+            id: 'r-cost',
+            key: 'cost_viewer',
+            nameAr: 'تكاليف',
+            nameEn: 'Cost viewer',
+            permissions: ['finance.costs.view', 'crm.lead.read'],
+          },
+        },
+      ],
+    };
+    const { svc } = build(withExtra);
+    const res = await svc.login({ email: baseUser.email, password: PASSWORD });
+    expect(res.user.roles.map((r) => r.key)).toEqual(['admin', 'cost_viewer']);
+    expect(res.user.permissions).toEqual(['crm.lead.read', 'finance.costs.view', 'finance.ledger.read']);
+    // roleKey stays the primary role
+    expect(res.user.roleKey).toBe('admin');
   });
 });

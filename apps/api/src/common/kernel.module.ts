@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { NumberingService } from './numbering.service';
 import { AuditService } from './audit.service';
+import { OrgSettingsService } from './org-settings.service';
 import { PostingService } from './posting.service';
 import { TaxService } from './tax.service';
 import { NotificationService } from './notification.service';
@@ -26,6 +27,7 @@ import { EventDispatcher } from './workflow/event-dispatcher.service';
   providers: [
     NumberingService,
     AuditService,
+    OrgSettingsService,
     PostingService,
     TaxService,
     NotificationService,
@@ -39,6 +41,7 @@ import { EventDispatcher } from './workflow/event-dispatcher.service';
   exports: [
     NumberingService,
     AuditService,
+    OrgSettingsService,
     PostingService,
     TaxService,
     NotificationService,

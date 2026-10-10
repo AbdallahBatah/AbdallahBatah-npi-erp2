@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
@@ -8,6 +8,7 @@ import { KernelModule } from './common/kernel.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { GlobalExceptionFilter } from './common/global-exception.filter';
+import { CostRedactionInterceptor } from './common/cost-redaction.interceptor';
 import { HealthController } from './common/health.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { CrmModule } from './modules/crm/crm.module';
@@ -63,6 +64,9 @@ import { InboxModule } from './modules/inbox/inbox.module';
     { provide: APP_GUARD, useClass: PermissionsGuard },
     // Normalizes Prisma/unknown errors into stable HTTP responses.
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+    // Nulls every cost/margin field for callers without finance.costs.view —
+    // the real guard behind the UI's hidden columns (see COST_FIELDS).
+    { provide: APP_INTERCEPTOR, useClass: CostRedactionInterceptor },
   ],
 })
 export class AppModule {}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
@@ -15,8 +16,9 @@ import { AttachmentsCard } from '@/components/attachments';
 interface Part {
   id: string;
   qty: string;
-  unitCost: string;
-  totalCost: string;
+  // null without finance.costs.view (nulled by the server)
+  unitCost: string | null;
+  totalCost: string | null;
   item: { sku: string; nameAr: string; nameEn: string; uom: string };
 }
 interface Ts {
@@ -57,7 +59,7 @@ interface Wo {
   assignedTo?: { id: string; nameAr: string; nameEn: string } | null;
   maintenancePlan?: { code: string; nameAr: string; nameEn: string } | null;
   parts: Part[];
-  partsCost: number;
+  partsCost: number | null;
   timesheets: Ts[];
   labourCost: number;
 }
@@ -67,6 +69,9 @@ interface Loc { id: string; code: string; nameAr: string; nameEn: string }
 
 export default function WorkOrderDetailPage() {
   const { t, locale, pick } = useI18n();
+  const { can } = useAuth();
+  // The parts' cost columns and the parts-cost total need finance.costs.view.
+  const showCosts = can('finance.costs.view');
   const enums = useEnums();
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -269,22 +274,24 @@ export default function WorkOrderDetailPage() {
         <div className="card overflow-hidden">
           <div className="card-title flex items-center justify-between">
             <h3 className="font-bold">{t('wo.parts')}</h3>
-            <span className="text-xs text-slate-500">
-              {t('wo.partsCost')}: <b className="text-brand-700">{formatMoney(wo.partsCost, locale)}</b>
-            </span>
+            {showCosts && (
+              <span className="text-xs text-slate-500">
+                {t('wo.partsCost')}: <b className="text-brand-700">{formatMoney(wo.partsCost ?? 0, locale)}</b>
+              </span>
+            )}
           </div>
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
                 <th scope="col" className="th">{t('po.item')}</th>
                 <th scope="col" className="th text-end">{t('po.qty')}</th>
-                <th scope="col" className="th text-end">{t('items.unitCost')}</th>
-                <th scope="col" className="th text-end">{t('common.total')}</th>
+                {showCosts && <th scope="col" className="th text-end">{t('items.unitCost')}</th>}
+                {showCosts && <th scope="col" className="th text-end">{t('common.total')}</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {wo.parts.length === 0 ? (
-                <EmptyRow colSpan={4} text={t('common.none')} />
+                <EmptyRow colSpan={showCosts ? 4 : 2} text={t('common.none')} />
               ) : (
                 wo.parts.map((p) => (
                   <tr key={p.id}>
@@ -293,8 +300,8 @@ export default function WorkOrderDetailPage() {
                       {pick(p.item, 'name')}
                     </td>
                     <td className="td-num">{Number(p.qty)} {p.item.uom}</td>
-                    <td className="td-num">{formatMoney(p.unitCost, locale)}</td>
-                    <td className="td-num">{formatMoney(p.totalCost, locale)}</td>
+                    {showCosts && <td className="td-num">{formatMoney(p.unitCost ?? 0, locale)}</td>}
+                    {showCosts && <td className="td-num">{formatMoney(p.totalCost ?? 0, locale)}</td>}
                   </tr>
                 ))
               )}

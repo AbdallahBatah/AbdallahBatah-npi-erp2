@@ -33,6 +33,7 @@ import { ZatcaService } from '../src/modules/finance/zatca.service';
 import { InvoicesService } from '../src/modules/finance/invoices.service';
 import { ReportsService } from '../src/modules/finance/reports.service';
 import { ContractsService } from '../src/modules/commercial/contracts.service';
+import { OpportunitiesService } from '../src/modules/crm/opportunities.service';
 import { ProcurementService } from '../src/modules/procurement/procurement.service';
 import { PayablesService } from '../src/modules/finance/payables.service';
 import type { AuthUser } from '../src/common/auth-user';
@@ -51,7 +52,7 @@ const events = new EventDispatcher(prisma);
 
 const invoices = new InvoicesService(prisma, numbering, audit, posting, tax, new ZatcaService(), notifications);
 const reports = new ReportsService(prisma, audit, posting);
-const contracts = new ContractsService(prisma, numbering, audit, notifications);
+const contracts = new ContractsService(prisma, numbering, audit, notifications, new OpportunitiesService(prisma, numbering, audit, outbox));
 const procurement = new ProcurementService(prisma, numbering, audit, posting, tax, approvals, notifications, engine, events);
 const payables = new PayablesService(prisma, numbering, audit, posting);
 

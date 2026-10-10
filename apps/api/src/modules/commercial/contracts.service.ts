@@ -9,6 +9,8 @@ import { AuditService } from '../../common/audit.service';
 import { NotificationService } from '../../common/notification.service';
 import type { AuthUser } from '../../common/auth-user';
 import { CreateContractDto } from './dto';
+import { OpportunitiesService } from '../crm/opportunities.service';
+import { canViewCosts, hideRevisionPricing } from './revision-pricing';
 
 @Injectable()
 export class ContractsService {
@@ -17,6 +19,7 @@ export class ContractsService {
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationService,
+    private readonly opportunities: OpportunitiesService,
   ) {}
 
   list(user: AuthUser) {
@@ -41,6 +44,11 @@ export class ContractsService {
       },
     });
     if (!contract) throw new NotFoundException('Contract not found');
+    // The embedded revision carries the price build-up; hide it from callers
+    // who may not see costs and margins (totalAmount stays).
+    if (!canViewCosts(user) && contract.proposalRevision) {
+      return { ...contract, proposalRevision: hideRevisionPricing(contract.proposalRevision) };
+    }
     return contract;
   }
 
@@ -91,6 +99,13 @@ export class ContractsService {
     if (!customer) throw new NotFoundException('Customer not found');
 
     return this.prisma.$transaction(async (tx) => {
+      // CRM Step 3 — the one rule for winning an opportunity through a contract:
+      // refuses a closed opportunity, WON or LOST, (409) before anything is
+      // written, guards against a concurrent stage change, audits via: contract
+      // and emits opportunity.won (CRM-S3-b: a second contract on a won deal is
+      // refused too).
+      if (opportunityId) await this.opportunities.markWonViaContract(tx, user, opportunityId);
+
       const code = await this.numbering.next(user.organizationId, 'CONTRACT', tx);
       const contract = await tx.contract.create({
         data: {
@@ -122,13 +137,6 @@ export class ContractsService {
         },
         include: { milestones: true },
       });
-
-      if (opportunityId) {
-        await tx.opportunity.update({
-          where: { id: opportunityId },
-          data: { stage: 'WON' },
-        });
-      }
 
       await this.audit.record(
         {

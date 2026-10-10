@@ -13,7 +13,9 @@ export type ApprovalDocumentType =
   | 'PURCHASE_REQUISITION'
   | 'PURCHASE_ORDER'
   | 'PROGRESS_CLAIM'
-  | 'CHANGE_ORDER';
+  | 'CHANGE_ORDER'
+  // CRM Phase 1 · Step 4: a proposal is signed before it may be sent to the customer.
+  | 'PROPOSAL';
 
 export interface ApprovalDocumentMeta {
   value: ApprovalDocumentType;
@@ -37,8 +39,8 @@ export const APPROVAL_DOCUMENTS: ApprovalDocumentMeta[] = [
     labelEn: 'Purchase requisition',
     // Approving a requisition is procurement's authority, not the requester's.
     // The split is the point: raising one needs REQUISITION_WRITE, which every
-    // engineer holds; approving one does not.
-    permission: PERMISSIONS.PROCUREMENT_WRITE,
+    // engineer holds; approving one needs PROCUREMENT_APPROVE.
+    permission: PERMISSIONS.PROCUREMENT_APPROVE,
     amountLabelAr: 'القيمة التقديرية للطلب',
     amountLabelEn: 'Estimated value of the request',
   },
@@ -46,7 +48,7 @@ export const APPROVAL_DOCUMENTS: ApprovalDocumentMeta[] = [
     value: 'PURCHASE_ORDER',
     labelAr: 'أمر شراء',
     labelEn: 'Purchase order',
-    permission: PERMISSIONS.PROCUREMENT_WRITE,
+    permission: PERMISSIONS.PROCUREMENT_APPROVE,
     amountLabelAr: 'إجمالي أمر الشراء شامل الضريبة',
     amountLabelEn: 'PO total including VAT',
   },
@@ -54,7 +56,7 @@ export const APPROVAL_DOCUMENTS: ApprovalDocumentMeta[] = [
     value: 'PROGRESS_CLAIM',
     labelAr: 'مستخلص مقاول من الباطن',
     labelEn: 'Subcontractor progress claim',
-    permission: PERMISSIONS.PROCUREMENT_WRITE,
+    permission: PERMISSIONS.PROCUREMENT_APPROVE,
     amountLabelAr: 'المبلغ المُطالَب به',
     amountLabelEn: 'Claimed amount',
   },
@@ -62,9 +64,18 @@ export const APPROVAL_DOCUMENTS: ApprovalDocumentMeta[] = [
     value: 'CHANGE_ORDER',
     labelAr: 'أمر تغيير',
     labelEn: 'Change order',
-    permission: PERMISSIONS.PROJECT_WRITE,
+    permission: PERMISSIONS.PROJECT_APPROVE,
     amountLabelAr: 'قيمة التغيير المطلقة',
     amountLabelEn: 'Absolute value of the variation',
+  },
+  {
+    value: 'PROPOSAL',
+    labelAr: 'عرض سعر',
+    labelEn: 'Proposal',
+    // Raising a proposal needs PROPOSAL_WRITE (sales); signing one needs its own key.
+    permission: PERMISSIONS.PROPOSAL_APPROVE,
+    amountLabelAr: 'إجمالي العرض (سعر البيع)',
+    amountLabelEn: 'Proposal total (selling price)',
   },
 ];
 

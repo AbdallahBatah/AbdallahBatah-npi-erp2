@@ -17,6 +17,8 @@ interface Summary {
   activeContracts: number;
   pipelineValue: number | string;
 }
+/** GET /tasks/summary — the caller's own open follow-up tasks. */
+interface TasksSummary { dueToday: number; overdue: number }
 interface FinSummary {
   issuedInvoices: number;
   accountsReceivable: number | string;
@@ -38,6 +40,7 @@ export default function DashboardPage() {
   const { t, locale } = useI18n();
   const { can } = useAuth();
   const [data, setData] = useState<Summary | null>(null);
+  const [tasksSum, setTasksSum] = useState<TasksSummary | null>(null);
   const [fin, setFin] = useState<FinSummary | null>(null);
   const [wo, setWo] = useState<WoSummary | null>(null);
   const [tel, setTel] = useState<TelDash | null>(null);
@@ -46,17 +49,19 @@ export default function DashboardPage() {
   // A user without the permission must never see the tile at all: firing the
   // call anyway and rendering the 403 as "—" makes the system look broken.
   const canCrm = can('crm.lead.read'); // /reference/dashboard
+  const canTasks = can('crm.customer.read'); // /tasks/summary — independent of canCrm
   const canFin = can('finance.invoice.read'); // /finance/summary
   const canOps = can('fsm.workorder.read'); // work-order summary + telemetry
 
   useEffect(() => {
     if (canCrm) api.get<Summary>('/reference/dashboard').then(setData).catch(() => setData(null));
+    if (canTasks) api.get<TasksSummary>('/tasks/summary').then(setTasksSum).catch(() => setTasksSum(null));
     if (canFin) api.get<FinSummary>('/finance/summary').then(setFin).catch(() => setFin(null));
     if (canOps) {
       api.get<WoSummary>('/fsm/work-orders/summary').then(setWo).catch(() => setWo(null));
       api.get<TelDash>('/telemetry/dashboard').then(setTel).catch(() => setTel(null));
     }
-  }, [canCrm, canFin, canOps]);
+  }, [canCrm, canTasks, canFin, canOps]);
 
   // A tile needs both its data source and read access to the page it links to.
   const kpis = [
@@ -81,6 +86,28 @@ export default function DashboardPage() {
       <PageHeader title={t('dash.title')} subtitle={t('app.tagline')} />
 
       <QuickActions />
+
+      {/* The caller's own follow-ups: due today and already late. Same key as the page it links to. */}
+      {canTasks && tasksSum && (
+        <Link href="/tasks" className="stat group mb-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Icon name="square-check" className="h-5 w-5 text-slate-500 transition group-hover:text-brand-500" />
+            <p className="text-sm font-semibold text-slate-700">{t('dash.myTasks')}</p>
+          </div>
+          <div className="flex items-center gap-8">
+            <p className="text-sm text-slate-600">
+              {t('dash.myTasks.today')}{' '}
+              <span className="ms-1 text-xl font-bold tabular-nums text-warning-700">{num(tasksSum.dueToday)}</span>
+            </p>
+            <p className="text-sm text-slate-600">
+              {t('dash.myTasks.overdue')}{' '}
+              <span className={`ms-1 text-xl font-bold tabular-nums ${tasksSum.overdue > 0 ? 'text-danger-700' : 'text-success-700'}`}>
+                {num(tasksSum.overdue)}
+              </span>
+            </p>
+          </div>
+        </Link>
+      )}
 
       {/* Row 1: sales KPIs */}
       {kpis.length > 0 && (

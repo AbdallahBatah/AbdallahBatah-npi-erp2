@@ -16,16 +16,17 @@ const prisma = new PrismaClient();
 // Full permission surface for the current slice. Kept in sync with
 // packages/shared/src/permissions.ts (the API imports it from there).
 const ALL_PERMISSIONS = [
-  'crm.customer.read', 'crm.customer.write',
+  'crm.customer.read', 'crm.customer.write', 'crm.customer.merge',
   'crm.lead.read', 'crm.lead.write',
   'crm.opportunity.read', 'crm.opportunity.write',
   'commercial.item.read', 'commercial.item.write',
-  'commercial.proposal.read', 'commercial.proposal.write',
+  'commercial.proposal.read', 'commercial.proposal.write', 'commercial.proposal.approve',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.costs.view',
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
-  'projects.project.read', 'projects.project.write',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
+  'projects.project.read', 'projects.project.write', 'projects.project.approve',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
   'assets.serialunit.read',
   'fsm.workorder.read', 'fsm.workorder.write',
   'admin.org.manage', 'admin.user.manage', 'admin.audit.read', 'admin.approval.manage',
@@ -41,6 +42,7 @@ const SALES_PERMISSIONS = [
   'commercial.proposal.read', 'commercial.proposal.write',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.costs.view',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
@@ -48,16 +50,18 @@ const SALES_PERMISSIONS = [
 const ACCOUNTANT_PERMISSIONS = [
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
+  'finance.costs.view',
   'crm.customer.read',
   'commercial.contract.read', 'commercial.proposal.read', 'commercial.item.read',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
 // مدير المشاريع: التنفيذ والتوريد كاملاً + قراءة العقود والتشغيل والفوترة
 const PM_PERMISSIONS = [
-  'projects.project.read', 'projects.project.write',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
+  'projects.project.read', 'projects.project.write', 'projects.project.approve',
+  'finance.costs.view',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
   'assets.serialunit.read',
   'commercial.contract.read', 'commercial.item.read',
   'crm.customer.read',
@@ -66,7 +70,21 @@ const PM_PERMISSIONS = [
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
-// مهندس الموقع: أوامر العمل والأصول والمخزون — بلا مال ولا عقود
+// الإدارة العليا: كل مفاتيح العرض + كل مفاتيح الاعتماد + التكاليف والهوامش
+// + سجل التدقيق + ضبط مصفوفة الاعتماد. لا مفاتيح كتابة ولا إدارة نظام.
+const EXECUTIVE_PERMISSIONS = [
+  ...new Set([
+    ...ALL_PERMISSIONS.filter((k) => k.endsWith('.read') || k.endsWith('.approve')),
+    'finance.costs.view',
+    'admin.audit.read',
+    'admin.approval.manage',
+    // Step 2: merging duplicate customers is an executive / administrator act.
+    'crm.customer.merge',
+  ]),
+];
+
+// مهندس الموقع (ميداني): أوامر العمل والأصول والمخزون — بلا مال ولا عقود،
+// بلا تكاليف (finance.costs.view) وبلا اعتماد.
 const SITE_ENGINEER_PERMISSIONS = [
   'fsm.workorder.read', 'fsm.workorder.write',
   'assets.serialunit.read',
@@ -124,6 +142,7 @@ async function main() {
     { key: 'accountant', nameAr: 'محاسب', nameEn: 'Accountant', permissions: ACCOUNTANT_PERMISSIONS },
     { key: 'pm', nameAr: 'مدير مشاريع', nameEn: 'Project Manager', permissions: PM_PERMISSIONS },
     { key: 'site_engineer', nameAr: 'مهندس موقع', nameEn: 'Site Engineer', permissions: SITE_ENGINEER_PERMISSIONS },
+    { key: 'executive', nameAr: 'الإدارة العليا', nameEn: 'Executive management', permissions: EXECUTIVE_PERMISSIONS },
   ];
   const extraRoles: Record<string, string> = {};
   for (const rd of roleDefs) {
@@ -138,6 +157,7 @@ async function main() {
     { email: 'accountant@npi.sa', pass: 'Acc@12345', nameAr: 'أمين الحسابات', nameEn: 'Chief Accountant', role: 'accountant' },
     { email: 'pm@npi.sa', pass: 'Pm@123456', nameAr: 'مدير المشاريع', nameEn: 'Projects Manager', role: 'pm' },
     { email: 'engineer@npi.sa', pass: 'Eng@12345', nameAr: 'مهندس الموقع', nameEn: 'Site Engineer', role: 'site_engineer' },
+    { email: 'ceo@npi.sa', pass: 'Ceo@12345', nameAr: 'الرئيس التنفيذي', nameEn: 'Chief Executive', role: 'executive' },
   ];
   for (const ud of userDefs) {
     await prisma.user.upsert({
@@ -217,6 +237,8 @@ async function main() {
     { documentType: 'PAYMENT', prefix: 'RCPT' },
     { documentType: 'VENDOR_PAYMENT', prefix: 'VPAY' },
     { documentType: 'CREDIT_NOTE', prefix: 'CN' },
+    // CRM Step 5: follow-up tasks (TSK-00001 …).
+    { documentType: 'FOLLOWUP_TASK', prefix: 'TSK' },
   ];
   for (const s of seqDefs) {
     await prisma.numberingSequence.upsert({
@@ -351,12 +373,131 @@ async function main() {
       nameAr: 'مصنع الرياض للصناعات',
       nameEn: 'Riyadh Industries Factory',
       customerType: 'CI' as CustomerType,
+      // CRM Step 2: the unified record's keys. nameNormalized is
+      // normalizeArabicName('مصنع الرياض للصناعات') — mirrored by migration 0022's SQL function.
+      entityKind: 'COMPANY',
       vatNumber: '310000000000003',
+      crNumber: '1010000001',
       creditTermsDays: 30,
       phone: '+966500000000',
+      mobile: '+966500000000',
+      nameNormalized: 'مصنع رياض للصناعات',
       email: 'procurement@riyadh-industries.sa',
     },
   });
+  // `update: {}` above never touches an existing row, so a database seeded
+  // before Step 2 would keep a CUS-00001 without the new keys. Fill them in —
+  // only where they are still empty, so a real edit is never overwritten.
+  await prisma.customer.updateMany({
+    where: { id: customer.id, crNumber: null },
+    data: { crNumber: '1010000001' },
+  });
+  await prisma.customer.updateMany({
+    where: { id: customer.id, mobile: null },
+    data: { mobile: '+966500000000' },
+  });
+  await prisma.customer.updateMany({
+    where: { id: customer.id, nameNormalized: null },
+    data: { nameNormalized: 'مصنع رياض للصناعات' },
+  });
+
+  // CRM Step 2 settings. `update: {}` — a value an administrator has set is kept.
+  for (const [key, value] of [
+    ['crm.customer.similarityThreshold', 0.8],
+    ['crm.customer.mergeEnabled', false],
+    // CRM Step 4: default proposal validity and the cost-age warning limit, in days.
+    ['crm.proposal.validityDays', 30],
+    ['crm.proposal.costAgeWarnDays', 30],
+    // CRM Step 5: a follow-up reminder goes this many days before the due day, at this Riyadh hour.
+    ['crm.task.reminderDaysBefore', 1],
+    ['crm.task.reminderHour', 8],
+  ] as const) {
+    await prisma.orgSetting.upsert({
+      where: { organizationId_key: { organizationId: org.id, key } },
+      update: {},
+      create: { organizationId: org.id, key, valueJson: value },
+    });
+  }
+
+  // CRM Step 5: one example of the communication log and one open follow-up on the demo
+  // customer, so the new tabs are not empty on a fresh database. Idempotent: each is
+  // created only if its text / title is not there yet, so re-seeding never duplicates
+  // and never touches one that was edited or finished.
+  {
+    const salesUser = await prisma.user.findUniqueOrThrow({ where: { email: 'sales@npi.sa' } });
+    const DAY = 86_400_000;
+    const callText =
+      'اتصلت بالأستاذ أحمد العتيبي (مدير المشتريات) وأكّد اهتمام المصنع بمحطة سقفية بقدرة 500 ك.و.ذ، وطلب عرضاً فنياً ومالياً قبل نهاية الشهر.';
+    const hasCall = await prisma.activity.findFirst({
+      where: { organizationId: org.id, customerId: customer.id, body: callText },
+      select: { id: true },
+    });
+    if (!hasCall) {
+      await prisma.activity.create({
+        data: {
+          organizationId: org.id,
+          customerId: customer.id,
+          activityType: 'CALL',
+          occurredAt: new Date(Date.now() - DAY),
+          body: callText,
+          createdById: salesUser.id,
+        },
+      });
+    }
+
+    const taskTitle = 'إرسال العرض الفني المبدئي لمصنع الرياض';
+    const hasTask = await prisma.followUpTask.findFirst({
+      where: { organizationId: org.id, customerId: customer.id, title: taskTitle },
+      select: { id: true },
+    });
+    if (!hasTask) {
+      // The due DAY is stored as UTC midnight of its Riyadh date (Riyadh = UTC+3), the
+      // reminder at 08:00 Riyadh the day before — the defaults the application applies.
+      const todayRiyadh = new Date(Date.now() + 3 * 3_600_000).toISOString().slice(0, 10);
+      const dueAt = new Date(Date.parse(`${todayRiyadh}T00:00:00Z`) + 3 * DAY);
+      const remindAt = new Date(dueAt.getTime() - 3 * 3_600_000 - DAY + 8 * 3_600_000);
+      // The same atomic increment NumberingService uses.
+      const seq = await prisma.numberingSequence.update({
+        where: {
+          organizationId_documentType_fiscalYear: { organizationId: org.id, documentType: 'FOLLOWUP_TASK', fiscalYear },
+        },
+        data: { nextValue: { increment: 1 } },
+      });
+      await prisma.followUpTask.create({
+        data: {
+          organizationId: org.id,
+          code: `${seq.prefix}-${String(seq.nextValue - 1).padStart(seq.padding, '0')}`,
+          customerId: customer.id,
+          title: taskTitle,
+          details: 'يشمل الجدول الزمني للتركيب وملخص العائد المتوقع.',
+          dueAt,
+          remindAt,
+          assigneeId: salesUser.id,
+          createdById: salesUser.id,
+        },
+      });
+    }
+  }
+
+  // CRM Phase 1 (Step 3): the six default reasons an opportunity is lost, in the
+  // order a salesperson sees them. Editable from Admin > Loss reasons; a reason
+  // is switched off, never deleted. Re-seeding never touches a reason the
+  // administrator has renamed, reordered or switched off (update: {}).
+  const lossReasons: Array<{ nameAr: string; nameEn: string; sortOrder: number }> = [
+    { nameAr: 'السعر', nameEn: 'Price', sortOrder: 1 },
+    { nameAr: 'اختيار منافس', nameEn: 'Competitor chosen', sortOrder: 2 },
+    { nameAr: 'إلغاء المشروع أو تأجيله', nameEn: 'Project cancelled or postponed', sortOrder: 3 },
+    { nameAr: 'عدم توفر التمويل', nameEn: 'Funding not available', sortOrder: 4 },
+    { nameAr: 'عدم استيفاء شروط المناقصة', nameEn: 'Tender requirements not met', sortOrder: 5 },
+    { nameAr: 'أخرى', nameEn: 'Other', sortOrder: 6 },
+  ];
+  for (const r of lossReasons) {
+    await prisma.lossReason.upsert({
+      where: { organizationId_nameAr: { organizationId: org.id, nameAr: r.nameAr } },
+      update: {},
+      create: { organizationId: org.id, ...r },
+    });
+  }
 
   // SCM-04: default stock locations (site locations are created per project).
   const locations: Array<{ code: string; nameAr: string; nameEn: string; locationType: any }> = [
@@ -451,6 +592,15 @@ async function main() {
         select: { id: true, code: true, status: true },
       }),
     },
+    // CRM Step 4: proposals written before the engine knew them are adopted in the
+    // state they are in (migration 0027 does the same for existing organizations).
+    {
+      flow: 'PROPOSAL',
+      rows: await prisma.proposal.findMany({
+        where: { organizationId: org.id },
+        select: { id: true, code: true, status: true },
+      }),
+    },
   ];
 
   let adopted = 0;
@@ -525,7 +675,7 @@ async function main() {
   // customer wants on day one. Only created when absent — an organization that
   // has tuned its own bands must never have them overwritten by a re-seed.
   const matrixDefaults: Array<{
-    documentType: 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PROGRESS_CLAIM' | 'CHANGE_ORDER';
+    documentType: 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PROGRESS_CLAIM' | 'CHANGE_ORDER' | 'PROPOSAL';
     minAmount: number;
     chain: string[];
   }> = [
@@ -536,6 +686,10 @@ async function main() {
     { documentType: 'PURCHASE_ORDER', minAmount: 100_000, chain: ['pm', 'accountant'] },
     { documentType: 'PROGRESS_CLAIM', minAmount: 250_000, chain: ['pm', 'accountant'] },
     { documentType: 'CHANGE_ORDER', minAmount: 100_000, chain: ['pm', 'admin'] },
+    // CRM Step 4 (decision CRM-S4-a): EVERY proposal, from 0 SAR up, is signed by the
+    // executive — the band's floor is the financial limit and is edited from
+    // Admin > Approval matrix, not in code.
+    { documentType: 'PROPOSAL', minAmount: 0, chain: ['executive'] },
   ];
   const roleIdByKey: Record<string, string> = {
     admin: adminRole.id,
@@ -629,8 +783,8 @@ async function main() {
         { from: 'DRAFT', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'رفع للاعتماد', nameEn: 'Submit for approval', permission: 'scm.requisition.write', condition: 'estimatedTotal > 0', requiresApproval: true },
         { from: 'RETURNED', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'إعادة الرفع', nameEn: 'Resubmit', permission: 'scm.requisition.write', condition: 'estimatedTotal > 0', requiresApproval: true },
         { from: 'DRAFT', to: 'CANCELLED', action: 'CANCEL', nameAr: 'إلغاء', nameEn: 'Cancel', permission: 'scm.requisition.write' },
-        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'scm.procurement.write', emits: 'pr.approved' },
-        { from: 'PENDING_APPROVAL', to: 'REJECTED', action: 'REJECT', nameAr: 'رفض', nameEn: 'Reject', permission: 'scm.procurement.write' },
+        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'scm.procurement.approve', emits: 'pr.approved' },
+        { from: 'PENDING_APPROVAL', to: 'REJECTED', action: 'REJECT', nameAr: 'رفض', nameEn: 'Reject', permission: 'scm.procurement.approve' },
         { from: 'PENDING_APPROVAL', to: 'RETURNED', action: 'RETURN', nameAr: 'إعادة لمقدّم الطلب', nameEn: 'Return to requester', permission: 'scm.procurement.write' },
         { from: 'APPROVED', to: 'CONVERTED', action: 'CONVERT', nameAr: 'تحويل لأمر شراء', nameEn: 'Convert to purchase order', permission: 'scm.procurement.write' },
       ],
@@ -653,8 +807,8 @@ async function main() {
       transitions: [
         { from: 'DRAFT', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'رفع للاعتماد', nameEn: 'Submit for approval', permission: 'scm.procurement.write', condition: 'total > 0', requiresApproval: true },
         { from: 'DRAFT', to: 'CANCELLED', action: 'CANCEL', nameAr: 'إلغاء', nameEn: 'Cancel', permission: 'scm.procurement.write' },
-        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'scm.procurement.write', emits: 'po.approved' },
-        { from: 'PENDING_APPROVAL', to: 'CANCELLED', action: 'REJECT', nameAr: 'رفض', nameEn: 'Reject', permission: 'scm.procurement.write' },
+        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'scm.procurement.approve', emits: 'po.approved' },
+        { from: 'PENDING_APPROVAL', to: 'CANCELLED', action: 'REJECT', nameAr: 'رفض', nameEn: 'Reject', permission: 'scm.procurement.approve' },
         { from: 'APPROVED', to: 'SENT', action: 'SEND', nameAr: 'إرسال للمورّد', nameEn: 'Send to vendor', permission: 'scm.procurement.write', emits: 'po.sent' },
         // RECEIVE moves are written by the receipt flow's acceptance, inside
         // its transaction — they are listed so the map is complete and the
@@ -704,6 +858,41 @@ async function main() {
         { from: 'MATCHED', to: 'DRAFT', action: 'RETURN', nameAr: 'إعادة للمراجعة', nameEn: 'Return for review', permission: 'finance.payment.write' },
         { from: 'APPROVED', to: 'SCHEDULED', action: 'SCHEDULE', nameAr: 'جدولة الدفع', nameEn: 'Schedule payment', permission: 'finance.payment.write' },
         { from: 'SCHEDULED', to: 'PAID', action: 'PAY', nameAr: 'سداد', nameEn: 'Pay', permission: 'finance.payment.write', emits: 'invoice.paid' },
+      ],
+    },
+    // CRM Step 4 (spec 4.3 / §9): the numbered, approved proposal. The same 7 states and
+    // 12 transitions migration 0027 writes for the organizations that already exist.
+    // REJECTED and EXPIRED are not final: the document itself says a change after
+    // sending is a new revision, and a refused or expired offer can be revived the same way.
+    {
+      code: 'PROPOSAL',
+      nameAr: 'عرض سعر',
+      nameEn: 'Proposal',
+      documentType: 'Proposal',
+      states: [
+        { code: 'DRAFT', nameAr: 'مسودة', nameEn: 'Draft', kind: 'INITIAL' },
+        { code: 'PENDING_APPROVAL', nameAr: 'بانتظار الاعتماد', nameEn: 'Pending approval', kind: 'INTERMEDIATE' },
+        { code: 'APPROVED', nameAr: 'معتمد', nameEn: 'Approved', kind: 'INTERMEDIATE' },
+        { code: 'SENT', nameAr: 'مُرسَل', nameEn: 'Sent to customer', kind: 'INTERMEDIATE' },
+        { code: 'ACCEPTED', nameAr: 'مقبول', nameEn: 'Accepted', kind: 'FINAL' },
+        { code: 'REJECTED', nameAr: 'مرفوض', nameEn: 'Rejected by customer', kind: 'INTERMEDIATE' },
+        { code: 'EXPIRED', nameAr: 'منتهي الصلاحية', nameEn: 'Expired', kind: 'INTERMEDIATE' },
+      ],
+      transitions: [
+        { from: 'DRAFT', to: 'PENDING_APPROVAL', action: 'SUBMIT', nameAr: 'رفع للاعتماد', nameEn: 'Submit for approval', permission: 'commercial.proposal.write', condition: 'total > 0', requiresApproval: true },
+        // Performed by the matrix's applier / rejecter only — no endpoint offers these.
+        { from: 'PENDING_APPROVAL', to: 'APPROVED', action: 'APPROVE', nameAr: 'اعتماد', nameEn: 'Approve', permission: 'commercial.proposal.approve', emits: 'proposal.approved' },
+        { from: 'PENDING_APPROVAL', to: 'DRAFT', action: 'RETURN', nameAr: 'إعادة للمسودة', nameEn: 'Return to draft', permission: 'commercial.proposal.approve' },
+        { from: 'APPROVED', to: 'SENT', action: 'SEND', nameAr: 'إرسال للعميل', nameEn: 'Send to customer', permission: 'commercial.proposal.write', emits: 'proposal.sent' },
+        { from: 'SENT', to: 'ACCEPTED', action: 'ACCEPT', nameAr: 'قبول العميل', nameEn: 'Customer accepted', permission: 'commercial.proposal.write', emits: 'proposal.accepted' },
+        { from: 'SENT', to: 'REJECTED', action: 'REJECT', nameAr: 'رفض العميل', nameEn: 'Customer rejected', permission: 'commercial.proposal.write' },
+        // EXPIRE is performed by the system actor (nightly sweep), never by a person.
+        { from: 'APPROVED', to: 'EXPIRED', action: 'EXPIRE', nameAr: 'انتهاء الصلاحية', nameEn: 'Expire', permission: 'commercial.proposal.write', emits: 'proposal.expired' },
+        { from: 'SENT', to: 'EXPIRED', action: 'EXPIRE', nameAr: 'انتهاء الصلاحية', nameEn: 'Expire', permission: 'commercial.proposal.write', emits: 'proposal.expired' },
+        { from: 'APPROVED', to: 'DRAFT', action: 'REVISE', nameAr: 'نسخة جديدة', nameEn: 'New revision', permission: 'commercial.proposal.write' },
+        { from: 'SENT', to: 'DRAFT', action: 'REVISE', nameAr: 'نسخة جديدة', nameEn: 'New revision', permission: 'commercial.proposal.write' },
+        { from: 'REJECTED', to: 'DRAFT', action: 'REVISE', nameAr: 'نسخة جديدة', nameEn: 'New revision', permission: 'commercial.proposal.write' },
+        { from: 'EXPIRED', to: 'DRAFT', action: 'REVISE', nameAr: 'نسخة جديدة', nameEn: 'New revision', permission: 'commercial.proposal.write' },
       ],
     },
   ];

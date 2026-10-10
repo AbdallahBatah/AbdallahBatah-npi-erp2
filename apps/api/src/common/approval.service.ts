@@ -326,7 +326,7 @@ export class ApprovalService implements OnApplicationBootstrap {
     // The caller's own role, or a role lent to them by an active delegation.
     // Checked in that order so the common case costs no extra query.
     let delegation: { id: string; fromUserId: string } | null = null;
-    if (step.roleId !== user.roleId) {
+    if (!user.roleIds.includes(step.roleId)) {
       delegation = await this.delegations.delegationFor(
         user.organizationId,
         user.userId,
@@ -442,7 +442,7 @@ export class ApprovalService implements OnApplicationBootstrap {
     // closed simply stops seeing the rows — nothing has to be un-assigned.
     const delegated = await this.delegations.rolesFor(user.organizationId, user.userId);
     const byRole = new Map(delegated.map((d) => [d.roleId, d]));
-    const roleIds = [...new Set([user.roleId, ...byRole.keys()])];
+    const roleIds = [...new Set([...user.roleIds, ...byRole.keys()])];
 
     const rows = await this.prisma.approvalRequest.findMany({
       where: {
@@ -464,7 +464,7 @@ export class ApprovalService implements OnApplicationBootstrap {
         const current = r.steps.find((s) => s.sequence === r.currentStep)!;
         const raisedByYou = r.raisedById === user.userId;
         const alreadySigned = r.steps.some((s) => s.decidedById === user.userId);
-        const via = current.roleId === user.roleId ? undefined : byRole.get(current.roleId);
+        const via = user.roleIds.includes(current.roleId) ? undefined : byRole.get(current.roleId);
         const lentByRaiser = !!via && via.fromUserId === r.raisedById;
         return {
           ...this.view(r),

@@ -27,11 +27,13 @@ interface Hit {
 type Results = Record<string, Hit[]>;
 
 /** `commands` is client-side (screens), the rest come from the API. */
-const GROUP_ORDER = ['commands', 'customers', 'leads', 'contracts', 'invoices', 'projects', 'workOrders', 'serialUnits'];
+const GROUP_ORDER = ['commands', 'customers', 'leads', 'opportunities', 'proposals', 'contracts', 'invoices', 'projects', 'workOrders', 'serialUnits'];
 const GROUP_NAV_KEY: Record<string, string> = {
   commands: 'search.commands',
   customers: 'nav.customers',
   leads: 'nav.leads',
+  opportunities: 'nav.opportunities',
+  proposals: 'nav.proposals',
   contracts: 'nav.contracts',
   invoices: 'nav.invoices',
   projects: 'nav.projects',
@@ -42,6 +44,8 @@ const GROUP_ICON: Record<string, string> = {
   commands: 'search',
   customers: 'users',
   leads: 'target',
+  opportunities: 'lightbulb',
+  proposals: 'file-text',
   contracts: 'file-signature',
   invoices: 'receipt',
   projects: 'building',

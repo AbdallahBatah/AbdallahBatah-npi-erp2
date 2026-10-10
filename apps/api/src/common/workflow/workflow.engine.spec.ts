@@ -11,6 +11,7 @@ const user = (over: Partial<AuthUser> = {}): AuthUser => ({
   permissions: ['scm.procurement.write', 'scm.requisition.write'],
   locale: 'AR',
   ...over,
+  roleIds: over.roleIds ?? [over.roleId ?? 'role-pm'],
 });
 
 const audit = { record: jest.fn().mockResolvedValue(undefined) };
@@ -524,5 +525,123 @@ describe('WorkflowEngine.available', () => {
     });
     const [action] = await make(prisma).available(user(), 'PurchaseRequisition', 'pr1');
     expect(action.requiresComment).toBe(true);
+  });
+});
+
+// ── CRM Phase 1 · Step 4: adopting an existing document, and the system actor ──
+
+describe('WorkflowEngine.adopt — taking an existing document into a flow at the state it is in', () => {
+  const adoptInput = (stateCode: string) => ({
+    organizationId: 'org1',
+    flowCode: 'PURCHASE_REQUISITION',
+    documentId: 'pr9',
+    documentCode: 'PR-00009',
+    stateCode,
+  });
+  const noInstance = () =>
+    prismaWith({
+      wfInstance: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn().mockResolvedValue({ id: 'wf9', currentState: 'APPROVED' }),
+        update: jest.fn(),
+      },
+    });
+
+  it('creates the instance in that state with an ADOPT history row that has no actor', async () => {
+    const prisma = noInstance();
+    const res = await make(prisma).adopt(prisma as never, adoptInput('APPROVED'));
+    const db = prisma as never as Record<string, { create: jest.Mock }>;
+    expect(db.wfInstance.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          documentId: 'pr9',
+          documentCode: 'PR-00009',
+          currentState: 'APPROVED',
+          closedAt: null,
+        }),
+      }),
+    );
+    expect(db.wfHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ actionCode: 'ADOPT', fromState: 'APPROVED', toState: 'APPROVED', actorId: null }),
+      }),
+    );
+    expect(res.state).toBe('APPROVED');
+  });
+
+  it('closes the instance at once when the state is FINAL, so history never parks in a task box', async () => {
+    const prisma = noInstance();
+    await make(prisma).adopt(prisma as never, adoptInput('REJECTED'));
+    const db = prisma as never as Record<string, { create: jest.Mock }>;
+    expect(db.wfInstance.create.mock.calls[0][0].data.closedAt).toBeInstanceOf(Date);
+  });
+
+  it('refuses a state the flow does not have', async () => {
+    const prisma = noInstance();
+    await expect(make(prisma).adopt(prisma as never, adoptInput('NOPE'))).rejects.toThrow(BadRequestException);
+  });
+
+  it('is idempotent: a document that already has an instance keeps it', async () => {
+    const prisma = prismaWith(); // wfInstance.findFirst returns an existing instance
+    const res = await make(prisma).adopt(prisma as never, adoptInput('APPROVED'));
+    const db = prisma as never as Record<string, { create: jest.Mock }>;
+    expect(db.wfInstance.create).not.toHaveBeenCalled();
+    expect(res.id).toBe('wf1');
+  });
+});
+
+describe('WorkflowEngine.transition — the system actor (expiry only)', () => {
+  const system = { system: true as const, organizationId: 'org1' };
+  const expire = (over: Record<string, unknown> = {}) =>
+    transition({ actionCode: 'EXPIRE', toState: 'APPROVED', requiredPermission: 'scm.requisition.write', emitsEvent: 'proposal.expired', ...over });
+
+  it('skips the permission check and records no actor in the history, the audit or the event', async () => {
+    const prisma = prismaWith();
+    (prisma as never as { wfTransition: { findUnique: jest.Mock } }).wfTransition.findUnique.mockResolvedValue(expire());
+    const res = await make(prisma).transition(system, {
+      documentType: 'PurchaseRequisition',
+      documentId: 'pr1',
+      actionCode: 'EXPIRE',
+      comment: 'Expired automatically — validity passed',
+    });
+    expect(res.actionCode).toBe('EXPIRE');
+    const db = prisma as never as Record<string, { create: jest.Mock }>;
+    expect(db.wfHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ actorId: null, comment: 'Expired automatically — validity passed' }),
+      }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ actorId: null, organizationId: 'org1', action: 'EXPIRE' }), expect.anything());
+    expect(outbox.emit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ organizationId: 'org1', payload: expect.objectContaining({ actorId: null }) }),
+    );
+  });
+
+  it('is for expiry alone: any other action by the system is forbidden, and nothing is written', async () => {
+    const prisma = prismaWith();
+    (prisma as never as { wfTransition: { findUnique: jest.Mock } }).wfTransition.findUnique.mockResolvedValue(
+      transition({ actionCode: 'APPROVE' }),
+    );
+    const apply = jest.fn();
+    await expect(
+      make(prisma).transition(system, {
+        documentType: 'PurchaseRequisition',
+        documentId: 'pr1',
+        actionCode: 'APPROVE',
+        apply,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it('still scopes the lookup to its organization', async () => {
+    const prisma = prismaWith();
+    (prisma as never as { wfTransition: { findUnique: jest.Mock } }).wfTransition.findUnique.mockResolvedValue(expire());
+    await make(prisma).transition(system, { documentType: 'PurchaseRequisition', documentId: 'pr1', actionCode: 'EXPIRE' });
+    const db = prisma as never as { wfInstance: { findFirst: jest.Mock } };
+    expect(db.wfInstance.findFirst.mock.calls[0][0].where).toMatchObject({ organizationId: 'org1', documentId: 'pr1' });
   });
 });

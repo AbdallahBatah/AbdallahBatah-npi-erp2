@@ -23,6 +23,8 @@
     "db:stop": "C:/Users/eyadq/.npi-erp/pgsql/bin/pg_ctl.exe -D C:/Users/eyadq/.npi-erp/data stop",
     "test": "npm run test -w @npi/api",
     "test:int": "npm run test:int -w @npi/api",
+    "uat:crm": "node scripts/crm-phase-1-acceptance.mjs",
+    "uat:crm:ui": "node scripts/crm-phase-1-ui-acceptance.mjs",
     "db:deploy": "npm run migrate:deploy -w @npi/db",
     "lint": "eslint .",
     "copilot:dev": "node scripts/copilot-dev.mjs",

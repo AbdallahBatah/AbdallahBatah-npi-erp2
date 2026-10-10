@@ -9,11 +9,17 @@ import type { AuthUser } from '../../common/auth-user';
 import { PERMISSIONS } from '@npi/shared';
 import {
   CUSTOMER_TYPES,
+  CUSTOMER_ENTITY_KINDS,
   LEAD_SOURCES,
   LEAD_STATUSES,
   OPPORTUNITY_STAGES,
+  OPPORTUNITY_TYPES,
+  OPPORTUNITY_STAGE_FLOW,
+  ACTIVITY_TYPES,
+  FOLLOWUP_TASK_STATUSES,
   ITEM_CATEGORIES,
   PROPOSAL_STATUSES,
+  COST_SOURCES,
   CONTRACT_TYPES,
   CONTRACT_STATUSES,
   MILESTONE_TRIGGER_TYPES,
@@ -55,11 +61,16 @@ export class ReferenceController {
   enums() {
     return {
       customerTypes: CUSTOMER_TYPES,
+      customerEntityKinds: CUSTOMER_ENTITY_KINDS,
       leadSources: LEAD_SOURCES,
       leadStatuses: LEAD_STATUSES,
       opportunityStages: OPPORTUNITY_STAGES,
+      opportunityTypes: OPPORTUNITY_TYPES,
+      activityTypes: ACTIVITY_TYPES,
+      followUpTaskStatuses: FOLLOWUP_TASK_STATUSES,
       itemCategories: ITEM_CATEGORIES,
       proposalStatuses: PROPOSAL_STATUSES,
+      costSources: COST_SOURCES,
       contractTypes: CONTRACT_TYPES,
       contractStatuses: CONTRACT_STATUSES,
       milestoneTriggerTypes: MILESTONE_TRIGGER_TYPES,
@@ -103,15 +114,19 @@ export class ReferenceController {
   @Get('dashboard')
   async dashboard(@CurrentUser() user: AuthUser) {
     const org = user.organizationId;
+    // The caller's own follow-up tasks (the dashboard card) are NOT here: they have their own
+    // route, GET /tasks/summary, under the key that matches them (crm.customer.read). Putting
+    // them behind this crm.lead.read endpoint hid the card from roles that may see tasks but
+    // not leads (CRM Step 5-b).
     const [leads, openOpps, contracts, activeContracts, pipeline] = await Promise.all([
       this.prisma.lead.count({ where: { organizationId: org, status: { not: 'CONVERTED' } } }),
       this.prisma.opportunity.count({
-        where: { organizationId: org, stage: { notIn: ['WON', 'LOST'] } },
+        where: { organizationId: org, stage: { in: [...OPPORTUNITY_STAGE_FLOW] } },
       }),
       this.prisma.contract.count({ where: { organizationId: org } }),
       this.prisma.contract.count({ where: { organizationId: org, status: 'ACTIVE' } }),
       this.prisma.opportunity.aggregate({
-        where: { organizationId: org, stage: { notIn: ['WON', 'LOST'] } },
+        where: { organizationId: org, stage: { in: [...OPPORTUNITY_STAGE_FLOW] } },
         _sum: { estimatedValue: true },
       }),
     ]);

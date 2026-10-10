@@ -1,12 +1,16 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { normalizeArabicName, normalizeSaudiMobile } from '@npi/shared';
+import type { Prisma } from '@npi/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
 import type { AuthUser } from '../../common/auth-user';
+import { CustomersService } from './customers.service';
 import { ConvertLeadDto, CreateLeadDto, UpdateLeadDto } from './dto';
 
 @Injectable()
@@ -15,7 +19,26 @@ export class LeadsService {
     private readonly prisma: PrismaService,
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
+    private readonly customers: CustomersService,
   ) {}
+
+  /**
+   * A customer id coming from a request body must belong to the caller's
+   * organization (404 otherwise, exactly like opportunities.create) and must not
+   * be a duplicate that was already merged away (409).
+   */
+  private async assertCustomerUsable(
+    organizationId: string,
+    customerId: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const customer = await (tx ?? this.prisma).customer.findFirst({
+      where: { id: customerId, organizationId },
+      select: { id: true, mergedIntoId: true },
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+    if (customer.mergedIntoId) throw new ConflictException('Customer already merged');
+  }
 
   async list(
     user: AuthUser,
@@ -64,6 +87,7 @@ export class LeadsService {
 
   async create(user: AuthUser, dto: CreateLeadDto) {
     return this.prisma.$transaction(async (tx) => {
+      if (dto.customerId) await this.assertCustomerUsable(user.organizationId, dto.customerId, tx);
       const code = await this.numbering.next(user.organizationId, 'LEAD', tx);
       const created = await tx.lead.create({
         data: {
@@ -97,6 +121,7 @@ export class LeadsService {
 
   async update(user: AuthUser, id: string, dto: UpdateLeadDto) {
     const existing = await this.get(user, id);
+    if (dto.customerId) await this.assertCustomerUsable(user.organizationId, dto.customerId);
     const updated = await this.prisma.lead.update({
       where: { id: existing.id },
       data: dto as any,
@@ -122,24 +147,62 @@ export class LeadsService {
     if (lead.status === 'CONVERTED') {
       throw new BadRequestException('Lead is already converted');
     }
+    // Step 3: a tender opportunity always has its close date, however it is born.
+    const opportunityType = dto.opportunityType ?? 'DIRECT';
+    const tenderCloseDate = dto.tenderCloseDate ? new Date(dto.tenderCloseDate) : null;
+    if (opportunityType === 'TENDER' && (!tenderCloseDate || Number.isNaN(tenderCloseDate.getTime()))) {
+      throw new BadRequestException('Tender close date is required');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       let customerId = dto.customerId ?? lead.customerId ?? undefined;
 
+      if (dto.customerId) await this.assertCustomerUsable(user.organizationId, dto.customerId, tx);
+
       if (!customerId) {
+        // A customer born from a lead goes through the same duplicate check as
+        // one typed in by hand: when the lead's CR / VAT / mobile already
+        // belongs to someone, the user gets the 409 and picks that customer
+        // (passing its id as `customerId`) instead of creating a twin.
+        // The mandatory-key rule of `CustomersService.create` is NOT applied
+        // here — a lead often has no CR or VAT yet, and refusing to convert it
+        // would stall the pipeline; the customer page flags the missing key.
+        const keys = this.customers.normalizeKeys({
+          crNumber: dto.crNumber ?? null,
+          vatNumber: dto.vatNumber ?? null,
+          mobile: dto.mobile ?? normalizeSaudiMobile(lead.phone),
+        });
+        await this.customers.assertNoDuplicateKeys(tx, user.organizationId, keys);
+        const name = lead.companyName ?? lead.contactName;
         const custCode = await this.numbering.next(user.organizationId, 'CUSTOMER', tx);
-        const customer = await tx.customer.create({
+        const createdCustomer = await tx.customer.create({
           data: {
             organizationId: user.organizationId,
             code: custCode,
-            nameAr: lead.companyName ?? lead.contactName,
-            nameEn: lead.companyName ?? lead.contactName,
+            nameAr: name,
+            nameEn: name,
+            nameNormalized: normalizeArabicName(name),
+            entityKind: lead.companyName ? 'COMPANY' : 'INDIVIDUAL',
             customerType: 'CI',
+            crNumber: keys.crNumber,
+            vatNumber: keys.vatNumber,
+            mobile: keys.mobile,
             phone: lead.phone,
             email: lead.email,
           },
         });
-        customerId = customer.id;
+        customerId = createdCustomer.id;
+        await this.audit.record(
+          {
+            organizationId: user.organizationId,
+            actorId: user.userId,
+            entityType: 'Customer',
+            entityId: createdCustomer.id,
+            action: 'CREATE',
+            after: createdCustomer,
+          },
+          tx,
+        );
       }
 
       const oppCode = await this.numbering.next(user.organizationId, 'OPPORTUNITY', tx);
@@ -150,6 +213,9 @@ export class LeadsService {
           name: dto.opportunityName ?? `${lead.contactName} — ${lead.code}`,
           customerId,
           stage: 'PROSPECTING',
+          stageChangedAt: new Date(),
+          opportunityType,
+          tenderCloseDate: opportunityType === 'TENDER' ? tenderCloseDate : null,
           estimatedKwp: lead.estimatedKwp,
           estimatedValue: dto.estimatedValue,
           ownerId: user.userId,
