@@ -119,8 +119,9 @@ model FirmConfig {
   // guess and reasons, per-step sources, what was skipped).
   setupSource           String    @default("manual")
   discoveryJson         Json?
-  // T-47b (reserved, nothing writes these yet): the last NPI-vs-Madar sync,
-  // the difference it found, and when the administrator last looked at it.
+  // T-47b: the last NPI-vs-Madar sync (`lastSyncAt`, bumped by every run that
+  // read NPI), the last non-empty difference it found (`lastSyncDiffJson`, with
+  // its own `at`), and when an administrator last acknowledged it.
   lastSyncAt            DateTime?
   lastSyncDiffJson      Json?
   lastSyncSeenAt        DateTime?
@@ -128,6 +129,25 @@ model FirmConfig {
   updatedAt             DateTime  @updatedAt
 
   @@map("firm_config")
+}
+
+// T-47b: one row per sync attempt that read NPI or was refused for a reason
+// the administrator can act on (a throttled login writes nothing). `diffJson`
+// is the difference (null when the run was skipped); `namesJson` the role and
+// department display names the run saw, which the next run compares against to
+// tell «NPI renamed it» from «an administrator typed another title».
+model SyncRun {
+  id          String   @id @default(cuid())
+  npiOrgId    String
+  at          DateTime @default(now())
+  byNpiUserId String
+  reason      String
+  diffJson    Json?
+  namesJson   Json?
+  skipped     String?
+
+  @@index([npiOrgId, at])
+  @@map("sync_runs")
 }
 
 model OnboardingSession {

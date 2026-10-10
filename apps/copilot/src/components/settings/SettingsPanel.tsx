@@ -6,11 +6,12 @@ import { ErrorState, LoadingState, EmptyState } from '@/components/ui/States';
 import type { RerunStep, SettingsView } from '@/settings/types';
 import type { ModuleKey } from '@/onboarding/profile.schema';
 import type { FlowType } from '@/agents/router';
-import { loadSettings, saveVisibleModules, saveBaseline, rerunStep } from './api';
+import { loadSettings, saveVisibleModules, saveBaseline, rerunStep, runSync } from './api';
 import { ProfileCard, DocTypesCard, TerminologyCard, LastApplyCard } from './ConfigCards';
 import { ModulesCard } from './ModulesCard';
 import { PositionsCard } from './PositionsCard';
 import { BaselinesCard } from './BaselinesCard';
+import { SyncCard, type SyncOutcome } from './SyncCard';
 
 const LOGIN_PATH = '/copilot/login';
 const SETUP_PATH = '/copilot/setup';
@@ -88,6 +89,25 @@ export function SettingsPanel({ initialData }: { initialData?: SettingsView } = 
     return { ok: true };
   }
 
+  async function handleSync(): Promise<SyncOutcome> {
+    const result = await runSync();
+    if (!result.ok) {
+      if (result.kind === 'unauthenticated') {
+        window.location.assign(LOGIN_PATH);
+        return { ok: false, messageAr: '' };
+      }
+      return { ok: false, messageAr: result.kind === 'server' ? t('state.error') : result.messageAr };
+    }
+    // The answer carries the refreshed card data; the positions below it are
+    // reloaded from the same GET the page uses so a new holder shows at once.
+    setView((current) => (current ? { ...current, sync: result.result.sync } : current));
+    if (result.result.outcome === 'synced' && result.result.changed) {
+      const fresh = await loadSettings();
+      if (fresh.ok) setView(fresh.view);
+    }
+    return { ok: true, result: result.result };
+  }
+
   async function handleRerun(step: RerunStep): Promise<void> {
     const result = await rerunStep(step);
     if (!result.ok) {
@@ -109,7 +129,7 @@ export function SettingsPanel({ initialData }: { initialData?: SettingsView } = 
     return <ErrorState message={errorMessage} onRetry={load} />;
   }
 
-  const { config, positions, baselines, openSetup } = view;
+  const { config, positions, baselines, openSetup, sync } = view;
 
   return (
     <div className="flex flex-col gap-5">
@@ -139,6 +159,8 @@ export function SettingsPanel({ initialData }: { initialData?: SettingsView } = 
           <LastApplyCard lastApply={config.lastApply} onRetryStep={handleRerun} />
         </>
       )}
+
+      {config !== null && sync.canSync ? <SyncCard sync={sync} onSync={handleSync} /> : null}
 
       <PositionsCard positions={positions} canRerun={config !== null} onRerun={() => handleRerun(2)} isAdmin />
       <BaselinesCard baselines={baselines} onSave={handleSaveBaseline} />

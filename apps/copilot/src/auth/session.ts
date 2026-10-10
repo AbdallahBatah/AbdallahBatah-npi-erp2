@@ -14,12 +14,15 @@ import { createNpiClient, type NpiClient } from '../npi/client';
 import { NpiError } from '../npi/errors';
 import { readMe, type NpiLogin, type NpiMe } from '../npi/responses';
 import { resolvePosition, type PositionsDb, type PositionsNpi } from '../positions/resolve';
+import { SYNC_PERMISSION, syncFromNpi } from '../onboarding/sync';
 import { SESSION_COOKIE_NAME } from './cookie';
 
 /** Fallback lifetime when the JWT's `exp` claim cannot be read. */
 const FALLBACK_TTL_MS = 12 * 60 * 60 * 1000;
 /** How long a `me()` revalidation result is trusted before NPI is asked again. */
 const REVALIDATE_CACHE_MS = 60 * 1000;
+/** How long an administrator's login waits for the NPI sync before giving up on it. */
+export const LOGIN_SYNC_TIMEOUT_MS = 10 * 1000;
 
 export interface SessionUser {
   npiUserId: string;
@@ -91,6 +94,9 @@ export interface SessionDeps {
    *  callers never set this — production always uses the real position
    *  resolution against the same `npi_copilot` database. */
   positions?: typeof resolvePosition;
+  /** Overridable for tests; defaults to the real `syncFromNpi` (T-47b). Like
+   *  `positions`, it works on the same `npi_copilot` database as `db`. */
+  sync?: typeof syncFromNpi;
 }
 
 function resolveNow(deps: Pick<SessionDeps, 'now'>): Date {
@@ -181,6 +187,41 @@ async function tryResolvePosition(
 }
 
 /**
+ * T-47b: an administrator's login brings Madar's departments, positions and
+ * holders in step with NPI (throttled to once per 10 minutes per organization
+ * inside `syncFromNpi`). It never blocks or fails the login: every error is
+ * logged and swallowed, and a sync still running after
+ * `LOGIN_SYNC_TIMEOUT_MS` is abandoned (it finishes in the background; the
+ * administrator's first page just may not reflect it yet).
+ */
+async function syncAfterAdminLogin(deps: SessionDeps, me: NpiMe, npi: ReturnType<SessionDeps['npiFor']>): Promise<void> {
+  if (!me.permissions.includes(SYNC_PERMISSION)) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const sync = deps.sync ?? syncFromNpi;
+    const run = sync({
+      orgId: me.organizationId,
+      npi: npi as unknown as Parameters<typeof syncFromNpi>[0]['npi'],
+      me,
+      reason: 'login',
+      db: deps.db as unknown as Parameters<typeof syncFromNpi>[0]['db'],
+      now: deps.now,
+    });
+    run.catch(() => undefined); // a late failure after the timeout is not an unhandled rejection
+    await Promise.race([
+      run,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`NPI sync still running after ${LOGIN_SYNC_TIMEOUT_MS} ms`)), LOGIN_SYNC_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (err) {
+    console.error('[copilot] NPI sync at login failed', err instanceof Error ? err.message : err);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
  * Creates a new session for a just-completed NPI login: generates the
  * cookie value, encrypts the NPI token, resolves the caller's position
  * (never failing the login if that resolution errors), and persists the row.
@@ -210,6 +251,8 @@ export async function createSession(
       lastSeenAt: now,
     },
   });
+
+  await syncAfterAdminLogin(deps, login.user, npi);
 
   const user = buildSessionUser(login.user, { departmentId, positionId, titleAr });
   return { cookieValue, expiresAt, user };

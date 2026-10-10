@@ -27,6 +27,7 @@ import {
   type TermKey,
 } from '../onboarding/profile.schema';
 import { reopenSetupAtStep, SETUP_ADMIN_PERMISSION, SetupForbiddenError, type SetupCaller, type SetupDeps, type SetupSessionDb } from '../onboarding/service';
+import { buildSyncView } from './sync';
 import { readDirectoryUsers, readRoles } from '../npi/admin';
 import type { NpiClient } from '../npi/client';
 import { readDepartments } from '../npi/directory';
@@ -53,6 +54,9 @@ export interface SettingsFirmConfigRow {
   terminologyJson: unknown;
   npiApiGapsJson: unknown;
   setupCompletedAt: Date | null;
+  /** T-47b; optional so a hand-built row (tests) may leave them out. */
+  lastSyncAt?: Date | null;
+  lastSyncDiffJson?: unknown;
 }
 
 export interface SettingsPositionRow {
@@ -352,7 +356,13 @@ async function buildSettingsView(deps: SettingsDeps, caller: SetupCaller): Promi
     deps.db.onboardingSession.findFirst({ where: { npiOrgId: caller.npiOrgId, completedAt: null } }),
   ]);
 
-  return { config, positions, baselines, openSetup: openSession !== null };
+  return {
+    config,
+    positions,
+    baselines,
+    openSetup: openSession !== null,
+    sync: buildSyncView(row, caller.permissions, (deps.now ?? (() => new Date()))()),
+  };
 }
 
 // ─── Entry points ───────────────────────────────────────────────────────────

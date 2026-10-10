@@ -8,7 +8,7 @@
 // the same `.env` loading `tests/helpers/load-env.ts` already does for Jest.
 // Never logs the connection URL.
 import '../../tests/helpers/load-env';
-import { PrismaClient, type FirmConfig, type ManualBaseline } from '../../src/generated/prisma';
+import { Prisma, PrismaClient, type FirmConfig, type ManualBaseline } from '../../src/generated/prisma';
 import { loadProfilePack } from '../../src/onboarding/catalog';
 
 let client: PrismaClient | undefined;
@@ -72,10 +72,14 @@ export async function seedSettingsFixture(npiOrgId: string): Promise<SettingsFix
         appliedAt: now.toISOString(),
       },
       setupCompletedAt: now,
+      lastSyncAt: null,
+      lastSyncDiffJson: Prisma.DbNull,
+      lastSyncSeenAt: null,
     },
   });
 
   await db.manualBaseline.deleteMany({ where: { npiOrgId } });
+  await db.syncRun.deleteMany({ where: { npiOrgId } });
 
   const session = await db.onboardingSession.create({
     data: {
@@ -122,6 +126,7 @@ export async function restoreSettingsFixture(handle: SettingsFixtureHandle): Pro
   await db.onboardingSession.deleteMany({ where: { npiOrgId, completedAt: null, id: { not: sessionId } } });
 
   await db.manualBaseline.deleteMany({ where: { npiOrgId } });
+  await db.syncRun.deleteMany({ where: { npiOrgId } });
   for (const baseline of priorBaselines) {
     await db.manualBaseline.create({
       data: {
@@ -145,6 +150,9 @@ export async function restoreSettingsFixture(handle: SettingsFixtureHandle): Pro
         terminologyJson: priorFirmConfig.terminologyJson as object,
         npiApiGapsJson: priorFirmConfig.npiApiGapsJson as object,
         setupCompletedAt: priorFirmConfig.setupCompletedAt,
+        lastSyncAt: priorFirmConfig.lastSyncAt,
+        lastSyncDiffJson: (priorFirmConfig.lastSyncDiffJson as object | null) ?? Prisma.DbNull,
+        lastSyncSeenAt: priorFirmConfig.lastSyncSeenAt,
       },
       update: {
         profileKey: priorFirmConfig.profileKey,
@@ -153,11 +161,46 @@ export async function restoreSettingsFixture(handle: SettingsFixtureHandle): Pro
         terminologyJson: priorFirmConfig.terminologyJson as object,
         npiApiGapsJson: priorFirmConfig.npiApiGapsJson as object,
         setupCompletedAt: priorFirmConfig.setupCompletedAt,
+        lastSyncAt: priorFirmConfig.lastSyncAt,
+        lastSyncDiffJson: (priorFirmConfig.lastSyncDiffJson as object | null) ?? Prisma.DbNull,
+        lastSyncSeenAt: priorFirmConfig.lastSyncSeenAt,
       },
     });
   } else {
     await db.firmConfig.deleteMany({ where: { npiOrgId } });
   }
+}
+
+/** T-47b: puts `firm_config` in a known NPI-sync state — «synced just now»
+ *  (so the login sync is throttled and leaves the state alone) with an
+ *  unacknowledged change of the given lines. */
+export async function seedUnseenSyncDiff(npiOrgId: string, summaryAr: string[]): Promise<void> {
+  const at = new Date();
+  await getClient().firmConfig.update({
+    where: { npiOrgId },
+    data: {
+      lastSyncAt: at,
+      lastSyncSeenAt: null,
+      lastSyncDiffJson: {
+        addedPositions: [],
+        renamedPositions: [],
+        addedAssignments: [],
+        endedAssignments: [],
+        emptiedPositions: [],
+        unchanged: 0,
+        summaryAr,
+        at: at.toISOString(),
+      },
+    },
+  });
+}
+
+/** T-47b: what the sync left behind for the organization. */
+export async function readSyncState(npiOrgId: string): Promise<{ lastSyncAt: Date | null; lastSyncSeenAt: Date | null; runs: { reason: string; skipped: string | null }[] }> {
+  const db = getClient();
+  const firm = await db.firmConfig.findUnique({ where: { npiOrgId } });
+  const runs = await db.syncRun.findMany({ where: { npiOrgId }, orderBy: { at: 'asc' }, select: { reason: true, skipped: true } });
+  return { lastSyncAt: firm?.lastSyncAt ?? null, lastSyncSeenAt: firm?.lastSyncSeenAt ?? null, runs };
 }
 
 /** Closes the fixture's own Prisma connection — call once, from `afterAll`. */

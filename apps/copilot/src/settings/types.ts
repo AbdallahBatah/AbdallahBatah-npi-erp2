@@ -101,6 +101,38 @@ export interface SettingsBaseline {
   measuredAt: string;
 }
 
+/** The «المزامنة مع NPI» card (T-47b). Times arrive as ready Arabic text,
+ *  computed on the server, so the server render and hydration cannot differ. */
+export interface SettingsSync {
+  /** The caller may run the sync (`admin.department.manage`) and a setup exists. */
+  canSync: boolean;
+  /** ISO timestamp of the last run that read NPI. */
+  lastSyncAt: string | null;
+  lastSyncAgoAr: string | null;
+  /** The last change a sync found; stays until a later one finds another. */
+  lastDiff: { at: string; agoAr: string; summaryAr: string[] } | null;
+}
+
+/** The home banner's content: the first lines of the unseen change. */
+export interface SyncBannerView {
+  lines: string[];
+  /** How many more lines the details hold. */
+  more: number;
+}
+
+/** The answer of `POST /api/settings/sync`. */
+export interface SyncActionResult {
+  outcome: 'synced' | 'skipped';
+  skipped?: 'throttled' | 'not_set_up' | 'permission' | 'unreadable';
+  missing?: string[];
+  /** `synced` only: whether this run found a difference. */
+  changed?: boolean;
+  /** `synced` only: this run's one-line summaries. */
+  summaryAr?: string[];
+  messageAr: string;
+  sync: SettingsSync;
+}
+
 export interface SettingsView {
   /** `null` until the setup wizard's apply has written `firm_config`. */
   config: SettingsConfig | null;
@@ -111,6 +143,8 @@ export interface SettingsView {
    *  organization — a `rerun` resumes it instead of cloning the last
    *  completed one. */
   openSetup: boolean;
+  /** T-47b: the NPI sync card. */
+  sync: SettingsSync;
 }
 
 /** Bounds of a manual baseline: one minute to ten hours. */

@@ -17,8 +17,10 @@ import { disconnectSetupDb } from './fixtures/setup-db';
 import {
   deleteFirmConfig,
   disconnectSettingsDb,
+  readSyncState,
   restoreSettingsFixture,
   seedSettingsFixture,
+  seedUnseenSyncDiff,
   type SettingsFixtureHandle,
 } from './fixtures/settings-db';
 
@@ -211,5 +213,70 @@ test.describe('settings screen (T-19)', () => {
     for (const flow of FLOW_TYPES) {
       await expect(page.getByTestId(`settings-baseline-${flow}`)).toBeVisible();
     }
+  });
+
+  test('the NPI sync card shows the login sync, and «حدّث من NPI» runs another one on demand (T-47b)', async ({ page }) => {
+    const admin = readAdminCredentials();
+    await signIn(page, admin);
+
+    // The administrator's login already read NPI once (reason login).
+    const afterLogin = await readSyncState(orgId);
+    expect(afterLogin.lastSyncAt).not.toBeNull();
+    expect(afterLogin.runs.map((r) => r.reason)).toEqual(['login']);
+
+    await page.goto('/copilot/settings');
+    await waitForHydration(page);
+
+    const card = page.getByTestId('settings-sync');
+    await expect(card).toBeVisible();
+    await expect(page.getByRole('heading', { name: t('sync.title') })).toBeVisible();
+    await expect(page.getByTestId('settings-sync-last')).toContainText(t('sync.last', { ago: '' }).trim());
+    await expect(page.getByTestId('settings-sync-result')).toHaveCount(0);
+
+    await page.getByTestId('settings-sync-button').click();
+    const result = page.getByTestId('settings-sync-result');
+    await expect(result).toBeVisible();
+    await expect(result).toHaveText(new RegExp(`^(${t('sync.done')}|${t('sync.no_change')})$`));
+    await expect(page.getByTestId('settings-sync-last')).toContainText(t('sync.last', { ago: '' }).trim());
+
+    const afterClick = await readSyncState(orgId);
+    expect(afterClick.runs.map((r) => r.reason)).toEqual(['login', 'manual']);
+    expect(afterClick.runs.every((r) => r.skipped === null)).toBe(true);
+  });
+
+  test('an unseen NPI change shows as a banner on the home page for an administrator until «تم» (T-47b)', async ({ page }) => {
+    await seedUnseenSyncDiff(orgId, ['سطر أول', 'سطر ثان', 'سطر ثالث', 'سطر رابع', 'سطر خامس']);
+
+    const admin = readAdminCredentials();
+    await signIn(page, admin);
+
+    const banner = page.getByTestId('sync-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText(t('sync.banner.title'));
+    await expect(banner).toContainText('سطر أول');
+    await expect(banner).toContainText('سطر ثالث');
+    await expect(banner).not.toContainText('سطر رابع');
+    await expect(banner).toContainText(t('sync.more', { n: formatNumber(2) }));
+    await expect(banner.getByRole('link', { name: t('sync.banner.details') })).toHaveAttribute('href', /\/settings$/);
+
+    await banner.getByTestId('sync-banner-seen').click();
+    await expect(banner).toHaveCount(0);
+    expect((await readSyncState(orgId)).lastSyncSeenAt).not.toBeNull();
+
+    await page.reload();
+    await waitForHydration(page);
+    await expect(page.getByTestId('sync-banner')).toHaveCount(0);
+  });
+
+  test('a user without admin.department.manage sees neither the sync banner nor the sync card (T-47b)', async ({ page }) => {
+    await seedUnseenSyncDiff(orgId, ['سطر أول']);
+
+    const engineer = readSiteEngineerCredentials();
+    await signIn(page, engineer);
+    await expect(page.getByTestId('sync-banner')).toHaveCount(0);
+
+    await page.goto('/copilot/settings');
+    await expect(page.getByText(t('settings.forbidden'))).toBeVisible();
+    await expect(page.getByTestId('settings-sync')).toHaveCount(0);
   });
 });
