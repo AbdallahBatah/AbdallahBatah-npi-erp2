@@ -155,13 +155,13 @@ describe('profile packs on disk', () => {
 // ─── 2. G-M2-1: every permission a pack names is one NPI actually serves ───
 
 describe('G-M2-1: packs only name permissions NPI\'s live catalog serves', () => {
-  // `02` §7 says NPI's permission surface has 35 keys; a previous draft of
-  // this brief said the live catalog had 37, which was a miscount corrected
-  // before this file was written — `PERMISSION_CATALOG`
-  // (packages/shared/src/permissions.ts:84-132) and the seed's own
-  // `ALL_PERMISSIONS` (packages/db/prisma/seed.ts:18-34) both list exactly 35.
-  it('NPI\'s permission catalog has exactly 35 keys', () => {
-    expect(PERMISSION_CATALOG).toHaveLength(35);
+  // `02` §7 said NPI's permission surface had 35 keys. CRM phase 1 (merged into
+  // this branch at 26acb7c) added five — crm.customer.merge, commercial.proposal.approve,
+  // projects.project.approve, scm.procurement.approve, finance.costs.view — so
+  // `PERMISSION_CATALOG` (packages/shared/src/permissions.ts) now lists 40, and
+  // every pack's admin role was topped up to match (2026-10-10).
+  it('NPI\'s permission catalog has exactly 40 keys', () => {
+    expect(PERMISSION_CATALOG).toHaveLength(40);
   });
 
   const npiKeys = permissionKeysOf(readPermissionCatalog(PERMISSION_CATALOG));

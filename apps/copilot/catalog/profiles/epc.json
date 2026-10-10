@@ -40,7 +40,8 @@
         "assets.serialunit.read",
         "fsm.workorder.read", "fsm.workorder.write",
         "admin.org.manage", "admin.user.manage", "admin.audit.read", "admin.approval.manage",
-        "platform.attachment.read", "platform.attachment.write"
+        "platform.attachment.read", "platform.attachment.write",
+        "crm.customer.merge", "commercial.proposal.approve", "projects.project.approve", "scm.procurement.approve", "finance.costs.view"
       ]
     },
     "sales": {
