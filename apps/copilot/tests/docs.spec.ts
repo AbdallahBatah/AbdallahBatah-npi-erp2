@@ -315,29 +315,26 @@ describe('docs/COPILOT_CHANGELOG.md: one section per tag, newest first', () => {
     }
     for (const tag of TAGS) {
       const bullets = sections.get(tag) ?? [];
-      // v0.5.0 also carries the «not done yet» bullets; every section stays within the brief's range.
+      // v0.5.0 carries twelve bullets (two halves of T-43, T-46); every section stays within the brief's range.
       expect({ tag, ok: bullets.length >= 4 && bullets.length <= 12 }).toEqual({ tag, ok: true });
       for (const b of bullets) expect(b).toMatch(/`(?:T|D|G)-[0-9a-z]+/);
     }
   });
 
-  it('the newest section is "in preparation" and says what is NOT done yet', () => {
+  it('the newest section is tagged and claims nothing as still open (T-46, 2026-10-10)', () => {
     const text = fs.readFileSync(DOCS.changelog, 'utf8');
     const start = text.indexOf('## `copilot-v0.5.0`');
     const end = text.indexOf('## `copilot-v0.4.0`');
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const section = text.slice(start, end);
-    expect(section).toContain('قيد الإعداد');
-    expect(section).toContain('لم يُنفَّذ بعد');
-    // The unfinished tasks sit AFTER that marker, each named as a code span.
-    const afterMarker = section.slice(section.indexOf('لم يُنفَّذ بعد'));
-    for (const task of ['T-43', 'T-46']) expect(afterMarker).toContain(`\`${task}\``);
-    // and none of them is claimed as delivered before it.
-    // (the heading itself names the whole range T-38…T-46, so it is skipped)
-    const beforeMarker = section.slice(section.indexOf('\n'), section.indexOf('لم يُنفَّذ بعد'));
-    // T-43's local half, T-44 and T-45 are done (2026-10-09): only T-46 may not appear above the marker.
-    for (const task of ['T-46']) expect(beforeMarker).not.toContain(`\`${task}\``);
+    // Until T-46 the section was «قيد الإعداد» with a «لم يُنفَّذ بعد» list; the tag retired both.
+    expect(section).not.toContain('قيد الإعداد');
+    expect(section).not.toContain('لم يُنفَّذ بعد');
+    expect(section).toContain('وُسم');
+    // The release carries both halves of T-43 and the merge + tag of T-46, each as a code span.
+    for (const task of ['T-43', 'T-46']) expect(section).toContain(`\`${task}\``);
+    expect(section).toContain('`9aae4f2`');
   });
 });
 
