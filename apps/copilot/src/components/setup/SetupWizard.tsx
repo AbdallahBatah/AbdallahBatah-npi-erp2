@@ -10,6 +10,7 @@ import {
   answerStructured,
   answerText,
   applySetup,
+  chooseManual,
   gotoStep,
   loadSetup,
   previewSetup,
@@ -20,6 +21,7 @@ import { ProfileCard } from './ProfileCard';
 import { PositionsStep } from './PositionsStep';
 import { ApprovalRulesEditor, DocTypesEditor, ItemsEditor, TerminologyEditor } from './StepEditors';
 import { DiffCard } from './DiffCard';
+import { SummaryScreen } from './SummaryScreen';
 
 const LOGIN_PATH = '/copilot/login';
 
@@ -162,10 +164,16 @@ export function SetupWizard({
   const [invalid, setInvalid] = useState<{ messageAr: string; issues: SetupIssue[] } | null>(null);
   const [preview, setPreview] = useState<SetupPreviewResult | null>(initialData ? initialPreview : null);
   const [applyResult, setApplyResult] = useState<SetupApplyResult | null>(null);
+  // T-47a: the administrator pressed «اعتمد وأسّس» on the summary; the diff
+  // card takes its place. Any new view from the server (an edit, a goto)
+  // brings the summary back.
+  const [confirmed, setConfirmed] = useState(false);
 
   const npiUsersByRole: Record<string, StepDefaultsNpiUser[]> = {};
   if (view?.defaults?.step === 2) {
     for (const position of view.defaults.positions) npiUsersByRole[position.roleKey] = position.npiUsers;
+    // A discovered session's positions are NPI's roles, not the pack's.
+    for (const [roleKey, users] of Object.entries(view.defaults.usersByRole ?? {})) npiUsersByRole[roleKey] = users;
   }
 
   // Never clears `freeText`: a view that arrives while the administrator is
@@ -179,6 +187,7 @@ export function SetupWizard({
     setInvalid(null);
     setPreview(null);
     setApplyResult(null);
+    setConfirmed(false);
     setPhase('ready');
   }, []);
 
@@ -237,6 +246,21 @@ export function SetupWizard({
     setPhase('ready');
     setFreeText('');
     const result = await gotoStep(step);
+    if (!result.ok) {
+      if (result.kind === 'unauthenticated') {
+        window.location.assign(LOGIN_PATH);
+        return;
+      }
+      setErrorMessage(t('state.error'));
+      setPhase('error');
+      return;
+    }
+    applyView(result.view);
+  }
+
+  async function handleManual() {
+    setPhase('parsing');
+    const result = await chooseManual();
     if (!result.ok) {
       if (result.kind === 'unauthenticated') {
         window.location.assign(LOGIN_PATH);
@@ -338,6 +362,35 @@ export function SetupWizard({
   const step = view.state.step;
   const canBack = step > 1 && (view.state.completedSteps.includes((step - 1) as SetupStepNumber) || step - 1 === nextOpenStep(view.state.completedSteps));
 
+  if (step === 7 && view.summary && !confirmed) {
+    return (
+      <SetupStep
+        step={step}
+        completedSteps={view.state.completedSteps}
+        questionTextAr={view.question.textAr}
+        onGotoStep={handleGoto}
+        isSummary
+        freeTextValue=""
+        onFreeTextChange={() => undefined}
+        onSendFreeText={() => undefined}
+        parsing={false}
+        unclear={null}
+        invalid={null}
+        onSave={() => undefined}
+        onBack={() => undefined}
+        canBack={false}
+      >
+        <SummaryScreen
+          summary={view.summary}
+          busy={phase === 'parsing'}
+          onChangeStep={handleGoto}
+          onConfirm={() => setConfirmed(true)}
+          onManual={handleManual}
+        />
+      </SetupStep>
+    );
+  }
+
   if (step === 7) {
     return (
       <SetupStep
@@ -387,6 +440,11 @@ export function SetupWizard({
       onBack={() => handleGoto((step - 1) as SetupStepNumber)}
       canBack={canBack}
     >
+      {view.discoveryNoteAr ? (
+        <p data-testid="setup-discovery-note" className="mb-3 whitespace-pre-line rounded-lg border border-info-200 bg-info-50 px-3 py-2 text-sm text-info-800">
+          {view.discoveryNoteAr}
+        </p>
+      ) : null}
       {step === 1 && draft?.step === 1 && view.defaults?.step === 1 ? (
         <ProfileCard
           profiles={view.defaults.profiles}

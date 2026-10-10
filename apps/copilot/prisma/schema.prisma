@@ -112,6 +112,18 @@ model FirmConfig {
   terminologyJson       Json
   npiApiGapsJson        Json
   setupCompletedAt      DateTime?
+  // T-47a: how the setup was reached. 'discovered' = the wizard read the
+  // answers from NPI and the administrator confirmed them; 'manual' = typed
+  // step by step (also the value of every row that predates T-47a).
+  // `discoveryJson` keeps the evidence the confirmation was based on (profile
+  // guess and reasons, per-step sources, what was skipped).
+  setupSource           String    @default("manual")
+  discoveryJson         Json?
+  // T-47b (reserved, nothing writes these yet): the last NPI-vs-Madar sync,
+  // the difference it found, and when the administrator last looked at it.
+  lastSyncAt            DateTime?
+  lastSyncDiffJson      Json?
+  lastSyncSeenAt        DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 

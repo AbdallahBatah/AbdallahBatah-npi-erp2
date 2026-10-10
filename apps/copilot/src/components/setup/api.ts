@@ -285,6 +285,11 @@ export async function gotoStep(step: SetupStep): Promise<SetupApiResult<{ view: 
   );
 }
 
+/** T-47a: drop the discovered answers and walk the steps by hand. */
+export async function chooseManual(): Promise<SetupApiResult<{ view: SetupStateView }>> {
+  return call(SETUP_API_PATH, postBody({ action: 'manual' }), (body) => (isSetupStateView(body) ? { view: body } : undefined));
+}
+
 export async function previewSetup(): Promise<SetupApiResult<{ preview: SetupPreviewResult }>> {
   return call(SETUP_API_PATH, postBody({ action: 'preview' }), (body) =>
     isSetupPreviewResult(body) ? { preview: body } : undefined,

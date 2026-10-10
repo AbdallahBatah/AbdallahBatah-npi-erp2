@@ -179,6 +179,10 @@ export interface NpiDirectoryUser {
   isActive: boolean;
   roleKey: string;
   nameAr: string;
+  /** The user's department, `null` when NPI holds none. Optional on the type
+   *  so a hand-built snapshot (tests) may leave it out — read as «no
+   *  department». T-47a (automatic setup) groups holders by it. */
+  departmentId?: string | null;
 }
 
 /**
@@ -190,6 +194,7 @@ export interface NpiDirectoryUser {
  *  - nameAr    line 14 (`nameAr: true,`)
  *  - isActive  line 17 (`isActive: true,`)
  *  - role.key  line 19 (`role: { select: { id: true, key: true, nameAr: true, nameEn: true } }`)
+ *  - departmentId  line 18 (`departmentId: true,`) — null for a user without one
  * NPI's own approval-rule guard (`ApprovalRulesService.validateSteps`) refuses
  * a chain through a role with no *active* user, which is why `isActive` is
  * read and not just the role key. `nameAr` is read for T-18's position-holder
@@ -207,6 +212,9 @@ export function readDirectoryUsers(body: unknown): NpiDirectoryUser[] {
     if (!isRecord(role) || typeof role.key !== 'string') {
       return unexpected(`${where}: missing/invalid "role.key"`);
     }
-    return { id, isActive, roleKey: role.key, nameAr };
+    if (row.departmentId !== null && row.departmentId !== undefined && typeof row.departmentId !== 'string') {
+      return unexpected(`${where}: "departmentId" present but not string/null`);
+    }
+    return { id, isActive, roleKey: role.key, nameAr, departmentId: row.departmentId ?? null };
   });
 }

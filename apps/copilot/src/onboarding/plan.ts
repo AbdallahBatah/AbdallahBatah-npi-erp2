@@ -41,6 +41,7 @@ import {
   PositionSchema,
   PROFILE_KEYS,
   ProfilePackSchema,
+  RolePermissionSetSchema,
   TERM_KEYS,
   visibleFlowsOf,
   type ApprovalDocumentType,
@@ -53,6 +54,12 @@ import {
 } from './profile.schema';
 
 // ─── Answers (what T-17's parser produces, what T-18's screens edit) ────────
+
+/** Where one step's answer came from (T-47a, automatic setup): read from NPI,
+ *  the profile pack's own default, a rule-based guess the administrator
+ *  confirms (step 1 only), or typed/edited by the administrator. */
+export const SETUP_SOURCES = ['npi', 'pack-default', 'heuristic', 'manual'] as const;
+export type SetupSource = (typeof SETUP_SOURCES)[number];
 
 /**
  * The administrator's answers, Q1–Q6. Every field but `profileKey` is
@@ -78,6 +85,16 @@ export const SetupAnswersSchema = z.object({
   items: z.array(ItemTemplateSchema).optional(),
   /** Q6 */
   terminology: z.partialRecord(z.enum(TERM_KEYS), z.string().min(1)).optional(),
+  /**
+   * T-47a — present only when the answers were discovered from NPI. The
+   * organization's own roles (key -> Arabic name + permissions) stand in for
+   * the pack's `rolePermissionSets`, so positions, approval chains and doc
+   * types are validated against what NPI really has, and the plan never
+   * proposes to rewrite a role (a role NPI already holds is `skip`).
+   */
+  npiRoleSets: z.record(z.string(), RolePermissionSetSchema).optional(),
+  /** T-47a — where each step's answer came from, keyed by the step number. */
+  sources: z.partialRecord(z.enum(['1', '2', '3', '4', '5', '6']), z.enum(SETUP_SOURCES)).optional(),
 });
 export type SetupAnswers = z.infer<typeof SetupAnswersSchema>;
 
@@ -132,6 +149,7 @@ export function effectivePack(pack: ProfilePack, answers: SetupAnswers): Profile
     approvalRuleDefaults: answers.approvalRules ?? pack.approvalRuleDefaults,
     itemTemplates: answers.items ?? pack.itemTemplates,
     positions: answers.positions ?? pack.positions,
+    rolePermissionSets: answers.npiRoleSets ?? pack.rolePermissionSets,
   };
 
   const parsed = ProfilePackSchema.safeParse(candidate);
@@ -272,6 +290,9 @@ export interface OnboardingPlan {
   /** Arabic label of every NPI permission key the snapshot could read, for
    *  rendering blocked reasons; falls back to the key as a code. */
   permissionLabel: (key: string) => string;
+  /** Arabic name of every role the plan knows (the pack's, or NPI's own for
+   *  discovered answers), for rendering approval chains. */
+  roleNamesAr: Record<string, string>;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -351,6 +372,7 @@ export function buildPlan(
   ]);
   const knownPermissions = new Set((snapshot.permissions ?? []).map((p) => p.key));
   const roleStepByKey = new Map<string, RoleStep>();
+  const rolesAreNpis = answers.npiRoleSets !== undefined;
   for (const [roleKey, roleSet] of Object.entries(eff.rolePermissionSets)) {
     const base = {
       kind: 'role' as const,
@@ -361,6 +383,25 @@ export function buildPlan(
     };
     if (roleGate) {
       const step: RoleStep = { ...base, ...blockedStep(roleGate), permissions: roleSet.permissions, permissionsAdded: [], permissionsRemoved: [] };
+      steps.push(step);
+      roleStepByKey.set(roleKey, step);
+      continue;
+    }
+
+    // Discovered answers: a role NPI already holds is NPI's, not the pack's —
+    // never rewritten, whatever its permission set is today.
+    const heldRole = snapshot.roles!.find((r) => r.key === roleKey);
+    if (rolesAreNpis && heldRole) {
+      const step: RoleStep = {
+        ...base,
+        action: 'skip',
+        blocked: null,
+        existingId: heldRole.id,
+        notesAr: [],
+        permissions: heldRole.permissions,
+        permissionsAdded: [],
+        permissionsRemoved: [],
+      };
       steps.push(step);
       roleStepByKey.set(roleKey, step);
       continue;
@@ -470,6 +511,21 @@ export function buildPlan(
       continue;
     }
 
+    // Discovered rules are NPI's: one that moved since it was read is left as
+    // it is (the next sync reports it), never put back.
+    if (existing && answers.sources?.['3'] === 'npi') {
+      ruleOthers.push({
+        ...base,
+        action: 'skip',
+        blocked: null,
+        existingId: existing.id,
+        notesAr: ['القاعدة في NPI تغيّرت بعد قراءتها؛ تبقى كما هي في NPI.'],
+        existingStepRoleKeys: existing.stepRoleKeys,
+        existingMinAmount: existing.minAmount,
+      });
+      continue;
+    }
+
     // Preconditions NPI enforces on create and on a step change.
     const blockedRole = rule.steps.find((key) => roleStepByKey.get(key)?.action === 'blocked');
     if (blockedRole !== undefined) {
@@ -567,6 +623,7 @@ export function buildPlan(
     gaps,
     counts,
     permissionLabel: permissionLabelResolver(snapshot.permissions),
+    roleNamesAr: Object.fromEntries(Object.entries(eff.rolePermissionSets).map(([key, set]) => [key, set.nameAr])),
   };
 }
 
@@ -628,7 +685,7 @@ const ACTION_VERB_AR: Record<Exclude<StepAction, 'skip' | 'blocked'>, string> = 
 };
 
 export function summarizePlanAr(plan: OnboardingPlan, pack: ProfilePack): PlanSummaryAr {
-  const roleNameAr = (key: string) => pack.rolePermissionSets[key]?.nameAr ?? key;
+  const roleNameAr = (key: string) => plan.roleNamesAr[key] ?? pack.rolePermissionSets[key]?.nameAr ?? key;
   const npi: string[] = [];
   const already: string[] = [];
   const blocked: string[] = [];

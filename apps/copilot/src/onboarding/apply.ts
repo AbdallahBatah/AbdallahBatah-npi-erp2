@@ -300,6 +300,9 @@ export interface FirmConfigWrite {
   terminologyJson: Record<string, string>;
   npiApiGapsJson: NpiApiGapsJson;
   setupCompletedAt?: Date | null;
+  /** T-47a: how the setup was reached, and the evidence behind a discovered one. */
+  setupSource: 'discovered' | 'manual';
+  discoveryJson: Record<string, unknown>;
 }
 
 /** Same shape as `FirmConfigWrite`, but `visibleModulesJson` is optional —
@@ -388,7 +391,15 @@ function withoutVisibleModules(write: FirmConfigWrite): FirmConfigUpdate {
 
 export async function persistCopilotConfig(
   db: OnboardingDb,
-  args: { npiOrgId: string; plan: OnboardingPlan; result: ApplyResult; holders: PositionHolder[]; now?: () => Date },
+  args: {
+    npiOrgId: string;
+    plan: OnboardingPlan;
+    result: ApplyResult;
+    holders: PositionHolder[];
+    now?: () => Date;
+    /** T-47a; absent (older callers, tests) means a manual setup. */
+    setup?: { source: 'discovered' | 'manual'; discoveryJson: Record<string, unknown> };
+  },
 ): Promise<PersistOutcome> {
   const { npiOrgId, plan, result, holders } = args;
   const now = (args.now ?? (() => new Date()))();
@@ -407,6 +418,8 @@ export async function persistCopilotConfig(
     acceptedDocTypesJson: plan.copilot.acceptedDocTypes.map((d) => ({ key: d.key, labelAr: d.labelAr, flow: d.flow })),
     terminologyJson: { ...plan.copilot.terminology },
     npiApiGapsJson: gapsJson,
+    setupSource: args.setup?.source ?? 'manual',
+    discoveryJson: args.setup?.discoveryJson ?? { manual: true, at: now.toISOString() },
   };
 
   // /settings (T-19) edits module visibility directly, never through the
