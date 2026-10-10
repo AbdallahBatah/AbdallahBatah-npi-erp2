@@ -1,0 +1,465 @@
+// ─────────────────────────────────────────────────────────────────────────
+// Madar Copilot — Prisma schema
+//
+// This database (npi_copilot) belongs to the copilot ONLY. It never shares
+// a schema, a migration history, or a Prisma client output path with NPI's
+// own database (npi_erp, see packages/db). NPI data is reached exclusively
+// through NPI's HTTP API — never via a direct database connection or a
+// foreign key into NPI's tables. Every "npi*Id" field below is an opaque
+// string copied from that API response, with no relational integrity to
+// NPI's own schema enforced here.
+// ─────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("COPILOT_DATABASE_URL")
+}
+
+// ─── Session ────────────────────────────────────────────────────────────
+
+model CopilotSession {
+  id              String   @id @default(cuid())
+  npiUserId       String
+  npiOrgId        String
+  roleKey         String
+  departmentId    String?
+  tokenEncrypted  String
+  expiresAt       DateTime
+  lastSeenAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([npiUserId])
+  @@index([expiresAt])
+  @@map("copilot_sessions")
+}
+
+// ─── Positions & handover ───────────────────────────────────────────────
+
+model Position {
+  id           String   @id @default(cuid())
+  npiOrgId     String
+  roleKey      String
+  departmentId String?
+  titleAr      String
+  personaAr    String   @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignments   PositionAssignment[]
+  handoverDocs  HandoverDoc[]
+  conversations Conversation[]
+  memoryFacts   MemoryFact[]
+
+  // Rows with no department are kept unique per (npiOrgId, roleKey) by a
+  // partial index that Prisma cannot express: migration
+  // 0003_position_role_only_unique.
+  @@unique([npiOrgId, roleKey, departmentId])
+  @@map("positions")
+}
+
+model PositionAssignment {
+  id            String    @id @default(cuid())
+  positionId    String
+  npiUserId     String
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  handoverDocId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  position    Position     @relation(fields: [positionId], references: [id])
+  handoverDoc HandoverDoc? @relation(fields: [handoverDocId], references: [id])
+
+  @@index([positionId, endedAt])
+  @@index([npiUserId])
+  @@map("position_assignments")
+}
+
+model HandoverDoc {
+  id         String   @id @default(cuid())
+  positionId String
+  fromUserId String?
+  toUserId   String
+  bodyJson   Json
+  bodyAr     String   @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  position    Position             @relation(fields: [positionId], references: [id])
+  assignments PositionAssignment[]
+
+  // T-39 (migration 0009_indexes): the position's documents and the
+  // predecessor check (`conversationReadableBy`), and the successor's list.
+  @@index([positionId, fromUserId])
+  @@index([toUserId])
+  @@map("handover_docs")
+}
+
+// ─── Firm setup ─────────────────────────────────────────────────────────
+
+model FirmConfig {
+  id                    String    @id @default(cuid())
+  npiOrgId              String    @unique
+  profileKey            String?
+  visibleModulesJson    Json
+  acceptedDocTypesJson  Json
+  terminologyJson       Json
+  npiApiGapsJson        Json
+  setupCompletedAt      DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("firm_config")
+}
+
+model OnboardingSession {
+  id            String    @id @default(cuid())
+  npiOrgId      String
+  npiUserId     String
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  stepsJson     Json
+  profileChosen String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([npiOrgId])
+  @@map("onboarding_sessions")
+}
+
+// One manual baseline («الزمن اليدوي المرجعي») per (org, flow): the number
+// of minutes the owner measured with a stopwatch entering that flow's
+// document on NPI's own screens, entered once from /settings
+// (spec/madar/02 §5.9). T-19.
+model ManualBaseline {
+  id         String   @id @default(cuid())
+  npiOrgId   String
+  flowType   String
+  minutes    Int
+  measuredAt DateTime
+  npiUserId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([npiOrgId, flowType])
+  @@map("manual_baselines")
+}
+
+// ─── Auth guard ─────────────────────────────────────────────────────────
+
+model LoginAttempt {
+  id          String   @id @default(cuid())
+  key         String
+  attemptedAt DateTime @default(now())
+  succeeded   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([key, attemptedAt])
+  @@map("login_attempts")
+}
+
+// ─── Enums (T-03 core) ──────────────────────────────────────────────────
+
+enum DocumentKind {
+  pdf_text
+  pdf_scanned
+  image
+}
+
+enum FlowType {
+  customer_contract
+  pr
+  po
+  grn
+  vendor_bill
+}
+
+enum IntakeStatus {
+  extracting
+  preview
+  approved
+  executing
+  done
+  failed
+  cancelled
+}
+
+enum ConsentDecision {
+  approved
+  cancelled
+}
+
+enum MemoryScope {
+  company
+  position
+}
+
+enum MemoryEntityType {
+  customer
+  vendor
+  project
+  item
+  position
+}
+
+enum MemorySourceType {
+  npi
+  chat
+}
+
+enum MessageRole {
+  user
+  assistant
+}
+
+// ─── Documents & consent ────────────────────────────────────────────────
+
+model Document {
+  id                       String       @id @default(cuid())
+  npiOrgId                 String
+  npiUserId                String
+  fileName                 String
+  mime                     String
+  sizeBytes                Int
+  sha256                   String
+  storagePath              String
+  kind                     DocumentKind
+  sensitivityFlag          Boolean      @default(false)
+  consentEventId           String?
+  extractedTextRedactedRef String?
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+
+  consentEvents ConsentEvent[]
+  intakeJobs    IntakeJob[]
+
+  // D-T31-11: identical bytes are deduplicated per USER within the organization.
+  // An org-wide key (T-21) handed a second employee the first uploader's row,
+  // which the chat then refused as not theirs (`runTurn` looks a document up by
+  // owner, and so do consent and the document page).
+  @@unique([npiOrgId, npiUserId, sha256])
+  @@index([npiUserId])
+  @@map("documents")
+}
+
+model ConsentEvent {
+  id          String          @id @default(cuid())
+  documentId  String
+  npiOrgId    String
+  npiUserId   String
+  decision    ConsentDecision
+  policyLine  String          @db.Text
+  createdAt   DateTime        @default(now())
+
+  document Document @relation(fields: [documentId], references: [id])
+
+  @@index([documentId])
+  @@map("consent_events")
+}
+
+// ─── Conversations & messages ───────────────────────────────────────────
+
+model Conversation {
+  id         String    @id @default(cuid())
+  npiOrgId   String
+  npiUserId  String
+  positionId String?
+  titleAr    String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  position           Position?           @relation(fields: [positionId], references: [id])
+  messages           Message[]
+  intakeJobs         IntakeJob[]
+  redactionSessions  RedactionSession[]
+
+  @@index([npiUserId, updatedAt])
+  @@index([positionId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  contentAr      String      @db.Text
+  badge          String?
+  /// answer | hr_refusal | flow_pending | intake | choose_flow | error; null on user messages.
+  kind           String?
+  memoryNoteJson Json?
+  intakeJobId    String?
+  /// The attached document (plain id, no relation — same discipline as LlmAudit).
+  documentId     String?
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  intakeJob    IntakeJob?   @relation(fields: [intakeJobId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// ─── Intake jobs ─────────────────────────────────────────────────────────
+
+model IntakeJob {
+  id                String       @id @default(cuid())
+  npiOrgId          String
+  npiUserId         String
+  documentId        String?
+  conversationId    String?
+  flowType          FlowType
+  status            IntakeStatus @default(extracting)
+  extractedJson     Json?
+  previewJson       Json?
+  executionLogJson  Json?
+  npiEntityRefs     Json?
+  error             String?      @db.Text
+  approvedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  document     Document?     @relation(fields: [documentId], references: [id])
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
+  messages     Message[]
+
+  @@index([npiUserId, createdAt])
+  @@index([status])
+  // T-39 (migration 0009_indexes): /metrics reads the organization's approved
+  // jobs; there was no index starting with npiOrgId.
+  @@index([npiOrgId, approvedAt])
+  @@map("intake_jobs")
+}
+
+// ─── Memory & full-text search ──────────────────────────────────────────
+
+model MemoryFact {
+  id           String            @id @default(cuid())
+  npiOrgId     String
+  scope        MemoryScope
+  positionId   String?
+  entityType   MemoryEntityType
+  npiEntityId  String?
+  factAr       String            @db.Text
+  searchText   String            @db.Text
+  valueJson    Json?
+  sourceType   MemorySourceType
+  // D-17 (T-29b): the NPI permission key whose holders may see this fact. Set on
+  // every fact derived from NPI data (the permission of its source); null =
+  // visible to everyone the scope already allows (chat and position facts).
+  sourcePermission String?
+  confidence   Float             @default(1)
+  useCount     Int               @default(0)
+  lastUsedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  // Generated column (see migration.sql): tsvector over the normalized
+  // `searchText`, using the "simple" text-search configuration on purpose
+  // (no stemming, so entity names and codes are matched literally).
+  // Unsupported: Prisma Client cannot read or write this column directly;
+  // it is populated by Postgres itself on every insert/update.
+  fts          Unsupported("tsvector")?
+
+  position Position? @relation(fields: [positionId], references: [id])
+
+  @@index([npiOrgId, scope])
+  @@index([positionId])
+  @@index([npiOrgId, entityType, npiEntityId])
+  // T-39 (migration 0009_indexes): the refresh gate (`latestNpiFactAt`, max
+  // updatedAt of the organization's npi facts) and the rewrite's read.
+  @@index([npiOrgId, sourceType, updatedAt])
+  @@map("memory_facts")
+}
+
+// ─── Redaction sessions ──────────────────────────────────────────────────
+
+model RedactionSession {
+  id             String   @id @default(cuid())
+  npiOrgId       String
+  npiUserId      String
+  conversationId String?
+  mapEncrypted   String   @db.Text
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId])
+  @@index([expiresAt])
+  @@map("redaction_sessions")
+}
+
+// ─── LLM audit, evals, usage ─────────────────────────────────────────────
+
+// Audit trail row. The three id columns below (conversationId, intakeJobId,
+// documentId) are deliberately plain strings with NO Prisma relation: the
+// audit record must survive the deletion of the conversation, intake job,
+// or document it refers to (invariant: audit rows are append-only and
+// never cascaded away).
+model LlmAudit {
+  id                  String   @id @default(cuid())
+  ts                  DateTime @default(now())
+  npiOrgId            String
+  npiUserId           String
+  conversationId      String?
+  intakeJobId         String?
+  documentId          String?
+  event               String
+  modelTier           String?
+  modelId             String?
+  tokensIn            Int      @default(0)
+  tokensOut           Int      @default(0)
+  costUsdMicro        BigInt   @default(0)
+  outboundRedactedText String? @db.Text
+  imageSent           Boolean  @default(false)
+  consentEventId      String?
+  latencyMs           Int?
+  error               String?  @db.Text
+
+  @@index([npiOrgId, ts])
+  @@index([npiUserId, ts])
+  // T-39 (migration 0009_indexes): /trust filtered by event, and the
+  // document counter (`loadDocumentUsage`). Two partial indexes that Prisma
+  // cannot express live only in the migration: the image rows
+  // (`WHERE "imageSent"`) and the error rows (`WHERE "error" IS NOT NULL`),
+  // both read by the /trust summary on every load.
+  @@index([npiOrgId, event, ts])
+  @@index([npiOrgId, documentId, ts])
+  @@map("llm_audit")
+}
+
+model EvalRun {
+  id          String    @id @default(cuid())
+  kind        String
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  score       Float?
+  passed      Boolean?
+  detailsJson Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([kind, startedAt])
+  @@map("eval_runs")
+}
+
+model DailyUsage {
+  id           String   @id @default(cuid())
+  npiOrgId     String
+  npiUserId    String
+  day          DateTime @db.Date
+  messageCount Int      @default(0)
+  tokensIn     Int      @default(0)
+  tokensOut    Int      @default(0)
+  costUsdMicro BigInt   @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([npiUserId, day])
+  @@index([npiOrgId, day])
+  @@map("daily_usage")
+}

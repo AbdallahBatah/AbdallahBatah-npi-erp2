@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "targetMinutes": 30,
+  "samples": [
+    {
+      "id": "S1",
+      "profileKey": "epc",
+      "scratchOrgKey": "epc",
+      "q1": "شركة طاقة شمسية تعمل EPC وتشغيل وصيانة",
+      "q1ExpectedSource": "deterministic",
+      "q3": "نعم كما هو",
+      "q4": "ما عندنا مستندات ثانية",
+      "q5": "موافق",
+      "q6": "لا، نفس المصطلحات",
+      "q6ExpectedSource": "deterministic",
+      "expect": {
+        "hiddenModules": ["fsm", "ppa", "telemetry"],
+        "docTypeKeys": ["epc_contract", "vendor_quote", "delivery_note", "vendor_bill", "purchase_request"],
+        "gapsContain": ["تعريفات التدفقات"],
+        "terminologyContains": null
+      }
+    },
+    {
+      "id": "S2",
+      "profileKey": "om_provider",
+      "scratchOrgKey": "om_provider",
+      "q1": "نشتغل تشغيل وصيانة لمحطات الطاقة الشمسية للغير",
+      "q1ExpectedSource": "deterministic",
+      "q3": "نعم كما هو",
+      "q4": "ما عندنا مستندات ثانية",
+      "q5": "موافق",
+      "q6": "نسمي أمر الشراء \"طلبية\"",
+      "q6ExpectedSource": "model",
+      "expect": {
+        "hiddenModules": ["projects", "ppa", "telemetry"],
+        "docTypeKeys": ["om_contract", "parts_request", "vendor_bill"],
+        "gapsContain": ["تعريفات التدفقات"],
+        "terminologyContains": { "purchase_order": "طلبية" }
+      }
+    },
+    {
+      "id": "S3",
+      "profileKey": "ppa_operator",
+      "scratchOrgKey": "ppa_operator",
+      "q1": "نبني المحطة على حسابنا ونبيع الكهرباء للعميل بعقد طويل الأجل",
+      "q1ExpectedSource": "model",
+      "q3": "نعم كما هو",
+      "q4": "ما عندنا مستندات ثانية",
+      "q5": "موافق",
+      "q6": "لا، نفس المصطلحات",
+      "q6ExpectedSource": "deterministic",
+      "expect": {
+        "hiddenModules": ["crm", "projects"],
+        "docTypeKeys": ["ppa_contract", "vendor_bill"],
+        "gapsContain": ["تعريفات التدفقات"],
+        "terminologyContains": null
+      }
+    },
+    {
+      "id": "S4",
+      "profileKey": "general_contracting",
+      "scratchOrgKey": "general_contracting",
+      "q1": "مؤسسة مقاولات عامة، بناء وتشييد وبنية تحتية",
+      "q1ExpectedSource": "deterministic",
+      "q3": "نعم كما هو",
+      "q4": "ما عندنا مستندات ثانية",
+      "q5": "موافق",
+      "q6": "لا، نفس المصطلحات",
+      "q6ExpectedSource": "deterministic",
+      "expect": {
+        "hiddenModules": ["fsm", "ppa", "telemetry"],
+        "docTypeKeys": ["contracting_contract", "progress_claim", "vendor_bill", "purchase_request"],
+        "gapsContain": ["تعريفات التدفقات"],
+        "terminologyContains": null
+      }
+    },
+    {
+      "id": "S5",
+      "profileKey": "equipment_trading",
+      "scratchOrgKey": "equipment_trading",
+      "q1": "نستورد ألواح وعواكس وبطاريات ونبيعها للمقاولين والموزعين",
+      "q1ExpectedSource": "model",
+      "q3": "نعم كما هو",
+      "q4": "ما عندنا مستندات ثانية",
+      "q5": "موافق",
+      "q6": "لا، نفس المصطلحات",
+      "q6ExpectedSource": "deterministic",
+      "expect": {
+        "hiddenModules": ["projects", "fsm", "ppa", "telemetry"],
+        "docTypeKeys": ["vendor_quote", "delivery_note", "vendor_bill"],
+        "gapsContain": ["تعريفات التدفقات"],
+        "terminologyContains": null
+      }
+    },
+    {
+      "id": "S6",
+      "profileKey": "engineering_consulting",
+      "scratchOrgKey": "engineering_consulting",
+      "q1": "مكتب استشارات هندسية: تصاميم ودراسات وإشراف على التنفيذ",
+      "q1ExpectedSource": "deterministic",
+      "q3": "نعم كما هو",
+      "q4": "ما عندنا مستندات ثانية",
+      "q5": "موافق",
+      "q6": "لا، نفس المصطلحات",
+      "q6ExpectedSource": "deterministic",
+      "expect": {
+        "hiddenModules": ["fsm", "ppa", "telemetry"],
+        "docTypeKeys": ["services_contract", "vendor_bill"],
+        "gapsContain": ["تعريفات التدفقات"],
+        "terminologyContains": null
+      }
+    }
+  ]
+}

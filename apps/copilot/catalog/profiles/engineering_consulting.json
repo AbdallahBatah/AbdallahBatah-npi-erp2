@@ -1,0 +1,95 @@
+{
+  "key": "engineering_consulting",
+  "titleAr": "استشارات هندسية",
+  "revenueLines": ["عقود الخدمات الاستشارية", "التصميم والدراسات الهندسية", "الإشراف على التنفيذ"],
+  "visibleModules": ["crm", "commercial", "projects", "finance", "procurement"],
+  "acceptedDocTypes": [
+    { "key": "services_contract", "labelAr": "عقد خدمات", "flow": "customer_contract" },
+    { "key": "vendor_bill", "labelAr": "فاتورة مورد", "flow": "vendor_bill" }
+  ],
+  "terminology": {
+    "contract": "عقد الخدمات",
+    "item": "الخدمة"
+  },
+  "defaultDepartments": [
+    { "code": "ENG", "nameAr": "الهندسة", "nameEn": "Engineering" },
+    { "code": "FIN", "nameAr": "المالية", "nameEn": "Finance" }
+  ],
+  "rolePermissionSets": {
+    "admin": {
+      "nameAr": "مدير النظام",
+      "nameEn": "Administrator",
+      "permissions": [
+        "crm.customer.read", "crm.customer.write",
+        "crm.lead.read", "crm.lead.write",
+        "crm.opportunity.read", "crm.opportunity.write",
+        "commercial.item.read", "commercial.item.write",
+        "commercial.proposal.read", "commercial.proposal.write",
+        "commercial.contract.read", "commercial.contract.write",
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.payment.read", "finance.payment.write", "finance.period.manage",
+        "projects.project.read", "projects.project.write",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "admin.department.manage", "admin.delegation.manage", "admin.workflow.manage",
+        "assets.serialunit.read",
+        "fsm.workorder.read", "fsm.workorder.write",
+        "admin.org.manage", "admin.user.manage", "admin.audit.read", "admin.approval.manage",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "engineer": {
+      "nameAr": "مهندس",
+      "nameEn": "Engineer",
+      "permissions": [
+        "projects.project.read", "projects.project.write",
+        "commercial.contract.read",
+        "commercial.proposal.read", "commercial.proposal.write",
+        "commercial.item.read",
+        "crm.customer.read",
+        "scm.procurement.read", "scm.requisition.write",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "accountant": {
+      "nameAr": "محاسب",
+      "nameEn": "Accountant",
+      "permissions": [
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.payment.read", "finance.payment.write", "finance.period.manage",
+        "crm.customer.read",
+        "commercial.contract.read", "commercial.proposal.read", "commercial.item.read",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    }
+  },
+  "approvalRuleDefaults": [
+    { "docType": "PURCHASE_ORDER", "minAmount": 20000, "steps": ["accountant"] }
+  ],
+  "itemTemplates": [
+    { "sku": "CONS-HR", "nameAr": "ساعة استشارة هندسية", "nameEn": "Engineering Consulting Hour", "itemCategory": "SERVICE", "uom": "ساعة" },
+    { "sku": "CONS-DAY", "nameAr": "يوم عمل مهندس", "nameEn": "Engineer Day", "itemCategory": "SERVICE", "uom": "يوم" },
+    { "sku": "CONS-RPT", "nameAr": "تقرير فني", "nameEn": "Technical Report", "itemCategory": "SERVICE", "uom": "unit" },
+    { "sku": "CONS-SUP", "nameAr": "إشراف موقعي شهري", "nameEn": "Monthly Site Supervision", "itemCategory": "SERVICE", "uom": "شهر" }
+  ],
+  "positions": [
+    {
+      "roleKey": "admin",
+      "departmentCode": null,
+      "titleAr": "مدير النظام",
+      "personaAr": "أنت الوكيل الذي يرافق مدير النظام في مَدار، الطبقة الحوارية فوق NPI. تساعده على متابعة إعداد المنشأة الأولي: مراجعة الأقسام والأدوار وسقوف الاعتماد المقترحة، وعلى إدخال عقود الخدمات الاستشارية من مستند يرفقه بما أنه الوحيد في هذه الحزمة الذي يملك صلاحية إدارة العقود، وعرض كل ذلك في بطاقة معاينة واضحة قبل أي تطبيق فعلي. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يملكه من صلاحية في NPI لا تملكه أنت نيابة عنه. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI حسب مصفوفته، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "engineer",
+      "departmentCode": "ENG",
+      "titleAr": "مهندس",
+      "personaAr": "أنت الوكيل الذي يرافق المهندس في مَدار، الطبقة الحوارية فوق NPI. تساعده على متابعة مشاريعه ومهامه المُسندة إليه، ورفع طلبات الشراء لما يحتاجه تنفيذ العمل، والاطلاع على عقود الخدمات المرتبطة بمشاريعه للقراءة فقط. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يستطيعه من شاشة NPI لا تستطيعه أنت من المحادثة، وأنت لا تُنشئ له عقوداً لأن صلاحيته على العقود للقراءة فقط. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI حسب مصفوفته، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "accountant",
+      "departmentCode": "FIN",
+      "titleAr": "محاسب",
+      "personaAr": "أنت الوكيل الذي يرافق المحاسب في مَدار، الطبقة الحوارية فوق NPI. مهمتك الأساسية استخراج فواتير الموردين من مستند أو صورة يرفقها، وعرضها في بطاقة معاينة قبل أي إدخال، مع توضيح الفرق صراحة عند غياب مطابقة واضحة بدل تسويته بنفسك. تعمل بصلاحيات هذا المستخدم في NPI حرفياً. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    }
+  ]
+}

@@ -16,6 +16,7 @@
     "migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "push": "dotenv -e ../../.env -- prisma db push",
     "seed": "dotenv -e ../../.env -- ts-node --transpile-only prisma/seed.ts",
+    "seed:madar-scratch": "dotenv -e ../../.env -- ts-node --transpile-only prisma/madar-scratch-orgs.ts",
     "studio": "dotenv -e ../../.env -- prisma studio",
     "build": "prisma generate && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"

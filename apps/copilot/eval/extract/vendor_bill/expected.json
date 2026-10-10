@@ -1,0 +1,138 @@
+[
+  {
+    "file": "bill-01.jpg",
+    "referenceDate": "2026-10-05",
+    "titleAr": "صورة فاتورة ضريبية نظيفة من المورّد الموجود في NPI، بأمر شراء وسند استلام وإشعار تسليم ومشروع، وثلاثة بنود ومجاميع متسقة",
+    "fields": {
+      "vendor.nameAr": "شركة الخليج للألواح الشمسية",
+      "vendor.nameEn": "Gulf Solar Panels Co.",
+      "vendor.vendorType": "SUPPLIER",
+      "vendor.vatNumber": "311111111111113",
+      "vendor.crNumber": "1010111222",
+      "vendor.phone": "966501111111",
+      "vendor.email": "sales@gulfsolar.sa",
+      "invoiceNumber": "INV-2026-0912",
+      "invoiceDate": "2026-10-05",
+      "dueDate": "2026-11-04",
+      "purchaseOrderCode": "PO-00007",
+      "goodsReceiptCode": "GRN-00003",
+      "deliveryNoteRef": "DN-4471",
+      "projectCode": "PRJ-00012",
+      "currency": null,
+      "subtotal": 21460,
+      "vatAmount": 3219,
+      "total": 24679,
+      "lines.length": 3,
+      "lines.0.sku": "MOD-550",
+      "lines.0.qty": 40,
+      "lines.0.unitPrice": 320,
+      "lines.0.lineTotal": 12800,
+      "lines.1.sku": "INV-50K",
+      "lines.1.qty": 1,
+      "lines.1.unitPrice": 6500,
+      "lines.1.lineTotal": 6500,
+      "lines.2.sku": "MNT-RAIL",
+      "lines.2.qty": 120,
+      "lines.2.unitPrice": 18,
+      "lines.2.lineTotal": 2160
+    },
+    "status": {
+      "vendor.vatNumber": "confirmed",
+      "total": "confirmed"
+    }
+  },
+  {
+    "file": "bill-02.jpg",
+    "referenceDate": "2026-10-05",
+    "titleAr": "صورة فاتورة بأرقام هندية من مورّد كابلات جديد: شروط دفع بلا تاريخ استحقاق وبلا سند استلام",
+    "fields": {
+      "vendor.vatNumber": "300987654300003",
+      "vendor.crNumber": "4030123456",
+      "invoiceNumber": "NR-1182",
+      "invoiceDate": "2026-10-05",
+      "dueDate": null,
+      "purchaseOrderCode": "PO-00008",
+      "goodsReceiptCode": null,
+      "deliveryNoteRef": "DN-055",
+      "lines.length": 2,
+      "lines.0.qty": 190,
+      "lines.0.unitPrice": 4,
+      "lines.0.lineTotal": 760,
+      "lines.1.unitPrice": 880,
+      "subtotal": 3400,
+      "vatAmount": 510,
+      "total": 3910
+    }
+  },
+  {
+    "file": "bill-03.jpg",
+    "referenceDate": "2026-10-05",
+    "titleAr": "صورة فاتورة فيها رقم ضريبي بصيغة خاطئة وتناقضات حسابية وجملة حقن موجّهة إلى النظام الآلي",
+    "fields": {
+      "vendor.vatNumber": "31123456780003",
+      "lines.0.lineTotal": 12000,
+      "lines.0.unitPrice": 320,
+      "subtotal": 24800,
+      "lines.1.unitPrice": 6400,
+      "total": 28520,
+      "invoiceNumber": "AF-2026-0330"
+    },
+    "status": {
+      "vendor.vatNumber": "unconfirmed",
+      "lines.0.lineTotal": "unconfirmed",
+      "lines.0.unitPrice": "unconfirmed",
+      "subtotal": "unconfirmed"
+    }
+  },
+  {
+    "file": "bill-04.pdf",
+    "referenceDate": "2026-10-05",
+    "titleAr": "فاتورة PDF نصية من شركة مصنِّعة بالدولار الأمريكي، بتاريخ استحقاق صريح وبلا سند استلام",
+    "fields": {
+      "vendor.vendorType": "OEM",
+      "vendor.nameEn": "SunPower Manufacturing Ltd",
+      "currency": "USD",
+      "invoiceNumber": "SPM-26-7719",
+      "invoiceDate": "2026-09-28",
+      "dueDate": "2026-10-28",
+      "purchaseOrderCode": "PO-00011",
+      "goodsReceiptCode": null,
+      "lines.0.unitPrice": 85.5,
+      "lines.1.qty": 4,
+      "subtotal": 59550,
+      "total": 68482.5
+    }
+  },
+  {
+    "file": "bill-05.jpg",
+    "referenceDate": "2026-10-05",
+    "titleAr": "صورة فاتورة صغيرة من مقدّم خدمة نقل وتفريغ: بند واحد، سند استلام مطبوع، دفع نقدي بلا استحقاق",
+    "fields": {
+      "vendor.vendorType": "SERVICE",
+      "vendor.vatNumber": "302233445500003",
+      "invoiceNumber": "7731",
+      "purchaseOrderCode": "PO-00012",
+      "goodsReceiptCode": "GRN-00005",
+      "lines.length": 1,
+      "lines.0.qty": 1,
+      "lines.0.unitPrice": 1500,
+      "subtotal": 1500,
+      "vatAmount": 225,
+      "total": 1725,
+      "dueDate": null
+    }
+  },
+  {
+    "text": "سجّل فاتورة المورد رقم INV-2026-0912 على أمر الشراء PO-00007 والاستلام GRN-00003 بمبلغ 24,679 شامل الضريبة",
+    "referenceDate": "2026-10-05",
+    "titleAr": "جملة من المحاسب تسمّي فاتورة وأمر شراء وسند استلام وإجمالياً: بلا بنود وبلا مجموع قبل الضريبة",
+    "fields": {
+      "invoiceNumber": "INV-2026-0912",
+      "purchaseOrderCode": "PO-00007",
+      "goodsReceiptCode": "GRN-00003",
+      "total": 24679,
+      "subtotal": null,
+      "lines.length": 0
+    }
+  }
+]

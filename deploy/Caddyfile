@@ -16,6 +16,18 @@
 		}
 	}
 
+	# Madar copilot (apps/copilot). `handle`, not `handle_path`: the app is
+	# built with basePath "/copilot" (apps/copilot/next.config.js) and expects
+	# the prefix on every request — stripping it would 404 every page. Caddy
+	# orders handle blocks longest path first, so /copilot/api/* lands here,
+	# never on NPI's /api/* above.
+	handle /copilot* {
+		reverse_proxy copilot:3100 {
+			lb_try_duration 5s
+			lb_try_interval 250ms
+		}
+	}
+
 	handle {
 		reverse_proxy web:3000 {
 			lb_try_duration 5s

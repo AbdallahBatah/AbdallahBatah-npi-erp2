@@ -8,7 +8,7 @@
 **AT-01 — عقد من PDF / Contract from text PDF** (F-04, F-05, F-10, F-11) `@live-flows`
 Given sales user, `eval/extract/contract-01.pdf` (text PDF, customer «شركة النخيل للمقاولات» not yet in NPI, value 850,000, 3 milestones 30/40/30, retention 10%, VAT number valid)
 When user writes «عقد جديد» and attaches it
-Then within 25 s a PreviewCard shows customer «جديد سيُنشأ», value 850,000.00, three milestones with percentages, retention 10%, and VAT number flagged «مؤكد»; audit shows `outboundRedactedText` without «النخيل»; after «اعتمد», NPI has a new customer and a DRAFT contract with 3 milestones under the user's id (visible in `/contracts`), the PDF attached to the contract, and ExecutionCard shows codes.
+Then within 30 s (D-19, 2026-10-06: was 25 s; measured 14.5–26 s of provider time on this two-page document) a PreviewCard shows customer «جديد سيُنشأ», value 850,000.00, three milestones with percentages, retention 10%, and VAT number flagged «مؤكد»; audit shows `outboundRedactedText` without «النخيل»; after «اعتمد», NPI has a new customer and a DRAFT contract with 3 milestones under the user's id (visible in `/contracts`), the PDF attached to the contract, and ExecutionCard shows codes.
 
 **AT-02 — عميل موجود / Existing customer match** (F-05, BR-09) `@live-flows`: same with a contract whose VAT number matches an existing customer → card offers «وجدت عميلاً مطابقاً» → approve → no duplicate customer.
 

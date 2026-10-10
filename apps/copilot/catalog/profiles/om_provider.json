@@ -1,0 +1,135 @@
+{
+  "key": "om_provider",
+  "titleAr": "مزوّد تشغيل وصيانة",
+  "revenueLines": ["عقود التشغيل والصيانة", "قطع الغيار", "الدعم الفني"],
+  "visibleModules": ["crm", "commercial", "fsm", "procurement", "finance"],
+  "acceptedDocTypes": [
+    { "key": "om_contract", "labelAr": "عقد صيانة", "flow": "customer_contract" },
+    { "key": "parts_request", "labelAr": "طلب قطع", "flow": "pr" },
+    { "key": "vendor_bill", "labelAr": "فاتورة مورد", "flow": "vendor_bill" }
+  ],
+  "terminology": {
+    "contract": "عقد الصيانة"
+  },
+  "defaultDepartments": [
+    { "code": "OPS", "nameAr": "التشغيل", "nameEn": "Operations" },
+    { "code": "MNT", "nameAr": "الصيانة", "nameEn": "Maintenance" },
+    { "code": "PROC", "nameAr": "المشتريات", "nameEn": "Procurement" },
+    { "code": "FIN", "nameAr": "المالية", "nameEn": "Finance" }
+  ],
+  "rolePermissionSets": {
+    "admin": {
+      "nameAr": "مدير النظام",
+      "nameEn": "Administrator",
+      "permissions": [
+        "crm.customer.read", "crm.customer.write",
+        "crm.lead.read", "crm.lead.write",
+        "crm.opportunity.read", "crm.opportunity.write",
+        "commercial.item.read", "commercial.item.write",
+        "commercial.proposal.read", "commercial.proposal.write",
+        "commercial.contract.read", "commercial.contract.write",
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.payment.read", "finance.payment.write", "finance.period.manage",
+        "projects.project.read", "projects.project.write",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "admin.department.manage", "admin.delegation.manage", "admin.workflow.manage",
+        "assets.serialunit.read",
+        "fsm.workorder.read", "fsm.workorder.write",
+        "admin.org.manage", "admin.user.manage", "admin.audit.read", "admin.approval.manage",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "sales": {
+      "nameAr": "مندوب مبيعات",
+      "nameEn": "Sales Representative",
+      "permissions": [
+        "crm.customer.read", "crm.customer.write",
+        "crm.lead.read", "crm.lead.write",
+        "crm.opportunity.read", "crm.opportunity.write",
+        "commercial.item.read",
+        "commercial.proposal.read", "commercial.proposal.write",
+        "commercial.contract.read", "commercial.contract.write",
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "pm": {
+      "nameAr": "مدير التشغيل",
+      "nameEn": "Operations Manager",
+      "permissions": [
+        "projects.project.read", "projects.project.write",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "assets.serialunit.read",
+        "commercial.contract.read", "commercial.item.read",
+        "crm.customer.read",
+        "fsm.workorder.read",
+        "finance.invoice.read",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "accountant": {
+      "nameAr": "محاسب",
+      "nameEn": "Accountant",
+      "permissions": [
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.payment.read", "finance.payment.write", "finance.period.manage",
+        "crm.customer.read",
+        "commercial.contract.read", "commercial.proposal.read", "commercial.item.read",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    },
+    "site_engineer": {
+      "nameAr": "فني صيانة",
+      "nameEn": "Maintenance Technician",
+      "permissions": [
+        "fsm.workorder.read", "fsm.workorder.write",
+        "assets.serialunit.read",
+        "scm.procurement.read", "scm.requisition.write",
+        "commercial.item.read",
+        "projects.project.read",
+        "platform.attachment.read", "platform.attachment.write"
+      ]
+    }
+  },
+  "approvalRuleDefaults": [
+    { "docType": "PURCHASE_REQUISITION", "minAmount": 5000, "steps": ["pm"] },
+    { "docType": "PURCHASE_ORDER", "minAmount": 50000, "steps": ["pm", "accountant"] }
+  ],
+  "itemTemplates": [
+    { "sku": "SPR-001", "nameAr": "قطعة غيار عامة", "nameEn": "General Spare Part", "itemCategory": "SPARE", "uom": "unit" },
+    { "sku": "SVC-HR", "nameAr": "ساعة عمل فني", "nameEn": "Technician Labor Hour", "itemCategory": "SERVICE", "uom": "ساعة" }
+  ],
+  "positions": [
+    {
+      "roleKey": "admin",
+      "departmentCode": null,
+      "titleAr": "مدير النظام",
+      "personaAr": "أنت الوكيل الذي يرافق مدير النظام في مَدار، الطبقة الحوارية فوق NPI. تساعده على متابعة إعداد المنشأة الأولي: مراجعة الأقسام والأدوار وسقوف الاعتماد المقترحة، وعرض ملخص واضح لما سيُضبط في NPI قبل أي تطبيق فعلي. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يملكه من صلاحية في NPI لا تملكه أنت نيابة عنه. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI حسب مصفوفته، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "sales",
+      "departmentCode": null,
+      "titleAr": "مسؤول المبيعات",
+      "personaAr": "أنت الوكيل الذي يرافق مسؤول المبيعات في مَدار، الطبقة الحوارية فوق NPI. مهمتك مساعدته على إدخال عقود الصيانة الجديدة من مستند يرفقه، والتحقق من مطابقة العميل قبل اقتراح إنشاء عميل جديد، وعرض كل ذلك في بطاقة معاينة قبل أي إدخال. تعمل بصلاحيات هذا المستخدم في NPI حرفياً. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "pm",
+      "departmentCode": "OPS",
+      "titleAr": "مدير التشغيل",
+      "personaAr": "أنت الوكيل الذي يرافق مدير التشغيل في مَدار، الطبقة الحوارية فوق NPI. تساعده على رفع طلبات شراء قطع الغيار، ومتابعة أوامر الشراء والاستلامات المرتبطة بعقود التشغيل والصيانة. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يملكه من صلاحية في NPI لا تملكه أنت نيابة عنه. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI حسب مصفوفته، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "accountant",
+      "departmentCode": "FIN",
+      "titleAr": "محاسب",
+      "personaAr": "أنت الوكيل الذي يرافق المحاسب في مَدار، الطبقة الحوارية فوق NPI. مهمتك الأساسية استخراج فواتير الموردين من مستند أو صورة يرفقها، وربطها بطلب القطع المرتبط عند توفره، وعرضها في بطاقة معاينة قبل أي إدخال. عند غياب مطابقة واضحة، اعرض الفرق للمستخدم صراحة بدل تسويته بنفسك. تعمل بصلاحيات هذا المستخدم في NPI حرفياً. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    },
+    {
+      "roleKey": "site_engineer",
+      "departmentCode": "MNT",
+      "titleAr": "فني صيانة",
+      "personaAr": "أنت الوكيل الذي يرافق فني الصيانة في مَدار، الطبقة الحوارية فوق NPI. تساعده على رفع طلبات شراء قطع الغيار اللازمة لأعمال الصيانة، ومتابعة حالتها حتى تحويلها إلى أمر شراء من قسم المشتريات. تعمل بصلاحيات هذا المستخدم في NPI حرفياً؛ ما لا يستطيعه من شاشة NPI لا تستطيعه أنت من المحادثة. لا تعتمد ولا ترفض شيئاً بنفسك أبداً؛ الاعتماد يحدث فقط داخل صندوق وارد NPI حسب مصفوفته، ولا يُدخل شيء في NPI قبل أن يضغط المستخدم زر «اعتمد» على بطاقة المعاينة. لا تُقيّم ولا توصي بأداء أي موظف؛ هذا قرار بشري بحت."
+    }
+  ]
+}

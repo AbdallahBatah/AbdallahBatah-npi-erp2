@@ -63,6 +63,19 @@ ssh root@204.168.182.109 "cd /opt/npi-erp && sh deploy/deploy.sh --rollback"
 يعيد صور الإصدار السابق ولا يعكس الترحيلات (كلها توسعية ومقبولة من الكود السابق، انظر `deploy/MIGRATIONS_AR.md`).
 لعكس الترحيلات نفسها: ملفات `down.sql` في كل مجلد ترحيل، بالترتيب العكسي 0029 → 0021، بعد إيقاف `api`.
 
-## ما بعد النشر
-1. إحصاء المكررات: `docs/crm-phase-1/customer-duplicates-census.sql` عبر `psql` (الأمر في رأس الملف؛ قراءة فقط).
-2. عرض القائمة على إياد → موافقة → نسخة احتياطية → تفعيل `crm.customer.mergeEnabled` → الدمج → إصدار يحوي 0023.
+## ما بعد النشر — النتيجة (2026-10-09)
+1. إحصاء المكررات على الخادم (`customer-duplicates-census.sql`، قراءة فقط، من Git Bash عبر المدخل القياسي لـ ssh):
+   منشأة واحدة، 7 عملاء، **صفر مكررات** في السجل التجاري والرقم الضريبي والجوال والاسم المطبَّع؛ تحذير واحد:
+   CUS-00005 منشأة بلا سجل ولا رقم ضريبي (لا يصطدم بالفهارس الجزئية). النتيجة في `census-live.txt` (غير متتبَّع).
+2. **خطوة الدمج أُلغيت** لعدم وجود ما يُدمَج؛ `crm.customer.mergeEnabled` بقي معطَّلاً.
+3. الإصدار 2-ب (يحوي 0023): الحزمة بُنيت **بلا** `-ExcludeMigration` (md5 `7D213A60F9BB70AE176C3E7E49A285AD`)، ثم
+   `backup.sh` → `tar -xzf` → `deploy.sh`. `migrate deploy` طبّق ترحيلاً واحداً (`0023_crm_customer_unique_keys`)
+   ثم تبديل `api` و`web`. نسخة احتياطية قبل النشر: `npi_erp_20261009_054737.dump`. الخرج في `deploy-0023-live.txt`.
+4. التحقق بعد النشر (`verify-0023-live.txt`): الفهارس `Customer_org_crNumber_active_key` و`Customer_org_vatNumber_active_key`
+   و`Customer_org_mobile_active_key` موجودة؛ `_prisma_migrations` تحوي 0023؛ سجل النشر ينتهي بـ `20261009054737`؛
+   `api` و`web` بحالة healthy؛ `/api/health` عبر Caddy = 200. الإعادة الليلية (03:00) تعيد الترحيلات من هذه الصورة فتحوي 0023.
+
+أمر التحقق (قراءة فقط، Git Bash):
+```bash
+ssh root@204.168.182.109 "cd /opt/npi-erp && docker compose -f docker-compose.prod.yml --env-file deploy/.env exec -T postgres psql -U npi -d npi_erp -c \"select indexname from pg_indexes where tablename='Customer' and indexname like 'Customer_org_%_active_key' order by 1\" && tail -3 deploy/.deploy_history && docker ps --format '{{.Names}} | {{.Status}}'"
+```

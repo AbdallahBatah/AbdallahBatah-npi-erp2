@@ -21,6 +21,18 @@ out/
 packages/db/prisma/*.db
 packages/db/prisma/migrations/dev.db*
 
+# Copilot's own Prisma client output (custom generator path, never committed)
+apps/copilot/src/generated/
+
+# Copilot document store (COPILOT_DOCS_DIR default, spec/madar/02 §11)
+apps/copilot/data/
+
+# Playwright output of the copilot e2e runs
+apps/copilot/test-results/
+apps/copilot/playwright-report/
+# Reports of the copilot perf gate (npm run perf), kept out of test-results/ which Playwright wipes
+apps/copilot/perf-results/
+
 # Packed deploy artifacts
 *.tar.gz
 
@@ -44,3 +56,6 @@ deploy/.deploy_history
 # TestSprite scratch: tunnel config, session keys, and a multi-MB run log.
 # The generated tests and the report next to it are kept.
 testsprite_tests/tmp/
+
+# Runtime upload store of the api (per-organization files), never committed
+apps/api/uploads/

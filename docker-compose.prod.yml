@@ -77,6 +77,48 @@ services:
       retries: 12
       start_period: 30s
 
+  # Madar copilot (apps/copilot, spec/madar/02 §11) — served by Caddy under
+  # /copilot. Its environment is its own: no env_file, no DATABASE_URL, no
+  # JWT secret — it reaches NPI only over HTTP as the signed-in user
+  # (NPI_API_BASE) and owns the separate database npi_copilot on the same
+  # Postgres container (created on the first boot by `prisma migrate deploy`).
+  copilot:
+    build:
+      context: .
+      dockerfile: apps/copilot/Dockerfile
+    image: npi-erp-copilot
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      COPILOT_DATABASE_URL: postgresql://npi:${POSTGRES_PASSWORD}@postgres:5432/npi_copilot?schema=public
+      NPI_API_BASE: http://api:4000/api
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in deploy/.env}
+      MADAR_PROVIDER: anthropic
+      COPILOT_MODEL_ECONOMY: ${COPILOT_MODEL_ECONOMY:-claude-haiku-4-5-20251001}
+      COPILOT_MODEL_ADVANCED: ${COPILOT_MODEL_ADVANCED:-claude-sonnet-5}
+      # 32 bytes hex (openssl rand -hex 32): encrypts the stored NPI token at rest.
+      COPILOT_SESSION_KEY: ${COPILOT_SESSION_KEY:?set COPILOT_SESSION_KEY in deploy/.env}
+      # Uploaded documents — on the copilot_docs volume, so they survive rebuilds.
+      COPILOT_DOCS_DIR: /data/copilot_docs
+      COPILOT_DAILY_TOKEN_CAP: ${COPILOT_DAILY_TOKEN_CAP:-600000}
+      # NEXT_PUBLIC_NPI_WEB_URL is deliberately unset: behind Caddy the copilot
+      # and NPI's web share one origin, so links to NPI stay relative.
+    volumes:
+      - copilot_docs:/data/copilot_docs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      # /copilot/api/health answers 200 only when npi_copilot answers (the
+      # same rule as the api's probe); the rolling deploy waits on this.
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3100/copilot/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -92,9 +134,11 @@ services:
     depends_on:
       - web
       - api
+      - copilot
 
 volumes:
   pg_data:
   caddy_data:
   caddy_config:
   uploads_data:
+  copilot_docs:

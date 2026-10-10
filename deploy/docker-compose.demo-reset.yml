@@ -10,6 +10,18 @@
 #   docker compose -f docker-compose.prod.yml -f deploy/docker-compose.demo-reset.yml \
 #     --env-file deploy/.env run --rm demo-reset
 #
+# The Madar copilot's own database (npi_copilot) and its uploaded documents
+# are reset by the second job in this file, run the same way (T-41, spec/madar/02
+# §11 — «nightly demo reset also resets npi_copilot»):
+#
+#   docker compose -f docker-compose.prod.yml -f deploy/docker-compose.demo-reset.yml \
+#     --env-file deploy/.env run --rm demo-reset-copilot
+#
+# The two jobs are independent on purpose: the copilot's rows point at NPI's
+# seeded ids (stable across resets), so either order works, and a failure of
+# one must not leave the other undone. The cron line in deploy/README_AR.md
+# runs both.
+#
 # Never install the nightly cron for this on a server holding real data.
 #
 # EXPOSE_API_DOCS / NEXT_PUBLIC_DEMO_PREFILL (T-00d): this file defines only
@@ -40,3 +52,25 @@ services:
       sh -c "npx prisma migrate reset --force --skip-generate --skip-seed --schema packages/db/prisma/schema.prisma
       && npx ts-node --transpile-only packages/db/prisma/seed.ts
       && node scripts/seed-demo.js"
+
+  # Madar copilot (T-41): wipes npi_copilot (migrate reset drops and recreates
+  # the database, then re-applies apps/copilot/prisma/migrations) and empties
+  # the documents volume, so every orphaned upload goes with its rows. Same
+  # image as the running copilot (the Prisma CLI is inside it), same volume,
+  # the copilot's own URL only — never NPI's DATABASE_URL (spec/madar/02 §13).
+  # The copilot has no seed: a firm starts the morning at «التأسيس» again.
+  demo-reset-copilot:
+    image: npi-erp-copilot
+    pull_policy: never
+    environment:
+      NODE_ENV: production
+      COPILOT_DATABASE_URL: postgresql://npi:${POSTGRES_PASSWORD}@postgres:5432/npi_copilot?schema=public
+    volumes:
+      - copilot_docs:/data/copilot_docs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "node node_modules/prisma/build/index.js migrate reset --force --skip-generate --skip-seed --schema apps/copilot/prisma/schema.prisma
+      && find /data/copilot_docs -mindepth 1 -delete
+      && echo 'copilot reset: npi_copilot re-created, documents volume emptied'"

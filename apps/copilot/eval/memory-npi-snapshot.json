@@ -1,0 +1,1156 @@
+{
+  "customers": [
+    {
+      "id": "cus_00001",
+      "code": "CUS-00001",
+      "nameAr": "مصنع الرياض للصناعات",
+      "creditTermsDays": 30
+    },
+    {
+      "id": "cus_00002",
+      "code": "CUS-00002",
+      "nameAr": "شركة النخيل للمقاولات",
+      "creditTermsDays": 45
+    },
+    {
+      "id": "cus_00003",
+      "code": "CUS-00003",
+      "nameAr": "مجموعة الواحة الزراعية",
+      "creditTermsDays": 60
+    },
+    {
+      "id": "cus_00004",
+      "code": "CUS-00004",
+      "nameAr": "مؤسسة الفرسان للتجارة",
+      "creditTermsDays": 15
+    },
+    {
+      "id": "cus_00005",
+      "code": "CUS-00005",
+      "nameAr": "شركة البحر الأحمر للتطوير العقاري",
+      "creditTermsDays": 90
+    },
+    {
+      "id": "cus_00006",
+      "code": "CUS-00006",
+      "nameAr": "مصنع الشرقية للبلاستيك",
+      "creditTermsDays": 30
+    },
+    {
+      "id": "cus_00007",
+      "code": "CUS-00007",
+      "nameAr": "مستشفى الأمل التخصصي",
+      "creditTermsDays": 60
+    },
+    {
+      "id": "cus_00008",
+      "code": "CUS-00008",
+      "nameAr": "شركة الجزيرة للأعلاف",
+      "creditTermsDays": 45
+    },
+    {
+      "id": "cus_00009",
+      "code": "CUS-00009",
+      "nameAr": "مدارس المستقبل الأهلية",
+      "creditTermsDays": 30
+    },
+    {
+      "id": "cus_00010",
+      "code": "CUS-00010",
+      "nameAr": "شركة الدرعية للاستثمار",
+      "creditTermsDays": 0
+    },
+    {
+      "id": "cus_00011",
+      "code": "CUS-00011",
+      "nameAr": "مؤسسة السحاب للنقليات",
+      "creditTermsDays": 0
+    }
+  ],
+  "contracts": [
+    {
+      "id": "ctr_00001",
+      "code": "CTR-00001",
+      "status": "ACTIVE",
+      "contractType": "EPC",
+      "totalValue": 1250000,
+      "retentionPct": 10,
+      "advancePct": 20,
+      "startDate": "2026-01-10T00:00:00.000Z",
+      "endDate": "2026-12-31T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00001",
+        "code": "CUS-00001",
+        "nameAr": "مصنع الرياض للصناعات"
+      },
+      "milestoneCount": 4
+    },
+    {
+      "id": "ctr_00002",
+      "code": "CTR-00002",
+      "status": "ACTIVE",
+      "contractType": "EPC",
+      "totalValue": 4500000,
+      "retentionPct": 5,
+      "advancePct": 30,
+      "startDate": "2026-02-01T00:00:00.000Z",
+      "endDate": "2027-06-30T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00002",
+        "code": "CUS-00002",
+        "nameAr": "شركة النخيل للمقاولات"
+      },
+      "milestoneCount": 6
+    },
+    {
+      "id": "ctr_00003",
+      "code": "CTR-00003",
+      "status": "ACTIVE",
+      "contractType": "PPA",
+      "totalValue": 800000,
+      "retentionPct": 0,
+      "advancePct": 0,
+      "startDate": "2026-03-01T00:00:00.000Z",
+      "endDate": "2036-02-28T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00003",
+        "code": "CUS-00003",
+        "nameAr": "مجموعة الواحة الزراعية"
+      },
+      "milestoneCount": 0
+    },
+    {
+      "id": "ctr_00004",
+      "code": "CTR-00004",
+      "status": "ACTIVE",
+      "contractType": "OM",
+      "totalValue": 120000,
+      "retentionPct": 5,
+      "advancePct": 10,
+      "startDate": "2026-01-15T00:00:00.000Z",
+      "endDate": "2027-01-14T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00004",
+        "code": "CUS-00004",
+        "nameAr": "مؤسسة الفرسان للتجارة"
+      },
+      "milestoneCount": 2
+    },
+    {
+      "id": "ctr_00005",
+      "code": "CTR-00005",
+      "status": "ACTIVE",
+      "contractType": "EPC",
+      "totalValue": 3200000,
+      "retentionPct": 10,
+      "advancePct": 25,
+      "startDate": "2026-02-20T00:00:00.000Z",
+      "endDate": "2027-03-31T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00005",
+        "code": "CUS-00005",
+        "nameAr": "شركة البحر الأحمر للتطوير العقاري"
+      },
+      "milestoneCount": 5
+    },
+    {
+      "id": "ctr_00006",
+      "code": "CTR-00006",
+      "status": "ACTIVE",
+      "contractType": "LEASE",
+      "totalValue": 360000,
+      "retentionPct": 0,
+      "advancePct": 0,
+      "startDate": "2026-04-01T00:00:00.000Z",
+      "endDate": "2029-03-31T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00006",
+        "code": "CUS-00006",
+        "nameAr": "مصنع الشرقية للبلاستيك"
+      },
+      "milestoneCount": 1
+    },
+    {
+      "id": "ctr_00007",
+      "code": "CTR-00007",
+      "status": "DRAFT",
+      "contractType": "EPC",
+      "totalValue": 950000,
+      "retentionPct": 5,
+      "advancePct": 15,
+      "startDate": null,
+      "endDate": null,
+      "customer": {
+        "id": "cus_00007",
+        "code": "CUS-00007",
+        "nameAr": "مستشفى الأمل التخصصي"
+      },
+      "milestoneCount": 3
+    },
+    {
+      "id": "ctr_00008",
+      "code": "CTR-00008",
+      "status": "ACTIVE",
+      "contractType": "EPC",
+      "totalValue": 2150000,
+      "retentionPct": 12.5,
+      "advancePct": 20,
+      "startDate": "2026-03-10T00:00:00.000Z",
+      "endDate": "2027-02-28T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00008",
+        "code": "CUS-00008",
+        "nameAr": "شركة الجزيرة للأعلاف"
+      },
+      "milestoneCount": 4
+    },
+    {
+      "id": "ctr_00009",
+      "code": "CTR-00009",
+      "status": "SUSPENDED",
+      "contractType": "OM",
+      "totalValue": 240000,
+      "retentionPct": 10,
+      "advancePct": 10,
+      "startDate": "2025-11-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00009",
+        "code": "CUS-00009",
+        "nameAr": "مدارس المستقبل الأهلية"
+      },
+      "milestoneCount": 2
+    },
+    {
+      "id": "ctr_00010",
+      "code": "CTR-00010",
+      "status": "CLOSED",
+      "contractType": "EPC",
+      "totalValue": 1800000,
+      "retentionPct": 10,
+      "advancePct": 30,
+      "startDate": "2024-06-01T00:00:00.000Z",
+      "endDate": "2025-12-31T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00001",
+        "code": "CUS-00001",
+        "nameAr": "مصنع الرياض للصناعات"
+      },
+      "milestoneCount": 6
+    },
+    {
+      "id": "ctr_00011",
+      "code": "CTR-00011",
+      "status": "ACTIVE",
+      "contractType": "PPA",
+      "totalValue": 2700000,
+      "retentionPct": 5,
+      "advancePct": 0,
+      "startDate": "2026-05-01T00:00:00.000Z",
+      "endDate": "2041-04-30T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00002",
+        "code": "CUS-00002",
+        "nameAr": "شركة النخيل للمقاولات"
+      },
+      "milestoneCount": 0
+    },
+    {
+      "id": "ctr_00012",
+      "code": "CTR-00012",
+      "status": "ACTIVE",
+      "contractType": "EPC",
+      "totalValue": 1600000,
+      "retentionPct": 5,
+      "advancePct": 20,
+      "startDate": "2026-04-15T00:00:00.000Z",
+      "endDate": "2027-02-15T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00010",
+        "code": "CUS-00010",
+        "nameAr": "شركة الدرعية للاستثمار"
+      },
+      "milestoneCount": 3
+    },
+    {
+      "id": "ctr_00013",
+      "code": "CTR-00013",
+      "status": "ACTIVE",
+      "contractType": "EPC",
+      "totalValue": 640000,
+      "retentionPct": 10,
+      "advancePct": 25,
+      "startDate": "2026-05-20T00:00:00.000Z",
+      "endDate": "2026-12-31T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00011",
+        "code": "CUS-00011",
+        "nameAr": "مؤسسة السحاب للنقليات"
+      },
+      "milestoneCount": 4
+    },
+    {
+      "id": "ctr_00014",
+      "code": "CTR-00014",
+      "status": "CANCELLED",
+      "contractType": "EPC",
+      "totalValue": 500000,
+      "retentionPct": 5,
+      "advancePct": 15,
+      "startDate": null,
+      "endDate": null,
+      "customer": {
+        "id": "cus_00004",
+        "code": "CUS-00004",
+        "nameAr": "مؤسسة الفرسان للتجارة"
+      },
+      "milestoneCount": 3
+    },
+    {
+      "id": "ctr_00015",
+      "code": "CTR-00015",
+      "status": "ACTIVE",
+      "contractType": "OM",
+      "totalValue": 150000,
+      "retentionPct": 0,
+      "advancePct": 5,
+      "startDate": "2026-06-01T00:00:00.000Z",
+      "endDate": "2027-05-31T00:00:00.000Z",
+      "customer": {
+        "id": "cus_00005",
+        "code": "CUS-00005",
+        "nameAr": "شركة البحر الأحمر للتطوير العقاري"
+      },
+      "milestoneCount": 1
+    }
+  ],
+  "purchaseOrders": [
+    {
+      "id": "po_00017",
+      "code": "PO-00017",
+      "status": "SENT",
+      "createdAt": "2026-07-20T08:15:00.000Z",
+      "approvedAt": "2026-07-21T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00007",
+        "code": "VEN-00007",
+        "nameAr": "شركة الصحراء للتوريدات"
+      },
+      "project": null,
+      "lines": [
+        {
+          "itemId": "itm_trm_lug",
+          "sku": "TRM-LUG",
+          "nameAr": "وصلة طرفية نحاسية",
+          "uom": "pcs",
+          "qty": 200
+        }
+      ],
+      "goodsReceipts": []
+    },
+    {
+      "id": "po_00016",
+      "code": "PO-00016",
+      "status": "APPROVED",
+      "createdAt": "2026-07-06T08:15:00.000Z",
+      "approvedAt": "2026-07-07T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00007",
+        "code": "VEN-00007",
+        "nameAr": "شركة الصحراء للتوريدات"
+      },
+      "project": {
+        "id": "prj_00011",
+        "code": "PRJ-00011"
+      },
+      "lines": [
+        {
+          "itemId": "itm_bat_10k",
+          "sku": "BAT-10K",
+          "nameAr": "بطارية ليثيوم 10 كيلوواط ساعة",
+          "uom": "unit",
+          "qty": 4
+        },
+        {
+          "itemId": "itm_cab_ac10",
+          "sku": "CAB-AC10",
+          "nameAr": "كابل AC 10مم",
+          "uom": "m",
+          "qty": 120
+        }
+      ],
+      "goodsReceipts": []
+    },
+    {
+      "id": "po_00018",
+      "code": "PO-00018",
+      "status": "CANCELLED",
+      "createdAt": "2026-06-15T08:15:00.000Z",
+      "approvedAt": null,
+      "vendor": {
+        "id": "ven_00007",
+        "code": "VEN-00007",
+        "nameAr": "شركة الصحراء للتوريدات"
+      },
+      "project": null,
+      "lines": [
+        {
+          "itemId": "itm_trm_lug",
+          "sku": "TRM-LUG",
+          "nameAr": "وصلة طرفية نحاسية",
+          "uom": "pcs",
+          "qty": 100
+        }
+      ],
+      "goodsReceipts": []
+    },
+    {
+      "id": "po_00015",
+      "code": "PO-00015",
+      "status": "RECEIVED",
+      "createdAt": "2026-06-08T08:15:00.000Z",
+      "approvedAt": "2026-06-09T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00006",
+        "code": "VEN-00006",
+        "nameAr": "مؤسسة الأفق للتجهيزات الكهربائية"
+      },
+      "project": {
+        "id": "prj_00011",
+        "code": "PRJ-00011"
+      },
+      "lines": [
+        {
+          "itemId": "itm_gnd_rod",
+          "sku": "GND-ROD",
+          "nameAr": "قضيب تأريض",
+          "uom": "pcs",
+          "qty": 60
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00016",
+          "code": "GRN-00016",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-06-06T10:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00014",
+      "code": "PO-00014",
+      "status": "RECEIVED",
+      "createdAt": "2026-06-01T08:15:00.000Z",
+      "approvedAt": "2026-06-02T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00006",
+        "code": "VEN-00006",
+        "nameAr": "مؤسسة الأفق للتجهيزات الكهربائية"
+      },
+      "project": {
+        "id": "prj_00008",
+        "code": "PRJ-00008"
+      },
+      "lines": [
+        {
+          "itemId": "itm_bos_kit",
+          "sku": "BOS-KIT",
+          "nameAr": "طقم مكونات مساعدة",
+          "uom": "set",
+          "qty": 12
+        },
+        {
+          "itemId": "itm_brk_dc",
+          "sku": "BRK-DC",
+          "nameAr": "قاطع تيار مستمر",
+          "uom": "unit",
+          "qty": 10
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00015",
+          "code": "GRN-00015",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-06-12T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00012",
+      "code": "PO-00012",
+      "status": "RECEIVED",
+      "createdAt": "2026-05-11T08:15:00.000Z",
+      "approvedAt": null,
+      "vendor": {
+        "id": "ven_00005",
+        "code": "VEN-00005",
+        "nameAr": "شركة الواحة للبطاريات"
+      },
+      "project": {
+        "id": "prj_00008",
+        "code": "PRJ-00008"
+      },
+      "lines": [
+        {
+          "itemId": "itm_bat_10k",
+          "sku": "BAT-10K",
+          "nameAr": "بطارية ليثيوم 10 كيلوواط ساعة",
+          "uom": "unit",
+          "qty": 8
+        },
+        {
+          "itemId": "itm_brk_dc",
+          "sku": "BRK-DC",
+          "nameAr": "قاطع تيار مستمر",
+          "uom": "unit",
+          "qty": 25
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00013",
+          "code": "GRN-00013",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-05-25T12:15:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00011",
+      "code": "PO-00011",
+      "status": "CANCELLED",
+      "createdAt": "2026-05-02T08:15:00.000Z",
+      "approvedAt": "2026-05-03T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00004",
+        "code": "VEN-00004",
+        "nameAr": "مصنع الجزيرة للهياكل المعدنية"
+      },
+      "project": null,
+      "lines": [
+        {
+          "itemId": "itm_str_roof",
+          "sku": "STR-ROOF",
+          "nameAr": "هيكل تثبيت سطحي",
+          "uom": "set",
+          "qty": 100
+        },
+        {
+          "itemId": "itm_trm_lug",
+          "sku": "TRM-LUG",
+          "nameAr": "وصلة طرفية نحاسية",
+          "uom": "pcs",
+          "qty": 100
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00012",
+          "code": "GRN-00012",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-05-08T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00009",
+      "code": "PO-00009",
+      "status": "RECEIVED",
+      "createdAt": "2026-04-14T08:15:00.000Z",
+      "approvedAt": "2026-04-15T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00003",
+        "code": "VEN-00003",
+        "nameAr": "شركة الطاقة المتقدمة للعواكس"
+      },
+      "project": {
+        "id": "prj_00002",
+        "code": "PRJ-00002"
+      },
+      "lines": [
+        {
+          "itemId": "itm_inv_50k",
+          "sku": "INV-50K",
+          "nameAr": "عاكس 50 كيلوواط",
+          "uom": "unit",
+          "qty": 4
+        },
+        {
+          "itemId": "itm_mtr_net",
+          "sku": "MTR-NET",
+          "nameAr": "عداد ثنائي الاتجاه",
+          "uom": "unit",
+          "qty": 5
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00010",
+          "code": "GRN-00010",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-05-25T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00004",
+      "code": "PO-00004",
+      "status": "RECEIVED",
+      "createdAt": "2026-04-02T08:15:00.000Z",
+      "approvedAt": "2026-04-03T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00001",
+        "code": "VEN-00001",
+        "nameAr": "شركة الخليج للألواح الشمسية"
+      },
+      "project": {
+        "id": "prj_00002",
+        "code": "PRJ-00002"
+      },
+      "lines": [
+        {
+          "itemId": "itm_mnt_rail",
+          "sku": "MNT-RAIL",
+          "nameAr": "قضيب تثبيت",
+          "uom": "m",
+          "qty": 250.5
+        },
+        {
+          "itemId": "itm_bos_kit",
+          "sku": "BOS-KIT",
+          "nameAr": "طقم مكونات مساعدة",
+          "uom": "set",
+          "qty": 15
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00005",
+          "code": "GRN-00005",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-04-24T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00010",
+      "code": "PO-00010",
+      "status": "RECEIVED",
+      "createdAt": "2026-03-16T08:15:00.000Z",
+      "approvedAt": "2026-03-17T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00004",
+        "code": "VEN-00004",
+        "nameAr": "مصنع الجزيرة للهياكل المعدنية"
+      },
+      "project": {
+        "id": "prj_00005",
+        "code": "PRJ-00005"
+      },
+      "lines": [
+        {
+          "itemId": "itm_str_roof",
+          "sku": "STR-ROOF",
+          "nameAr": "هيكل تثبيت سطحي",
+          "uom": "set",
+          "qty": 30
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00011",
+          "code": "GRN-00011",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-03-22T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00008",
+      "code": "PO-00008",
+      "status": "RECEIVED",
+      "createdAt": "2026-03-09T08:15:00.000Z",
+      "approvedAt": "2026-03-10T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00003",
+        "code": "VEN-00003",
+        "nameAr": "شركة الطاقة المتقدمة للعواكس"
+      },
+      "project": {
+        "id": "prj_00005",
+        "code": "PRJ-00005"
+      },
+      "lines": [
+        {
+          "itemId": "itm_inv_50k",
+          "sku": "INV-50K",
+          "nameAr": "عاكس 50 كيلوواط",
+          "uom": "unit",
+          "qty": 2
+        },
+        {
+          "itemId": "itm_spd_ac",
+          "sku": "SPD-AC",
+          "nameAr": "واقي صواعق للتيار المتردد",
+          "uom": "unit",
+          "qty": 6
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00009",
+          "code": "GRN-00009",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-04-10T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00006",
+      "code": "PO-00006",
+      "status": "RECEIVED",
+      "createdAt": "2026-03-03T08:15:00.000Z",
+      "approvedAt": "2026-03-04T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00002",
+        "code": "VEN-00002",
+        "nameAr": "مؤسسة النور للكابلات"
+      },
+      "project": {
+        "id": "prj_00005",
+        "code": "PRJ-00005"
+      },
+      "lines": [
+        {
+          "itemId": "itm_cab_dc6",
+          "sku": "CAB-DC6",
+          "nameAr": "كابل DC 6مم",
+          "uom": "m",
+          "qty": 700
+        },
+        {
+          "itemId": "itm_cab_ac10",
+          "sku": "CAB-AC10",
+          "nameAr": "كابل AC 10مم",
+          "uom": "m",
+          "qty": 250
+        },
+        {
+          "itemId": "itm_brk_dc",
+          "sku": "BRK-DC",
+          "nameAr": "قاطع تيار مستمر",
+          "uom": "unit",
+          "qty": 40
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00007",
+          "code": "GRN-00007",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-03-19T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00013",
+      "code": "PO-00013",
+      "status": "CLOSED",
+      "createdAt": "2026-02-23T08:15:00.000Z",
+      "approvedAt": "2026-02-24T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00005",
+        "code": "VEN-00005",
+        "nameAr": "شركة الواحة للبطاريات"
+      },
+      "project": null,
+      "lines": [],
+      "goodsReceipts": [
+        {
+          "id": "grn_00014",
+          "code": "GRN-00014",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-03-16T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00003",
+      "code": "PO-00003",
+      "status": "CLOSED",
+      "createdAt": "2026-02-10T08:15:00.000Z",
+      "approvedAt": "2026-02-11T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00001",
+        "code": "VEN-00001",
+        "nameAr": "شركة الخليج للألواح الشمسية"
+      },
+      "project": {
+        "id": "prj_00005",
+        "code": "PRJ-00005"
+      },
+      "lines": [
+        {
+          "itemId": "itm_mod_550",
+          "sku": "MOD-550",
+          "nameAr": "لوح شمسي 550 واط",
+          "uom": "unit",
+          "qty": 100
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00004",
+          "code": "GRN-00004",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-02-20T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00007",
+      "code": "PO-00007",
+      "status": "CLOSED",
+      "createdAt": "2026-02-02T08:15:00.000Z",
+      "approvedAt": "2026-02-03T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00003",
+        "code": "VEN-00003",
+        "nameAr": "شركة الطاقة المتقدمة للعواكس"
+      },
+      "project": {
+        "id": "prj_00001",
+        "code": "PRJ-00001"
+      },
+      "lines": [
+        {
+          "itemId": "itm_inv_50k",
+          "sku": "INV-50K",
+          "nameAr": "عاكس 50 كيلوواط",
+          "uom": "unit",
+          "qty": 3
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00008",
+          "code": "GRN-00008",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-02-28T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00002",
+      "code": "PO-00002",
+      "status": "RECEIVED",
+      "createdAt": "2026-01-20T08:15:00.000Z",
+      "approvedAt": "2026-01-21T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00001",
+        "code": "VEN-00001",
+        "nameAr": "شركة الخليج للألواح الشمسية"
+      },
+      "project": {
+        "id": "prj_00001",
+        "code": "PRJ-00001"
+      },
+      "lines": [
+        {
+          "itemId": "itm_mod_550",
+          "sku": "MOD-550",
+          "nameAr": "لوح شمسي 550 واط",
+          "uom": "unit",
+          "qty": 150
+        },
+        {
+          "itemId": "itm_str_roof",
+          "sku": "STR-ROOF",
+          "nameAr": "هيكل تثبيت سطحي",
+          "uom": "set",
+          "qty": 20
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00003",
+          "code": "GRN-00003",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-02-08T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00005",
+      "code": "PO-00005",
+      "status": "CLOSED",
+      "createdAt": "2026-01-12T08:15:00.000Z",
+      "approvedAt": "2026-01-13T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00002",
+        "code": "VEN-00002",
+        "nameAr": "مؤسسة النور للكابلات"
+      },
+      "project": {
+        "id": "prj_00001",
+        "code": "PRJ-00001"
+      },
+      "lines": [
+        {
+          "itemId": "itm_cab_dc6",
+          "sku": "CAB-DC6",
+          "nameAr": "كابل DC 6مم",
+          "uom": "m",
+          "qty": 500
+        },
+        {
+          "itemId": "itm_cab_ac10",
+          "sku": "CAB-AC10",
+          "nameAr": "كابل AC 10مم",
+          "uom": "m",
+          "qty": 300
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00006",
+          "code": "GRN-00006",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-01-20T15:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "po_00001",
+      "code": "PO-00001",
+      "status": "RECEIVED",
+      "createdAt": "2026-01-05T08:15:00.000Z",
+      "approvedAt": "2026-01-06T10:00:00.000Z",
+      "vendor": {
+        "id": "ven_00001",
+        "code": "VEN-00001",
+        "nameAr": "شركة الخليج للألواح الشمسية"
+      },
+      "project": {
+        "id": "prj_00001",
+        "code": "PRJ-00001"
+      },
+      "lines": [
+        {
+          "itemId": "itm_mod_550",
+          "sku": "MOD-550",
+          "nameAr": "لوح شمسي 550 واط",
+          "uom": "unit",
+          "qty": 200
+        },
+        {
+          "itemId": "itm_mnt_rail",
+          "sku": "MNT-RAIL",
+          "nameAr": "قضيب تثبيت",
+          "uom": "m",
+          "qty": 400
+        }
+      ],
+      "goodsReceipts": [
+        {
+          "id": "grn_00001",
+          "code": "GRN-00001",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-01-26T15:00:00.000Z"
+        },
+        {
+          "id": "grn_00002",
+          "code": "GRN-00002",
+          "status": "ACCEPTED",
+          "receivedAt": "2026-01-18T15:00:00.000Z"
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "prj_00001",
+      "code": "PRJ-00001",
+      "nameAr": "محطة مصنع الرياض الشمسية",
+      "stage": "EXECUTION",
+      "capacityKwp": 500,
+      "plannedEnd": "2026-12-15T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00001",
+        "customer": {
+          "nameAr": "مصنع الرياض للصناعات"
+        }
+      }
+    },
+    {
+      "id": "prj_00002",
+      "code": "PRJ-00002",
+      "nameAr": "مجمع الورود السكني",
+      "stage": "PROCUREMENT",
+      "capacityKwp": 1250.5,
+      "plannedEnd": "2027-03-30T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00002",
+        "customer": {
+          "nameAr": "شركة النخيل للمقاولات"
+        }
+      }
+    },
+    {
+      "id": "prj_00003",
+      "code": "PRJ-00003",
+      "nameAr": "مزرعة الواحة الذكية",
+      "stage": "PLANNING",
+      "capacityKwp": 320,
+      "plannedEnd": "2027-06-30T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00003",
+        "customer": {
+          "nameAr": "مجموعة الواحة الزراعية"
+        }
+      }
+    },
+    {
+      "id": "prj_00004",
+      "code": "PRJ-00004",
+      "nameAr": "مستودعات الفرسان اللوجستية",
+      "stage": "COMMISSIONING",
+      "capacityKwp": 150,
+      "plannedEnd": "2026-11-10T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00004",
+        "customer": {
+          "nameAr": "مؤسسة الفرسان للتجارة"
+        }
+      }
+    },
+    {
+      "id": "prj_00005",
+      "code": "PRJ-00005",
+      "nameAr": "برج البحر الأحمر الإداري",
+      "stage": "EXECUTION",
+      "capacityKwp": 800,
+      "plannedEnd": "2027-01-20T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00005",
+        "customer": {
+          "nameAr": "شركة البحر الأحمر للتطوير العقاري"
+        }
+      }
+    },
+    {
+      "id": "prj_00006",
+      "code": "PRJ-00006",
+      "nameAr": "سقف مصنع الشرقية",
+      "stage": "PROCUREMENT",
+      "capacityKwp": 62.5,
+      "plannedEnd": "2026-12-01T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00006",
+        "customer": {
+          "nameAr": "مصنع الشرقية للبلاستيك"
+        }
+      }
+    },
+    {
+      "id": "prj_00007",
+      "code": "PRJ-00007",
+      "nameAr": "محطة طاقة مستشفى الأمل",
+      "stage": "PLANNING",
+      "capacityKwp": null,
+      "plannedEnd": "2027-09-01T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00007",
+        "customer": {
+          "nameAr": "مستشفى الأمل التخصصي"
+        }
+      }
+    },
+    {
+      "id": "prj_00008",
+      "code": "PRJ-00008",
+      "nameAr": "مزارع الأعلاف الشمالية",
+      "stage": "EXECUTION",
+      "capacityKwp": 980,
+      "plannedEnd": null,
+      "contract": {
+        "code": "CTR-00008",
+        "customer": {
+          "nameAr": "شركة الجزيرة للأعلاف"
+        }
+      }
+    },
+    {
+      "id": "prj_00009",
+      "code": "PRJ-00009",
+      "nameAr": "الحرم الشمسي لمدارس المستقبل",
+      "stage": "COMMISSIONING",
+      "capacityKwp": 120,
+      "plannedEnd": "2026-10-30T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00009",
+        "customer": {
+          "nameAr": "مدارس المستقبل الأهلية"
+        }
+      }
+    },
+    {
+      "id": "prj_00010",
+      "code": "PRJ-00010",
+      "nameAr": "محطة الدرعية الشمسية",
+      "stage": "PROCUREMENT",
+      "capacityKwp": 640,
+      "plannedEnd": "2027-02-15T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00012",
+        "customer": {
+          "nameAr": "شركة الدرعية للاستثمار"
+        }
+      }
+    },
+    {
+      "id": "prj_00011",
+      "code": "PRJ-00011",
+      "nameAr": "مستودع السحاب للنقليات",
+      "stage": "EXECUTION",
+      "capacityKwp": 430,
+      "plannedEnd": "2026-12-31T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00013",
+        "customer": {
+          "nameAr": "مؤسسة السحاب للنقليات"
+        }
+      }
+    },
+    {
+      "id": "prj_00012",
+      "code": "PRJ-00012",
+      "nameAr": "محطة الدمام",
+      "stage": "PLANNING",
+      "capacityKwp": 2000,
+      "plannedEnd": "2028-01-15T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00011",
+        "customer": {
+          "nameAr": "شركة النخيل للمقاولات"
+        }
+      }
+    },
+    {
+      "id": "prj_00013",
+      "code": "PRJ-00013",
+      "nameAr": "محطة الرياض القديمة",
+      "stage": "CLOSED",
+      "capacityKwp": 300,
+      "plannedEnd": "2025-12-31T00:00:00.000Z",
+      "contract": {
+        "code": "CTR-00010",
+        "customer": {
+          "nameAr": "مصنع الرياض للصناعات"
+        }
+      }
+    }
+  ]
+}

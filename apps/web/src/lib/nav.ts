@@ -73,6 +73,10 @@ export const NAV_SECTIONS: NavSection[] = [
       // administer nothing.
       { href: '/inbox', key: 'nav.inbox', icon: 'square-check' },
       { href: '/approvals', key: 'nav.approvals', icon: 'stamp' },
+      // The Madar copilot (T-08): a separate Next.js app mounted at
+      // `/copilot`, outside this app's own routes. No `perm` — every user
+      // may open the assistant, same reasoning as inbox/approvals above.
+      { href: '/copilot', key: 'nav.madar', icon: 'message-circle' },
       { href: '/admin', key: 'nav.admin', icon: 'shield-users', perm: 'admin.user.manage' },
       // M4's two organisation-structure screens. They are separate routes, not
       // tabs of /admin, because their permissions are separate: an

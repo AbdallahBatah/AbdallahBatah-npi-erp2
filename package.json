@@ -11,6 +11,7 @@
     "db:generate": "npm run generate -w @npi/db",
     "db:migrate": "npm run migrate -w @npi/db",
     "db:seed": "npm run seed -w @npi/db",
+    "db:seed:madar-scratch": "npm run seed:madar-scratch -w @npi/db",
     "db:studio": "npm run studio -w @npi/db",
     "dev:api": "npm run dev -w @npi/api",
     "dev:web": "npm run dev -w @npi/web",
@@ -25,7 +26,11 @@
     "uat:crm": "node scripts/crm-phase-1-acceptance.mjs",
     "uat:crm:ui": "node scripts/crm-phase-1-ui-acceptance.mjs",
     "db:deploy": "npm run migrate:deploy -w @npi/db",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "copilot:dev": "node scripts/copilot-dev.mjs",
+    "copilot:build": "npm run build -w @npi/copilot",
+    "copilot:migrate": "npm run migrate -w @npi/copilot",
+    "copilot:gen-types": "npm run gen-types -w @npi/copilot --"
   },
   "engines": {
     "node": ">=20"
