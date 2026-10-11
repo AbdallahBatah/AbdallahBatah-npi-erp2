@@ -6,7 +6,7 @@
 //
 // This module must never import from src/llm, src/privacy or src/npi — a
 // model is never involved in intake (enforced by a source guard test).
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import convertHeic from 'heic-convert';
@@ -120,7 +120,9 @@ export function createFsStorage(root: string): DocumentStorage {
       const segments = assertSafeRelPath(relPath);
       const fullPath = path.join(root, ...segments);
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      const tmpPath = `${fullPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      // An unguessable temp name (not Math.random): nothing else on the host
+      // can predict and pre-create it next to the documents.
+      const tmpPath = `${fullPath}.tmp-${process.pid}-${randomUUID()}`;
       try {
         await fs.writeFile(tmpPath, bytes);
         await fs.rename(tmpPath, fullPath);

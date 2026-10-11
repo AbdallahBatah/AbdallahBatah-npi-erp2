@@ -22,6 +22,12 @@ import { Message } from './Message';
 import { WaitingIndicator } from './WaitingIndicator';
 
 const LOGIN_PATH = '/copilot/login';
+/** Id of a message that exists only in this browser (notices, the attach
+ *  echo): a UUID rather than Math.random, so a local id can never collide
+ *  with, or be mistaken for, a server-issued one. */
+function localMessageId(): string {
+  return `local-${crypto.randomUUID()}`;
+}
 // The question the assistant can answer without a document (suggest.3) comes
 // first, ahead of the two document-intake suggestions.
 const SUGGESTION_KEYS = ['chat.suggest.3', 'chat.suggest.1', 'chat.suggest.2'] as const;
@@ -188,7 +194,7 @@ export function Chat({
     setMessages((prev) => [
       ...prev,
       {
-        id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        id: localMessageId(),
         role: 'assistant',
         textAr,
         badges: [],
@@ -219,7 +225,7 @@ export function Chat({
     setMessages((prev) => [
       ...prev,
       {
-        id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        id: localMessageId(),
         role: 'user',
         textAr: t('chat.attached', { name: document.fileName }),
         badges: [],
