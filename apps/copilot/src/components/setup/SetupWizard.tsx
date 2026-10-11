@@ -165,20 +165,22 @@ interface FailureSinks {
   setPhase: (phase: Phase) => void;
 }
 
-/** The sentence for a failed call. `specific` lets a permission or NPI failure
- *  speak with its own words; every other failure (and every failure of
- *  `handleGoto`/`handleManual`) is the generic one. */
-function failureMessageAr(failure: SetupFailure, specific: boolean): string {
-  return specific && (failure.kind === 'forbidden' || failure.kind === 'npi') ? failure.messageAr : t('state.error');
+/** How a failed call is worded: `specific` lets a permission or NPI failure
+ *  speak with its own words; `generic` (every failure of `handleGoto`/
+ *  `handleManual`) is the one generic sentence. */
+type FailureWording = 'specific' | 'generic';
+
+function failureMessageAr(failure: SetupFailure, wording: FailureWording): string {
+  return wording === 'specific' && (failure.kind === 'forbidden' || failure.kind === 'npi') ? failure.messageAr : t('state.error');
 }
 
 /** A lost session goes to the login page; anything else is the error phase. */
-function routeFailure(failure: SetupFailure, specific: boolean, sinks: FailureSinks): void {
+function routeFailure(failure: SetupFailure, wording: FailureWording, sinks: FailureSinks): void {
   if (failure.kind === 'unauthenticated') {
     window.location.assign(LOGIN_PATH);
     return;
   }
-  sinks.setErrorMessage(failureMessageAr(failure, specific));
+  sinks.setErrorMessage(failureMessageAr(failure, wording));
   sinks.setPhase('error');
 }
 
@@ -191,7 +193,7 @@ function failGenerically(sinks: FailureSinks, isCurrent: () => boolean): void {
 
 interface SettleOptions<T> {
   sinks: FailureSinks;
-  specific: boolean;
+  wording: FailureWording;
   onOk: (body: T) => void;
   /** Handles the 422 «invalid» answer inline; without it that failure is an error like any other. */
   onInvalid?: (failure: InvalidFailure) => void;
@@ -212,7 +214,7 @@ async function settle<T extends object>(call: Promise<SetupApiResult<T>>, option
     options.onInvalid(result);
     return;
   }
-  routeFailure(result, options.specific, options.sinks);
+  routeFailure(result, options.wording, options.sinks);
 }
 
 /** Step 7 is a lazy fetch: only while the wizard stands on it with no diff yet. */
@@ -274,7 +276,7 @@ function useSetupWizard(initialData: SetupStateView | undefined, initialPreview:
     setPhase('loading');
     await settle(loadSetup(), {
       sinks: { setErrorMessage, setPhase },
-      specific: true,
+      wording: 'specific',
       onOk: (body) => applyView(body.view),
       isCurrent: () => seq === loadSeq.current,
     });
@@ -296,7 +298,7 @@ function useSetupWizard(initialData: SetupStateView | undefined, initialPreview:
     setPhase('previewing');
     settle(previewSetup(), {
       sinks: effectSinks,
-      specific: true,
+      wording: 'specific',
       onOk: (body) => {
         setPreview(body.preview);
         setPhase('ready');
@@ -314,12 +316,12 @@ function useSetupWizard(initialData: SetupStateView | undefined, initialPreview:
   async function handleGoto(step: SetupStepNumber) {
     setPhase('ready');
     setFreeText('');
-    await settle(gotoStep(step), { sinks, specific: false, onOk: (body) => applyView(body.view) });
+    await settle(gotoStep(step), { sinks, wording: 'generic', onOk: (body) => applyView(body.view) });
   }
 
   async function handleManual() {
     setPhase('parsing');
-    await settle(chooseManual(), { sinks, specific: false, onOk: (body) => applyView(body.view) });
+    await settle(chooseManual(), { sinks, wording: 'generic', onOk: (body) => applyView(body.view) });
   }
 
   function showInvalid(failure: InvalidFailure) {
@@ -347,7 +349,7 @@ function useSetupWizard(initialData: SetupStateView | undefined, initialPreview:
     setInvalid(null);
     await settle(send(view.state.step), {
       sinks,
-      specific: true,
+      wording: 'specific',
       onInvalid: showInvalid,
       onOk: (body) => applyOutcome(body.outcome),
     });
@@ -369,7 +371,7 @@ function useSetupWizard(initialData: SetupStateView | undefined, initialPreview:
     setPhase('applying');
     await settle(applySetup(), {
       sinks,
-      specific: true,
+      wording: 'specific',
       onOk: (body) => {
         setApplyResult(body.apply);
         setPhase('ready');
@@ -412,7 +414,7 @@ function Step7Stage({
   onConfirm,
   onManual,
   onApprove,
-}: {
+}: Readonly<{
   view: SetupStateView;
   phase: Phase;
   preview: SetupPreviewResult | null;
@@ -422,7 +424,7 @@ function Step7Stage({
   onConfirm: () => void;
   onManual: () => void;
   onApprove: () => void;
-}) {
+}>) {
   let content: ReactNode;
   if (view.summary && !confirmed) {
     content = (
@@ -476,12 +478,12 @@ function StepEditor({
   view,
   draft,
   setDraft,
-}: {
+}: Readonly<{
   step: SetupStepNumber;
   view: SetupStateView;
   draft: Draft;
   setDraft: (draft: Draft) => void;
-}) {
+}>) {
   return (
     <>
       {view.discoveryNoteAr ? (
@@ -542,13 +544,13 @@ function canGoBack(view: SetupStateView): boolean {
 export function SetupWizard({
   initialData,
   initialPreview = null,
-}: {
+}: Readonly<{
   initialData?: SetupStateView;
   /** Step 7's diff, when the page already ran the dry run on the server
    *  (T-39b): the card is then in the first HTML and the step-7 effect
    *  has nothing to fetch. Null means «fetch it as before». */
   initialPreview?: SetupPreviewResult | null;
-} = {}) {
+}> = {}) {
   const wizard = useSetupWizard(initialData, initialPreview);
   const { phase, view } = wizard;
 

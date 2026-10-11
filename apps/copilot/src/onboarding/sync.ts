@@ -459,15 +459,28 @@ function endReasonOf(user: NpiUserRow | undefined, wanted: string | undefined, p
   return wanted !== undefined && wanted !== positionId ? 'moved' : null;
 }
 
-function planAssignments(read: NpiRead, held: Held, refFor: Map<string, string>, titleOf: Map<string, string>, holdersBefore: Map<string, number>) {
-  const nameOf = (id: string): string | null => read.users.get(id)?.nameAr ?? null;
-  const wantedOf = new Map<string, string>(); // npiUserId → the position (or ref) NPI puts them in
+/** npiUserId → the position (or pending ref) NPI puts them in. */
+function wantedPositions(read: NpiRead, refFor: Map<string, string>): Map<string, string> {
+  const wantedOf = new Map<string, string>();
   for (const e of read.expected) for (const userId of e.userIds) wantedOf.set(userId, refFor.get(pairKey(e.roleKey, e.departmentId))!);
+  return wantedOf;
+}
 
+interface EndedPlan {
+  endIds: string[];
+  entries: SyncDiff['endedAssignments'];
+  /** `${positionId}\u0000${userId}` rows already open and right. */
+  satisfied: Set<string>;
+  /** Open holders per position once the ended rows are gone. */
+  stillOpen: Map<string, number>;
+}
+
+/** Which open assignments end (and why); the rest stay as they are. */
+function planEnded(read: NpiRead, held: Held, wantedOf: Map<string, string>, titleOf: Map<string, string>, holdersBefore: Map<string, number>): EndedPlan {
   const endIds: string[] = [];
   const entries: SyncDiff['endedAssignments'] = [];
   const stillOpen = new Map<string, number>(holdersBefore);
-  const satisfied = new Set<string>(); // `${positionId}\u0000${userId}` already open and right
+  const satisfied = new Set<string>();
   for (const a of held.openBefore) {
     const wanted = wantedOf.get(a.npiUserId);
     const reason = endReasonOf(read.users.get(a.npiUserId), wanted, a.positionId);
@@ -481,14 +494,24 @@ function planAssignments(read: NpiRead, held: Held, refFor: Map<string, string>,
     }
     endIds.push(a.id);
     stillOpen.set(a.positionId, (stillOpen.get(a.positionId) ?? 1) - 1);
-    if (reason !== null) entries.push({ npiUserId: a.npiUserId, nameAr: nameOf(a.npiUserId), titleAr: titleOf.get(a.positionId) ?? '', reason });
+    if (reason !== null) entries.push({ npiUserId: a.npiUserId, nameAr: nameOf(read, a.npiUserId), titleAr: titleOf.get(a.positionId) ?? '', reason });
   }
+  return { endIds, entries, satisfied, stillOpen };
+}
+
+function nameOf(read: NpiRead, npiUserId: string): string | null {
+  return read.users.get(npiUserId)?.nameAr ?? null;
+}
+
+function planAssignments(read: NpiRead, held: Held, refFor: Map<string, string>, titleOf: Map<string, string>, holdersBefore: Map<string, number>) {
+  const wantedOf = wantedPositions(read, refFor);
+  const { endIds, entries, satisfied, stillOpen } = planEnded(read, held, wantedOf, titleOf, holdersBefore);
 
   const creates: SyncPlan['createAssignments'] = [];
   for (const [userId, positionRef] of wantedOf) {
     if (satisfied.has(`${positionRef}\u0000${userId}`)) continue;
     stillOpen.set(positionRef, (stillOpen.get(positionRef) ?? 0) + 1);
-    creates.push({ positionRef, entry: { npiUserId: userId, nameAr: nameOf(userId), titleAr: titleOf.get(positionRef) ?? '' } });
+    creates.push({ positionRef, entry: { npiUserId: userId, nameAr: nameOf(read, userId), titleAr: titleOf.get(positionRef) ?? '' } });
   }
   return { endIds, entries, creates, unchanged: satisfied.size, stillOpen };
 }
@@ -537,23 +560,31 @@ interface ApplyContext {
   now: Date;
 }
 
-/** Runs inside `db.$transaction`: all of it or none of it. */
+/** Runs inside `db.$transaction`: all of it or none of it. The rows of one
+ *  batch do not depend on each other, so each batch is issued at once (the
+ *  interactive transaction still runs them on its one connection); the
+ *  batches themselves stay in order because assignments need the new
+ *  positions' ids. */
 async function applySync(tx: SyncWriteDb, plan: SyncPlan, ctx: ApplyContext): Promise<void> {
   const { orgId, now } = ctx;
   const createdId = new Map<string, string>(); // pending ref → the new position's id
-  for (const e of plan.createPositions) {
-    const created = await tx.position.create({
-      data: { npiOrgId: orgId, roleKey: e.roleKey, departmentId: e.departmentId, titleAr: e.titleAr, personaAr: e.personaAr },
-    });
-    createdId.set(pendingRef(e), created.id);
-  }
-  for (const r of plan.renamePositions) await tx.position.update({ where: { id: r.id }, data: { titleAr: r.toAr } });
+  await Promise.all(
+    plan.createPositions.map(async (e) => {
+      const created = await tx.position.create({
+        data: { npiOrgId: orgId, roleKey: e.roleKey, departmentId: e.departmentId, titleAr: e.titleAr, personaAr: e.personaAr },
+      });
+      createdId.set(pendingRef(e), created.id);
+    }),
+  );
+  await Promise.all(plan.renamePositions.map((r) => tx.position.update({ where: { id: r.id }, data: { titleAr: r.toAr } })));
   if (plan.endAssignments.ids.length > 0) {
     await tx.positionAssignment.updateMany({ where: { id: { in: plan.endAssignments.ids }, endedAt: null }, data: { endedAt: now } });
   }
-  for (const a of plan.createAssignments) {
-    await tx.positionAssignment.create({ data: { positionId: createdId.get(a.positionRef) ?? a.positionRef, npiUserId: a.entry.npiUserId } });
-  }
+  await Promise.all(
+    plan.createAssignments.map((a) =>
+      tx.positionAssignment.create({ data: { positionId: createdId.get(a.positionRef) ?? a.positionRef, npiUserId: a.entry.npiUserId } }),
+    ),
+  );
   await tx.syncRun.create({
     data: { npiOrgId: orgId, at: now, byNpiUserId: ctx.byNpiUserId, reason: ctx.reason, diffJson: plan.diff, namesJson: plan.names, skipped: null },
   });
