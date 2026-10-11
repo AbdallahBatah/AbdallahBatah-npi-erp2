@@ -15,6 +15,11 @@ on:
     branches: [main, 'feat/**', 'feature/**']
   pull_request:
   workflow_dispatch:
+    inputs:
+      sonar_branch:
+        description: 'Branch name to file the analysis under on SonarQube Cloud (default: the ref being run). Used once to give `main` its full baseline before the v0.6.0 merge.'
+        required: false
+        default: ''
 
 concurrency:
   group: sonar-${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -56,13 +61,13 @@ jobs:
       - name: API unit tests with coverage
         continue-on-error: true
         run: |
-          npm test -w @npi/api -- --ci --coverage --coverageReporters=lcov --coverageDirectory=coverage
+          npm test -w @npi/api -- --ci --coverage --coverageReporters=lcov
           sed -i 's#^SF:#SF:apps/api/#' apps/api/coverage/lcov.info
 
       - name: Copilot unit tests with coverage
         continue-on-error: true
         run: |
-          npm test -w @npi/copilot -- --ci --coverage --coverageReporters=lcov --coverageDirectory=coverage
+          npm test -w @npi/copilot -- --ci --coverage --coverageReporters=lcov
           sed -i 's#^SF:#SF:apps/copilot/#' apps/copilot/coverage/lcov.info
 
       # Pinned to the release commit (a moving tag could swap the code that
@@ -75,4 +80,4 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          args: ${{ github.event_name != 'pull_request' && format('-Dsonar.branch.name={0}', github.ref_name) || '' }}
+          args: ${{ github.event_name != 'pull_request' && format('-Dsonar.branch.name={0}', inputs.sonar_branch || github.ref_name) || '' }}
