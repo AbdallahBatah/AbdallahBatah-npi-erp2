@@ -330,52 +330,108 @@ export function applyAnswer(state: SetupState, step: SetupStep, answer: StepAnsw
     ]);
   }
 
-  let answers: Partial<SetupAnswers> = { ...state.answers };
-  let completedSteps = [...state.completedSteps];
   // Discovered answers survive an edit (the edited step becomes the
   // administrator's own); a different profile makes them meaningless, so the
   // session turns into today's manual wizard.
-  let discovery: DiscoveryMeta | undefined = state.discovery;
-  let manual = state.manual;
-
-  if (answer.step === 1) {
-    const changedProfile = answers.profileKey !== undefined && answers.profileKey !== answer.profileKey;
-    if (changedProfile) {
-      answers = { profileKey: answer.profileKey, revenueLines: answer.revenueLines };
-      completedSteps = [];
-      discovery = undefined;
-      manual = true;
-    } else {
-      answers.profileKey = answer.profileKey;
-      if (answer.revenueLines !== undefined) answers.revenueLines = answer.revenueLines;
-    }
-  } else if (answer.step === 2) {
-    answers.departments = answer.departments;
-    answers.positions = answer.positions;
-    // A free-text re-answer (parsed by the model) never carries `holders`
-    // and must not wipe a choice already made in the picker; a structured
-    // answer that *does* carry `holders` (even `[]`) replaces it outright.
-    if (answer.holders !== undefined) answers.holders = answer.holders;
-    // Holders are a convenience over positions, not a contract of their own:
-    // prune any entry whose (roleKey, departmentCode) no longer names a
-    // position in the list just answered, dropping the rest silently.
-    if (answers.holders !== undefined) {
-      const positionKeys = new Set(answer.positions.map((p) => `${p.roleKey}\u0000${p.departmentCode ?? ''}`));
-      answers.holders = answers.holders.filter((h) => positionKeys.has(`${h.roleKey}\u0000${h.departmentCode ?? ''}`));
-    }
-  } else if (answer.step === 3) {
-    answers.approvalRules = answer.approvalRules;
-  } else if (answer.step === 4) {
-    answers.acceptedDocTypeKeys = answer.acceptedDocTypeKeys;
-  } else if (answer.step === 5) {
-    answers.items = answer.items;
-  } else {
-    answers.terminology = answer.terminology;
-  }
+  const applied: AppliedAnswer =
+    answer.step === 1
+      ? applyProfileAnswer(state, answer)
+      : { answers: mergeAnswer(state.answers, answer), completedSteps: [...state.completedSteps], discovery: state.discovery, manual: state.manual };
+  const { answers } = applied;
 
   // profileKey is always set by now: either this call just set it (step 1),
   // or the step-order check above already refused the call.
-  const profileKey = answers.profileKey as ProfileKey;
+  validateAgainstPack(answers.profileKey as ProfileKey, answers, applied.discovery, loadPack);
+
+  const completedSteps = applied.completedSteps.includes(step)
+    ? applied.completedSteps
+    : [...applied.completedSteps, step].sort((a, b) => a - b);
+
+  const discovery =
+    applied.discovery === undefined
+      ? undefined
+      : { ...applied.discovery, sources: { ...applied.discovery.sources, [String(step)]: 'manual' as SetupSource } };
+
+  const next: SetupState = { step: nextOpenStep(completedSteps), answers, completedSteps };
+  if (applied.manual !== undefined) next.manual = applied.manual;
+  if (discovery !== undefined) next.discovery = discovery;
+  return next;
+}
+
+/** What one answer leaves behind, before the pack check and the completion
+ *  bookkeeping `applyAnswer` does after it. */
+interface AppliedAnswer {
+  answers: Partial<SetupAnswers>;
+  completedSteps: SetupStep[];
+  discovery: DiscoveryMeta | undefined;
+  manual: boolean | undefined;
+}
+
+/** Step 1: pick (or re-pick) the profile. A *different* profile than before
+ *  clears steps 2–6, their completion and the discovery. */
+function applyProfileAnswer(state: SetupState, answer: Extract<StepAnswer, { step: 1 }>): AppliedAnswer {
+  const changedProfile = state.answers.profileKey !== undefined && state.answers.profileKey !== answer.profileKey;
+  if (changedProfile) {
+    return {
+      answers: { profileKey: answer.profileKey, revenueLines: answer.revenueLines },
+      completedSteps: [],
+      discovery: undefined,
+      manual: true,
+    };
+  }
+  const answers: Partial<SetupAnswers> = { ...state.answers };
+  answers.profileKey = answer.profileKey;
+  if (answer.revenueLines !== undefined) answers.revenueLines = answer.revenueLines;
+  return { answers, completedSteps: [...state.completedSteps], discovery: state.discovery, manual: state.manual };
+}
+
+/** Steps 2–6: the answer laid over the answers so far. */
+function mergeAnswer(current: Partial<SetupAnswers>, answer: Exclude<StepAnswer, { step: 1 }>): Partial<SetupAnswers> {
+  const answers: Partial<SetupAnswers> = { ...current };
+  switch (answer.step) {
+    case 2:
+      answers.departments = answer.departments;
+      answers.positions = answer.positions;
+      mergeHolders(answers, answer);
+      break;
+    case 3:
+      answers.approvalRules = answer.approvalRules;
+      break;
+    case 4:
+      answers.acceptedDocTypeKeys = answer.acceptedDocTypeKeys;
+      break;
+    case 5:
+      answers.items = answer.items;
+      break;
+    case 6:
+      answers.terminology = answer.terminology;
+      break;
+  }
+  return answers;
+}
+
+function mergeHolders(answers: Partial<SetupAnswers>, answer: Extract<StepAnswer, { step: 2 }>): void {
+  // A free-text re-answer (parsed by the model) never carries `holders`
+  // and must not wipe a choice already made in the picker; a structured
+  // answer that *does* carry `holders` (even `[]`) replaces it outright.
+  if (answer.holders !== undefined) answers.holders = answer.holders;
+  // Holders are a convenience over positions, not a contract of their own:
+  // prune any entry whose (roleKey, departmentCode) no longer names a
+  // position in the list just answered, dropping the rest silently.
+  if (answers.holders !== undefined) {
+    const positionKeys = new Set(answer.positions.map((p) => `${p.roleKey}\u0000${p.departmentCode ?? ''}`));
+    answers.holders = answers.holders.filter((h) => positionKeys.has(`${h.roleKey}\u0000${h.departmentCode ?? ''}`));
+  }
+}
+
+/** Refuses answers the pack cannot take: a profile that does not load, or
+ *  answers that, laid over the pack, break a cross-check T-14 wrote. */
+function validateAgainstPack(
+  profileKey: ProfileKey,
+  answers: Partial<SetupAnswers>,
+  discovery: DiscoveryMeta | undefined,
+  loadPack: (key: string) => ProfilePack,
+): void {
   let pack: ProfilePack;
   try {
     pack = loadPack(profileKey);
@@ -392,17 +448,6 @@ export function applyAnswer(state: SetupState, step: SetupStep, answer: StepAnsw
     }
     throw err;
   }
-
-  if (!completedSteps.includes(step)) completedSteps = [...completedSteps, step].sort((a, b) => a - b);
-
-  if (discovery !== undefined) {
-    discovery = { ...discovery, sources: { ...discovery.sources, [String(step)]: 'manual' as SetupSource } };
-  }
-
-  const next: SetupState = { step: nextOpenStep(completedSteps), answers, completedSteps };
-  if (manual !== undefined) next.manual = manual;
-  if (discovery !== undefined) next.discovery = discovery;
-  return next;
 }
 
 /** The answers with what discovery knows about NPI laid on (its roles and the

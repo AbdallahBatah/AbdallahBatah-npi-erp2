@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { t } from '@/i18n/ar';
 import { formatNumber } from '@/i18n/format';
 import { Button } from '@/components/ui/Button';
+import { keyedLines } from '@/components/ui/keys';
 import { markSyncSeen } from '@/components/settings/api';
 import type { SyncBannerView } from '@/settings/types';
 
@@ -19,6 +20,7 @@ import type { SyncBannerView } from '@/settings/types';
 export function SyncBanner({ banner }: { banner: SyncBannerView }) {
   const [dismissed, setDismissed] = useState(false);
   const [working, setWorking] = useState(false);
+  const titleId = useId();
 
   if (dismissed) return null;
 
@@ -37,15 +39,14 @@ export function SyncBanner({ banner }: { banner: SyncBannerView }) {
 
   return (
     <section
-      role="status"
-      aria-label={t('sync.banner.title')}
+      aria-labelledby={titleId}
       data-testid="sync-banner"
       className="flex flex-col gap-2 rounded-xl border border-info-200 bg-info-50/60 p-4"
     >
-      <p className="text-sm font-bold text-slate-900">{t('sync.banner.title')}</p>
+      <p id={titleId} className="text-sm font-bold text-slate-900">{t('sync.banner.title')}</p>
       <ul className="flex list-disc flex-col gap-1 ps-5 text-sm text-slate-800">
-        {banner.lines.map((line, index) => (
-          <li key={`${index}-${line}`}>{line}</li>
+        {keyedLines(banner.lines).map(({ key, line }) => (
+          <li key={key}>{line}</li>
         ))}
       </ul>
       {banner.more > 0 ? <p className="text-xs text-slate-500">{t('sync.more', { n: formatNumber(banner.more) })}</p> : null}

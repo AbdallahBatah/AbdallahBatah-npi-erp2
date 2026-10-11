@@ -34,6 +34,7 @@ import {
 } from '../src/onboarding/service';
 import { applyPlan, loadNpiSnapshot, type OnboardingNpi } from '../src/onboarding/apply';
 import { t } from '../src/i18n/ar';
+import { formatNumber } from '../src/i18n/format';
 import { PERMISSION_CATALOG } from '../../../packages/shared/src/permissions';
 
 const ALL_PERMISSION_KEYS: string[] = PERMISSION_CATALOG.map((p) => p.key as string);
@@ -244,6 +245,20 @@ describe('discoverFromNpi — steps 2 to 6', () => {
     const dl = d.answers[2].positions.find((p) => p.roleKey === 'pm' && p.departmentCode === null);
     expect(dl).toBeDefined();
     expect(d.answers[2].holders!.find((h) => h.roleKey === 'pm' && h.departmentCode === null)!.npiUserIds).toEqual(['u_pm_nodept']);
+  });
+
+  it('step 2: a user in a deactivated department is not a holder, creates no department-less position, and is counted in the skipped lines', () => {
+    const org = epcOrg();
+    org.snapshot.users!.push(user('u_old_sales', 'sales', 'OLD'), user('u_old_acc', 'accountant', 'OLD'));
+    const d = discover(org);
+    const step2 = d.answers[2];
+    const every = (step2.holders ?? []).flatMap((h) => h.npiUserIds);
+    expect(every).not.toContain('u_old_sales');
+    expect(every).not.toContain('u_old_acc');
+    expect(step2.positions.some((p) => p.departmentCode === null && p.roleKey !== 'admin')).toBe(false);
+    expect(step2.holders!.find((h) => h.roleKey === 'sales')!.npiUserIds).toEqual(['u_sales']);
+    expect(d.evidence.skippedAr).toContain(t('setup.discover.skipped.department_users', { n: formatNumber(2) }));
+    expect(d.sources['2']).toBe('npi');
   });
 
   it('step 3: the active rules NPI already holds, as they are; inactive ones are not carried over', () => {

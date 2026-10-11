@@ -192,6 +192,26 @@ function buildDb(firm: Partial<FirmRow> | null = {}) {
         return ok[0] ? { namesJson: ok[0].namesJson } : null;
       },
     },
+    /** All or nothing: a throw inside restores every table (in place, so the
+     *  helpers' references keep working) and rethrows. */
+    async $transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
+      const snapshot = {
+        positions: positions.map((p) => ({ ...p })),
+        assignments: assignments.map((a) => ({ ...a })),
+        runs: runs.map((r) => ({ ...r })),
+        firms: [...firms].map(([key, row]) => [key, { ...row }] as const),
+      };
+      try {
+        return await fn(db);
+      } catch (e) {
+        positions.splice(0, positions.length, ...snapshot.positions);
+        assignments.splice(0, assignments.length, ...snapshot.assignments);
+        runs.splice(0, runs.length, ...snapshot.runs);
+        firms.clear();
+        for (const [key, row] of snapshot.firms) firms.set(key, row);
+        throw e;
+      }
+    },
   };
   return { db: db as unknown as SyncDb & SyncActionDb, firms, positions, assignments, runs };
 }
@@ -406,6 +426,26 @@ describe('syncFromNpi: reconciliation', () => {
     expect(h.runs).toMatchObject([{ skipped: 'unreadable', diffJson: null }]);
     expect(h.firms.get(ORG)!.lastSyncAt).toBeNull();
   });
+
+  it('a holder whose department NPI deactivated keeps the assignment; no department-less position is invented', async () => {
+    const h = buildDb();
+    const n = buildNpi();
+    done(await sync(h, n));
+    const salesAssignment = openOf(h, 'u_sales')[0];
+    const positionsBefore = h.positions.map((p) => ({ ...p }));
+    n.state.departments.find((d) => d.code === 'SALES')!.isActive = false;
+
+    clock = minutes(15);
+    const out = done(await sync(h, n));
+
+    expect(isEmptyDiff(out.diff)).toBe(true);
+    expect(out.changed).toBe(false);
+    expect(out.diff.unchanged).toBe(3); // the other three holders; the stranded one is neither agreed nor moved
+    expect(h.assignments.find((a) => a.id === salesAssignment.id)!.endedAt).toBeNull();
+    expect(openOf(h, 'u_sales')).toHaveLength(1);
+    expect(h.positions).toEqual(positionsBefore);
+    expect(h.positions.some((p) => p.roleKey === 'sales' && p.departmentId === null)).toBe(false);
+  });
 });
 
 describe('syncFromNpi: throttle, permissions, failures', () => {
@@ -442,7 +482,7 @@ describe('syncFromNpi: throttle, permissions, failures', () => {
     expect(h.assignments).toHaveLength(4);
   });
 
-  it('a caller without the read permissions is skipped without throwing, and the throttle slot is given back', async () => {
+  it('a caller without the read permissions is skipped without throwing, and the throttle slot is kept, so the next login within the window is throttled; a manual run still reads', async () => {
     const h = buildDb();
     const n = buildNpi();
     const me = { id: 'u_sales', roleKey: 'sales', permissions: ALL_PERMISSIONS.filter((p) => p !== SYNC_PERMISSION) };
@@ -451,11 +491,35 @@ describe('syncFromNpi: throttle, permissions, failures', () => {
 
     expect(out).toEqual({ skipped: 'permission', missing: [SYNC_PERMISSION] });
     expect(n.calls).toEqual(['listRoles']); // the one read this caller's permissions cover
-    expect(h.firms.get(ORG)!.lastSyncAt).toBeNull();
+    expect(h.firms.get(ORG)!.lastSyncAt).toEqual(clock);
     expect(h.runs).toMatchObject([{ skipped: 'permission' }]);
     expect(h.positions).toEqual([]);
-    // so an administrator logging in right after is not throttled by it
-    expect(done(await sync(h, n, 'login')).skipped).toBeNull();
+
+    // NPI was read once: the next login inside the window does not read it again…
+    n.calls.length = 0;
+    clock = minutes(5);
+    expect(await sync(h, n, 'login')).toEqual({ skipped: 'throttled' });
+    expect(n.calls).toEqual([]);
+    expect(h.runs).toHaveLength(1);
+    // …but the button always runs, so an administrator who just got the permission can use it
+    expect(done(await sync(h, n, 'manual')).skipped).toBeNull();
+    expect(h.positions).toHaveLength(4);
+  });
+
+  it('an organization too thin to read keeps the throttle slot the same way', async () => {
+    const h = buildDb();
+    const n = buildNpi();
+    n.state.users = [];
+
+    expect(await sync(h, n, 'login')).toEqual({ skipped: 'unreadable' });
+    expect(h.firms.get(ORG)!.lastSyncAt).toEqual(clock);
+    expect(h.runs).toMatchObject([{ skipped: 'unreadable', diffJson: null }]);
+
+    n.calls.length = 0;
+    clock = minutes(5);
+    expect(await sync(h, n, 'login')).toEqual({ skipped: 'throttled' });
+    expect(n.calls).toEqual([]);
+    expect(h.runs).toHaveLength(1);
   });
 
   it('NPI answering 403 on a read is a skipped permission too', async () => {
@@ -476,6 +540,30 @@ describe('syncFromNpi: throttle, permissions, failures', () => {
     };
     await expect(sync(h, n, 'login')).rejects.toBeInstanceOf(NpiError);
     expect(h.firms.get(ORG)!.lastSyncAt).toEqual(new Date('2026-10-10T07:00:00Z'));
+  });
+
+  it('a write failing inside the transaction leaves the organization exactly as it was, and a login gives its slot back', async () => {
+    const h = buildDb();
+    const n = buildNpi();
+    done(await sync(h, n)); // a synced organization at 08:00
+    const state = () => JSON.parse(JSON.stringify({ positions: h.positions, assignments: h.assignments, runs: h.runs, firm: h.firms.get(ORG) }));
+    const before = state();
+    // a new sales holder in the project department: a new position AND a new assignment
+    n.state.users.push({ id: 'u_sales2', nameAr: 'خالد', roleKey: 'sales', isActive: true, departmentId: 'dept_PROJ' });
+    jest.spyOn(h.db.positionAssignment, 'create').mockRejectedValueOnce(new Error('connection lost'));
+
+    clock = minutes(15);
+    await expect(sync(h, n, 'login')).rejects.toThrow('connection lost');
+
+    expect(state()).toEqual(before); // the position created before the failure is gone too; lastSyncAt and lastSyncDiffJson untouched
+    expect(h.firms.get(ORG)!.lastSyncAt).toEqual(new Date('2026-10-10T08:00:00Z'));
+
+    // the slot was given back, so the very next login runs and writes everything
+    clock = minutes(16);
+    const out = done(await sync(h, n, 'login'));
+    expect(out.diff.addedPositions).toMatchObject([{ roleKey: 'sales', departmentCode: 'PROJ' }]);
+    expect(out.diff.addedAssignments).toMatchObject([{ npiUserId: 'u_sales2' }]);
+    expect(openOf(h, 'u_sales2')).toHaveLength(1);
   });
 });
 

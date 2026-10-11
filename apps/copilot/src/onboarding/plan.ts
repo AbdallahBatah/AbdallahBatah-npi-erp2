@@ -330,149 +330,217 @@ function gate(caller: PlanCaller, writePermission: string, readSlots: { permissi
 
 // ─── The plan ───────────────────────────────────────────────────────────────
 
-export function buildPlan(
-  pack: ProfilePack,
-  answers: SetupAnswers,
-  snapshot: NpiSnapshot,
-  caller: PlanCaller,
-): OnboardingPlan {
-  const eff = effectivePack(pack, answers);
-  // Every plan starts with the standing gap: workflow definitions are
-  // seed-only in NPI (01 B-02, ADR-30), so no pack can set them and the
-  // administrator is told so on every setup (AT-11, G-M2-3 "gaps list
-  // non-empty and shown").
-  const gaps: NpiApiGap[] = [WORKFLOW_DEFINITIONS_GAP];
-  const steps: PlanStep[] = [];
+type PackDepartment = ProfilePack['defaultDepartments'][number];
+type PackRoleSet = ProfilePack['rolePermissionSets'][string];
+type PackApprovalRule = ProfilePack['approvalRuleDefaults'][number];
+type PackItem = ProfilePack['itemTemplates'][number];
 
-  // ── departments ──────────────────────────────────────────────────────────
+// ── departments ──────────────────────────────────────────────────────────────
+
+function planDepartments(eff: ProfilePack, snapshot: NpiSnapshot, caller: PlanCaller): DepartmentStep[] {
   const deptGate = gate(caller, STEP_WRITE_PERMISSION.department, [
     { permission: SNAPSHOT_READ_PERMISSION.departments, value: snapshot.departments },
   ]);
-  for (const dept of eff.defaultDepartments) {
-    const base = { kind: 'department' as const, id: `department:${dept.code}`, code: dept.code, nameAr: dept.nameAr, nameEn: dept.nameEn };
-    if (deptGate) {
-      steps.push({ ...base, ...blockedStep(deptGate) });
-      continue;
-    }
-    const existing = snapshot.departments!.find((d) => d.code === dept.code);
-    if (existing) {
-      const notesAr: string[] = [];
-      if (!existing.isActive) notesAr.push('القسم موجود في NPI لكنه موقوف؛ لم يُغيَّر.');
-      if (existing.nameAr !== dept.nameAr) notesAr.push(`اسم القسم في NPI «${existing.nameAr}» يبقى كما هو.`);
-      steps.push({ ...base, action: 'skip', blocked: null, existingId: existing.id, notesAr });
-    } else {
-      steps.push({ ...base, action: 'create', blocked: null, existingId: null, notesAr: [] });
-    }
-  }
+  return eff.defaultDepartments.map((dept) => planDepartment(dept, snapshot, deptGate));
+}
 
-  // ── roles ────────────────────────────────────────────────────────────────
-  const roleGate = gate(caller, STEP_WRITE_PERMISSION.role, [
-    { permission: SNAPSHOT_READ_PERMISSION.permissions, value: snapshot.permissions },
-    { permission: SNAPSHOT_READ_PERMISSION.roles, value: snapshot.roles },
-  ]);
-  const knownPermissions = new Set((snapshot.permissions ?? []).map((p) => p.key));
-  const roleStepByKey = new Map<string, RoleStep>();
-  const rolesAreNpis = answers.npiRoleSets !== undefined;
-  for (const [roleKey, roleSet] of Object.entries(eff.rolePermissionSets)) {
-    const base = {
-      kind: 'role' as const,
-      id: `role:${roleKey}`,
-      roleKey,
-      nameAr: roleSet.nameAr,
-      nameEn: roleSet.nameEn,
-    };
-    if (roleGate) {
-      const step: RoleStep = { ...base, ...blockedStep(roleGate), permissions: roleSet.permissions, permissionsAdded: [], permissionsRemoved: [] };
-      steps.push(step);
-      roleStepByKey.set(roleKey, step);
-      continue;
-    }
+function planDepartment(dept: PackDepartment, snapshot: NpiSnapshot, deptGate: BlockedReason | null): DepartmentStep {
+  const base = { kind: 'department' as const, id: `department:${dept.code}`, code: dept.code, nameAr: dept.nameAr, nameEn: dept.nameEn };
+  if (deptGate) return { ...base, ...blockedStep(deptGate) };
+  const existing = snapshot.departments!.find((d) => d.code === dept.code);
+  if (!existing) return { ...base, action: 'create', blocked: null, existingId: null, notesAr: [] };
+  const notesAr: string[] = [];
+  if (!existing.isActive) notesAr.push('القسم موجود في NPI لكنه موقوف؛ لم يُغيَّر.');
+  if (existing.nameAr !== dept.nameAr) notesAr.push(`اسم القسم في NPI «${existing.nameAr}» يبقى كما هو.`);
+  return { ...base, action: 'skip', blocked: null, existingId: existing.id, notesAr };
+}
 
-    // Discovered answers: a role NPI already holds is NPI's, not the pack's —
-    // never rewritten, whatever its permission set is today.
-    const heldRole = snapshot.roles!.find((r) => r.key === roleKey);
-    if (rolesAreNpis && heldRole) {
-      const step: RoleStep = {
-        ...base,
-        action: 'skip',
-        blocked: null,
-        existingId: heldRole.id,
-        notesAr: [],
-        permissions: heldRole.permissions,
-        permissionsAdded: [],
-        permissionsRemoved: [],
-      };
-      steps.push(step);
-      roleStepByKey.set(roleKey, step);
-      continue;
-    }
+// ── roles ────────────────────────────────────────────────────────────────────
 
-    // Keys NPI's live catalog does not serve are gaps — listed, not sent.
-    let target = roleSet.permissions.filter((p) => knownPermissions.has(p));
-    for (const p of roleSet.permissions) {
-      if (!knownPermissions.has(p)) gaps.push({ kind: 'permission_unknown', roleKey, permission: p });
-    }
+interface RolePlanContext {
+  roleGate: BlockedReason | null;
+  snapshot: NpiSnapshot;
+  knownPermissions: Set<string>;
+  rolesAreNpis: boolean;
+  caller: PlanCaller;
+  gaps: NpiApiGap[];
+}
 
-    const existing = snapshot.roles!.find((r) => r.key === roleKey);
-    const notesAr: string[] = [];
-    let step: RoleStep;
-    if (existing) {
-      if (roleKey === caller.roleKey) {
-        // Never strip a permission from the role the administrator is acting
-        // under: the next step of this very apply would be refused.
-        target = [...new Set([...existing.permissions, ...target])];
-        notesAr.push('هذا دورك أنت؛ شاشة الإعداد تضيف إليه ولا تسحب منه.');
-      }
-      if (existing.nameAr !== roleSet.nameAr) notesAr.push(`اسم الدور في NPI «${existing.nameAr}» يبقى كما هو.`);
-      const added = target.filter((p) => !existing.permissions.includes(p));
-      const removed = existing.permissions.filter((p) => !target.includes(p));
-      step = sameSet(existing.permissions, target)
-        ? { ...base, action: 'skip', blocked: null, existingId: existing.id, notesAr, permissions: target, permissionsAdded: [], permissionsRemoved: [] }
-        : { ...base, action: 'update', blocked: null, existingId: existing.id, notesAr, permissions: target, permissionsAdded: added, permissionsRemoved: removed };
-    } else {
-      step = { ...base, action: 'create', blocked: null, existingId: null, notesAr, permissions: target, permissionsAdded: target, permissionsRemoved: [] };
-    }
-    steps.push(step);
-    roleStepByKey.set(roleKey, step);
-  }
-
-  // ── approval rules ───────────────────────────────────────────────────────
-  const ruleGate = gate(caller, STEP_WRITE_PERMISSION.approval_rule, [
-    { permission: SNAPSHOT_READ_PERMISSION.rules, value: snapshot.approvalRules },
-    { permission: SNAPSHOT_READ_PERMISSION.roles, value: snapshot.roles },
-  ]);
-  const activeUsersByRole = new Set((snapshot.users ?? []).filter((u) => u.isActive).map((u) => u.roleKey));
-  // The active bands NPI will hold once the updates planned here have run,
-  // keyed by NPI rule id (or a synthetic key for a band this plan creates).
-  // Creates are checked against *these* bands, and updates are emitted before
-  // creates, so a moved threshold makes room for a new band in the same run.
-  const bandsAfterUpdates = new Map<string, { docType: string; min: number; max: number | null }>();
-  for (const r of snapshot.approvalRules ?? []) {
-    if (r.isActive) bandsAfterUpdates.set(r.id, { docType: r.documentType, min: r.minAmount, max: r.maxAmount });
-  }
-  const clashWith = (docType: string, band: { min: number; max: number | null }, excludeId: string | null) => {
-    for (const [id, other] of bandsAfterUpdates) {
-      if (id !== excludeId && other.docType === docType && bandsOverlap(band, other)) return other;
-    }
-    return null;
+function planRoles(
+  eff: ProfilePack,
+  answers: SetupAnswers,
+  snapshot: NpiSnapshot,
+  caller: PlanCaller,
+): { steps: RoleStep[]; gaps: NpiApiGap[]; byKey: Map<string, RoleStep> } {
+  const gaps: NpiApiGap[] = [];
+  const ctx: RolePlanContext = {
+    roleGate: gate(caller, STEP_WRITE_PERMISSION.role, [
+      { permission: SNAPSHOT_READ_PERMISSION.permissions, value: snapshot.permissions },
+      { permission: SNAPSHOT_READ_PERMISSION.roles, value: snapshot.roles },
+    ]),
+    snapshot,
+    knownPermissions: new Set((snapshot.permissions ?? []).map((p) => p.key)),
+    rolesAreNpis: answers.npiRoleSets !== undefined,
+    caller,
+    gaps,
   };
-  // Which NPI rule each planned rule *is*: the same band exactly; otherwise,
-  // for an open-ended band («فأكثر»), the document type's open-ended rule
-  // whatever its current floor — moving that floor is what "change the
-  // threshold" means, and NPI allows at most one active open-ended band per
-  // type. Each NPI rule is claimed by at most one planned rule.
+  const steps: RoleStep[] = [];
+  const byKey = new Map<string, RoleStep>();
+  for (const [roleKey, roleSet] of Object.entries(eff.rolePermissionSets)) {
+    const step = planRole(ctx, roleKey, roleSet);
+    steps.push(step);
+    byKey.set(roleKey, step);
+  }
+  return { steps, gaps, byKey };
+}
+
+function roleBase(roleKey: string, roleSet: PackRoleSet) {
+  return {
+    kind: 'role' as const,
+    id: `role:${roleKey}`,
+    roleKey,
+    nameAr: roleSet.nameAr,
+    nameEn: roleSet.nameEn,
+  };
+}
+
+function planRole(ctx: RolePlanContext, roleKey: string, roleSet: PackRoleSet): RoleStep {
+  const base = roleBase(roleKey, roleSet);
+  if (ctx.roleGate) {
+    return { ...base, ...blockedStep(ctx.roleGate), permissions: roleSet.permissions, permissionsAdded: [], permissionsRemoved: [] };
+  }
+
+  // Discovered answers: a role NPI already holds is NPI's, not the pack's —
+  // never rewritten, whatever its permission set is today.
+  const existing = ctx.snapshot.roles!.find((r) => r.key === roleKey);
+  if (ctx.rolesAreNpis && existing) {
+    return {
+      ...base,
+      action: 'skip',
+      blocked: null,
+      existingId: existing.id,
+      notesAr: [],
+      permissions: existing.permissions,
+      permissionsAdded: [],
+      permissionsRemoved: [],
+    };
+  }
+
+  // Keys NPI's live catalog does not serve are gaps — listed, not sent.
+  const target = roleSet.permissions.filter((p) => ctx.knownPermissions.has(p));
+  for (const p of roleSet.permissions) {
+    if (!ctx.knownPermissions.has(p)) ctx.gaps.push({ kind: 'permission_unknown', roleKey, permission: p });
+  }
+
+  if (!existing) {
+    return { ...base, action: 'create', blocked: null, existingId: null, notesAr: [], permissions: target, permissionsAdded: target, permissionsRemoved: [] };
+  }
+  return planExistingRole(base, existing, roleSet, target, ctx.caller);
+}
+
+function planExistingRole(
+  base: ReturnType<typeof roleBase>,
+  existing: NpiRole,
+  roleSet: PackRoleSet,
+  packTarget: string[],
+  caller: PlanCaller,
+): RoleStep {
+  let target = packTarget;
+  const notesAr: string[] = [];
+  if (base.roleKey === caller.roleKey) {
+    // Never strip a permission from the role the administrator is acting
+    // under: the next step of this very apply would be refused.
+    target = [...new Set([...existing.permissions, ...target])];
+    notesAr.push('هذا دورك أنت؛ شاشة الإعداد تضيف إليه ولا تسحب منه.');
+  }
+  if (existing.nameAr !== roleSet.nameAr) notesAr.push(`اسم الدور في NPI «${existing.nameAr}» يبقى كما هو.`);
+  const added = target.filter((p) => !existing.permissions.includes(p));
+  const removed = existing.permissions.filter((p) => !target.includes(p));
+  return sameSet(existing.permissions, target)
+    ? { ...base, action: 'skip', blocked: null, existingId: existing.id, notesAr, permissions: target, permissionsAdded: [], permissionsRemoved: [] }
+    : { ...base, action: 'update', blocked: null, existingId: existing.id, notesAr, permissions: target, permissionsAdded: added, permissionsRemoved: removed };
+}
+
+// ── approval rules ───────────────────────────────────────────────────────────
+
+type Band = { min: number; max: number | null };
+type TypedBand = Band & { docType: string };
+
+interface RulePlanContext {
+  eff: ProfilePack;
+  answers: SetupAnswers;
+  snapshot: NpiSnapshot;
+  ruleGate: BlockedReason | null;
+  roleStepByKey: Map<string, RoleStep>;
+  activeUsersByRole: Set<string>;
+  /** The active bands NPI will hold once the updates planned here have run,
+   *  keyed by NPI rule id (or a synthetic key for a band this plan creates).
+   *  Creates are checked against *these* bands, and updates are emitted before
+   *  creates, so a moved threshold makes room for a new band in the same run. */
+  bandsAfterUpdates: Map<string, TypedBand>;
+}
+
+/** Which NPI rule each planned rule *is*: the same band exactly; otherwise,
+ *  for an open-ended band («فأكثر»), the document type's open-ended rule
+ *  whatever its current floor — moving that floor is what "change the
+ *  threshold" means, and NPI allows at most one active open-ended band per
+ *  type. Each NPI rule is claimed by at most one planned rule. */
+function matchApprovalRules(eff: ProfilePack, snapshot: NpiSnapshot): (NpiApprovalRule | null)[] {
+  const npiRules = snapshot.approvalRules;
+  if (npiRules === null) return eff.approvalRuleDefaults.map(() => null);
   const claimedRuleIds = new Set<string>();
-  const matched = eff.approvalRuleDefaults.map((rule) => {
-    if (snapshot.approvalRules === null) return null;
-    const maxAmount = rule.maxAmount ?? null;
-    const candidates = snapshot.approvalRules.filter((r) => r.documentType === rule.docType && !claimedRuleIds.has(r.id));
-    const existing =
-      candidates.find((r) => r.minAmount === rule.minAmount && r.maxAmount === maxAmount) ??
-      (maxAmount === null ? (candidates.find((r) => r.maxAmount === null && r.isActive) ?? candidates.find((r) => r.maxAmount === null)) : undefined) ??
-      candidates.find((r) => r.minAmount === rule.minAmount);
+  return eff.approvalRuleDefaults.map((rule) => {
+    const candidates = npiRules.filter((r) => r.documentType === rule.docType && !claimedRuleIds.has(r.id));
+    const existing = findNpiRule(rule, candidates);
     if (existing) claimedRuleIds.add(existing.id);
     return existing ?? null;
   });
+}
+
+function findNpiRule(rule: PackApprovalRule, candidates: NpiApprovalRule[]): NpiApprovalRule | undefined {
+  const maxAmount = rule.maxAmount ?? null;
+  return (
+    candidates.find((r) => r.minAmount === rule.minAmount && r.maxAmount === maxAmount) ??
+    (maxAmount === null ? (candidates.find((r) => r.maxAmount === null && r.isActive) ?? candidates.find((r) => r.maxAmount === null)) : undefined) ??
+    candidates.find((r) => r.minAmount === rule.minAmount)
+  );
+}
+
+function activeBands(snapshot: NpiSnapshot): Map<string, TypedBand> {
+  const bands = new Map<string, TypedBand>();
+  for (const r of snapshot.approvalRules ?? []) {
+    if (r.isActive) bands.set(r.id, { docType: r.documentType, min: r.minAmount, max: r.maxAmount });
+  }
+  return bands;
+}
+
+function clashWith(ctx: RulePlanContext, docType: string, band: Band, excludeId: string | null): TypedBand | null {
+  for (const [id, other] of ctx.bandsAfterUpdates) {
+    if (id !== excludeId && other.docType === docType && bandsOverlap(band, other)) return other;
+  }
+  return null;
+}
+
+function planApprovalRules(
+  eff: ProfilePack,
+  answers: SetupAnswers,
+  snapshot: NpiSnapshot,
+  caller: PlanCaller,
+  roleStepByKey: Map<string, RoleStep>,
+): ApprovalRuleStep[] {
+  const ctx: RulePlanContext = {
+    eff,
+    answers,
+    snapshot,
+    ruleGate: gate(caller, STEP_WRITE_PERMISSION.approval_rule, [
+      { permission: SNAPSHOT_READ_PERMISSION.rules, value: snapshot.approvalRules },
+      { permission: SNAPSHOT_READ_PERMISSION.roles, value: snapshot.roles },
+    ]),
+    roleStepByKey,
+    activeUsersByRole: new Set((snapshot.users ?? []).filter((u) => u.isActive).map((u) => u.roleKey)),
+    bandsAfterUpdates: activeBands(snapshot),
+  };
+  const matched = matchApprovalRules(eff, snapshot);
   // Rules that update an existing NPI rule are planned (and later run) before
   // rules that create one, so a moved threshold has already made room.
   const ruleIndices = eff.approvalRuleDefaults.map((_, i) => i);
@@ -480,81 +548,47 @@ export function buildPlan(
   const ruleUpdates: ApprovalRuleStep[] = [];
   const ruleOthers: ApprovalRuleStep[] = [];
   for (const index of ruleOrder) {
-    const rule = eff.approvalRuleDefaults[index];
-    const existing = matched[index];
-    const maxAmount = rule.maxAmount ?? null;
-    const band = { min: rule.minAmount, max: maxAmount };
-    const base = {
-      kind: 'approval_rule' as const,
-      id: `approval_rule:${rule.docType}:${rule.minAmount}`,
-      docType: rule.docType,
-      minAmount: rule.minAmount,
-      maxAmount,
-      stepRoleKeys: [...rule.steps],
-      existingStepRoleKeys: null as string[] | null,
-      existingMinAmount: null as number | null,
-      reactivate: false,
-    };
-    if (ruleGate) {
-      ruleOthers.push({ ...base, ...blockedStep(ruleGate) });
-      continue;
-    }
+    const { step, isUpdate } = planApprovalRule(ctx, eff.approvalRuleDefaults[index], matched[index]);
+    (isUpdate ? ruleUpdates : ruleOthers).push(step);
+  }
+  return [...ruleUpdates, ...ruleOthers];
+}
 
-    if (
-      existing &&
-      existing.isActive &&
-      existing.minAmount === rule.minAmount &&
-      existing.maxAmount === maxAmount &&
-      sameSequence(existing.stepRoleKeys, rule.steps)
-    ) {
-      ruleOthers.push({ ...base, action: 'skip', blocked: null, existingId: existing.id, notesAr: [], existingStepRoleKeys: existing.stepRoleKeys, existingMinAmount: existing.minAmount });
-      continue;
-    }
+function approvalRuleBase(rule: PackApprovalRule, maxAmount: number | null) {
+  return {
+    kind: 'approval_rule' as const,
+    id: `approval_rule:${rule.docType}:${rule.minAmount}`,
+    docType: rule.docType,
+    minAmount: rule.minAmount,
+    maxAmount,
+    stepRoleKeys: [...rule.steps],
+    existingStepRoleKeys: null as string[] | null,
+    existingMinAmount: null as number | null,
+    reactivate: false,
+  };
+}
 
-    // Discovered rules are NPI's: one that moved since it was read is left as
-    // it is (the next sync reports it), never put back.
-    if (existing && answers.sources?.['3'] === 'npi') {
-      ruleOthers.push({
-        ...base,
-        action: 'skip',
-        blocked: null,
-        existingId: existing.id,
-        notesAr: ['القاعدة في NPI تغيّرت بعد قراءتها؛ تبقى كما هي في NPI.'],
-        existingStepRoleKeys: existing.stepRoleKeys,
-        existingMinAmount: existing.minAmount,
-      });
-      continue;
-    }
+function planApprovalRule(
+  ctx: RulePlanContext,
+  rule: PackApprovalRule,
+  existing: NpiApprovalRule | null,
+): { step: ApprovalRuleStep; isUpdate: boolean } {
+  const maxAmount = rule.maxAmount ?? null;
+  const base = approvalRuleBase(rule, maxAmount);
+  if (ctx.ruleGate) return { step: { ...base, ...blockedStep(ctx.ruleGate) }, isUpdate: false };
 
-    // Preconditions NPI enforces on create and on a step change.
-    const blockedRole = rule.steps.find((key) => roleStepByKey.get(key)?.action === 'blocked');
-    if (blockedRole !== undefined) {
-      ruleOthers.push({ ...base, ...blockedStep({ code: 'depends_on_blocked_role', roleKey: blockedRole }) });
-      continue;
-    }
-    const notesAr: string[] = [];
-    if (snapshot.users === null) {
-      notesAr.push('لم يُتحقق من وجود مستخدمين نشطين لأدوار السلسلة؛ قد ترفض NPI القاعدة عند التطبيق.');
-    } else {
-      const emptyRole = rule.steps.find((key) => !activeUsersByRole.has(key));
-      if (emptyRole !== undefined) {
-        ruleOthers.push({
-          ...base,
-          ...blockedStep({ code: 'role_without_active_user', roleKey: emptyRole, roleNameAr: eff.rolePermissionSets[emptyRole].nameAr }),
-        });
-        continue;
-      }
-    }
+  const settled = skipApprovalRule(ctx, rule, existing, base) ?? blockApprovalRule(ctx, rule, existing, base);
+  if (settled) return { step: settled, isUpdate: false };
 
-    const clash = clashWith(rule.docType, band, existing?.id ?? null);
-    if (clash) {
-      ruleOthers.push({ ...base, ...blockedStep({ code: 'band_overlap', min: clash.min, max: clash.max }) });
-      continue;
-    }
-
-    if (existing) {
-      bandsAfterUpdates.set(existing.id, { docType: rule.docType, ...band });
-      ruleUpdates.push({
+  const notesAr: string[] = [];
+  if (ctx.snapshot.users === null) {
+    notesAr.push('لم يُتحقق من وجود مستخدمين نشطين لأدوار السلسلة؛ قد ترفض NPI القاعدة عند التطبيق.');
+  }
+  const band = { min: rule.minAmount, max: maxAmount };
+  if (existing) {
+    ctx.bandsAfterUpdates.set(existing.id, { docType: rule.docType, ...band });
+    return {
+      step: {
         ...base,
         action: 'update',
         blocked: null,
@@ -563,45 +597,115 @@ export function buildPlan(
         existingStepRoleKeys: existing.stepRoleKeys,
         existingMinAmount: existing.minAmount,
         reactivate: !existing.isActive,
-      });
-      continue;
-    }
-    bandsAfterUpdates.set(`new:${base.id}`, { docType: rule.docType, ...band });
-    ruleOthers.push({ ...base, action: 'create', blocked: null, existingId: null, notesAr });
+      },
+      isUpdate: true,
+    };
   }
-  steps.push(...ruleUpdates, ...ruleOthers);
+  ctx.bandsAfterUpdates.set(`new:${base.id}`, { docType: rule.docType, ...band });
+  return { step: { ...base, action: 'create', blocked: null, existingId: null, notesAr }, isUpdate: false };
+}
 
-  // ── items ────────────────────────────────────────────────────────────────
+/** The two cases where NPI already holds the rule and nothing is written. */
+function skipApprovalRule(
+  ctx: RulePlanContext,
+  rule: PackApprovalRule,
+  existing: NpiApprovalRule | null,
+  base: ReturnType<typeof approvalRuleBase>,
+): ApprovalRuleStep | null {
+  if (!existing) return null;
+  if (
+    existing.isActive &&
+    existing.minAmount === rule.minAmount &&
+    existing.maxAmount === base.maxAmount &&
+    sameSequence(existing.stepRoleKeys, rule.steps)
+  ) {
+    return { ...base, action: 'skip', blocked: null, existingId: existing.id, notesAr: [], existingStepRoleKeys: existing.stepRoleKeys, existingMinAmount: existing.minAmount };
+  }
+
+  // Discovered rules are NPI's: one that moved since it was read is left as
+  // it is (the next sync reports it), never put back.
+  if (ctx.answers.sources?.['3'] === 'npi') {
+    return {
+      ...base,
+      action: 'skip',
+      blocked: null,
+      existingId: existing.id,
+      notesAr: ['القاعدة في NPI تغيّرت بعد قراءتها؛ تبقى كما هي في NPI.'],
+      existingStepRoleKeys: existing.stepRoleKeys,
+      existingMinAmount: existing.minAmount,
+    };
+  }
+  return null;
+}
+
+/** Preconditions NPI enforces on create and on a step change. */
+function blockApprovalRule(
+  ctx: RulePlanContext,
+  rule: PackApprovalRule,
+  existing: NpiApprovalRule | null,
+  base: ReturnType<typeof approvalRuleBase>,
+): ApprovalRuleStep | null {
+  const blockedRole = rule.steps.find((key) => ctx.roleStepByKey.get(key)?.action === 'blocked');
+  if (blockedRole !== undefined) {
+    return { ...base, ...blockedStep({ code: 'depends_on_blocked_role', roleKey: blockedRole }) };
+  }
+  const emptyRole = ctx.snapshot.users === null ? undefined : rule.steps.find((key) => !ctx.activeUsersByRole.has(key));
+  if (emptyRole !== undefined) {
+    return {
+      ...base,
+      ...blockedStep({ code: 'role_without_active_user', roleKey: emptyRole, roleNameAr: ctx.eff.rolePermissionSets[emptyRole].nameAr }),
+    };
+  }
+  const clash = clashWith(ctx, rule.docType, { min: rule.minAmount, max: base.maxAmount }, existing?.id ?? null);
+  if (clash) return { ...base, ...blockedStep({ code: 'band_overlap', min: clash.min, max: clash.max }) };
+  return null;
+}
+
+// ── items ────────────────────────────────────────────────────────────────────
+
+function planItems(eff: ProfilePack, snapshot: NpiSnapshot, caller: PlanCaller): ItemStep[] {
   const itemGate = gate(caller, STEP_WRITE_PERMISSION.item, [
     { permission: SNAPSHOT_READ_PERMISSION.items, value: snapshot.items },
   ]);
-  for (const item of eff.itemTemplates) {
-    const base = {
-      kind: 'item' as const,
-      id: `item:${item.sku}`,
-      sku: item.sku,
-      nameAr: item.nameAr,
-      nameEn: item.nameEn,
-      itemCategory: item.itemCategory,
-      uom: item.uom,
-      isSerialised: item.isSerialised,
-    };
-    if (itemGate) {
-      steps.push({ ...base, ...blockedStep(itemGate) });
-      continue;
-    }
-    const existing = snapshot.items!.find((i) => i.sku === item.sku);
-    if (existing) {
-      const notesAr: string[] = [];
-      if (existing.itemCategory !== item.itemCategory) {
-        notesAr.push(`الصنف موجود في NPI بتصنيف مختلف (${existing.itemCategory})؛ لم يُغيَّر.`);
-      }
-      if (existing.nameAr !== item.nameAr) notesAr.push(`اسم الصنف في NPI «${existing.nameAr}» يبقى كما هو.`);
-      steps.push({ ...base, action: 'skip', blocked: null, existingId: existing.id, notesAr });
-    } else {
-      steps.push({ ...base, action: 'create', blocked: null, existingId: null, notesAr: [] });
-    }
+  return eff.itemTemplates.map((item) => planItem(item, snapshot, itemGate));
+}
+
+function planItem(item: PackItem, snapshot: NpiSnapshot, itemGate: BlockedReason | null): ItemStep {
+  const base = {
+    kind: 'item' as const,
+    id: `item:${item.sku}`,
+    sku: item.sku,
+    nameAr: item.nameAr,
+    nameEn: item.nameEn,
+    itemCategory: item.itemCategory,
+    uom: item.uom,
+    isSerialised: item.isSerialised,
+  };
+  if (itemGate) return { ...base, ...blockedStep(itemGate) };
+  const existing = snapshot.items!.find((i) => i.sku === item.sku);
+  if (!existing) return { ...base, action: 'create', blocked: null, existingId: null, notesAr: [] };
+  const notesAr: string[] = [];
+  if (existing.itemCategory !== item.itemCategory) {
+    notesAr.push(`الصنف موجود في NPI بتصنيف مختلف (${existing.itemCategory})؛ لم يُغيَّر.`);
   }
+  if (existing.nameAr !== item.nameAr) notesAr.push(`اسم الصنف في NPI «${existing.nameAr}» يبقى كما هو.`);
+  return { ...base, action: 'skip', blocked: null, existingId: existing.id, notesAr };
+}
+
+export function buildPlan(
+  pack: ProfilePack,
+  answers: SetupAnswers,
+  snapshot: NpiSnapshot,
+  caller: PlanCaller,
+): OnboardingPlan {
+  const eff = effectivePack(pack, answers);
+  const roles = planRoles(eff, answers, snapshot, caller);
+  const steps: PlanStep[] = [
+    ...planDepartments(eff, snapshot, caller),
+    ...roles.steps,
+    ...planApprovalRules(eff, answers, snapshot, caller, roles.byKey),
+    ...planItems(eff, snapshot, caller),
+  ];
 
   const counts: Record<StepAction, number> = { create: 0, update: 0, skip: 0, blocked: 0 };
   for (const step of steps) counts[step.action] += 1;
@@ -620,7 +724,11 @@ export function buildPlan(
       positions: eff.positions,
       holders: answers.holders ?? [],
     },
-    gaps,
+    // Every plan starts with the standing gap: workflow definitions are
+    // seed-only in NPI (01 B-02, ADR-30), so no pack can set them and the
+    // administrator is told so on every setup (AT-11, G-M2-3 "gaps list
+    // non-empty and shown").
+    gaps: [WORKFLOW_DEFINITIONS_GAP, ...roles.gaps],
     counts,
     permissionLabel: permissionLabelResolver(snapshot.permissions),
     roleNamesAr: Object.fromEntries(Object.entries(eff.rolePermissionSets).map(([key, set]) => [key, set.nameAr])),

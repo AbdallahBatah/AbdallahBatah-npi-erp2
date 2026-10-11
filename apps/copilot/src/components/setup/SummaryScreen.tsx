@@ -4,6 +4,7 @@ import { t, type ArKey } from '@/i18n/ar';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { keyedLines } from '@/components/ui/keys';
 import type { SetupStep as SetupStepNumber } from '@/onboarding/machine';
 import type { SetupSource } from '@/onboarding/plan';
 import type { SetupSummary } from '@/onboarding/summary';
@@ -62,8 +63,8 @@ export function SummaryScreen({ summary, busy, onChangeStep, onConfirm, onManual
         <div className="flex flex-col gap-1">
           <p className="text-xs font-semibold text-slate-600">{t('setup.summary.reasons')}</p>
           <ul className="list-inside list-disc text-sm text-slate-700">
-            {profile.reasonsAr.map((reason, i) => (
-              <li key={i}>{reason}</li>
+            {keyedLines(profile.reasonsAr).map(({ key, line }) => (
+              <li key={key}>{line}</li>
             ))}
           </ul>
         </div>
@@ -84,11 +85,9 @@ export function SummaryScreen({ summary, busy, onChangeStep, onConfirm, onManual
                   </Button>
                 </div>
                 <ul className="flex flex-col gap-0.5 text-sm text-slate-700">
-                  {card.lines
-                    .filter((line) => line.length > 0)
-                    .map((line, i) => (
-                      <li key={i}>{line}</li>
-                    ))}
+                  {keyedLines(card.lines.filter((line) => line.length > 0)).map(({ key, line }) => (
+                    <li key={key}>{line}</li>
+                  ))}
                 </ul>
               </div>
             </Card>
@@ -100,8 +99,8 @@ export function SummaryScreen({ summary, busy, onChangeStep, onConfirm, onManual
         <div data-testid="setup-summary-skipped" className="flex flex-col gap-1 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2">
           <p className="text-xs font-semibold text-warning-800">{t('setup.summary.skipped')}</p>
           <ul className="list-inside list-disc text-sm text-warning-800">
-            {skippedAr.map((line, i) => (
-              <li key={i}>{line}</li>
+            {keyedLines(skippedAr).map(({ key, line }) => (
+              <li key={key}>{line}</li>
             ))}
           </ul>
         </div>

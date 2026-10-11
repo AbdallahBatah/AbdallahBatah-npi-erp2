@@ -409,29 +409,7 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
     return buildView(deps, caller, next);
   }
 
-  if (body.action === 'answer') {
-    const pack = state.answers.profileKey !== undefined ? loadPack(state.answers.profileKey) : null;
-    let answer: StepAnswer;
-    let source: SetupAnswerResult['source'];
-
-    if ('answer' in body) {
-      answer = body.answer;
-      source = 'structured';
-    } else {
-      const outcome = await parseAnswer(
-        { llm: deps.llm, pseudonymizer: deps.pseudonymizer },
-        { step: body.step, text: body.text, pack, current: state },
-        { npiOrgId: caller.npiOrgId, npiUserId: caller.npiUserId },
-      );
-      if (outcome.kind === 'unclear') return { unclear: outcome.messageAr };
-      answer = outcome.answer;
-      source = outcome.source;
-    }
-
-    const next = applyAnswer(state, body.step, answer, { loadPack });
-    await saveState(deps, row.id, next);
-    return { ...(await buildView(deps, caller, next)), parsed: answer, source };
-  }
+  if (body.action === 'answer') return handleAnswerAction(deps, caller, row, state, body, loadPack);
 
   // 'preview' and 'apply' both need a complete-enough set of answers to
   // build a plan; `toAnswers` throws `MachineError` when step 1 was never
@@ -442,9 +420,57 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
 
   if (body.action === 'preview') return buildPreview(deps, pack, answers, planCaller);
 
-  // 'apply': re-reads NPI and rebuilds the plan rather than trusting a plan
-  // the client may have cached from an earlier preview (spec/madar/02 §7:
-  // "dry-run diff shown first" — apply never trusts a stale one).
+  return applyAction(deps, caller, row, state, pack, answers, planCaller);
+}
+
+/** The structured / free-text `answer` action: parse (free text goes through
+ *  the model, structured answers are taken as they are), apply the answer to
+ *  the machine, save, and answer with the new view. */
+async function handleAnswerAction(
+  deps: SetupDeps,
+  caller: SetupCaller,
+  row: OnboardingSessionRow,
+  state: SetupState,
+  body: Extract<SetupActionBody, { action: 'answer' }>,
+  loadPack: (key: string) => ProfilePack,
+): Promise<SetupAnswerResult | SetupUnclearResult> {
+  const pack = state.answers.profileKey !== undefined ? loadPack(state.answers.profileKey) : null;
+  let answer: StepAnswer;
+  let source: SetupAnswerResult['source'];
+
+  if ('answer' in body) {
+    answer = body.answer;
+    source = 'structured';
+  } else {
+    const outcome = await parseAnswer(
+      { llm: deps.llm, pseudonymizer: deps.pseudonymizer },
+      { step: body.step, text: body.text, pack, current: state },
+      { npiOrgId: caller.npiOrgId, npiUserId: caller.npiUserId },
+    );
+    if (outcome.kind === 'unclear') return { unclear: outcome.messageAr };
+    answer = outcome.answer;
+    source = outcome.source;
+  }
+
+  const next = applyAnswer(state, body.step, answer, { loadPack });
+  await saveState(deps, row.id, next);
+  return { ...(await buildView(deps, caller, next)), parsed: answer, source };
+}
+
+/** The `apply` action: re-reads NPI and rebuilds the plan rather than
+ *  trusting a plan the client may have cached from an earlier preview
+ *  (spec/madar/02 §7: "dry-run diff shown first" — apply never trusts a stale
+ *  one), runs it, persists the copilot side, and closes the session when the
+ *  run completed. */
+async function applyAction(
+  deps: SetupDeps,
+  caller: SetupCaller,
+  row: OnboardingSessionRow,
+  state: SetupState,
+  pack: ProfilePack,
+  answers: ReturnType<typeof toAnswers>,
+  planCaller: { roleKey: string; permissions: readonly string[] },
+): Promise<SetupApplyResult> {
   const snapshot = await loadNpiSnapshot(deps.npi, planCaller);
   const plan = buildPlan(pack, answers, snapshot, planCaller);
   const result = await applyPlan({ npi: deps.npi }, plan);

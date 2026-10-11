@@ -273,17 +273,13 @@ function positionKey(roleKey: string, departmentCode: string | null): string {
   return `${roleKey}\u0000${departmentCode ?? ''}`;
 }
 
-function discoverStep2(
-  snapshot: NpiSnapshot,
-  roleSets: RoleSets,
-  personaFor: (roleKey: string) => string,
-  skippedAr: string[],
-): Step2 | null {
-  if (snapshot.departments === null || snapshot.users === null) return null;
+type DeptById = Map<string, { code: string; nameAr: string }>;
 
+/** NPI's active departments the profile schema accepts; the others are named in `skippedAr`. */
+function carriedDepartments(all: NonNullable<NpiSnapshot['departments']>, skippedAr: string[]): { departments: Step2['departments']; deptById: DeptById } {
   const departments: Step2['departments'] = [];
-  const deptById = new Map<string, { code: string; nameAr: string }>();
-  for (const d of snapshot.departments) {
+  const deptById: DeptById = new Map();
+  for (const d of all) {
     if (!d.isActive) continue;
     if (!DEPARTMENT_CODE_RE.test(d.code) || d.nameAr.trim().length < 2 || d.nameAr.length > 120) {
       skippedAr.push(t('setup.discover.skipped.department', { name: d.nameAr }));
@@ -292,24 +288,56 @@ function discoverStep2(
     departments.push({ code: d.code, nameAr: d.nameAr });
     deptById.set(d.id, { code: d.code, nameAr: d.nameAr });
   }
-  if (departments.length === 0) return null;
+  return { departments, deptById };
+}
 
-  const groups = new Map<string, { roleKey: string; departmentCode: string | null; departmentNameAr: string | null; userIds: string[] }>();
+interface HolderGroup {
+  roleKey: string;
+  departmentCode: string | null;
+  departmentNameAr: string | null;
+  userIds: string[];
+}
+
+/** One group per (role, department) with an active user; users it cannot place are named in `skippedAr`. */
+function groupHolders(users: NonNullable<NpiSnapshot['users']>, roleSets: RoleSets, deptById: DeptById, skippedAr: string[]): Map<string, HolderGroup> {
+  const groups = new Map<string, HolderGroup>();
   const skippedRoles = new Set<string>();
-  for (const user of snapshot.users) {
+  let strandedUsers = 0; // active users of a department that is not carried over
+  for (const user of users) {
     if (!user.isActive) continue;
-    const role = roleSets[user.roleKey];
-    if (!role) {
+    if (!roleSets[user.roleKey]) {
       skippedRoles.add(user.roleKey);
       continue;
     }
     const dept = user.departmentId ? deptById.get(user.departmentId) : undefined;
+    // A user whose department NPI deactivated (or the schema refuses) is not
+    // moved into a department-less position: they are left out and counted.
+    if (user.departmentId && !dept) {
+      strandedUsers += 1;
+      continue;
+    }
     const key = positionKey(user.roleKey, dept?.code ?? null);
     const group = groups.get(key) ?? { roleKey: user.roleKey, departmentCode: dept?.code ?? null, departmentNameAr: dept?.nameAr ?? null, userIds: [] };
     group.userIds.push(user.id);
     groups.set(key, group);
   }
   for (const roleKey of skippedRoles) skippedAr.push(t('setup.discover.skipped.role', { role: roleKey }));
+  if (strandedUsers > 0) skippedAr.push(t('setup.discover.skipped.department_users', { n: formatNumber(strandedUsers) }));
+  return groups;
+}
+
+function discoverStep2(
+  snapshot: NpiSnapshot,
+  roleSets: RoleSets,
+  personaFor: (roleKey: string) => string,
+  skippedAr: string[],
+): Step2 | null {
+  if (snapshot.departments === null || snapshot.users === null) return null;
+
+  const { departments, deptById } = carriedDepartments(snapshot.departments, skippedAr);
+  if (departments.length === 0) return null;
+
+  const groups = groupHolders(snapshot.users, roleSets, deptById, skippedAr);
   if (groups.size === 0) return null;
 
   const ordered = [...groups.values()].sort((a, b) => positionKey(a.roleKey, a.departmentCode).localeCompare(positionKey(b.roleKey, b.departmentCode)));
@@ -405,6 +433,46 @@ function toAnswers(a: DiscoveredAnswers['answers'], roleSets: RoleSets | undefin
   };
 }
 
+type Fixed = { step1: Step1; step5: Step5; step6: Step6 };
+
+/**
+ * Attempt 1 of the reading: NPI's own roles, departments, users and rules.
+ * `null` when NPI holds too little for it, or when what it holds does not form
+ * a valid profile (the caller then falls back to the pack's own steps 2–4).
+ */
+function discoverFromRoles(
+  snapshot: NpiSnapshot,
+  roleSets: RoleSets | undefined,
+  pack: ProfilePack,
+  fixed: Fixed,
+  personaFor: (roleKey: string) => string,
+  guess: ReturnType<typeof guessProfile>,
+): DiscoveredAnswers | null {
+  if (roleSets === undefined) return null;
+  const attemptSkipped: string[] = [];
+  const step2 = discoverStep2(snapshot, roleSets, personaFor, attemptSkipped);
+  const step4 = discoverStep4(pack, roleSets);
+  if (step2 === null || step4 === null) return null;
+
+  const npiRules = discoverStep3(snapshot.approvalRules, roleSets, attemptSkipped);
+  const step3: Step3 = npiRules ?? { step: 3, approvalRules: packRulesUnder(pack, roleSets, attemptSkipped) };
+  const answers = { 1: fixed.step1, 2: step2, 3: step3, 4: step4, 5: fixed.step5, 6: fixed.step6 };
+  try {
+    effectivePack(pack, toAnswers(answers, roleSets));
+  } catch (err) {
+    // The data NPI holds does not form a valid profile: fall through to
+    // the pack's own steps 2–4.
+    if (err instanceof PlanError) return null;
+    throw err;
+  }
+  return {
+    answers,
+    sources: { '1': 'heuristic', '2': 'npi', '3': npiRules ? 'npi' : 'pack-default', '4': 'npi', '5': 'npi', '6': 'pack-default' },
+    evidence: { ...guess, skippedAr: attemptSkipped },
+    roleSets,
+  };
+}
+
 export function discoverFromNpi(snapshot: NpiSnapshot, extras: DiscoveryExtras): DiscoveredAnswers {
   const loadPack = extras.loadPack ?? loadProfilePack;
   const personaFor = extras.personaFor ?? loadPersona;
@@ -417,30 +485,8 @@ export function discoverFromNpi(snapshot: NpiSnapshot, extras: DiscoveryExtras):
   const step6: Step6 = { step: 6, terminology: { ...pack.terminology } };
 
   // ── Attempt 1: NPI's own roles, departments, users and rules ──────────────
-  const roleSets = usableRoles(snapshot.roles);
-  if (roleSets !== undefined) {
-    const attemptSkipped: string[] = [];
-    const step2 = discoverStep2(snapshot, roleSets, personaFor, attemptSkipped);
-    const step4 = discoverStep4(pack, roleSets);
-    if (step2 !== null && step4 !== null) {
-      const npiRules = discoverStep3(snapshot.approvalRules, roleSets, attemptSkipped);
-      const step3: Step3 = npiRules ?? { step: 3, approvalRules: packRulesUnder(pack, roleSets, attemptSkipped) };
-      const answers = { 1: step1, 2: step2, 3: step3, 4: step4, 5: step5, 6: step6 };
-      try {
-        effectivePack(pack, toAnswers(answers, roleSets));
-        return {
-          answers,
-          sources: { '1': 'heuristic', '2': 'npi', '3': npiRules ? 'npi' : 'pack-default', '4': 'npi', '5': 'npi', '6': 'pack-default' },
-          evidence: { ...guess, skippedAr: attemptSkipped },
-          roleSets,
-        };
-      } catch (err) {
-        // The data NPI holds does not form a valid profile: fall through to
-        // the pack's own steps 2–4 below.
-        if (!(err instanceof PlanError)) throw err;
-      }
-    }
-  }
+  const attempt1 = discoverFromRoles(snapshot, usableRoles(snapshot.roles), pack, { step1, step5, step6 }, personaFor, guess);
+  if (attempt1 !== null) return attempt1;
 
   // ── Attempt 2: the pack's own steps 2–4 (an organization with too little
   //    of its own to read, or one whose data the profile schema refuses) ────

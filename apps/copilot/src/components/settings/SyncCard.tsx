@@ -61,13 +61,12 @@ export function SyncCard({ sync, onSync }: SyncCardProps) {
               {working ? t('sync.working') : t('sync.button')}
             </Button>
             {message ? (
-              <span
-                role="status"
+              <output
                 data-testid="settings-sync-result"
                 className={message.tone === 'ok' ? 'text-sm font-semibold text-success-700' : 'text-sm text-warning-700'}
               >
                 {message.text}
-              </span>
+              </output>
             ) : null}
           </div>
         ) : null}

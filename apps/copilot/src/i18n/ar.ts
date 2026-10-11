@@ -362,6 +362,7 @@ export const ar = {
   'setup.discover.reason.little_evidence': 'الأدلة في NPI قليلة؛ تأكد من النشاط قبل المتابعة',
   'setup.discover.skipped.department': 'القسم «{name}» تُرك: رمزه في NPI لا يوافق صيغة مَدار',
   'setup.discover.skipped.role': 'مستخدمون بدور «{role}» تُركوا: الدور بلا صلاحيات أو باسم غير مقبول',
+  'setup.discover.skipped.department_users': 'مستخدمون في أقسام موقوفة أو متروكة لم يُنقلوا: {n}',
   'setup.discover.skipped.inactive_rules': 'قواعد اعتماد موقوفة في NPI لم تُنقل: {n}',
   'setup.discover.skipped.rule': 'قاعدة اعتماد «{doc}» من {min} تُركت: لا تتفق مع أدوار NPI',
   'setup.discover.skipped.pack_rule': 'قاعدة النشاط المقترحة «{doc}» من {min} لم تُقترح: دور من سلسلتها غير موجود في NPI',

@@ -2,11 +2,13 @@
 //
 // After the setup, the organization's departments, positions and holders are
 // not frozen: at every administrator login (at most once per 10 minutes per
-// organization) and on the «حدّث من NPI» button in /settings, Madar re-reads
-// NPI with the CALLER's own token and reconciles its `positions` and
-// `position_assignments` with what it finds. Users' own roles and permissions
-// are not touched here — they are already live (`/auth/me`, 60 s, see
-// `src/auth/session.ts`).
+// organization — a reading NPI refused, or one too thin to use, counts too:
+// reading again changes nothing until NPI does) and on the «حدّث من NPI»
+// button in /settings (never throttled), Madar re-reads NPI with the CALLER's
+// own token and reconciles its `positions` and `position_assignments` with
+// what it finds; the writes of one reconciliation are one transaction. Users'
+// own roles and permissions are not touched here — they are already live
+// (`/auth/me`, 60 s, see `src/auth/session.ts`).
 //
 // Deterministic, no model, no I/O of its own beyond the injected NPI client
 // and database. The reading is `discoverFromNpi` (T-47a) — the same reader the
@@ -29,8 +31,10 @@
 //  - an open assignment whose user is deactivated or gone from NPI's directory,
 //    or whose user NPI now puts in another (role, department) → ENDED
 //    (`endedAt`); never deleted, so the handover history survives;
-//  - an active user whose role the sync cannot read (a role without
-//    permissions, say) keeps whatever assignment they have;
+//  - an active user the sync cannot place — whose role it cannot read (a role
+//    without permissions, say), or whose department NPI deactivated or the
+//    profile schema refuses (the discovery leaves such a user out rather than
+//    treating them as department-less) — keeps whatever assignment they have;
 //  - a position that lost its last holder in this run stays and is listed in
 //    the diff (`emptiedPositions`);
 //  - everything else is left exactly as it is.
@@ -40,7 +44,7 @@ import { getDb } from '../db';
 import type { NpiMe } from '../npi/responses';
 import { buildTitleAr } from '../positions/persona';
 import { loadProfilePack } from './catalog';
-import { discoverFromNpi, discoveryBlockers } from './discover';
+import { discoverFromNpi, discoveryBlockers, type DiscoveredAnswers } from './discover';
 import { loadNpiSnapshot, type OnboardingNpi } from './apply';
 import { SNAPSHOT_READ_PERMISSION } from './gaps';
 import type { NpiSnapshot } from './plan';
@@ -98,6 +102,9 @@ interface SyncNames {
 export interface SyncFirmConfigRow {
   profileKey: string | null;
   setupCompletedAt: Date | null;
+  /** The last time Madar read NPI for this organization — a login claims it
+   *  before reading and keeps it when the reading was refused or too thin; a
+   *  successful run writes it with the diff. Only a run that throws gives it back. */
   lastSyncAt: Date | null;
 }
 
@@ -155,7 +162,12 @@ export interface SyncDb {
     /** The newest run that read NPI (its names are the baseline). */
     findFirst(args: { where: { npiOrgId: string; skipped: null }; orderBy: { at: 'desc' } }): Promise<{ namesJson: unknown } | null>;
   };
+  /** The reconciliation's writes run in one of these: all of them or none. */
+  $transaction<T>(fn: (tx: SyncWriteDb) => Promise<T>): Promise<T>;
 }
+
+/** What the writes of a reconciliation touch (the transaction's client). */
+export type SyncWriteDb = Pick<SyncDb, 'position' | 'positionAssignment' | 'syncRun' | 'firmConfig'>;
 
 /** The three NPI reads the sync makes. */
 export type SyncNpi = Pick<OnboardingNpi, 'listRoles' | 'listDepartments' | 'listDepartmentDirectory'>;
@@ -199,6 +211,11 @@ function pairKey(roleKey: string, departmentId: string | null): string {
 }
 
 // ─── The sync ───────────────────────────────────────────────────────────────
+//
+// Four stages, each a function of its own: `readNpi` (NPI, no writes),
+// `loadHeld` (Madar's database, no writes), `planSync` (pure: what has to
+// change) and `applySync` (every write, inside ONE transaction — a failure
+// halfway leaves nothing of the reconciliation behind).
 
 export async function syncFromNpi(args: SyncArgs): Promise<SyncOutcome> {
   const db = args.db ?? (getDb() as unknown as SyncDb);
@@ -209,8 +226,11 @@ export async function syncFromNpi(args: SyncArgs): Promise<SyncOutcome> {
   if (firm === null || firm.setupCompletedAt === null || !packIsKnown(firm.profileKey)) return { skipped: 'not_set_up' };
 
   // A login claims the throttle slot atomically (two administrators logging in
-  // together sync once); a manual run is always allowed. A run that ends up
-  // reading nothing gives the slot back.
+  // together sync once); a manual run is always allowed. The slot is kept once
+  // NPI has been read — even when the reading was refused or too thin, because
+  // reading again on the next login changes nothing until NPI changes (the
+  // button is how an administrator who just got the permission tries again).
+  // Only a run that THROWS gives the slot back.
   let claimed = false;
   if (reason === 'login') {
     const threshold = new Date(now.getTime() - SYNC_THROTTLE_MS);
@@ -222,22 +242,76 @@ export async function syncFromNpi(args: SyncArgs): Promise<SyncOutcome> {
     claimed = true;
   }
 
-  let synced = false;
+  let failed = true;
   try {
     const outcome = await reconcile(db, args, firm.profileKey, now);
-    synced = outcome.skipped === null;
+    failed = false;
     return outcome;
   } finally {
-    if (claimed && !synced) await db.firmConfig.update({ where: { npiOrgId: orgId }, data: { lastSyncAt: firm.lastSyncAt } });
+    if (claimed && failed) await db.firmConfig.update({ where: { npiOrgId: orgId }, data: { lastSyncAt: firm.lastSyncAt } });
   }
 }
 
 async function reconcile(db: SyncDb, args: SyncArgs, profileKey: string, now: Date): Promise<SyncOutcome> {
   const { orgId, me, reason } = args;
-  const record = (skipped: SyncSkipReason) =>
-    db.syncRun.create({ data: { npiOrgId: orgId, at: now, byNpiUserId: me.id, reason, diffJson: null, namesJson: null, skipped } });
+  const read = await readNpi(args, profileKey);
+  if (read.skipped !== null) {
+    // A single write: no transaction needed.
+    await db.syncRun.create({ data: { npiOrgId: orgId, at: now, byNpiUserId: me.id, reason, diffJson: null, namesJson: null, skipped: read.skipped } });
+    return read.skipped === 'permission' ? { skipped: 'permission', missing: read.missing } : { skipped: 'unreadable' };
+  }
+  const held = await loadHeld(db, orgId);
+  const plan = planSync(read, held);
+  await db.$transaction((tx) => applySync(tx, plan, { orgId, byNpiUserId: me.id, reason, now }));
+  return { skipped: null, diff: plan.diff, changed: plan.changed, at: now.toISOString() };
+}
 
-  // ── Read NPI as the caller ────────────────────────────────────────────────
+// ─── Stage 1: what NPI says ─────────────────────────────────────────────────
+
+type Step2 = DiscoveredAnswers['answers'][2];
+type RoleSets = NonNullable<DiscoveredAnswers['roleSets']>;
+type NpiDepartmentRow = NonNullable<NpiSnapshot['departments']>[number];
+type NpiUserRow = NonNullable<NpiSnapshot['users']>[number];
+
+/** One (role, department) NPI has an active, placeable holder for. */
+interface Expected {
+  roleKey: string;
+  departmentId: string | null;
+  departmentCode: string | null;
+  titleAr: string;
+  personaAr: string;
+  userIds: string[];
+}
+
+interface NpiRead {
+  skipped: null;
+  expected: Expected[];
+  names: SyncNames;
+  users: Map<string, NpiUserRow>;
+  /** Every department NPI lists, inactive ones included. */
+  deptById: Map<string, NpiDepartmentRow>;
+  roleSets: RoleSets;
+}
+
+type ReadResult = { skipped: 'permission'; missing: string[] } | { skipped: 'unreadable' } | NpiRead;
+
+function expectedPositions(step2: Step2, departmentIdByCode: Map<string, string>): Expected[] {
+  const holders = step2.holders ?? [];
+  return step2.positions.map((p) => {
+    const holder = holders.find((h: PositionHolder) => h.roleKey === p.roleKey && h.departmentCode === p.departmentCode);
+    return {
+      roleKey: p.roleKey,
+      departmentId: p.departmentCode === null ? null : (departmentIdByCode.get(p.departmentCode) ?? null),
+      departmentCode: p.departmentCode,
+      titleAr: p.titleAr,
+      personaAr: p.personaAr,
+      userIds: holder?.npiUserIds ?? [],
+    };
+  });
+}
+
+async function readNpi(args: SyncArgs, profileKey: string): Promise<ReadResult> {
+  const { me } = args;
   // `admin.user.manage` also opens the permission catalog slot, which the sync
   // does not need: it gets an empty answer instead of a request.
   const reader: OnboardingNpi = {
@@ -253,10 +327,7 @@ async function reconcile(db: SyncDb, args: SyncArgs, profileKey: string, now: Da
     permissions: me.permissions.filter((p) => READ_PERMISSIONS.includes(p)),
   });
   const missing = discoveryBlockers(snapshot);
-  if (missing.length > 0) {
-    await record('permission');
-    return { skipped: 'permission', missing };
-  }
+  if (missing.length > 0) return { skipped: 'permission', missing };
 
   // The firm's own profile pack validates the reading (not a fresh guess): every
   // key maps to it, so the tie-break inside `discoverFromNpi` picks a profile
@@ -269,154 +340,227 @@ async function reconcile(db: SyncDb, args: SyncArgs, profileKey: string, now: Da
     ...(args.personaFor ? { personaFor: args.personaFor } : {}),
   });
   const step2 = discovered.answers[2];
-  if (discovered.sources['2'] !== 'npi' || step2.holders === undefined || discovered.roleSets === undefined) {
-    await record('unreadable');
-    return { skipped: 'unreadable' };
-  }
+  if (discovered.sources['2'] !== 'npi' || step2.holders === undefined || discovered.roleSets === undefined) return { skipped: 'unreadable' };
+
   const roleSets = discovered.roleSets;
-
-  // ── What NPI says ─────────────────────────────────────────────────────────
   const departments = snapshot.departments ?? [];
-  const deptByCode = new Map(departments.map((d) => [d.code, d]));
-  const deptById = new Map(departments.map((d) => [d.id, d]));
-  const users = new Map((snapshot.users ?? []).map((u) => [u.id, u]));
-  const nameOf = (id: string): string | null => users.get(id)?.nameAr ?? null;
-
-  const idOfCode = (code: string | null): string | null => (code === null ? null : (deptByCode.get(code)?.id ?? null));
-  const codeOfId = (id: string | null): string | null => (id === null ? null : (deptById.get(id)?.code ?? null));
-  const deptNameAr = (id: string | null): string | null => (id === null ? null : (deptById.get(id)?.nameAr ?? null));
-
-  interface Expected {
-    roleKey: string;
-    departmentId: string | null;
-    departmentCode: string | null;
-    titleAr: string;
-    personaAr: string;
-    userIds: string[];
-  }
-  const expected: Expected[] = step2.positions.map((p) => {
-    const holder = step2.holders!.find((h: PositionHolder) => h.roleKey === p.roleKey && h.departmentCode === p.departmentCode);
-    return {
-      roleKey: p.roleKey,
-      departmentId: idOfCode(p.departmentCode),
-      departmentCode: p.departmentCode,
-      titleAr: p.titleAr,
-      personaAr: p.personaAr,
-      userIds: holder?.npiUserIds ?? [],
-    };
-  });
-
-  const names: SyncNames = {
-    roles: Object.fromEntries(Object.entries(roleSets).map(([key, set]) => [key, set.nameAr])),
-    departments: Object.fromEntries(departments.filter((d) => d.isActive).map((d) => [d.id, d.nameAr])),
+  return {
+    skipped: null,
+    expected: expectedPositions(step2, new Map(departments.map((d) => [d.code, d.id]))),
+    names: {
+      roles: Object.fromEntries(Object.entries(roleSets).map(([key, set]) => [key, set.nameAr])),
+      departments: Object.fromEntries(departments.filter((d) => d.isActive).map((d) => [d.id, d.nameAr])),
+    },
+    users: new Map((snapshot.users ?? []).map((u) => [u.id, u])),
+    deptById: new Map(departments.map((d) => [d.id, d])),
+    roleSets,
   };
-  const previousNames = namesFromJson((await db.syncRun.findFirst({ where: { npiOrgId: orgId, skipped: null }, orderBy: { at: 'desc' } }))?.namesJson);
+}
 
-  // ── What Madar holds ──────────────────────────────────────────────────────
+// ─── Stage 2: what Madar holds ──────────────────────────────────────────────
+
+interface Held {
+  positions: SyncPositionRow[];
+  /** Every open assignment of the organization's positions. */
+  openBefore: SyncAssignmentRow[];
+  /** The names the last run that read NPI saw (null on the first sync). */
+  previousNames: SyncNames | null;
+}
+
+async function loadHeld(db: Pick<SyncDb, 'position' | 'positionAssignment' | 'syncRun'>, orgId: string): Promise<Held> {
+  const previousRun = await db.syncRun.findFirst({ where: { npiOrgId: orgId, skipped: null }, orderBy: { at: 'desc' } });
   const positions = await db.position.findMany({ where: { npiOrgId: orgId } });
-  const positionByKey = new Map(positions.map((p) => [pairKey(p.roleKey, p.departmentId), p]));
   const openBefore = await db.positionAssignment.findMany({ where: { endedAt: null, position: { npiOrgId: orgId } } });
-  const holdersBefore = new Map<string, number>();
-  for (const a of openBefore) holdersBefore.set(a.positionId, (holdersBefore.get(a.positionId) ?? 0) + 1);
+  return { positions, openBefore, previousNames: namesFromJson(previousRun?.namesJson) };
+}
 
-  const diff: Omit<SyncDiff, 'unchanged' | 'summaryAr'> = {
-    addedPositions: [],
-    renamedPositions: [],
-    addedAssignments: [],
-    endedAssignments: [],
-    emptiedPositions: [],
-  };
-  const titleOf = new Map<string, string>(positions.map((p) => [p.id, p.titleAr]));
+// ─── Stage 3: the plan (pure) ───────────────────────────────────────────────
 
-  // ── Positions: create the missing ─────────────────────────────────────────
-  const positionIdFor = new Map<string, string>();
-  for (const e of expected) {
+/** What a reconciliation will write, and the diff it will report. */
+interface SyncPlan {
+  createPositions: Expected[];
+  renamePositions: { id: string; toAr: string; entry: SyncDiff['renamedPositions'][number] }[];
+  endAssignments: { ids: string[]; entries: SyncDiff['endedAssignments'] };
+  /** `positionRef` is a position's id, or `pendingRef(...)` for one this run creates. */
+  createAssignments: { positionRef: string; entry: SyncDiff['addedAssignments'][number] }[];
+  diff: SyncDiff;
+  changed: boolean;
+  names: SyncNames;
+}
+
+/** Stands in for the id of a position the run has yet to create. */
+function pendingRef(e: Pick<Expected, 'roleKey' | 'departmentId'>): string {
+  return `new:${pairKey(e.roleKey, e.departmentId)}`;
+}
+
+function departmentCodeOf(read: NpiRead, id: string | null): string | null {
+  return id === null ? null : (read.deptById.get(id)?.code ?? null);
+}
+
+function departmentNameOf(read: NpiRead, id: string | null): string | null {
+  return id === null ? null : (read.deptById.get(id)?.nameAr ?? null);
+}
+
+function countOpen(openBefore: SyncAssignmentRow[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const a of openBefore) counts.set(a.positionId, (counts.get(a.positionId) ?? 0) + 1);
+  return counts;
+}
+
+/** Which (role, department) pairs have a row, which need one, and the title of each. */
+function planPositions(read: NpiRead, held: Held) {
+  const byKey = new Map(held.positions.map((p) => [pairKey(p.roleKey, p.departmentId), p]));
+  const refFor = new Map<string, string>(); // pairKey → position id, or the pending ref
+  const titleOf = new Map<string, string>(held.positions.map((p) => [p.id, p.titleAr])); // id or ref → title
+  const createPositions: Expected[] = [];
+  for (const e of read.expected) {
     const key = pairKey(e.roleKey, e.departmentId);
-    const existing = positionByKey.get(key);
+    if (refFor.has(key)) continue;
+    const existing = byKey.get(key);
     if (existing) {
-      positionIdFor.set(key, existing.id);
+      refFor.set(key, existing.id);
       continue;
     }
-    const created = await db.position.create({
-      data: { npiOrgId: orgId, roleKey: e.roleKey, departmentId: e.departmentId, titleAr: e.titleAr, personaAr: e.personaAr },
-    });
-    positionIdFor.set(key, created.id);
-    titleOf.set(created.id, e.titleAr);
-    diff.addedPositions.push({ roleKey: e.roleKey, departmentCode: e.departmentCode, titleAr: e.titleAr });
+    const ref = pendingRef(e);
+    refFor.set(key, ref);
+    titleOf.set(ref, e.titleAr);
+    createPositions.push(e);
   }
+  return { createPositions, refFor, titleOf };
+}
 
-  // ── Positions: follow NPI's renames (only titles Madar itself built) ──────
-  if (previousNames !== null) {
-    for (const p of positions) {
-      const role = roleSets[p.roleKey];
-      if (!role || (p.departmentId !== null && !deptById.has(p.departmentId))) continue;
-      const before = buildTitleAr(previousNames.roles[p.roleKey] ?? role.nameAr, p.departmentId === null ? null : (previousNames.departments[p.departmentId] ?? deptNameAr(p.departmentId)));
-      const after = buildTitleAr(role.nameAr, deptNameAr(p.departmentId));
-      if (p.titleAr !== before || before === after) continue;
-      await db.position.update({ where: { id: p.id }, data: { titleAr: after } });
-      titleOf.set(p.id, after);
-      diff.renamedPositions.push({ roleKey: p.roleKey, departmentCode: codeOfId(p.departmentId), fromAr: p.titleAr, toAr: after });
-    }
+/** The title Madar would now build for `p`, when `p` still carries the title it built last time. */
+function renamedTitle(read: NpiRead, p: SyncPositionRow, previous: SyncNames): string | null {
+  const role = read.roleSets[p.roleKey];
+  if (!role || (p.departmentId !== null && !read.deptById.has(p.departmentId))) return null;
+  const deptNow = departmentNameOf(read, p.departmentId);
+  const deptBefore = p.departmentId === null ? null : (previous.departments[p.departmentId] ?? deptNow);
+  const before = buildTitleAr(previous.roles[p.roleKey] ?? role.nameAr, deptBefore);
+  const after = buildTitleAr(role.nameAr, deptNow);
+  return p.titleAr === before && before !== after ? after : null;
+}
+
+function planRenames(read: NpiRead, held: Held): SyncPlan['renamePositions'] {
+  const out: SyncPlan['renamePositions'] = [];
+  if (held.previousNames === null) return out;
+  for (const p of held.positions) {
+    const toAr = renamedTitle(read, p, held.previousNames);
+    if (toAr === null) continue;
+    out.push({ id: p.id, toAr, entry: { roleKey: p.roleKey, departmentCode: departmentCodeOf(read, p.departmentId), fromAr: p.titleAr, toAr } });
   }
+  return out;
+}
 
-  // ── Assignments ───────────────────────────────────────────────────────────
-  const expectedPositionOfUser = new Map<string, string>();
-  for (const e of expected) for (const userId of e.userIds) expectedPositionOfUser.set(userId, positionIdFor.get(pairKey(e.roleKey, e.departmentId))!);
+/** Why an open assignment ends, or null when it stays. An active user the
+ *  sync cannot place (`wanted` undefined) keeps what they have. */
+function endReasonOf(user: NpiUserRow | undefined, wanted: string | undefined, positionId: string): EndedReason | null {
+  if (!user) return 'removed';
+  if (!user.isActive) return 'inactive';
+  return wanted !== undefined && wanted !== positionId ? 'moved' : null;
+}
 
-  const toEnd: string[] = [];
+function planAssignments(read: NpiRead, held: Held, refFor: Map<string, string>, titleOf: Map<string, string>, holdersBefore: Map<string, number>) {
+  const nameOf = (id: string): string | null => read.users.get(id)?.nameAr ?? null;
+  const wantedOf = new Map<string, string>(); // npiUserId → the position (or ref) NPI puts them in
+  for (const e of read.expected) for (const userId of e.userIds) wantedOf.set(userId, refFor.get(pairKey(e.roleKey, e.departmentId))!);
+
+  const endIds: string[] = [];
+  const entries: SyncDiff['endedAssignments'] = [];
   const stillOpen = new Map<string, number>(holdersBefore);
   const satisfied = new Set<string>(); // `${positionId}\u0000${userId}` already open and right
-  for (const a of openBefore) {
-    const user = users.get(a.npiUserId);
-    const wanted = expectedPositionOfUser.get(a.npiUserId);
-    let endReason: EndedReason | null = null;
-    if (!user) endReason = 'removed';
-    else if (!user.isActive) endReason = 'inactive';
-    else if (wanted !== undefined && wanted !== a.positionId) endReason = 'moved';
-    else if (wanted === a.positionId) {
-      const dedupe = `${a.positionId}\u0000${a.npiUserId}`;
-      if (satisfied.has(dedupe)) {
-        // A second open row for the same user on the same position: not a
-        // change NPI made, but a duplicate that should not outlive the sync.
-        toEnd.push(a.id);
-        stillOpen.set(a.positionId, (stillOpen.get(a.positionId) ?? 1) - 1);
-        continue;
-      }
-      satisfied.add(dedupe);
+  for (const a of held.openBefore) {
+    const wanted = wantedOf.get(a.npiUserId);
+    const reason = endReasonOf(read.users.get(a.npiUserId), wanted, a.positionId);
+    const key = `${a.positionId}\u0000${a.npiUserId}`;
+    // A second open row for the same user on the same position is not a change
+    // NPI made, but a duplicate that should not outlive the sync.
+    const duplicate = reason === null && wanted === a.positionId && satisfied.has(key);
+    if (reason === null && !duplicate) {
+      if (wanted === a.positionId) satisfied.add(key);
+      continue;
     }
-    if (endReason !== null) {
-      toEnd.push(a.id);
-      stillOpen.set(a.positionId, (stillOpen.get(a.positionId) ?? 1) - 1);
-      diff.endedAssignments.push({ npiUserId: a.npiUserId, nameAr: nameOf(a.npiUserId), titleAr: titleOf.get(a.positionId) ?? '', reason: endReason });
-    }
-  }
-  if (toEnd.length > 0) await db.positionAssignment.updateMany({ where: { id: { in: toEnd }, endedAt: null }, data: { endedAt: now } });
-
-  for (const [userId, positionId] of expectedPositionOfUser) {
-    if (satisfied.has(`${positionId}\u0000${userId}`)) continue;
-    await db.positionAssignment.create({ data: { positionId, npiUserId: userId } });
-    stillOpen.set(positionId, (stillOpen.get(positionId) ?? 0) + 1);
-    diff.addedAssignments.push({ npiUserId: userId, nameAr: nameOf(userId), titleAr: titleOf.get(positionId) ?? '' });
+    endIds.push(a.id);
+    stillOpen.set(a.positionId, (stillOpen.get(a.positionId) ?? 1) - 1);
+    if (reason !== null) entries.push({ npiUserId: a.npiUserId, nameAr: nameOf(a.npiUserId), titleAr: titleOf.get(a.positionId) ?? '', reason });
   }
 
-  for (const p of positions) {
+  const creates: SyncPlan['createAssignments'] = [];
+  for (const [userId, positionRef] of wantedOf) {
+    if (satisfied.has(`${positionRef}\u0000${userId}`)) continue;
+    stillOpen.set(positionRef, (stillOpen.get(positionRef) ?? 0) + 1);
+    creates.push({ positionRef, entry: { npiUserId: userId, nameAr: nameOf(userId), titleAr: titleOf.get(positionRef) ?? '' } });
+  }
+  return { endIds, entries, creates, unchanged: satisfied.size, stillOpen };
+}
+
+function planEmptied(read: NpiRead, held: Held, holdersBefore: Map<string, number>, stillOpen: Map<string, number>, titleOf: Map<string, string>): SyncDiff['emptiedPositions'] {
+  const out: SyncDiff['emptiedPositions'] = [];
+  for (const p of held.positions) {
     if ((holdersBefore.get(p.id) ?? 0) > 0 && (stillOpen.get(p.id) ?? 0) === 0) {
-      diff.emptiedPositions.push({ roleKey: p.roleKey, departmentCode: codeOfId(p.departmentId), titleAr: titleOf.get(p.id) ?? p.titleAr });
+      out.push({ roleKey: p.roleKey, departmentCode: departmentCodeOf(read, p.departmentId), titleAr: titleOf.get(p.id) ?? p.titleAr });
     }
   }
+  return out;
+}
 
-  const full: SyncDiff = { ...diff, unchanged: satisfied.size, summaryAr: summarize(diff) };
-  const changed = !isEmptyDiff(diff);
+function planSync(read: NpiRead, held: Held): SyncPlan {
+  const { createPositions, refFor, titleOf } = planPositions(read, held);
+  const renamePositions = planRenames(read, held);
+  for (const r of renamePositions) titleOf.set(r.id, r.toAr);
 
-  // ── Record ────────────────────────────────────────────────────────────────
-  await db.syncRun.create({
-    data: { npiOrgId: orgId, at: now, byNpiUserId: me.id, reason, diffJson: full, namesJson: names, skipped: null },
+  const holdersBefore = countOpen(held.openBefore);
+  const assignments = planAssignments(read, held, refFor, titleOf, holdersBefore);
+  const diff: Omit<SyncDiff, 'unchanged' | 'summaryAr'> = {
+    addedPositions: createPositions.map((e) => ({ roleKey: e.roleKey, departmentCode: e.departmentCode, titleAr: e.titleAr })),
+    renamedPositions: renamePositions.map((r) => r.entry),
+    addedAssignments: assignments.creates.map((c) => c.entry),
+    endedAssignments: assignments.entries,
+    emptiedPositions: planEmptied(read, held, holdersBefore, assignments.stillOpen, titleOf),
+  };
+  return {
+    createPositions,
+    renamePositions,
+    endAssignments: { ids: assignments.endIds, entries: assignments.entries },
+    createAssignments: assignments.creates,
+    diff: { ...diff, unchanged: assignments.unchanged, summaryAr: summarize(diff) },
+    changed: !isEmptyDiff(diff),
+    names: read.names,
+  };
+}
+
+// ─── Stage 4: the writes (one transaction) ──────────────────────────────────
+
+interface ApplyContext {
+  orgId: string;
+  byNpiUserId: string;
+  reason: SyncReason;
+  now: Date;
+}
+
+/** Runs inside `db.$transaction`: all of it or none of it. */
+async function applySync(tx: SyncWriteDb, plan: SyncPlan, ctx: ApplyContext): Promise<void> {
+  const { orgId, now } = ctx;
+  const createdId = new Map<string, string>(); // pending ref → the new position's id
+  for (const e of plan.createPositions) {
+    const created = await tx.position.create({
+      data: { npiOrgId: orgId, roleKey: e.roleKey, departmentId: e.departmentId, titleAr: e.titleAr, personaAr: e.personaAr },
+    });
+    createdId.set(pendingRef(e), created.id);
+  }
+  for (const r of plan.renamePositions) await tx.position.update({ where: { id: r.id }, data: { titleAr: r.toAr } });
+  if (plan.endAssignments.ids.length > 0) {
+    await tx.positionAssignment.updateMany({ where: { id: { in: plan.endAssignments.ids }, endedAt: null }, data: { endedAt: now } });
+  }
+  for (const a of plan.createAssignments) {
+    await tx.positionAssignment.create({ data: { positionId: createdId.get(a.positionRef) ?? a.positionRef, npiUserId: a.entry.npiUserId } });
+  }
+  await tx.syncRun.create({
+    data: { npiOrgId: orgId, at: now, byNpiUserId: ctx.byNpiUserId, reason: ctx.reason, diffJson: plan.diff, namesJson: plan.names, skipped: null },
   });
-  await db.firmConfig.update({
+  await tx.firmConfig.update({
     where: { npiOrgId: orgId },
-    data: { lastSyncAt: now, ...(changed ? { lastSyncDiffJson: { ...full, at: now.toISOString() } } : {}) },
+    data: { lastSyncAt: now, ...(plan.changed ? { lastSyncDiffJson: { ...plan.diff, at: now.toISOString() } } : {}) },
   });
-  return { skipped: null, diff: full, changed, at: now.toISOString() };
 }
 
 // ─── Arabic one-liners ──────────────────────────────────────────────────────
