@@ -17,7 +17,35 @@
   وعلى كل طلب دمج، ويدوياً (`workflow_dispatch`).
 - **غير مُلزِم بعد:** لم يُضَف إلى `ci-gate`، فبوابة الجودة معلومة لا مانعاً للدمج حتى تقرر.
 
-## خطوات لمرة واحدة (بيدك — ثلاث دقائق)
+## السبب الحقيقي للفشل المتكرر (اكتُشف 2026-10-11)
+
+ليس في الكود ولا في الإعداد: **حصة الأسطر في المنظمة**. رسالة خادم SonarCloud عند معالجة أول
+تحليل من CI (المهمة `AaEpXkDwuoMz_oCESuzL`):
+
+> This analysis will make your organization 'eyad62689-lab' reach the maximum allowed lines
+> limit of 100000. Current LOC usage is: 90200. LOC count in this analysis: 72222.
+
+أي أن المنظمة تستهلك 90,200 من 100,000 سطر في مشاريعها الأخرى، و`npi-erp` يحتاج نحو 66,000
+بعد استثناء الملف المولَّد `apps/copilot/src/npi/types.ts` (6,400 سطر). التحليلات التلقائية
+السابقة كلها فشلت للسبب نفسه. الخيارات (قرار المالك):
+
+| الخيار | الأثر |
+|---|---|
+| حذف مشاريع قديمة من المنظمة حتى تتوفر ≈ 66,000 سطر (مثلاً priva-pdf 20,026 + learnenglishv 19,344 + hr-assistant 14,962 + estraha 12,061 = 66,393) | مجاني؛ يُزيل تاريخ تحليل تلك المشاريع فقط، الكود يبقى في GitHub |
+| رفع خطة المنظمة إلى شريحة أسطر أعلى | مدفوع؛ لا حذف |
+| تحليل جزء من المستودع فقط | غير مجدٍ: الكوبايلوت وحده ≈ 26,700 سطر، والمتبقي 9,800 |
+
+استهلاك المشاريع الأخرى (ncloc): learnenglishv 19,344 · priva-pdf 20,026 · hr-assistant 14,962 ·
+estraha 12,061 · visit-alahsa 11,042 · npi-website 10,442 · Alpha_CIA_Platform 1,740 ·
+trustscan 799 · solar-calculator-api 583 · npi-legal 0.
+
+حجم npi-erp التقريبي بعد الاستثناءات: api 16,300 · web 20,500 · copilot 26,700 · shared 850 ·
+prisma 1,100.
+
+**الرمز**: `github-actions-npi-erp` بلا انتهاء ما دام يُستخدم، ويسقط إن بقي بلا استخدام 60 يوماً
+(أي إن توقف الورك فلو شهرين يلزم رمز جديد وتحديث السرّ `SONAR_TOKEN`).
+
+## خطوات لمرة واحدة (أُنجزت 2026-10-11: الرمز، السرّ، إيقاف التحليل التلقائي)
 
 1. **رمز الوصول:** في SonarCloud: My Account → Security → Generate Token (اسم مثل
    `github-actions-npi-erp`، نوع Global أو Project Analysis). انسخ القيمة.

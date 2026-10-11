@@ -67,7 +67,12 @@ jobs:
 
       # Pinned to the release commit (a moving tag could swap the code that
       # receives SONAR_TOKEN); bump the SHA and the comment together.
+      # Pull requests are detected from the event; a push or a manual run names
+      # its branch explicitly (a workflow_dispatch run was otherwise filed under
+      # the main branch).
       - name: SonarQube Cloud scan
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: ${{ github.event_name != 'pull_request' && format('-Dsonar.branch.name={0}', github.ref_name) || '' }}
