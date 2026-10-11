@@ -72,7 +72,7 @@ const EXTENSION_RE = /\.[A-Za-z0-9]{1,10}$/;
 export function sanitizeFileName(name: string): string {
   const lastSegment = name.split(/[/\\]/).pop() ?? '';
   let cleaned = lastSegment.replace(FORBIDDEN_NAME_CHARS, '');
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  cleaned = cleaned.replaceAll(/\s+/g, ' ').trim();
   if (cleaned.length === 0) return 'document';
 
   if (cleaned.length > MAX_FILE_NAME_LENGTH) {
@@ -247,7 +247,7 @@ export type UploadOutcome =
   | { status: 'existing'; document: DocumentSummary }
   | { status: 'refused'; reason: UploadRefusal; detail?: string };
 
-async function defaultConvertHeic(bytes: Uint8Array): Promise<Uint8Array> {
+function defaultConvertHeic(bytes: Uint8Array): Promise<Uint8Array> {
   return convertHeic({ buffer: bytes, format: 'JPEG', quality: 0.9 });
 }
 

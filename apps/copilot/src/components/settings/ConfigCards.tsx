@@ -5,6 +5,7 @@ import { formatDate } from '@/i18n/format';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { lineKeys } from '@/components/ui/keys';
 import type { RerunStep, SettingsConfig, SettingsLastApply, SettingsLeftover } from '@/settings/types';
 import { describeGapAr } from '@/onboarding/gaps';
 import { FLOW_REQUIRED_MODULE, type ModuleKey, type TermKey } from '@/onboarding/profile.schema';
@@ -117,15 +118,16 @@ export function TerminologyCard({ config, onRerun }: ConfigCardProps) {
 
 function GapsSection({ gaps }: { gaps: SettingsLastApply['gaps'] }) {
   if (gaps.length === 0) return null;
+  const gapKeys = lineKeys(gaps.map((gap) => (gap.kind === 'workflow_definitions' ? gap.kind : `${gap.roleKey}\u0000${gap.permission}`)));
   return (
     <div className="flex flex-col gap-1">
       <h4 className="text-sm font-bold text-slate-900">{t('settings.last_apply.gaps')}</h4>
       <ul className="list-inside list-disc text-sm text-info-700">
-        {gaps.map((gap, i) =>
+        {gaps.map((gap, position) =>
           gap.kind === 'workflow_definitions' ? (
-            <li key={i}>{describeGapAr(gap, '')}</li>
+            <li key={gapKeys[position]}>{describeGapAr(gap, '')}</li>
           ) : (
-            <li key={i}>
+            <li key={gapKeys[position]}>
               <code dir="ltr" className="text-xs text-slate-500">
                 {gap.permission}
               </code>{' '}

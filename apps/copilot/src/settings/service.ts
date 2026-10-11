@@ -369,7 +369,7 @@ async function buildSettingsView(deps: SettingsDeps, caller: SetupCaller): Promi
 
 export async function getSettingsView(deps: SettingsDeps, caller: SetupCaller): Promise<SettingsView> {
   requireAdmin(caller);
-  return buildSettingsView(deps, caller);
+  return await buildSettingsView(deps, caller);
 }
 
 export async function handleSettingsAction(deps: SettingsDeps, caller: SetupCaller, rawBody: unknown): Promise<SettingsActionResult> {

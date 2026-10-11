@@ -297,7 +297,7 @@ function postInit(body: unknown): RequestInit {
 
 // ─── Entry points ───────────────────────────────────────────────────────────
 
-export async function loadHandovers(): Promise<HandoverApiResult<{ handovers: HandoverSummary[] }>> {
+export function loadHandovers(): Promise<HandoverApiResult<{ handovers: HandoverSummary[] }>> {
   return call(
     HANDOVER_API_PATH,
     getInit(),
@@ -309,7 +309,7 @@ export async function loadHandovers(): Promise<HandoverApiResult<{ handovers: Ha
   );
 }
 
-export async function loadHandover(id: string): Promise<HandoverApiResult<{ handover: HandoverView }>> {
+export function loadHandover(id: string): Promise<HandoverApiResult<{ handover: HandoverView }>> {
   return call(
     `${HANDOVER_API_PATH}?id=${encodeURIComponent(id)}`,
     getInit(),
@@ -318,7 +318,7 @@ export async function loadHandover(id: string): Promise<HandoverApiResult<{ hand
   );
 }
 
-export async function loadCandidates(positionId: string): Promise<HandoverApiResult<{ candidates: HandoverCandidatesView }>> {
+export function loadCandidates(positionId: string): Promise<HandoverApiResult<{ candidates: HandoverCandidatesView }>> {
   return call(
     `${HANDOVER_API_PATH}?positionId=${encodeURIComponent(positionId)}`,
     getInit(),
@@ -328,7 +328,7 @@ export async function loadCandidates(positionId: string): Promise<HandoverApiRes
 }
 
 /** Reassigns the position; the model call inside can take up to a minute. */
-export async function reassign(positionId: string, toUserId: string): Promise<HandoverApiResult<{ outcome: ReassignOutcome }>> {
+export function reassign(positionId: string, toUserId: string): Promise<HandoverApiResult<{ outcome: ReassignOutcome }>> {
   return call(
     HANDOVER_API_PATH,
     postInit({ action: 'reassign', positionId, toUserId }),
@@ -337,7 +337,7 @@ export async function reassign(positionId: string, toUserId: string): Promise<Ha
   );
 }
 
-export async function narrate(id: string): Promise<HandoverApiResult<{ handover: HandoverView }>> {
+export function narrate(id: string): Promise<HandoverApiResult<{ handover: HandoverView }>> {
   return call(
     HANDOVER_API_PATH,
     postInit({ action: 'narrate', id }),
@@ -349,7 +349,7 @@ export async function narrate(id: string): Promise<HandoverApiResult<{ handover:
 /** An administrator's read-only read of a predecessor's conversation: the
  *  chat endpoint answers 200 to its owner and to an administrator of the
  *  organization (BR-07) and 404 to everyone else. */
-export async function loadPredecessorConversation(
+export function loadPredecessorConversation(
   conversationId: string,
 ): Promise<HandoverApiResult<{ messages: TranscriptMessage[] }>> {
   return call(

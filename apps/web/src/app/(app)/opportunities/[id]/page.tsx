@@ -263,12 +263,12 @@ export default function OpportunityPage() {
 
       {/* A closed opportunity: the verdict, and no buttons. */}
       {o.stage === 'WON' && (
-        <div role="status" className="mb-4 rounded-xl border border-success-200 bg-success-50/60 p-4 text-sm font-semibold text-success-900">
+        <output className="block mb-4 rounded-xl border border-success-200 bg-success-50/60 p-4 text-sm font-semibold text-success-900">
           {t('opps.closed.won').replace('{date}', formatDate(o.closedAt, locale))}
-        </div>
+        </output>
       )}
       {o.stage === 'LOST' && (
-        <div role="status" className="mb-4 rounded-xl border border-danger-200 bg-danger-50/60 p-4 text-sm text-danger-900">
+        <div aria-live="polite" aria-atomic="true" className="mb-4 rounded-xl border border-danger-200 bg-danger-50/60 p-4 text-sm text-danger-900">
           <p className="font-semibold">
             {t('opps.closed.lost').replace('{date}', formatDate(o.closedAt, locale))}
             {o.lossReason && <> — {t('opps.closed.reason').replace('{reason}', pick(o.lossReason, 'name'))}</>}

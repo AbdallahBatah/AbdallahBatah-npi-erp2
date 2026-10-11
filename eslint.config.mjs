@@ -48,6 +48,33 @@ export default tseslint.config(
     },
   },
   {
+    // Q-5 (2026-10-11): the mechanical sweep's rules, so the SonarCloud
+    // baseline does not grow back. `require-await` is off for tests, whose
+    // mocks return promises from async stubs on purpose.
+    rules: {
+      'require-await': 'error',
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.name='isNaN']",
+          message: 'Use Number.isNaN: the global isNaN coerces its argument first.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='charCodeAt']",
+          message: 'Use codePointAt (and String.fromCodePoint): charCodeAt splits astral characters.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='replace'] > Literal.arguments:first-child[regex.flags=/g/]",
+          message: 'Use replaceAll with a global pattern.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['**/*.spec.ts', '**/*.spec.tsx', '**/*.int-spec.ts', '**/e2e/**', '**/tests/**'],
+    rules: { 'require-await': 'off' },
+  },
+  {
     rules: {
       // Interop with decorators/DTO patterns and existing idioms:
       '@typescript-eslint/no-explicit-any': 'off',

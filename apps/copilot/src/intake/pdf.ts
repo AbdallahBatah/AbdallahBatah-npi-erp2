@@ -84,7 +84,7 @@ export async function analyzePdf(data: Uint8Array): Promise<PdfAnalysis> {
       throw toPdfReadError(err);
     }
 
-    const textChars = textResult.text.replace(/\s+/g, ' ').trim().length;
+    const textChars = textResult.text.replaceAll(/\s+/g, ' ').trim().length;
 
     if (textChars >= PDF_TEXT_MIN_CHARS) {
       return {

@@ -1030,7 +1030,7 @@ describe('deriveNpiFacts: the whole output', () => {
   it('has no Latin letters outside document codes and SKUs', () => {
     const skus = new Set(['MOD-550', 'CAB-LV6', 'BOS-KIT']);
     for (const f of deriveNpiFacts(full)) {
-      let text = f.factAr.replace(/[A-Z]{2,4}-\d{3,5}/g, '');
+      let text = f.factAr.replaceAll(/[A-Z]{2,4}-\d{3,5}/g, '');
       for (const token of text.match(/[A-Z0-9-]+/g) ?? []) {
         if (skus.has(token)) text = text.replace(token, '');
       }

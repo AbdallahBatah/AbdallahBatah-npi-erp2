@@ -41,7 +41,7 @@ export function Skeleton({ className = 'h-4 w-full' }: { className?: string }) {
   );
 }
 
-/** Whole-region loading indicator, announced to assistive tech via `role="status"`.
+/** Whole-region loading indicator, announced to assistive tech via `<output>` (implicit `status` role).
  *  `aria-busy` as on `Skeleton`'s users: the perf gate (T-39) treats every
  *  `aria-busy` element as a load still in progress and interacts only once
  *  none is left — without it the trust screen's 50-row table was still
@@ -49,9 +49,9 @@ export function Skeleton({ className = 'h-4 w-full' }: { className?: string }) {
  *  throttled phone, T-39b). */
 export function LoadingState() {
   return (
-    <div role="status" aria-busy="true" className="flex items-center justify-center gap-2 p-8 text-sm text-slate-600">
+    <output aria-busy="true" className="flex items-center justify-center gap-2 p-8 text-sm text-slate-600">
       <Spinner className="h-4 w-4" />
       {t('state.loading')}
-    </div>
+    </output>
   );
 }

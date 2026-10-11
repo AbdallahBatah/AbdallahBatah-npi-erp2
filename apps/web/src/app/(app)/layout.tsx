@@ -56,10 +56,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-slate-500">
         <img src="/brand/npi-icon.svg" alt="" className="h-11 w-11" />
-        <span className="flex items-center gap-2 text-xs" role="status">
+        <output className="flex items-center gap-2 text-xs">
           <Spinner className="h-3.5 w-3.5" />
           {t('common.loading')}
-        </span>
+        </output>
       </div>
     );
   }

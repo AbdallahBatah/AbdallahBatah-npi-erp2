@@ -93,9 +93,9 @@ export function ModulesCard({ visibleModules, onSave }: ModulesCardProps) {
             {t('settings.modules.save')}
           </Button>
           {saved ? (
-            <span role="status" className="text-sm font-semibold text-success-700">
+            <output className="text-sm font-semibold text-success-700">
               {t('settings.modules.saved')}
-            </span>
+            </output>
           ) : null}
         </div>
       </div>

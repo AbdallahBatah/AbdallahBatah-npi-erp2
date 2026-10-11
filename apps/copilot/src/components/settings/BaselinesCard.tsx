@@ -83,9 +83,9 @@ function BaselineRow({ flow, baseline, onSave }: BaselineRowProps) {
             : t('settings.baselines.none')}
         </span>
         {saved ? (
-          <span role="status" className="text-xs font-semibold text-success-700">
+          <output className="text-xs font-semibold text-success-700">
             {t('settings.baselines.saved')}
-          </span>
+          </output>
         ) : null}
         {error ? (
           <span role="alert" className="text-xs text-danger-700">

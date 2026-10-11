@@ -245,7 +245,7 @@ export class CustomersService {
       throw new BadRequestException('A company customer requires a CR number or a VAT number');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    return await this.prisma.$transaction(async (tx) => {
       await this.assertNoDuplicateKeys(tx, user.organizationId, keys);
       const code = await this.numbering.next(user.organizationId, 'CUSTOMER', tx);
       const created = await tx.customer.create({
@@ -291,7 +291,7 @@ export class CustomersService {
       vatNumber: dto.vatNumber,
       mobile: dto.mobile,
     });
-    return this.prisma.$transaction(async (tx) => {
+    return await this.prisma.$transaction(async (tx) => {
       const existing = await tx.customer.findFirst({
         where: { id, organizationId: user.organizationId },
       });

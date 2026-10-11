@@ -27,6 +27,7 @@ import {
   serialsField,
   textField,
   wire,
+  NO_FLAGS,
   type AssessFlags,
 } from './common';
 import type { AssessedField, WireField } from './field';
@@ -165,7 +166,7 @@ export function batchNoField(w: WireField): AssessedField<string> {
  *    `values.lines` keeps usable lines only (order preserved) and `values`
  *    is null when none is usable.
  */
-export function assessGrn(out: GrnOutput, flags: AssessFlags = { ligatureSuspect: false }): { assessed: AssessedGrn; values: GrnValues | null } {
+export function assessGrn(out: GrnOutput, flags: AssessFlags = NO_FLAGS): { assessed: AssessedGrn; values: GrnValues | null } {
   const lines: AssessedGrnLine[] = out.lines.map((l) => {
     const qty = quantityField(l.qty);
     return {

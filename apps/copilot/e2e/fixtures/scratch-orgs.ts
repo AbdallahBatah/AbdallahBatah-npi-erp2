@@ -79,7 +79,7 @@ export interface ScratchAccount {
  *  domains the same way — never hardcoded here. */
 export function scratchAccount(key: string, role: ScratchRole = 'admin'): ScratchAccount {
   const local = EMAIL_LOCAL_BY_ROLE[role];
-  const domainKey = key.replace(/_/g, '-');
+  const domainKey = key.replaceAll(/_/g, '-');
   return {
     email: `${local}@${domainKey}.scratch.madar.test`,
     password: readScratchPassword(),

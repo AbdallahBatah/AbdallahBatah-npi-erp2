@@ -498,7 +498,7 @@ export class RequisitionsService implements OnModuleInit {
     if (!vendor) throw new NotFoundException('Vendor not found');
 
     const overrides = new Map((dto.prices ?? []).map((p) => [p.requisitionLineId, p.unitPrice]));
-    return this.prisma.$transaction(async (tx) =>
+    return this.prisma.$transaction((tx) =>
       this.buildPoFromRequisition(tx, user.organizationId, pr, dto.vendorId, overrides, {
         actorId: user.userId,
         currency: dto.currency,

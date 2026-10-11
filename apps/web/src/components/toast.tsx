@@ -59,7 +59,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           role="alert"/"status" INSIDE this one, and nesting live regions is
           undefined — screen readers double-announce or drop the inner one. */}
       <div
-        role="status"
         aria-live="polite"
         aria-atomic="false"
         className="pointer-events-none fixed bottom-4 start-4 z-[100] flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2"

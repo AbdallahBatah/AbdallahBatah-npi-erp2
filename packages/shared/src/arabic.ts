@@ -41,7 +41,7 @@ const FOLD_RE = /[أإآٱةىؤئ٠-٩۰-۹]/g;
 function fold(ch: string): string {
   const mapped = LETTER_FOLD[ch];
   if (mapped) return mapped;
-  const code = ch.charCodeAt(0);
+  const code = ch.codePointAt(0) ?? 0;
   if (code >= 0x0660 && code <= 0x0669) return String(code - 0x0660);
   if (code >= 0x06f0 && code <= 0x06f9) return String(code - 0x06f0);
   return ch;
@@ -60,13 +60,13 @@ function fold(ch: string): string {
  *      «الف» stay).
  */
 export function normalizeArabicName(input: string | null | undefined): string {
-  let s = (input ?? '').replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
-  s = s.replace(DIACRITICS_RE, '');
-  s = s.replace(FOLD_RE, fold);
-  s = s.replace(/\./g, '');
-  s = s.replace(/[^a-z0-9ء-ي ]/g, ' ');
-  s = s.replace(/ +/g, ' ').trim();
-  s = s.replace(/(^| )ال(?=[^ ]{2})/g, '$1');
+  let s = (input ?? '').replaceAll(/[A-Z]/g, (c) => String.fromCodePoint((c.codePointAt(0) ?? 0) + 32));
+  s = s.replaceAll(DIACRITICS_RE, '');
+  s = s.replaceAll(FOLD_RE, fold);
+  s = s.replaceAll('.', '');
+  s = s.replaceAll(/[^a-z0-9ء-ي ]/g, ' ');
+  s = s.replaceAll(/ +/g, ' ').trim();
+  s = s.replaceAll(/(^| )ال(?=[^ ]{2})/g, '$1');
   return s;
 }
 
@@ -161,8 +161,8 @@ export function nameSimilarity(a: string | null | undefined, b: string | null | 
 export function normalizeSaudiMobile(input: string | null | undefined): string | null {
   if (!input) return null;
   const s = input
-    .replace(/[٠-٩۰-۹]/g, fold)
-    .replace(/[ \t\r\n().-]/g, '');
+    .replaceAll(/[٠-٩۰-۹]/g, fold)
+    .replaceAll(/[ \t\r\n().-]/g, '');
   const m = /^(?:\+?966|00966|0)?(5[0-9]{8})$/.exec(s);
   return m ? `+966${m[1]}` : null;
 }
@@ -175,8 +175,8 @@ export function normalizeSaudiMobile(input: string | null | undefined): string |
  */
 export function mobileSearchFragment(input: string | null | undefined): string | null {
   const raw = (input ?? '')
-    .replace(/[٠-٩۰-۹]/g, fold)
-    .replace(/[ \t\r\n().+-]/g, '');
+    .replaceAll(/[٠-٩۰-۹]/g, fold)
+    .replaceAll(/[ \t\r\n().+-]/g, '');
   if (!/^[0-9]+$/.test(raw)) return null;
   const digits = raw.replace(/^(?:00966|966|0)/, '');
   return digits.length >= 3 ? digits : null;

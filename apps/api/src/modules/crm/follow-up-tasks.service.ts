@@ -255,7 +255,7 @@ export class FollowUpTasksService {
    * one is due) and the overdue notice (the task may lapse again); moving it earlier keeps
    * what was already sent. A reminder not yet sent is recomputed for the new day.
    */
-  async update(user: AuthUser, id: string, dto: UpdateTaskDto) {
+  update(user: AuthUser, id: string, dto: UpdateTaskDto) {
     const org = user.organizationId;
     return this.prisma.$transaction(async (tx) => {
       const found = await tx.followUpTask.findFirst({

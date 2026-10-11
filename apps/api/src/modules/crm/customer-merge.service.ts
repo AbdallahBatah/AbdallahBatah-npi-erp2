@@ -81,7 +81,7 @@ export class CustomerMergeService {
     private readonly customers: CustomersService,
   ) {}
 
-  async mergeEnabled(organizationId: string): Promise<boolean> {
+  mergeEnabled(organizationId: string): Promise<boolean> {
     return this.settings.get<boolean>(
       organizationId,
       ORG_SETTING_KEYS.CUSTOMER_MERGE_ENABLED,
@@ -312,7 +312,7 @@ export class CustomerMergeService {
     return { survivorId: dto.survivorId, merged: results };
   }
 
-  private async mergeOne(user: AuthUser, survivorId: string, mergedId: string, backupRef: string) {
+  private mergeOne(user: AuthUser, survivorId: string, mergedId: string, backupRef: string) {
     const org = user.organizationId;
     return this.prisma.$transaction(async (tx) => {
       // Two merges touching the same customers must not interleave.

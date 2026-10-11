@@ -78,7 +78,7 @@ export class DelegationService {
   }
 
   /** Users currently holding delegated authority *from* this user. */
-  async delegatesOf(organizationId: string, fromUserId: string, at: Date = new Date()) {
+  delegatesOf(organizationId: string, fromUserId: string, at: Date = new Date()) {
     return this.prisma.approvalDelegation.findMany({
       where: {
         organizationId,

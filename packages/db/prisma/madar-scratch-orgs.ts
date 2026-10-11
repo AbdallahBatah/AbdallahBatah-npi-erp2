@@ -127,7 +127,7 @@ const ROLE_DEFS = [
 // underscore in a domain label), e.g. admin@om-provider.scratch.madar.test.
 /** E-mail domain of a scratch org's users: underscores become hyphens. */
 function scratchDomain(key: string): string {
-  return `${key.replace(/_/g, '-')}.scratch.madar.test`;
+  return `${key.replaceAll('_', '-')}.scratch.madar.test`;
 }
 
 const USER_DEFS = [

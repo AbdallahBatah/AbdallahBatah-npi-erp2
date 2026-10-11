@@ -113,7 +113,7 @@ export default function TasksPage() {
 
       {/* A task that is closed (or filtered out) still answers the link that pointed at it. */}
       {focusTask && !inList && rows && (
-        <div className="card mb-4 border-brand-200 bg-brand-50/40 p-4 text-sm" role="status">
+        <div className="card mb-4 border-brand-200 bg-brand-50/40 p-4 text-sm" aria-live="polite" aria-atomic="true">
           <div className="mb-1 text-xs font-semibold text-brand-700">{t('tasks.focused')}</div>
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-mono text-xs">{focusTask.code}</span>

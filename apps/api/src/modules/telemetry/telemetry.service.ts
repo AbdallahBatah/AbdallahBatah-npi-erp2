@@ -65,7 +65,7 @@ export class TelemetryService {
       if (!asset) throw new NotFoundException(`Asset ${r.assetId} not found`);
 
       const day = new Date(r.readingDate);
-      if (isNaN(day.getTime())) throw new BadRequestException(`Bad date: ${r.readingDate}`);
+      if (Number.isNaN(day.getTime())) throw new BadRequestException(`Bad date: ${r.readingDate}`);
       const readingDate = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()));
 
       const expected =

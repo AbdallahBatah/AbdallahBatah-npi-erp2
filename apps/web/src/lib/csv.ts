@@ -8,7 +8,7 @@
 function cell(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
   const s = String(value);
-  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 
 export function downloadCsv(

@@ -503,7 +503,7 @@ export class ProposalsService implements OnModuleInit {
    * park it for ever), and the whole of it runs under a per-proposal lock so two
    * simultaneous submits cannot open two signature chains.
    */
-  async submit(user: AuthUser, proposalId: string): Promise<SubmitOutcome> {
+  submit(user: AuthUser, proposalId: string): Promise<SubmitOutcome> {
     return this.withProposalLock(proposalId, async () => {
       const proposal = await this.loadProposal(user.organizationId, proposalId);
       const current = proposal.revisions[0] ?? null;

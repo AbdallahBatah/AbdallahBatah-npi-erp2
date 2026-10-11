@@ -240,14 +240,14 @@ export function auditQueryString(opts: { filters: AuditFilters; cursor: string |
   return params.toString();
 }
 
-export async function loadAudit(opts: {
+export function loadAudit(opts: {
   filters: AuditFilters;
   cursor: string | null;
 }): Promise<AuditApiResult<{ view: AuditListView }>> {
   return call(auditQueryString(opts), (body) => (isAuditListView(body) ? { view: body } : undefined));
 }
 
-export async function loadAuditRow(id: string): Promise<AuditApiResult<{ row: AuditDetailView }>> {
+export function loadAuditRow(id: string): Promise<AuditApiResult<{ row: AuditDetailView }>> {
   return call(new URLSearchParams({ id }).toString(), (body) =>
     isRecord(body) && isAuditDetailView(body.row) ? { row: body.row } : undefined,
   );

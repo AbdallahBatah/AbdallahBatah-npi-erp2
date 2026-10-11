@@ -288,10 +288,10 @@ async function callModel(deps: ParseDeps, input: ParseInput, ctx: LlmContext, ou
   const { step, pack } = input;
   const defaults = pack ? stepDefaults(step, pack, {}) : null;
   const system = loadPrompt(PROMPT_FILE)
-    .replace(/\{\{step\}\}/g, String(step))
-    .replace(/\{\{question\}\}/g, t(questionKey(step)))
-    .replace(/\{\{defaults_json\}\}/g, JSON.stringify(defaults ?? {}))
-    .replace(/\{\{schema_hint\}\}/g, schemaHintFor(step));
+    .replaceAll('{{step}}', String(step))
+    .replaceAll('{{question}}', t(questionKey(step)))
+    .replaceAll('{{defaults_json}}', JSON.stringify(defaults ?? {}))
+    .replaceAll('{{schema_hint}}', schemaHintFor(step));
 
   let response: ModelResponse;
   try {
@@ -336,5 +336,5 @@ export async function parseAnswer(deps: ParseDeps, input: ParseInput, ctx: LlmCo
   const deterministic = tryDeterministic(step, pack, tokens);
   if (deterministic) return { kind: 'answer', answer: deterministic, source: 'deterministic' };
 
-  return callModel(deps, input, ctx, normalizeDigitsOnly(text));
+  return await callModel(deps, input, ctx, normalizeDigitsOnly(text));
 }

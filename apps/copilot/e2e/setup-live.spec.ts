@@ -268,7 +268,7 @@ test.describe('setup live apply (T-20) @live-setup', () => {
 
   test.afterAll(async () => {
     const finishedAt = new Date();
-    const timestamp = finishedAt.toISOString().replace(/:/g, '-');
+    const timestamp = finishedAt.toISOString().replaceAll(/:/g, '-');
     const outDir = path.resolve(__dirname, '..', 'test-results', 'setup-live');
     mkdirSync(outDir, { recursive: true });
     writeFileSync(path.join(outDir, `report-${timestamp}.json`), JSON.stringify(report, null, 2), 'utf8');

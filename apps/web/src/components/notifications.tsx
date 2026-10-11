@@ -92,7 +92,7 @@ export function NotificationsBell() {
     }
   }
 
-  async function onRowClick(n: NotificationRow) {
+  function onRowClick(n: NotificationRow) {
     setOpen(false);
     if (!n.readAt) {
       setUnread((u) => Math.max(0, u - 1));
@@ -101,7 +101,7 @@ export function NotificationsBell() {
     if (n.linkPath) router.push(n.linkPath);
   }
 
-  async function markAll() {
+  function markAll() {
     setRows((r) => r.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
     setUnread(0);
     api.post('/notifications/read-all').catch(() => undefined);

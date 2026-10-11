@@ -26,6 +26,7 @@ import {
   reconcileTotals,
   textField,
   wire,
+  NO_FLAGS,
   type AssessFlags,
 } from './common';
 import type { AssessedField } from './field';
@@ -139,7 +140,7 @@ export function billDtoFrom(values: VendorBillValues, resolved: { goodsReceiptId
  */
 export function assessVendorBill(
   out: VendorBillOutput,
-  flags: AssessFlags = { ligatureSuspect: false },
+  flags: AssessFlags = NO_FLAGS,
 ): { assessed: AssessedVendorBill; values: VendorBillValues | null } {
   const { assessed: vendor, values: vendorValues } = assessVendor(out.vendor, flags);
 

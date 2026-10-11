@@ -898,7 +898,7 @@ export type ArKey = keyof typeof ar;
 export function t(key: ArKey, vars?: Record<string, string | number>): string {
   const template: string = ar[key] ?? key;
   if (!vars) return template;
-  return template.replace(/\{(\w+)\}/g, (match, name: string) => {
+  return template.replaceAll(/\{(\w+)\}/g, (match, name: string) => {
     const value = vars[name];
     return value === undefined ? match : String(value);
   });

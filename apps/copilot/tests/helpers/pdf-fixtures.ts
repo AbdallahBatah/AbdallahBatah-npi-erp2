@@ -20,7 +20,7 @@ function pdf(objects: string[]): Buffer {
 }
 
 function escapePdfString(text: string): string {
-  return text.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  return text.replaceAll(/\\/g, '\\\\').replaceAll(/\(/g, '\\(').replaceAll(/\)/g, '\\)');
 }
 
 /** A one-page PDF whose single Helvetica text object draws `text`. */

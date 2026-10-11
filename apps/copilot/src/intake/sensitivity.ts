@@ -27,7 +27,7 @@ const CONFIDENTIAL_WORDS = ['سري', 'سرية', 'confidential'].map((w) => nor
  * keeps `-`/`_` intact so codes like "PRJ-00012" survive elsewhere).
  */
 export function isConfidentialText(text: string): string | null {
-  const normalized = normalizeArabic(text).replace(/[-_]/g, ' ');
+  const normalized = normalizeArabic(text).replaceAll(/[-_]/g, ' ');
   const tokens = tokenize(normalized);
   const indices = indicesOfWords(tokens, CONFIDENTIAL_WORDS);
   return indices.length === 0 ? null : tokens[indices[0]];

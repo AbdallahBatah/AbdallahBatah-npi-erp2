@@ -24,8 +24,8 @@ export function Icon({
       className={className}
       aria-hidden
     >
-      {paths.map((d, i) => (
-        <path key={i} d={d} />
+      {paths.map((d) => (
+        <path key={d} d={d} />
       ))}
     </svg>
   );

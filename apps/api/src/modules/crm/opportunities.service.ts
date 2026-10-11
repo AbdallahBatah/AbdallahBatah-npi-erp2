@@ -202,7 +202,7 @@ export class OpportunitiesService {
       throw new BadRequestException('Stage changes go through /stage');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    return await this.prisma.$transaction(async (tx) => {
       const existing = await tx.opportunity.findFirst({ where: { id, organizationId: user.organizationId } });
       if (!existing) throw new NotFoundException('Opportunity not found');
 
@@ -282,7 +282,7 @@ export class OpportunitiesService {
       throw new BadRequestException('Loss reason is required');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    return await this.prisma.$transaction(async (tx) => {
       const existing = await tx.opportunity.findFirst({ where: { id, organizationId: user.organizationId } });
       if (!existing) throw new NotFoundException('Opportunity not found');
 

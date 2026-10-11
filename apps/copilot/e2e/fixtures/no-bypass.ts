@@ -378,7 +378,7 @@ export async function npiCount(request: APIRequestContext, token: string, listPa
  * (`partyLabel` in `src/intake/resolution.ts` is this same `nameAr`).
  */
 export async function npiCustomerNameByVat(request: APIRequestContext, token: string, vatNumber: string): Promise<string> {
-  const digits = (value: string) => value.replace(/\D/g, '');
+  const digits = (value: string) => value.replaceAll(/\D/g, '');
   const parties = partiesFromNpi(await npiGet(request, token, '/customers'));
   const found = parties.find((p) => p.vatNumber !== null && digits(p.vatNumber) === digits(vatNumber));
   if (!found) throw new Error(`npiCustomerNameByVat: no customer with VAT ${vatNumber} in NPI`);

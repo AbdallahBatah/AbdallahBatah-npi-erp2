@@ -27,7 +27,7 @@ export const DOCUMENT_ID = 'doc-1';
 type Kind = PreviewField['kind'];
 
 function labelOf(path: string): string {
-  const key = `preview.f.${path.replace(/\.\d+(?=\.|$)/g, '')}`;
+  const key = `preview.f.${path.replaceAll(/\.\d+(?=\.|$)/g, '')}`;
   const label = (ar as Record<string, string>)[key];
   if (label === undefined) throw new Error(`fixtures/intake: no label for ${path}`);
   return label;

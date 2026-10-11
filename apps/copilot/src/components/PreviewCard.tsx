@@ -7,6 +7,7 @@ import { formatNumber } from '@/i18n/format';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { keyedLines } from '@/components/ui/keys';
 import { DocumentChip } from '@/components/DocumentChip';
 import { WaitingIndicator } from '@/components/chat/WaitingIndicator';
 import { useServerDesktopHint } from '@/components/ViewportHint';
@@ -147,8 +148,8 @@ function FieldBody({ field, readOnly, busy, onConfirm, onSet }: FieldBodyProps) 
         ) : null}
       </div>
       {showWarnings
-        ? field.warningsAr.map((warning, i) => (
-            <p key={i} className="break-words text-xs text-warning-700">
+        ? keyedLines(field.warningsAr).map(({ key, line: warning }) => (
+            <p key={key} className="break-words text-xs text-warning-700">
               {warning}
             </p>
           ))
@@ -484,8 +485,8 @@ export function PreviewCard({
             <section className="flex min-w-0 flex-col gap-1">
               <h4 className="text-sm font-bold text-slate-900">{t('preview.notes_title')}</h4>
               <ul data-testid="preview-notes" className="list-inside list-disc text-sm text-slate-700">
-                {preview.notesAr.map((note, i) => (
-                  <li key={i} className="break-words">
+                {keyedLines(preview.notesAr).map(({ key, line: note }) => (
+                  <li key={key} className="break-words">
                     {note}
                   </li>
                 ))}
@@ -510,8 +511,8 @@ export function PreviewCard({
             <section className="flex min-w-0 flex-col gap-1">
               <h4 className="text-sm font-bold text-danger-700">{t('preview.blocked_title')}</h4>
               <ul data-testid="preview-blockers" className="list-inside list-disc text-sm text-danger-700">
-                {preview.blockersAr.map((blocker, i) => (
-                  <li key={i} className="break-words">
+                {keyedLines(preview.blockersAr).map(({ key, line: blocker }) => (
+                  <li key={key} className="break-words">
                     {blocker}
                   </li>
                 ))}

@@ -83,12 +83,12 @@ function asciiDigits(text: string): string {
 }
 
 function digitsOnly(text: string): string {
-  return asciiDigits(text).replace(/\D/g, '');
+  return asciiDigits(text).replaceAll(/\D/g, '');
 }
 
 /** «po-12», «PO 00012», «PO-00012» → `{ prefix: 'PO', number: 12 }`. */
 export function codeKey(code: string): { prefix: string; number: number | null } {
-  const cleaned = asciiDigits(code).trim().toUpperCase().replace(/\s+/g, '');
+  const cleaned = asciiDigits(code).trim().toUpperCase().replaceAll(/\s+/g, '');
   const m = /^([A-Z]+)[-_]?(\d+)$/.exec(cleaned);
   if (!m) return { prefix: cleaned, number: null };
   return { prefix: m[1], number: Number(m[2]) };
@@ -535,10 +535,10 @@ function resolveByNameLadder<T>(
   namesOf: (entity: T) => readonly (string | null)[],
 ): LadderResult<T> {
   if (query.sku && query.sku.trim().length > 0) {
-    const sku = normalizeArabic(query.sku).replace(/\s+/g, '');
+    const sku = normalizeArabic(query.sku).replaceAll(/\s+/g, '');
     const bySku = entities.find((e) => {
       const s = skuOf(e);
-      return s !== null && normalizeArabic(s).replace(/\s+/g, '') === sku;
+      return s !== null && normalizeArabic(s).replaceAll(/\s+/g, '') === sku;
     });
     if (bySku !== undefined) return { kind: 'matched', by: 'sku', entity: bySku, similarity: 1 };
   }

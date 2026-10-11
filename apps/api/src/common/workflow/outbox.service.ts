@@ -41,7 +41,7 @@ export class OutboxService {
   }
 
   /** Operational read for the admin screen: what is stuck, and why. */
-  async failed(organizationId: string, take = 50) {
+  failed(organizationId: string, take = 50) {
     return this.prisma.domainEvent.findMany({
       where: { organizationId, status: 'FAILED' },
       orderBy: { createdAt: 'desc' },

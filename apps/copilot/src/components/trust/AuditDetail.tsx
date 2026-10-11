@@ -6,6 +6,7 @@ import { formatDateTime, formatNumber, formatUsdMicro } from '@/i18n/format';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { lineKeys } from '@/components/ui/keys';
 import { ErrorState, LoadingState } from '@/components/ui/States';
 import type { AuditDetailView, AuditOutbound, AuditOutboundBlock } from '@/audit/types';
 
@@ -145,8 +146,29 @@ function ConsentLine({ row }: { row: AuditDetailView }) {
   );
 }
 
+const KEY_HEAD_LENGTH = 64;
+
+/** A bounded identity for a message's content: its length plus its first characters. */
+function contentKey(content: string | AuditOutboundBlock[]): string {
+  const text = typeof content === 'string' ? content : JSON.stringify(content);
+  return `${text.length}\u0000${text.slice(0, KEY_HEAD_LENGTH)}`;
+}
+
+/** Blocks have no id either: a text block is identified by its text, a vision
+ *  block by its consent event (lineKeys keeps repeats unique). */
+function keyedBlocks(blocks: AuditOutboundBlock[]): { key: string; block: AuditOutboundBlock }[] {
+  const keys = lineKeys(blocks.map((block) => (block.type === 'text' ? `text\u0000${contentKey(block.text)}` : `${block.type}\u0000${block.consentEventId}`)));
+  return blocks.map((block, position) => ({ key: keys[position], block }));
+}
+
 function Outbound({ outbound }: { outbound: AuditOutbound | null }) {
   const [showSystem, setShowSystem] = useState(false);
+  // A recorded message has no id of its own: its role, its content's length
+  // and the content's head identify it, bounded so a long text does not become
+  // a long key (lineKeys keeps repeats unique).
+  const messageKeys = lineKeys(
+    outbound?.kind === 'parsed' ? outbound.messages.map((message) => `${message.role}\u0000${contentKey(message.content)}`) : [],
+  );
 
   return (
     <div data-testid="trust-detail-outbound" className="flex flex-col gap-3">
@@ -180,8 +202,8 @@ function Outbound({ outbound }: { outbound: AuditOutbound | null }) {
               </div>
               <h4 className="text-sm font-semibold text-slate-800">{t('trust.detail.messages')}</h4>
               <div className="flex flex-col gap-3">
-                {outbound.messages.map((message, index) => (
-                  <div key={index} className="flex flex-col gap-1.5">
+                {outbound.messages.map((message, position) => (
+                  <div key={messageKeys[position]} className="flex flex-col gap-1.5">
                     <p className="text-xs font-semibold text-slate-500">
                       {message.role === 'user' ? t('trust.detail.role.user') : t('trust.detail.role.assistant')}
                     </p>
@@ -190,7 +212,7 @@ function Outbound({ outbound }: { outbound: AuditOutbound | null }) {
                         {message.content}
                       </pre>
                     ) : (
-                      message.content.map((block, blockIndex) => <Block key={blockIndex} block={block} />)
+                      keyedBlocks(message.content).map(({ key, block }) => <Block key={key} block={block} />)
                     )}
                   </div>
                 ))}

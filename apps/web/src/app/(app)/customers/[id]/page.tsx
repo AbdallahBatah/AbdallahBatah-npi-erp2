@@ -285,9 +285,9 @@ export default function CustomerPage() {
       )}
 
       {!merged && keyMissing && (
-        <div role="status" className="mb-4 rounded-xl border border-warning-200 bg-warning-50/60 p-4 text-sm text-warning-900">
+        <output className="block mb-4 rounded-xl border border-warning-200 bg-warning-50/60 p-4 text-sm text-warning-900">
           {t('cust.keyMissing')}
-        </div>
+        </output>
       )}
 
       <div className="card mb-5 grid grid-cols-2 gap-x-6 gap-y-4 p-5 text-sm sm:grid-cols-3 lg:grid-cols-4">

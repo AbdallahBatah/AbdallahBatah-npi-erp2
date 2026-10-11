@@ -93,7 +93,7 @@ interface DocOutcome {
  *  «6مم» into «6 مم» and the model copies what it sees (T-24, pr-08); the
  *  item is the same and so is the resolution. */
 function textKey(s: string): string {
-  return normalizeArabic(s).replace(/\s+/g, '');
+  return normalizeArabic(s).replaceAll(/\s+/g, '');
 }
 
 function sameValue(expected: unknown, got: unknown): boolean {
@@ -282,7 +282,7 @@ async function main(): Promise<void> {
 
     const outDir = path.join(process.cwd(), 'test-results', 'extract');
     mkdirSync(outDir, { recursive: true });
-    const stamp = startedAt.toISOString().replace(/[:.]/g, '-');
+    const stamp = startedAt.toISOString().replaceAll(/[:.]/g, '-');
     const reportPath = path.join(outDir, `${flow}-${stamp}.json`);
     writeFileSync(reportPath, JSON.stringify({ flow, startedAt, score: run.score, gate: GATE, passed: run.passed, docs: run.docs }, null, 2));
     console.log(`  التقرير: ${reportPath}`);

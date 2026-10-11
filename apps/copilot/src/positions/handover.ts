@@ -358,7 +358,7 @@ const UNKNOWN_NAME_AR = 'غير معروف';
 
 /** One line: every run of whitespace (including a stored newline) becomes one space. */
 function oneLine(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
+  return text.replaceAll(/\s+/g, ' ').trim();
 }
 
 function documentLabelAr(documentType: string): string {

@@ -318,9 +318,9 @@ async function readNpi(args: SyncArgs, profileKey: string): Promise<ReadResult> 
     listRoles: () => args.npi.listRoles(),
     listDepartments: () => args.npi.listDepartments(),
     listDepartmentDirectory: () => args.npi.listDepartmentDirectory(),
-    listPermissions: async () => [],
-    listApprovalRules: async () => [],
-    listItems: async () => [],
+    listPermissions: () => Promise.resolve([]),
+    listApprovalRules: () => Promise.resolve([]),
+    listItems: () => Promise.resolve([]),
   } as unknown as OnboardingNpi;
   const snapshot: NpiSnapshot = await loadNpiSnapshot(reader, {
     roleKey: me.roleKey,

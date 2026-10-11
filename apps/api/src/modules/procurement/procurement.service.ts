@@ -96,7 +96,7 @@ export class ProcurementService implements OnModuleInit {
     });
   }
 
-  async createVendor(user: AuthUser, dto: CreateVendorDto) {
+  createVendor(user: AuthUser, dto: CreateVendorDto) {
     return this.prisma.$transaction(async (tx) => {
       const code = await this.numbering.next(user.organizationId, 'VENDOR', tx);
       const vendor = await tx.vendor.create({

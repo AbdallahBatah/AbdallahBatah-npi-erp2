@@ -81,7 +81,7 @@ const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/;
 /** Every non-comment line of `file` the regex matches (1-based). The regex is
  *  cloned without `g`/`y`, so a global regex never carries `lastIndex` between lines. */
 function codeLinesMatching(file: string, regex: RegExp): HitLine[] {
-  const probe = new RegExp(regex.source, regex.flags.replace(/[gy]/g, ''));
+  const probe = new RegExp(regex.source, regex.flags.replaceAll(/[gy]/g, ''));
   const hits: HitLine[] = [];
   read(file)
     .split(/\r?\n/)
@@ -187,7 +187,7 @@ function filesOf(sites: CallSite[]): string[] {
   return [...new Set(sites.map((s) => rel(s.file)))].sort();
 }
 
-const collapse = (text: string): string => text.replace(/\s+/g, ' ').trim();
+const collapse = (text: string): string => text.replaceAll(/\s+/g, ' ').trim();
 
 const ALL_FILES = SCAN_DIRS.flatMap((d) => walk(path.join(APP_ROOT, d)));
 const NON_SELF_FILES = ALL_FILES.filter((f) => f !== SELF);
@@ -618,7 +618,7 @@ describe('no-bypass-llm R9: staticPrompt( takes a literal, a prompt file or a na
     },
     {
       file: 'src/extract/run.ts',
-      arg: 'loadPrompt(spec.promptFile) .replace(/\\{\\{our_party_hint\\}\\}/g, hint) .replace(/\\{\\{today\\}\\}/g, referenceDate)',
+      arg: "loadPrompt(spec.promptFile) .replaceAll('{{our_party_hint}}', hint) .replaceAll('{{today}}', referenceDate)",
       reason:
         "`hint` carries the organization's own name (`user.orgNameAr` from NPI) in clear so the model does not take the firm for the customer; recorded as the open decision D-20 in PROGRESS.md (redact it through the same pseudonymizer, or keep): the guard names it so it is a conscious exception, not an oversight",
     },
@@ -637,7 +637,7 @@ describe('no-bypass-llm R9: staticPrompt( takes a literal, a prompt file or a na
   /** `${...}` expressions a template literal may interpolate (a date and a page number). */
   const TEMPLATE_INTERPOLATIONS = new Set(['today', 'page.num', 'num']);
 
-  /** Second arguments of `.replace(` that carry no data: a string literal or the reference date. */
+  /** Second arguments of `.replace(`/`.replaceAll(` that carry no data: a string literal or the reference date. */
   const REPLACEMENT_IDENTIFIERS = new Set(['referenceDate', 'flags.referenceDate']);
 
   const SINGLE_QUOTED = /^'(?:[^'\\]|\\.)*'$/;
@@ -658,8 +658,8 @@ describe('no-bypass-llm R9: staticPrompt( takes a literal, a prompt file or a na
     if (arg.startsWith('loadPrompt(')) {
       const open = arg.indexOf('(');
       const close = closingIndex(arg, open);
-      if (!/^\s*(?:\.replace\s*\(|$)/.test(arg.slice(close + 1))) return 'loadPrompt(...) followed by something other than .replace(';
-      for (const m of arg.matchAll(/\.replace\s*\(/g)) {
+      if (!/^\s*(?:\.replace(?:All)?\s*\(|$)/.test(arg.slice(close + 1))) return 'loadPrompt(...) followed by something other than .replace(';
+      for (const m of arg.matchAll(/\.replace(?:All)?\s*\(/g)) {
         const replaceArgs = splitTopLevel(balancedArgument(arg, (m.index ?? 0) + m[0].length - 1));
         const replacement = (replaceArgs[1] ?? '').trim();
         const ok =

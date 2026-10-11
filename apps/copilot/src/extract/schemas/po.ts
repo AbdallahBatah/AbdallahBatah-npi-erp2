@@ -41,6 +41,7 @@ import {
   SAUDI_VAT_RE,
   textField,
   wire,
+  NO_FLAGS,
   type AssessFlags,
 } from './common';
 
@@ -285,7 +286,7 @@ export function assessVendor(v: VendorOutput, flags: AssessFlags): { assessed: A
  *    there is neither a usable line nor a source requisition code (a
  *    sentence naming an approved PR has no lines and is still actionable).
  */
-export function assessPo(out: PoOutput, flags: AssessFlags = { ligatureSuspect: false }): { assessed: AssessedPo; values: PoValues | null } {
+export function assessPo(out: PoOutput, flags: AssessFlags = NO_FLAGS): { assessed: AssessedPo; values: PoValues | null } {
   const { assessed: vendor, values: vendorValues } = assessVendor(out.vendor, flags);
 
   let subtotal = amountField(out.subtotal);

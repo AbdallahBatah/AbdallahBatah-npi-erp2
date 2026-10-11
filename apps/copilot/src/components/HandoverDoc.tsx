@@ -8,6 +8,7 @@ import { APPROVAL_DOCUMENT_LABEL_AR } from '@/onboarding/plan';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { keyedLines } from '@/components/ui/keys';
 import { PredecessorChats } from '@/components/handover/PredecessorChats';
 import type { HandoverFact, HandoverTask, HandoverView } from '@/positions/handover-types';
 
@@ -120,8 +121,8 @@ export function HandoverDoc({ view, isAdmin, onNarrate, narrating = false }: Han
                 <div className="flex flex-col gap-1">
                   <h4 className="text-sm font-bold text-slate-900">{t('handover.narrative.first_week')}</h4>
                   <ul className="list-disc ps-5 text-sm leading-7 text-slate-800">
-                    {narrative.firstWeekAr.map((line, i) => (
-                      <li key={i}>{line}</li>
+                    {keyedLines(narrative.firstWeekAr).map(({ key, line }) => (
+                      <li key={key}>{line}</li>
                     ))}
                   </ul>
                 </div>
@@ -130,8 +131,8 @@ export function HandoverDoc({ view, isAdmin, onNarrate, narrating = false }: Han
                 <div className="flex flex-col gap-1">
                   <h4 className="text-sm font-bold text-slate-900">{t('handover.narrative.cautions')}</h4>
                   <ul className="list-disc ps-5 text-sm leading-7 text-slate-800">
-                    {narrative.cautionsAr.map((line, i) => (
-                      <li key={i}>{line}</li>
+                    {keyedLines(narrative.cautionsAr).map(({ key, line }) => (
+                      <li key={key}>{line}</li>
                     ))}
                   </ul>
                 </div>
@@ -140,9 +141,9 @@ export function HandoverDoc({ view, isAdmin, onNarrate, narrating = false }: Han
             </div>
           ) : (
             <div className="flex flex-col items-start gap-3">
-              <p role="status" className="text-sm text-warning-700">
+              <output className="block text-sm text-warning-700">
                 {t('handover.narrative.failed', { reason: narrative.reason })}
-              </p>
+              </output>
               {isAdmin ? (
                 <Button type="button" variant="secondary" size="sm" loading={narrating} onClick={onNarrate}>
                   {narrating ? t('handover.narrative.retrying') : t('handover.narrative.retry')}

@@ -127,9 +127,9 @@ function readLines(file: string): Line[] {
 /** A prose line with inline code and link/autolink URLs blanked out. */
 function proseOf(text: string): string {
   return text
-    .replace(/`[^`\n]*`/g, ' ')
-    .replace(/\]\((?:https?:)[^)\s]*\)/g, '] ')
-    .replace(/<https?:[^>\s]*>/g, ' ');
+    .replaceAll(/`[^`\n]*`/g, ' ')
+    .replaceAll(/\]\((?:https?:)[^)\s]*\)/g, '] ')
+    .replaceAll(/<https?:[^>\s]*>/g, ' ');
 }
 
 function latinOffenders(file: string): string[] {

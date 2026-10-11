@@ -344,5 +344,5 @@ export async function getServerSession(): Promise<ActiveSession | null> {
     key,
     npiFor: (token: string) => createNpiClient({ token }),
   };
-  return readSession(deps, cookieValue);
+  return await readSession(deps, cookieValue);
 }

@@ -471,7 +471,7 @@ export async function npiCustomerIdByVat(
   token: string,
   vat: string,
 ): Promise<{ id: string; nameAr: string } | null> {
-  const digits = (value: string) => value.replace(/\D/g, '');
+  const digits = (value: string) => value.replaceAll(/\D/g, '');
   const found = partiesFromNpi(await npiGet(request, token, '/customers')).find(
     (p) => p.vatNumber !== null && digits(p.vatNumber) === digits(vat),
   );

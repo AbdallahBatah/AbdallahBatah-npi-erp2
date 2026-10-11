@@ -128,6 +128,8 @@ export function Btn({
 
 /** Deterministic widths — Math.random() here would break hydration. */
 const SKELETON_WIDTHS = ['62%', '84%', '45%', '73%', '55%', '90%'];
+/** Stable keys for the stat-tile placeholders (callers ask for at most four). */
+const STAT_PLACEHOLDER_KEYS = ['stat-1', 'stat-2', 'stat-3', 'stat-4', 'stat-5', 'stat-6', 'stat-7', 'stat-8'];
 
 /**
  * Placeholder rows shaped like the table that is loading. A row of grey bars
@@ -139,8 +141,8 @@ export function TableSkeleton({ cols, rows = 5 }: { cols: number; rows?: number 
   return (
     <>
       <tr>
-        <td colSpan={cols} className="sr-only" role="status">
-          {t('common.loading')}
+        <td colSpan={cols} className="sr-only">
+          <output>{t('common.loading')}</output>
         </td>
       </tr>
       {Array.from({ length: rows }, (_, r) => (
@@ -167,24 +169,24 @@ export function PageSkeleton({ stats = 4 }: { stats?: number }) {
   const { t } = useI18n();
   return (
     <div>
-      <span className="sr-only" role="status">
+      <output className="sr-only">
         {t('common.loading')}
-      </span>
+      </output>
       <div className="mb-6 space-y-2" aria-hidden>
         <div className="skeleton h-3 w-16" />
         <div className="skeleton h-6 w-56" />
       </div>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" aria-hidden>
-        {Array.from({ length: stats }, (_, i) => (
-          <div key={i} className="card space-y-3 p-5">
+        {STAT_PLACEHOLDER_KEYS.slice(0, stats).map((k) => (
+          <div key={k} className="card space-y-3 p-5">
             <div className="skeleton h-3 w-20" />
             <div className="skeleton h-7 w-24" />
           </div>
         ))}
       </div>
       <div className="card mt-6 space-y-3.5 p-6" aria-hidden>
-        {SKELETON_WIDTHS.map((w, i) => (
-          <div key={i} className="skeleton h-3.5" style={{ width: w }} />
+        {SKELETON_WIDTHS.map((w) => (
+          <div key={w} className="skeleton h-3.5" style={{ width: w }} />
         ))}
       </div>
     </div>

@@ -127,13 +127,13 @@ export default function TelemetryPage() {
             <p className="py-8 text-center text-sm text-slate-500">{t('tel.noPlant')}</p>
           ) : (
             <div className="flex items-end gap-1" style={{ height: 160 }} dir="ltr">
-              {dash.series.map((s, i) => {
+              {dash.series.map((s) => {
                 const hA = Math.max(3, (s.energyKwh / maxKwh) * 150);
                 const hE = Math.max(3, ((s.expectedKwh ?? 0) / maxKwh) * 150);
                 const low = s.pr != null && s.pr < 0.8;
                 return (
                   <div
-                    key={i}
+                    key={`${s.date}|${s.asset}`}
                     tabIndex={0}
                     role="img"
                     aria-label={`${formatDay(s.date, locale)} · ${formatNumber(s.energyKwh, locale)}/${

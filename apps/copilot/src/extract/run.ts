@@ -329,19 +329,19 @@ const LIGATURE_ARTIFACT_RE = /ا[أإآ]ل|اال/;
  */
 export function repairPdfTextWithFlags(text: string): { text: string; flags: Pick<SourceFlags, 'ligatureSuspect'> } {
   const ligatureSuspect = LIGATURE_ARTIFACT_RE.test(text);
-  const repaired = (ligatureSuspect ? text.replace(/ل([اأإآ])ل/g, 'لل$1') : text)
-    .replace(/\r\n?/g, '\n')
-    .replace(/\t+/g, ' ')
-    .replace(/(\d{4}) - (\d{1,2}) - (\d{1,2})/g, '$1-$2-$3')
-    .replace(/ا([أإآ])ل/g, 'ال$1')
-    .replace(/اال/g, 'الا')
-    .replace(/[  ]{2,}/g, ' ')
+  const repaired = (ligatureSuspect ? text.replaceAll(/ل([اأإآ])ل/g, 'لل$1') : text)
+    .replaceAll(/\r\n?/g, '\n')
+    .replaceAll(/\t+/g, ' ')
+    .replaceAll(/(\d{4}) - (\d{1,2}) - (\d{1,2})/g, '$1-$2-$3')
+    .replaceAll(/ا([أإآ])ل/g, 'ال$1')
+    .replaceAll('اال', 'الا')
+    .replaceAll(/[  ]{2,}/g, ' ')
     // Trailing whitespace per line. `trimEnd` instead of `/ +\n/`: an
     // unanchored ` +` retried from every space is quadratic on long runs.
     .split('\n')
     .map((line) => line.trimEnd())
     .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
+    .replaceAll(/\n{3,}/g, '\n\n')
     .trim();
   return { text: repaired, flags: { ligatureSuspect } };
 }
@@ -366,8 +366,8 @@ function systemFor(spec: FlowSpec<unknown, unknown, unknown>, input: ExtractInpu
     : '';
   return staticPrompt(
     loadPrompt(spec.promptFile)
-      .replace(/\{\{our_party_hint\}\}/g, hint)
-      .replace(/\{\{today\}\}/g, referenceDate),
+      .replaceAll('{{our_party_hint}}', hint)
+      .replaceAll('{{today}}', referenceDate),
   );
 }
 
@@ -502,7 +502,7 @@ export async function runExtraction(
     effort: 'medium',
   };
 
-  return callAndAssess(deps, spec, input.flow, request, flags, ctx);
+  return await callAndAssess(deps, spec, input.flow, request, flags, ctx);
 }
 
 /**
@@ -600,7 +600,7 @@ export async function runEdit(deps: ExtractDeps, input: EditInput, ctx: LlmConte
   const request: RedactedRequest = {
     tier: 'advanced',
     purpose: `${spec.purpose}_edit`,
-    system: staticPrompt(loadPrompt('extract/edit.md').replace(/\{\{today\}\}/g, flags.referenceDate)),
+    system: staticPrompt(loadPrompt('extract/edit.md').replaceAll('{{today}}', flags.referenceDate)),
     messages: [
       {
         role: 'user',
@@ -617,7 +617,7 @@ export async function runEdit(deps: ExtractDeps, input: EditInput, ctx: LlmConte
     maxTokens: MAX_OUTPUT_TOKENS,
     effort: 'low',
   };
-  return callAndAssess(deps, spec, input.flow, request, flags, ctx);
+  return await callAndAssess(deps, spec, input.flow, request, flags, ctx);
 }
 
 const EDIT_CURRENT_HEADER = 'البيانات الحالية (JSON):\n';

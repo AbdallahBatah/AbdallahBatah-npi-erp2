@@ -11,6 +11,7 @@ import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney, formatDate } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can, Btn, PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { lineKeys } from '@/lib/keys';
 import { AttachmentsCard } from '@/components/attachments';
 
 interface Part {
@@ -146,6 +147,8 @@ export default function WorkOrderDetailPage() {
 
   if (loadErr && !wo) return <LoadError message={loadErr} onRetry={load} />;
   if (!wo) return <PageSkeleton />;
+  const viewKeys = lineKeys((wo.checklistJson ?? []).map((c) => c.label));
+  const editKeys = lineKeys(checklist.map((c) => c.label));
 
   return (
     <div>
@@ -389,7 +392,7 @@ export default function WorkOrderDetailPage() {
           {wo.checklistJson && wo.checklistJson.length > 0 ? (
             <ul className="divide-y divide-slate-100">
               {wo.checklistJson.map((c, i) => (
-                <li key={i} className="flex items-center justify-between px-5 py-2 text-sm">
+                <li key={viewKeys[i]} className="flex items-center justify-between px-5 py-2 text-sm">
                   <span className={`flex items-center gap-2 ${c.done ? 'text-slate-500 line-through' : 'text-slate-700'}`}>
                     <Icon
                       name={c.done ? 'square-check' : 'square'}
@@ -465,7 +468,7 @@ export default function WorkOrderDetailPage() {
         <p className="mb-3 text-xs text-slate-500">{t('wo.checklistHint')}</p>
         <div className="space-y-2">
           {checklist.map((c, i) => (
-            <label key={i} className="flex items-center gap-2 text-sm">
+            <label key={editKeys[i]} className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={c.done}

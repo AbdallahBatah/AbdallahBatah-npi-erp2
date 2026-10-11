@@ -99,7 +99,7 @@ interface Actor {
 const db = getDb();
 const key = parseKey(process.env.COPILOT_SESSION_KEY);
 const storage = createFsStorage(docsRoot());
-const runId = new Date().toISOString().replace(/[:.]/g, '-');
+const runId = new Date().toISOString().replaceAll(/[:.]/g, '-');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -156,7 +156,7 @@ function evalBytes(file: string): Uint8Array {
 }
 
 async function upload(actor: Actor, file: string, asFileName?: string) {
-  return uploadDocument({ db, storage }, caller(actor), { fileName: asFileName ?? path.basename(file), bytes: evalBytes(file) });
+  return await uploadDocument({ db, storage }, caller(actor), { fileName: asFileName ?? path.basename(file), bytes: evalBytes(file) });
 }
 
 async function uploadedId(actor: Actor, file: string): Promise<string> {
@@ -218,7 +218,7 @@ async function contractCodes(actor: Actor): Promise<{ id: string; code: string }
     .flatMap((r) => (str(r.id) && str(r.code) ? [{ id: r.id as string, code: r.code as string }] : []));
 }
 
-async function auditCount(where: Record<string, unknown>): Promise<number> {
+function auditCount(where: Record<string, unknown>): Promise<number> {
   return db.llmAudit.count({ where });
 }
 
@@ -390,7 +390,7 @@ const checks: Record<number, Check> = {
   14: async (actor, s) => {
     const reply = await turn(actor, { text: s.inputAr as string }, (deps) => {
       deps.npi = createNpiClient({ token: actor.token, baseUrl: DEAD_NPI_BASE });
-      deps.dictionary = async () => [];
+      deps.dictionary = () => Promise.resolve([]);
     });
     const ratio = arabicRatio(reply.textAr);
     const audited = await auditCount({ conversationId: reply.conversationId });
@@ -449,7 +449,7 @@ const checks: Record<number, Check> = {
     const reply = await turn(actor, { text: s.inputAr as string }, (deps) => {
       const usageAtCap = new Proxy(db.dailyUsage, {
         get(target, prop, receiver) {
-          if (prop === 'findUnique') return async () => ({ npiUserId: actor.user.npiUserId, day: new Date(), tokensIn: cap, tokensOut: 0 });
+          if (prop === 'findUnique') return () => Promise.resolve({ npiUserId: actor.user.npiUserId, day: new Date(), tokensIn: cap, tokensOut: 0 });
           return Reflect.get(target, prop, receiver);
         },
       });
@@ -512,7 +512,7 @@ async function main(): Promise<void> {
 
   const outDir = path.join(process.cwd(), 'test-results', 'behaviour');
   mkdirSync(outDir, { recursive: true });
-  const reportPath = path.join(outDir, `${startedAt.toISOString().replace(/[:.]/g, '-')}.json`);
+  const reportPath = path.join(outDir, `${startedAt.toISOString().replaceAll(/[:.]/g, '-')}.json`);
   writeFileSync(reportPath, JSON.stringify({ startedAt, gate: GATE, passed, total, ok, fixtures: fx, outcomes }, null, 2));
   console.log(`  التقرير: ${reportPath}`);
 

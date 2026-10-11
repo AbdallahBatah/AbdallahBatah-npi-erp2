@@ -136,9 +136,9 @@ export function SettingsPanel({ initialData }: { initialData?: SettingsView } = 
       <p className="text-sm text-slate-600">{t('settings.intro')}</p>
 
       {openSetup ? (
-        <div role="status" className="rounded-lg border border-info-200 bg-info-50/60 px-3 py-2 text-sm text-info-700">
+        <output className="block rounded-lg border border-info-200 bg-info-50/60 px-3 py-2 text-sm text-info-700">
           {t('settings.open_setup_note')}
-        </div>
+        </output>
       ) : null}
 
       {config === null ? (

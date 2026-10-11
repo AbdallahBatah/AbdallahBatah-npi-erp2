@@ -40,6 +40,10 @@ export interface AssessFlags {
   referenceDate?: string;
 }
 
+/** The default flags when a caller passes none: a shared frozen value, so no
+ *  call allocates a fresh literal and none can mutate the default. */
+export const NO_FLAGS: Readonly<AssessFlags> = Object.freeze({ ligatureSuspect: false });
+
 // Formats and enums are described, not enforced, in the model-facing
 // schema: structured output drops `pattern`/`enum` constraints anyway, and
 // a single off-format value must become one unconfirmed field (assessment
@@ -72,8 +76,8 @@ export function asciiDigits(text: string): string {
  * («1.150.000») are thousands separators too.
  */
 export function parseNumber(text: string): number | null {
-  let s = asciiDigits(text).replace(/[٬\s,]/g, '').replace(/٫/g, '.').replace(/[^\d.\-]/g, '');
-  if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  let s = asciiDigits(text).replaceAll(/[٬\s,]/g, '').replaceAll('٫', '.').replaceAll(/[^\d.\-]/g, '');
+  if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replaceAll('.', '');
   if (!/\d/.test(s)) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
@@ -81,7 +85,7 @@ export function parseNumber(text: string): number | null {
 
 /** Digits only, for identifiers the document may print with spaces/dashes. */
 export function identifierDigits(text: string): string {
-  return asciiDigits(text).replace(/[\s\-–.]/g, '');
+  return asciiDigits(text).replaceAll(/[\s\-–.]/g, '');
 }
 
 export const keepText = (s: string): string => s;
@@ -89,12 +93,12 @@ export const keepText = (s: string): string => s;
 export const parseEnum =
   <T extends string>(allowed: readonly T[]) =>
   (s: string): T | null => {
-    const upper = s.toUpperCase().replace(/[^A-Z]/g, '');
+    const upper = s.toUpperCase().replaceAll(/[^A-Z]/g, '');
     return allowed.find((a) => a === upper) ?? null;
   };
 
 export const parseIsoDate = (s: string): string | null => {
-  const value = asciiDigits(s).replace(/\//g, '-').replace(/\s+/g, '');
+  const value = asciiDigits(s).replaceAll('/', '-').replaceAll(/\s+/g, '');
   if (!ISO_DATE_RE.test(value)) return null;
   const parsed = new Date(`${value}T00:00:00Z`);
   return Number.isNaN(parsed.getTime()) || !parsed.toISOString().startsWith(value) ? null : value;
@@ -181,7 +185,7 @@ export function currencyField(w: WireField): AssessedField<string> {
  *  collapsed. An off-shape text is kept — the user sees what was read — and
  *  flagged. */
 export function codeField(w: WireField): AssessedField<string> {
-  const { field } = fromWire(w, (s) => asciiDigits(s).trim().toUpperCase().replace(/\s+/g, ' '));
+  const { field } = fromWire(w, (s) => asciiDigits(s).trim().toUpperCase().replaceAll(/\s+/g, ' '));
   const offShape: FieldWarning[] = field.value !== null && !/^[A-Z]{1,6}-?\d+$/.test(field.value) ? ['extract.warn.code_format'] : [];
   return assessField(field, field.value === null ? [] : [...placeholderWarning(field.value), ...offShape]);
 }
@@ -218,7 +222,7 @@ export function dateNotFutureField(w: WireField, flags: AssessFlags): AssessedFi
 export function splitSerials(text: string): string[] {
   return asciiDigits(text)
     .split(/[;،,|\r\n]+/)
-    .map((s) => s.trim().replace(/\s+/g, ' ').toUpperCase())
+    .map((s) => s.trim().replaceAll(/\s+/g, ' ').toUpperCase())
     .filter((s) => s.length > 0);
 }
 
