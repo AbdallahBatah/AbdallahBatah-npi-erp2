@@ -256,7 +256,7 @@ function postBody(body: unknown): RequestInit {
 
 // ─── Entry points ───────────────────────────────────────────────────────────
 
-export async function loadSetup(): Promise<SetupApiResult<{ view: SetupStateView }>> {
+export function loadSetup(): Promise<SetupApiResult<{ view: SetupStateView }>> {
   return call(SETUP_API_PATH, { method: 'GET', headers: { Accept: 'application/json' } }, (body) =>
     isSetupStateView(body) ? { view: body } : undefined,
   );
@@ -268,30 +268,35 @@ function onAnswerOk(body: unknown): { outcome: AnswerOutcome } | undefined {
   return undefined;
 }
 
-export async function answerText(step: SetupStep, text: string): Promise<SetupApiResult<{ outcome: AnswerOutcome }>> {
+export function answerText(step: SetupStep, text: string): Promise<SetupApiResult<{ outcome: AnswerOutcome }>> {
   return call(SETUP_API_PATH, postBody({ action: 'answer', step, text }), onAnswerOk);
 }
 
-export async function answerStructured(
+export function answerStructured(
   step: SetupStep,
   answer: unknown,
 ): Promise<SetupApiResult<{ outcome: AnswerOutcome }>> {
   return call(SETUP_API_PATH, postBody({ action: 'answer', step, answer }), onAnswerOk);
 }
 
-export async function gotoStep(step: SetupStep): Promise<SetupApiResult<{ view: SetupStateView }>> {
+export function gotoStep(step: SetupStep): Promise<SetupApiResult<{ view: SetupStateView }>> {
   return call(SETUP_API_PATH, postBody({ action: 'goto', step }), (body) =>
     isSetupStateView(body) ? { view: body } : undefined,
   );
 }
 
-export async function previewSetup(): Promise<SetupApiResult<{ preview: SetupPreviewResult }>> {
+/** T-47a: drop the discovered answers and walk the steps by hand. */
+export function chooseManual(): Promise<SetupApiResult<{ view: SetupStateView }>> {
+  return call(SETUP_API_PATH, postBody({ action: 'manual' }), (body) => (isSetupStateView(body) ? { view: body } : undefined));
+}
+
+export function previewSetup(): Promise<SetupApiResult<{ preview: SetupPreviewResult }>> {
   return call(SETUP_API_PATH, postBody({ action: 'preview' }), (body) =>
     isSetupPreviewResult(body) ? { preview: body } : undefined,
   );
 }
 
-export async function applySetup(): Promise<SetupApiResult<{ apply: SetupApplyResult }>> {
+export function applySetup(): Promise<SetupApiResult<{ apply: SetupApplyResult }>> {
   return call(SETUP_API_PATH, postBody({ action: 'apply' }), (body) =>
     isSetupApplyResult(body) ? { apply: body } : undefined,
   );

@@ -54,7 +54,7 @@ export function ReassignForm({ positionId }: ReassignFormProps) {
   }, [positionId]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   async function handleSubmit(event: FormEvent) {

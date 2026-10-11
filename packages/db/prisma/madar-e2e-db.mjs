@@ -85,7 +85,10 @@ function approvalDocumentValues() {
   if (!match) fail('schema.prisma has no enum ApprovalDocument');
   const values = match[1]
     .split(/\r?\n/)
-    .map((l) => l.replace(/\/\/.*$/, '').trim())
+    .map((l) => {
+      const comment = l.indexOf('//');
+      return (comment === -1 ? l : l.slice(0, comment)).trim();
+    })
     .filter((l) => /^[A-Z_]+$/.test(l));
   if (values.length === 0) fail('enum ApprovalDocument has no values');
   return values;

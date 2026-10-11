@@ -127,9 +127,9 @@ function readLines(file: string): Line[] {
 /** A prose line with inline code and link/autolink URLs blanked out. */
 function proseOf(text: string): string {
   return text
-    .replace(/`[^`\n]*`/g, ' ')
-    .replace(/\]\((?:https?:)[^)\s]*\)/g, '] ')
-    .replace(/<https?:[^>\s]*>/g, ' ');
+    .replaceAll(/`[^`\n]*`/g, ' ')
+    .replaceAll(/\]\((?:https?:)[^)\s]*\)/g, '] ')
+    .replaceAll(/<https?:[^>\s]*>/g, ' ');
 }
 
 function latinOffenders(file: string): string[] {
@@ -286,7 +286,7 @@ describe('docs/COPILOT_RUN_AR.md: the seven sections, in order', () => {
 });
 
 describe('docs/COPILOT_CHANGELOG.md: one section per tag, newest first', () => {
-  const TAGS = ['copilot-v0.5.0', 'copilot-v0.4.0', 'copilot-v0.3.0', 'copilot-v0.2.0', 'copilot-v0.1.0'];
+  const TAGS = ['copilot-v0.6.0', 'copilot-v0.5.0', 'copilot-v0.4.0', 'copilot-v0.3.0', 'copilot-v0.2.0', 'copilot-v0.1.0'];
 
   it('has exactly one heading per tag, in descending order, then Phase 0', () => {
     const headings = headingsOf(DOCS.changelog);
@@ -300,7 +300,7 @@ describe('docs/COPILOT_CHANGELOG.md: one section per tag, newest first', () => {
     expect(phase0).toBeGreaterThan(indexes[indexes.length - 1]);
   });
 
-  it('every tag section lists its tasks as code spans (4 to 10 bullets, one sentence each)', () => {
+  it('every tag section lists its tasks as code spans (4 to 12 bullets, one sentence each)', () => {
     const lines = readLines(DOCS.changelog);
     const sections = new Map<string, string[]>();
     let current: string | null = null;
@@ -315,29 +315,44 @@ describe('docs/COPILOT_CHANGELOG.md: one section per tag, newest first', () => {
     }
     for (const tag of TAGS) {
       const bullets = sections.get(tag) ?? [];
-      // v0.5.0 also carries the «not done yet» bullets; every section stays within the brief's range.
+      // v0.5.0 carries twelve bullets (two halves of T-43, T-46) and v0.6.0 eleven (T-47, Q-1..Q-5, the release); every section stays within the brief's range.
       expect({ tag, ok: bullets.length >= 4 && bullets.length <= 12 }).toEqual({ tag, ok: true });
-      for (const b of bullets) expect(b).toMatch(/`(?:T|D|G)-[0-9a-z]+/);
+      for (const b of bullets) expect(b).toMatch(/`(?:T|D|G|Q)-[0-9a-z]+/);
     }
   });
 
-  it('the newest section is "in preparation" and says what is NOT done yet', () => {
+  it('the newest section is "in preparation" and says what is NOT done yet (v0.6.0, 2026-10-11)', () => {
+    const text = fs.readFileSync(DOCS.changelog, 'utf8');
+    const start = text.indexOf('## `copilot-v0.6.0`');
+    const end = text.indexOf('## `copilot-v0.5.0`');
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const section = text.slice(start, end);
+    expect(section).toContain('قيد الإعداد');
+    expect(section).toContain('لم يُنفَّذ بعد');
+    // The release step (merge, tag, main re-analysis) sits AFTER that marker and names the tag.
+    const afterMarker = section.slice(section.indexOf('لم يُنفَّذ بعد'));
+    expect(afterMarker).toContain('`copilot-v0.6.0`');
+    expect(afterMarker).toContain('`main`');
+    // What is done sits before it, each as a code span: both halves of T-47 and the five quality stages.
+    const beforeMarker = section.slice(section.indexOf('\n'), section.indexOf('لم يُنفَّذ بعد'));
+    for (const task of ['T-47a', 'T-47b', 'Q-1', 'Q-2', 'Q-3', 'Q-4', 'Q-5']) expect(beforeMarker).toContain(`\`${task}\``);
+    // and nothing before the marker claims the tag as placed.
+    expect(beforeMarker).not.toContain('وُسم `copilot-v0.6.0`');
+  });
+
+  it('the previous section stays a tagged release (T-46, 2026-10-10)', () => {
     const text = fs.readFileSync(DOCS.changelog, 'utf8');
     const start = text.indexOf('## `copilot-v0.5.0`');
     const end = text.indexOf('## `copilot-v0.4.0`');
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const section = text.slice(start, end);
-    expect(section).toContain('قيد الإعداد');
-    expect(section).toContain('لم يُنفَّذ بعد');
-    // The unfinished tasks sit AFTER that marker, each named as a code span.
-    const afterMarker = section.slice(section.indexOf('لم يُنفَّذ بعد'));
-    for (const task of ['T-43', 'T-46']) expect(afterMarker).toContain(`\`${task}\``);
-    // and none of them is claimed as delivered before it.
-    // (the heading itself names the whole range T-38…T-46, so it is skipped)
-    const beforeMarker = section.slice(section.indexOf('\n'), section.indexOf('لم يُنفَّذ بعد'));
-    // T-43's local half, T-44 and T-45 are done (2026-10-09): only T-46 may not appear above the marker.
-    for (const task of ['T-46']) expect(beforeMarker).not.toContain(`\`${task}\``);
+    expect(section).not.toContain('قيد الإعداد');
+    expect(section).not.toContain('لم يُنفَّذ بعد');
+    expect(section).toContain('وُسم');
+    for (const task of ['T-43', 'T-46']) expect(section).toContain(`\`${task}\``);
+    expect(section).toContain('`9aae4f2`');
   });
 });
 

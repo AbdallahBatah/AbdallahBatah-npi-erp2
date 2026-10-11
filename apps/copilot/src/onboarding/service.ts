@@ -21,7 +21,8 @@ import {
   type PersistOutcome,
 } from './apply';
 import { loadProfilePack } from './catalog';
-import { SNAPSHOT_READ_PERMISSION } from './gaps';
+import { discoveryBlockers, discoverFromNpi, seedStateFromDiscovery } from './discover';
+import { describeBlockedAr, SNAPSHOT_READ_PERMISSION } from './gaps';
 import {
   applyAnswer,
   goTo,
@@ -43,9 +44,12 @@ import type { RerunStep } from '../settings/types';
 import { parseAnswer, type ParseDeps } from './parse';
 import { buildPlan, describeStepAr, summarizePlanAr, type OnboardingPlan, type PlanSummaryAr } from './plan';
 import type { ProfilePack } from './profile.schema';
+import { buildSummary, type SetupSummary } from './summary';
 import { t } from '../i18n/ar';
+import type { NpiClient } from '../npi/client';
 import { readDirectoryUsers } from '../npi/admin';
 import { NpiError } from '../npi/errors';
+import { readList } from '../npi/responses';
 
 // ─── Dependencies ───────────────────────────────────────────────────────────
 
@@ -79,9 +83,13 @@ export interface SetupSessionDb {
   };
 }
 
+/** The three lists discovery counts (T-47a). Optional, so a caller or a fake
+ *  that does not offer one simply gives the guess less to go on. */
+export type DiscoveryNpi = Partial<Pick<NpiClient, 'listCustomers' | 'listProjects' | 'listVendors'>>;
+
 export interface SetupDeps {
   db: SetupSessionDb & OnboardingDb;
-  npi: OnboardingNpi;
+  npi: OnboardingNpi & DiscoveryNpi;
   llm: ParseDeps['llm'];
   pseudonymizer: ParseDeps['pseudonymizer'];
   /** Overridable for tests; defaults to the real `loadProfilePack`. */
@@ -99,7 +107,7 @@ export interface SetupDeps {
  * may construct a provider, and that list must not grow for a page.
  * `SetupDeps` is assignable to this, so the route keeps passing its own.
  */
-export type SetupReadDeps = Pick<SetupDeps, 'db' | 'npi' | 'loadPack'>;
+export type SetupReadDeps = Pick<SetupDeps, 'db' | 'npi' | 'loadPack' | 'now'>;
 
 export interface SetupCaller {
   npiOrgId: string;
@@ -140,6 +148,8 @@ const SetupActionBodySchema = z.union([
   z.object({ action: z.literal('goto'), step: SetupStepSchema }),
   z.object({ action: z.literal('preview') }),
   z.object({ action: z.literal('apply') }),
+  /** T-47a: drop the discovered answers and type the steps by hand. */
+  z.object({ action: z.literal('manual') }),
 ]);
 export type SetupActionBody = z.infer<typeof SetupActionBodySchema>;
 
@@ -150,6 +160,12 @@ export interface SetupStateView {
   question: { step: SetupStep; key: ReturnType<typeof questionKey>; textAr: string };
   defaults: StepDefaults | null;
   profileTitleAr: string | null;
+  /** T-47a: the «هذا ما قرأته من NPI» screen — set only for a discovered
+   *  session standing on the summary, which then replaces the step editors. */
+  summary: SetupSummary | null;
+  /** T-47a: why the setup is manual when discovery was not possible (the NPI
+   *  read permission missing), in Arabic. */
+  discoveryNoteAr: string | null;
 }
 
 export interface SetupAnswerResult extends SetupStateView {
@@ -203,7 +219,7 @@ async function loadOrCreateSession(deps: SetupReadDeps, caller: SetupCaller): Pr
 }
 
 async function saveState(
-  deps: SetupDeps,
+  deps: Pick<SetupDeps, 'db'>,
   id: string,
   state: SetupState,
   extra: Partial<{ completedAt: Date | null; profileChosen: string | null }> = {},
@@ -234,12 +250,73 @@ async function buildView(deps: SetupReadDeps, caller: SetupCaller, state: SetupS
     }
   }
 
+  const defaults = stepDefaults(state.step, pack, { npiUsers, roleSets: state.discovery?.roleSets });
+  if (defaults?.step === 2 && state.discovery !== undefined) {
+    // A discovered session's positions are NPI's roles, not the pack's, so the
+    // holder picker needs the active users of every role.
+    const usersByRole: Record<string, StepDefaultsNpiUser[]> = {};
+    for (const user of npiUsers) if (user.isActive) (usersByRole[user.roleKey] ??= []).push(user);
+    defaults.usersByRole = usersByRole;
+  }
+
   return {
     state,
     question: { step: state.step, key, textAr: t(key) },
-    defaults: stepDefaults(state.step, pack, { npiUsers }),
+    defaults,
     profileTitleAr: pack ? pack.titleAr : null,
+    summary: buildSummary(state, pack),
+    discoveryNoteAr: discoveryNoteAr(state),
   };
+}
+
+function discoveryNoteAr(state: SetupState): string | null {
+  if (!state.discoveryMissing || state.discoveryMissing.length === 0) return null;
+  const lines = state.discoveryMissing.map((permission) => describeBlockedAr({ code: 'npi_state_unreadable', permission }));
+  return [t('setup.discover.unavailable'), ...lines].join('\n');
+}
+
+// ─── Discovery (T-47a) ──────────────────────────────────────────────────────
+
+/** How many rows NPI lists, one page; null when the list is not offered or
+ *  NPI refuses it (the guess then simply has less evidence). */
+async function countOf(read: (() => Promise<unknown>) | undefined): Promise<number | null> {
+  if (read === undefined) return null;
+  try {
+    return readList(await read()).length;
+  } catch (err) {
+    if (err instanceof NpiError) return null;
+    throw err;
+  }
+}
+
+/**
+ * A session with no answers yet and no instruction to type them by hand is
+ * seeded from NPI: the answers are read (as the administrator, with their
+ * token), stored with `discovery` metadata, and the view shows the summary.
+ * When the roles, departments or user directory cannot be read, the session
+ * becomes today's manual wizard and records which permission was missing.
+ * Nothing is written to NPI here.
+ */
+async function ensureDiscovery(deps: SetupReadDeps, caller: SetupCaller, id: string, state: SetupState): Promise<SetupState> {
+  if (state.manual || state.discovery || state.completedSteps.length > 0 || state.answers.profileKey !== undefined) return state;
+
+  const snapshot = await loadNpiSnapshot(deps.npi, { roleKey: caller.roleKey, permissions: caller.permissions });
+  const missing = discoveryBlockers(snapshot);
+  if (missing.length > 0) {
+    const next: SetupState = { ...state, manual: true, discoveryMissing: missing };
+    await saveState(deps, id, next);
+    return next;
+  }
+
+  const counts = {
+    projects: await countOf(deps.npi.listProjects ? () => deps.npi.listProjects!() : undefined),
+    customers: await countOf(deps.npi.listCustomers ? () => deps.npi.listCustomers!() : undefined),
+    vendors: await countOf(deps.npi.listVendors ? () => deps.npi.listVendors!() : undefined),
+  };
+  const discovered = discoverFromNpi(snapshot, { counts, loadPack: deps.loadPack });
+  const next = seedStateFromDiscovery(discovered, (deps.now ?? (() => new Date()))());
+  await saveState(deps, id, next);
+  return next;
 }
 
 function withoutPermissionLabel(plan: OnboardingPlan): Omit<OnboardingPlan, 'permissionLabel'> {
@@ -270,7 +347,7 @@ async function buildPreview(
   planCaller: { roleKey: string; permissions: readonly string[] },
 ): Promise<SetupPreviewResult> {
   const plan = await dryRun({ npi: deps.npi }, pack, answers, planCaller);
-  const roleNameAr = (key: string) => pack.rolePermissionSets[key]?.nameAr ?? key;
+  const roleNameAr = (key: string) => plan.roleNamesAr[key] ?? pack.rolePermissionSets[key]?.nameAr ?? key;
   const stepTitlesAr: Record<string, string> = {};
   for (const step of plan.steps) stepTitlesAr[step.id] = describeStepAr(step, roleNameAr);
   return {
@@ -286,7 +363,7 @@ async function buildPreview(
 export async function getSetupState(deps: SetupReadDeps, caller: SetupCaller): Promise<SetupStateView> {
   requireAdmin(caller);
   const row = await loadOrCreateSession(deps, caller);
-  const state = parseStoredState(row.stepsJson);
+  const state = await ensureDiscovery(deps, caller, row.id, parseStoredState(row.stepsJson));
   return buildView(deps, caller, state);
 }
 
@@ -320,35 +397,19 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
   const row = await loadOrCreateSession(deps, caller);
   const state = parseStoredState(row.stepsJson);
 
+  if (body.action === 'manual') {
+    const next: SetupState = { ...initialState(), manual: true };
+    await saveState(deps, row.id, next);
+    return buildView(deps, caller, next);
+  }
+
   if (body.action === 'goto') {
     const next = goTo(state, body.step);
     await saveState(deps, row.id, next);
     return buildView(deps, caller, next);
   }
 
-  if (body.action === 'answer') {
-    const pack = state.answers.profileKey !== undefined ? loadPack(state.answers.profileKey) : null;
-    let answer: StepAnswer;
-    let source: SetupAnswerResult['source'];
-
-    if ('answer' in body) {
-      answer = body.answer;
-      source = 'structured';
-    } else {
-      const outcome = await parseAnswer(
-        { llm: deps.llm, pseudonymizer: deps.pseudonymizer },
-        { step: body.step, text: body.text, pack, current: state },
-        { npiOrgId: caller.npiOrgId, npiUserId: caller.npiUserId },
-      );
-      if (outcome.kind === 'unclear') return { unclear: outcome.messageAr };
-      answer = outcome.answer;
-      source = outcome.source;
-    }
-
-    const next = applyAnswer(state, body.step, answer, { loadPack });
-    await saveState(deps, row.id, next);
-    return { ...(await buildView(deps, caller, next)), parsed: answer, source };
-  }
+  if (body.action === 'answer') return handleAnswerAction(deps, caller, row, state, body, loadPack);
 
   // 'preview' and 'apply' both need a complete-enough set of answers to
   // build a plan; `toAnswers` throws `MachineError` when step 1 was never
@@ -359,9 +420,57 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
 
   if (body.action === 'preview') return buildPreview(deps, pack, answers, planCaller);
 
-  // 'apply': re-reads NPI and rebuilds the plan rather than trusting a plan
-  // the client may have cached from an earlier preview (spec/madar/02 §7:
-  // "dry-run diff shown first" — apply never trusts a stale one).
+  return applyAction(deps, caller, row, state, pack, answers, planCaller);
+}
+
+/** The structured / free-text `answer` action: parse (free text goes through
+ *  the model, structured answers are taken as they are), apply the answer to
+ *  the machine, save, and answer with the new view. */
+async function handleAnswerAction(
+  deps: SetupDeps,
+  caller: SetupCaller,
+  row: OnboardingSessionRow,
+  state: SetupState,
+  body: Extract<SetupActionBody, { action: 'answer' }>,
+  loadPack: (key: string) => ProfilePack,
+): Promise<SetupAnswerResult | SetupUnclearResult> {
+  const pack = state.answers.profileKey !== undefined ? loadPack(state.answers.profileKey) : null;
+  let answer: StepAnswer;
+  let source: SetupAnswerResult['source'];
+
+  if ('answer' in body) {
+    answer = body.answer;
+    source = 'structured';
+  } else {
+    const outcome = await parseAnswer(
+      { llm: deps.llm, pseudonymizer: deps.pseudonymizer },
+      { step: body.step, text: body.text, pack, current: state },
+      { npiOrgId: caller.npiOrgId, npiUserId: caller.npiUserId },
+    );
+    if (outcome.kind === 'unclear') return { unclear: outcome.messageAr };
+    answer = outcome.answer;
+    source = outcome.source;
+  }
+
+  const next = applyAnswer(state, body.step, answer, { loadPack });
+  await saveState(deps, row.id, next);
+  return { ...(await buildView(deps, caller, next)), parsed: answer, source };
+}
+
+/** The `apply` action: re-reads NPI and rebuilds the plan rather than
+ *  trusting a plan the client may have cached from an earlier preview
+ *  (spec/madar/02 §7: "dry-run diff shown first" — apply never trusts a stale
+ *  one), runs it, persists the copilot side, and closes the session when the
+ *  run completed. */
+async function applyAction(
+  deps: SetupDeps,
+  caller: SetupCaller,
+  row: OnboardingSessionRow,
+  state: SetupState,
+  pack: ProfilePack,
+  answers: ReturnType<typeof toAnswers>,
+  planCaller: { roleKey: string; permissions: readonly string[] },
+): Promise<SetupApplyResult> {
   const snapshot = await loadNpiSnapshot(deps.npi, planCaller);
   const plan = buildPlan(pack, answers, snapshot, planCaller);
   const result = await applyPlan({ npi: deps.npi }, plan);
@@ -372,12 +481,29 @@ export async function handleSetupAction(deps: SetupDeps, caller: SetupCaller, ra
     result,
     holders: validHolders,
     now: deps.now,
+    setup: setupRecord(state, (deps.now ?? (() => new Date()))()),
   });
   const mergedPersisted: PersistOutcome = { ...persisted, holdersSkipped: [...persisted.holdersSkipped, ...holderValidationSkips] };
   if (result.completed) {
     await saveState(deps, row.id, state, { completedAt: (deps.now ?? (() => new Date()))(), profileChosen: plan.profileKey });
   }
   return { result, summary: summarizePlanAr(plan, pack), persisted: mergedPersisted };
+}
+
+/** What `firm_config.setupSource`/`discoveryJson` keep of how this setup was reached. */
+function setupRecord(state: SetupState, now: Date): { source: 'discovered' | 'manual'; discoveryJson: Record<string, unknown> } {
+  const discovery = state.discovery;
+  if (discovery === undefined) return { source: 'manual', discoveryJson: { manual: true, at: now.toISOString() } };
+  return {
+    source: 'discovered',
+    discoveryJson: {
+      at: discovery.at,
+      confirmedAt: now.toISOString(),
+      sources: discovery.sources,
+      evidence: discovery.evidence,
+      roleKeys: Object.keys(discovery.roleSets ?? {}),
+    },
+  };
 }
 
 // ─── /settings: re-opening a step (T-19) ───────────────────────────────────
@@ -437,7 +563,14 @@ export async function reopenSetupAtStep(deps: Pick<SetupDeps, 'db'>, caller: Set
     data: {
       npiOrgId: caller.npiOrgId,
       npiUserId: caller.npiUserId,
-      stepsJson: { step, answers: parsed.data.answers, completedSteps: [1, 2, 3, 4, 5, 6] },
+      stepsJson: {
+        step,
+        answers: parsed.data.answers,
+        completedSteps: [1, 2, 3, 4, 5, 6],
+        // A re-run of one step goes straight to the diff, as before — the
+        // discovered session's roles and sources still apply to it.
+        ...(parsed.data.discovery ? { discovery: { ...parsed.data.discovery, needsReview: false } } : {}),
+      },
     },
   });
   return 'cloned';

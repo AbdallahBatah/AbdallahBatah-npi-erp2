@@ -112,10 +112,42 @@ model FirmConfig {
   terminologyJson       Json
   npiApiGapsJson        Json
   setupCompletedAt      DateTime?
+  // T-47a: how the setup was reached. 'discovered' = the wizard read the
+  // answers from NPI and the administrator confirmed them; 'manual' = typed
+  // step by step (also the value of every row that predates T-47a).
+  // `discoveryJson` keeps the evidence the confirmation was based on (profile
+  // guess and reasons, per-step sources, what was skipped).
+  setupSource           String    @default("manual")
+  discoveryJson         Json?
+  // T-47b: the last NPI-vs-Madar sync (`lastSyncAt`, bumped by every run that
+  // read NPI), the last non-empty difference it found (`lastSyncDiffJson`, with
+  // its own `at`), and when an administrator last acknowledged it.
+  lastSyncAt            DateTime?
+  lastSyncDiffJson      Json?
+  lastSyncSeenAt        DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
   @@map("firm_config")
+}
+
+// T-47b: one row per sync attempt that read NPI or was refused for a reason
+// the administrator can act on (a throttled login writes nothing). `diffJson`
+// is the difference (null when the run was skipped); `namesJson` the role and
+// department display names the run saw, which the next run compares against to
+// tell «NPI renamed it» from «an administrator typed another title».
+model SyncRun {
+  id          String   @id @default(cuid())
+  npiOrgId    String
+  at          DateTime @default(now())
+  byNpiUserId String
+  reason      String
+  diffJson    Json?
+  namesJson   Json?
+  skipped     String?
+
+  @@index([npiOrgId, at])
+  @@map("sync_runs")
 }
 
 model OnboardingSession {

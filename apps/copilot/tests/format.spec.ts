@@ -52,7 +52,7 @@ describe('formatDate', () => {
 
 describe('formatDateTime', () => {
   // Strip the bidi marks Intl may add around Arabic-locale numerals.
-  const stripMarks = (s: string): string => s.replace(/[‎‏]/g, '');
+  const stripMarks = (s: string): string => s.replaceAll(/[‎‏]/g, '');
 
   it('renders Latin digits, a Gregorian year and an HH:mm group, with no م/ص marker', () => {
     const out = stripMarks(formatDateTime(new Date('2026-10-06T14:35:00Z')));

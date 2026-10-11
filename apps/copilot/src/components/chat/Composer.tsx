@@ -165,14 +165,13 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
       {/* Live region for the mic's state. It is always mounted (a live region
           must exist before its text changes to be announced) and keeps a
           minimum height so the composer does not jump when text appears. */}
-      <p
-        role="status"
+      <output
         aria-live="polite"
         data-testid="mic-status"
-        className={`min-h-4 px-1 text-xs ${micState === 'error' ? 'text-danger-600' : 'text-slate-500'}`}
+        className={`block min-h-4 px-1 text-xs ${micState === 'error' ? 'text-danger-600' : 'text-slate-500'}`}
       >
         {micStatus}
-      </p>
+      </output>
       {value.length >= COUNTER_THRESHOLD ? (
         <p dir="rtl" className={`px-1 text-xs ${tooLong ? 'text-danger-600' : 'text-slate-500'}`}>
           <bdi>{formatNumber(value.length)}</bdi> / <bdi>{formatNumber(MAX_MESSAGE_LENGTH)}</bdi>

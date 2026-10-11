@@ -323,7 +323,7 @@ export default function CustomersPage() {
 
           {similar.length > 0 && (
             <div
-              role="status"
+              aria-live="polite" aria-atomic="true"
               className="rounded-xl border border-warning-200 bg-warning-50/60 p-4 sm:col-span-2"
             >
               <p className="text-sm font-bold text-warning-900">{t('cust.similar.title')}</p>

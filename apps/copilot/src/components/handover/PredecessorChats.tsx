@@ -88,9 +88,9 @@ export function PredecessorChats({ conversations }: PredecessorChatsProps) {
                   </Button>
                 </div>
                 {transcript?.status === 'loading' ? (
-                  <p role="status" className="text-sm text-slate-500">
+                  <output className="block text-sm text-slate-500">
                     {t('handover.chats.loading')}
-                  </p>
+                  </output>
                 ) : null}
                 {transcript?.status === 'error' ? (
                   <p role="alert" className="text-sm text-danger-700">

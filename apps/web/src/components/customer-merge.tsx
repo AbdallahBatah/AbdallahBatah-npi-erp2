@@ -97,9 +97,9 @@ export function CustomerMergeCard() {
   return (
     <div>
       {!data.mergeEnabled && (
-        <div role="status" className="mb-4 rounded-xl border border-warning-200 bg-warning-50/60 p-4 text-sm font-semibold text-warning-900">
+        <output className="block mb-4 rounded-xl border border-warning-200 bg-warning-50/60 p-4 text-sm font-semibold text-warning-900">
           {t('cust.merge.disabledBanner')}
-        </div>
+        </output>
       )}
       <p className="mb-1 text-sm text-slate-600">{t('cust.merge.hint')}</p>
       <p className="mb-5 text-xs text-slate-500">
@@ -197,7 +197,7 @@ export function CustomerMergeCard() {
             className="grid gap-4"
             onSubmit={(e) => {
               e.preventDefault();
-              runMerge(confirming);
+              void runMerge(confirming);
             }}
           >
             <p className="text-sm leading-7 text-slate-700">{t('cust.merge.confirmMsg')}</p>

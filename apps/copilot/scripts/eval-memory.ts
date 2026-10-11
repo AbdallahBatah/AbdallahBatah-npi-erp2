@@ -247,7 +247,7 @@ async function main(): Promise<void> {
 
   const outDir = path.join(process.cwd(), 'test-results', 'memory');
   mkdirSync(outDir, { recursive: true });
-  const stamp = startedAt.toISOString().replace(/[:.]/g, '-');
+  const stamp = startedAt.toISOString().replaceAll(/[:.]/g, '-');
   const reportPath = path.join(outDir, `${stamp}.json`);
   writeFileSync(
     reportPath,

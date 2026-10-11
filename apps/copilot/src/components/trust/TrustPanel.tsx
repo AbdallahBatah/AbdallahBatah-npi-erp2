@@ -71,12 +71,12 @@ export function TrustPanel() {
   }, []);
 
   useEffect(() => {
-    load({});
+    void load({});
   }, [load]);
 
   function handleFilters(next: AuditFiltersValue) {
     setFilters(next);
-    load(next);
+    void load(next);
   }
 
   async function handleMore() {

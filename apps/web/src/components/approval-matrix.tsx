@@ -253,7 +253,7 @@ export function ApprovalMatrixCard({ roles }: { roles: RoleRow[] }) {
           className="grid gap-4"
           onSubmit={(ev) => {
             ev.preventDefault();
-            submit();
+            void submit();
           }}
         >
           <Field

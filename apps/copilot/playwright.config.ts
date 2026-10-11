@@ -36,7 +36,7 @@ function e2eNpiDatabaseUrl(): string {
     .split(/\r?\n/)
     .find((l) => /^\s*DATABASE_URL\s*=/.test(l));
   if (!line) throw new Error(`playwright.config.ts: ${envFile} has no DATABASE_URL line`);
-  const url = new URL(line.replace(/^\s*DATABASE_URL\s*=\s*/, '').trim().replace(/^["']|["']$/g, ''));
+  const url = new URL(line.replace(/^\s*DATABASE_URL\s*=\s*/, '').trim().replaceAll(/^["']|["']$/g, ''));
   if (url.pathname !== '/npi_erp') throw new Error(`playwright.config.ts: DATABASE_URL names ${url.pathname.slice(1)}, expected npi_erp`);
   url.pathname = '/npi_erp_e2e';
   return url.toString();

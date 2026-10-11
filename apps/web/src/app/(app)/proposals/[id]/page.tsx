@@ -533,7 +533,7 @@ export default function ProposalDetailPage() {
     }
     if (!text) return null;
     return (
-      <div className={`mb-4 rounded-xl border p-4 ${tone}`} role="status">
+      <div className={`mb-4 rounded-xl border p-4 ${tone}`} aria-live="polite" aria-atomic="true">
         <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
           <Icon name={current.status === 'PENDING_APPROVAL' ? 'stamp' : current.status === 'EXPIRED' ? 'alert-triangle' : 'check-circle'} className="h-4 w-4" />
           {text}

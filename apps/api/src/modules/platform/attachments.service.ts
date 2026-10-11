@@ -91,7 +91,7 @@ export class AttachmentsService {
   async list(user: AuthUser, rawType: string, entityId: string) {
     const entityType = this.parseEntityType(rawType);
     this.requireEntityAccess(user, entityType);
-    return this.prisma.attachment.findMany({
+    return await this.prisma.attachment.findMany({
       where: { organizationId: user.organizationId, entityType, entityId },
       orderBy: { createdAt: 'desc' },
       include: { uploadedBy: { select: { nameAr: true, nameEn: true } } },

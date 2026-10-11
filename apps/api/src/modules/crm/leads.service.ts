@@ -85,7 +85,7 @@ export class LeadsService {
     return lead;
   }
 
-  async create(user: AuthUser, dto: CreateLeadDto) {
+  create(user: AuthUser, dto: CreateLeadDto) {
     return this.prisma.$transaction(async (tx) => {
       if (dto.customerId) await this.assertCustomerUsable(user.organizationId, dto.customerId, tx);
       const code = await this.numbering.next(user.organizationId, 'LEAD', tx);

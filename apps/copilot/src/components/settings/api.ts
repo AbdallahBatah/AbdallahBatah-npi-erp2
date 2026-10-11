@@ -14,7 +14,9 @@ import type {
   SettingsLeftover,
   SettingsPosition,
   SettingsPositionHolder,
+  SettingsSync,
   SettingsView,
+  SyncActionResult,
 } from '@/settings/types';
 import type { FlowType } from '@/agents/router';
 import type { ModuleKey } from '@/onboarding/profile.schema';
@@ -141,9 +143,32 @@ function isBaselinesRecord(value: unknown): value is Record<FlowType, SettingsBa
   return FLOW_TYPES.every((flow) => isSettingsBaseline(value[flow]));
 }
 
+function isSettingsSync(value: unknown): value is SettingsSync {
+  if (!isRecord(value)) return false;
+  const diff = value.lastDiff;
+  return (
+    typeof value.canSync === 'boolean' &&
+    isNullableString(value.lastSyncAt) &&
+    isNullableString(value.lastSyncAgoAr) &&
+    (diff === null ||
+      (isRecord(diff) && typeof diff.at === 'string' && typeof diff.agoAr === 'string' && isStringArray(diff.summaryAr)))
+  );
+}
+
+function isSyncActionResult(value: unknown): value is SyncActionResult {
+  return (
+    isRecord(value) &&
+    (value.outcome === 'synced' || value.outcome === 'skipped') &&
+    typeof value.messageAr === 'string' &&
+    (value.summaryAr === undefined || isStringArray(value.summaryAr)) &&
+    isSettingsSync(value.sync)
+  );
+}
+
 function isSettingsView(value: unknown): value is SettingsView {
   return (
     isRecord(value) &&
+    isSettingsSync(value.sync) &&
     (value.config === null || isSettingsConfig(value.config)) &&
     Array.isArray(value.positions) &&
     value.positions.every(isSettingsPosition) &&
@@ -178,10 +203,11 @@ function serverError(): { ok: false; kind: 'server'; messageAr: string } {
 async function call<T extends object>(
   init: RequestInit,
   onOk: (body: unknown) => T | undefined,
+  path: string = SETTINGS_API_PATH,
 ): Promise<SettingsApiResult<T>> {
   let res: Response;
   try {
-    res = await fetch(SETTINGS_API_PATH, { credentials: 'same-origin', ...init });
+    res = await fetch(path, { credentials: 'same-origin', ...init });
   } catch {
     return serverError();
   }
@@ -223,20 +249,38 @@ function postBody(body: unknown): RequestInit {
 
 // ─── Entry points ───────────────────────────────────────────────────────────
 
-export async function loadSettings(): Promise<SettingsApiResult<{ view: SettingsView }>> {
+export function loadSettings(): Promise<SettingsApiResult<{ view: SettingsView }>> {
   return call({ method: 'GET', headers: { Accept: 'application/json' } }, (body) =>
     isSettingsView(body) ? { view: body } : undefined,
   );
 }
 
-export async function saveVisibleModules(modules: ModuleKey[]): Promise<SettingsApiResult<{ view: SettingsView }>> {
+export function saveVisibleModules(modules: ModuleKey[]): Promise<SettingsApiResult<{ view: SettingsView }>> {
   return call(postBody({ action: 'visible_modules', modules }), (body) => (isSettingsView(body) ? { view: body } : undefined));
 }
 
-export async function saveBaseline(flow: FlowType, minutes: number): Promise<SettingsApiResult<{ view: SettingsView }>> {
+export function saveBaseline(flow: FlowType, minutes: number): Promise<SettingsApiResult<{ view: SettingsView }>> {
   return call(postBody({ action: 'baseline', flow, minutes }), (body) => (isSettingsView(body) ? { view: body } : undefined));
 }
 
-export async function rerunStep(step: RerunStep): Promise<SettingsApiResult<{ redirect: '/setup' }>> {
+export function rerunStep(step: RerunStep): Promise<SettingsApiResult<{ redirect: '/setup' }>> {
   return call(postBody({ action: 'rerun', step }), (body) => (isRedirectResult(body) ? { redirect: body.redirect } : undefined));
+}
+
+/** `POST /copilot/api/settings/sync`: the «حدّث من NPI» button. */
+export function runSync(): Promise<SettingsApiResult<{ result: SyncActionResult }>> {
+  return call(
+    { method: 'POST', headers: { Accept: 'application/json' } },
+    (body) => (isSyncActionResult(body) ? { result: body } : undefined),
+    `${SETTINGS_API_PATH}/sync`,
+  );
+}
+
+/** `POST /copilot/api/settings/sync/seen`: the home banner's «تم». */
+export function markSyncSeen(): Promise<SettingsApiResult<object>> {
+  return call(
+    { method: 'POST', headers: { Accept: 'application/json' } },
+    (body) => (isRecord(body) && body.ok === true ? {} : undefined),
+    `${SETTINGS_API_PATH}/sync/seen`,
+  );
 }

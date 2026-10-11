@@ -921,7 +921,7 @@ describe('renderHandoverAr', () => {
     expect(text.endsWith('\n\n')).toBe(false);
     expect(text).not.toMatch(/\n{3,}/);
     // Indented fact lines start with two spaces on purpose; no other run of spaces.
-    expect(text.replace(/^ {2}· /gm, '· ')).not.toMatch(/ {2,}/);
+    expect(text.replaceAll(/^ {2}· /gm, '· ')).not.toMatch(/ {2,}/);
   });
 
   it('has no Latin letters outside document codes, item codes and NPI', () => {

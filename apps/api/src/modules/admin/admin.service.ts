@@ -476,7 +476,7 @@ export class AdminService {
       // A bare YYYY-MM-DD "to" means "through that day", so push it to the
       // last millisecond — same convention as the finance reports.
       const to = filter.to ? new Date(`${filter.to.slice(0, 10)}T23:59:59.999Z`) : undefined;
-      if ((from && isNaN(+from)) || (to && isNaN(+to))) {
+      if ((from && Number.isNaN(+from)) || (to && Number.isNaN(+to))) {
         throw new BadRequestException('Invalid from/to date');
       }
       if (from && to && from > to) {

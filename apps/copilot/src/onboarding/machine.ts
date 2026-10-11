@@ -22,7 +22,7 @@
 // make no promise against the new one.
 import { z } from 'zod';
 import { loadProfilePack } from './catalog';
-import { effectivePack, PlanError, SetupAnswersSchema, type SetupAnswers } from './plan';
+import { effectivePack, PlanError, SETUP_SOURCES, SetupAnswersSchema, type SetupAnswers, type SetupSource } from './plan';
 import {
   ApprovalRuleDefaultSchema,
   DepartmentSchema,
@@ -30,6 +30,7 @@ import {
   PositionHolderSchema,
   PositionSchema,
   PROFILE_KEYS,
+  RolePermissionSetSchema,
   TERM_KEYS,
   type ProfileKey,
   type ProfilePack,
@@ -52,10 +53,44 @@ export const SetupStepSchema = z.union([
   z.literal(7),
 ]);
 
+/**
+ * What discovery (T-47a, `discover.ts`) leaves in the session next to the
+ * seeded answers: which source each step came from, the guess behind step 1,
+ * and the organization's own roles the answers were validated against. The
+ * summary screen reads it; `toAnswers` hands the plan the roles and sources.
+ */
+export const DiscoveryMetaSchema = z.object({
+  discovered: z.literal(true),
+  /** ISO time of the discovery. */
+  at: z.string(),
+  sources: z.partialRecord(z.enum(['1', '2', '3', '4', '5', '6']), z.enum(SETUP_SOURCES)),
+  /** NPI's own roles, absent when discovery fell back to the pack's roles. */
+  roleSets: z.record(z.string(), RolePermissionSetSchema).optional(),
+  evidence: z.object({
+    profileKey: z.enum(PROFILE_KEYS),
+    confidence: z.enum(['high', 'medium', 'low']),
+    reasonsAr: z.array(z.string()),
+    scores: z.record(z.string(), z.number()),
+    /** Things the reading left out, in Arabic (a user without a department
+     *  in a role the pack lacks, a rule NPI holds that cannot be mapped…). */
+    skippedAr: z.array(z.string()),
+  }),
+  /** True from the seeding until the summary is confirmed or edited away. */
+  needsReview: z.boolean(),
+});
+export type DiscoveryMeta = z.infer<typeof DiscoveryMetaSchema>;
+
 export interface SetupState {
   step: SetupStep;
   answers: Partial<SetupAnswers>;
   completedSteps: SetupStep[];
+  /** T-47a: the wizard must not try to discover again (the administrator
+   *  chose to type the steps, or discovery was impossible). */
+  manual?: boolean;
+  /** T-47a: set when the answers were read from NPI. */
+  discovery?: DiscoveryMeta;
+  /** T-47a: NPI read permissions discovery lacked (fallback to the manual wizard). */
+  discoveryMissing?: string[];
 }
 
 /** What `onboarding_sessions.stepsJson` stores; reads it back from JSON. */
@@ -63,6 +98,9 @@ export const SetupStateSchema = z.object({
   step: SetupStepSchema,
   answers: SetupAnswersSchema.partial(),
   completedSteps: z.array(SetupStepSchema),
+  manual: z.boolean().optional(),
+  discovery: DiscoveryMetaSchema.optional(),
+  discoveryMissing: z.array(z.string()).optional(),
 });
 
 export function initialState(): SetupState {
@@ -96,6 +134,8 @@ export interface StepDefaultsNpiUser {
 
 export interface StepDefaultsContext {
   npiUsers?: StepDefaultsNpiUser[];
+  /** Discovered sessions: NPI's own roles, named instead of the pack's (step 3). */
+  roleSets?: Record<string, { nameAr: string }>;
 }
 
 export interface Step1Defaults {
@@ -111,6 +151,9 @@ export interface Step2Defaults {
   step: 2;
   departments: ProfilePack['defaultDepartments'];
   positions: Step2Position[];
+  /** Active NPI users by role key — set for discovered sessions, whose
+   *  positions are NPI's roles rather than the pack's. */
+  usersByRole?: Record<string, StepDefaultsNpiUser[]>;
 }
 export interface Step3Defaults {
   step: 3;
@@ -171,7 +214,7 @@ export function stepDefaults(step: SetupStep, pack: ProfilePack | null, context:
     }
     case 3: {
       const roleNamesAr: Record<string, string> = {};
-      for (const [roleKey, roleSet] of Object.entries(pack.rolePermissionSets)) roleNamesAr[roleKey] = roleSet.nameAr;
+      for (const [roleKey, roleSet] of Object.entries(context.roleSets ?? pack.rolePermissionSets)) roleNamesAr[roleKey] = roleSet.nameAr;
       return { step: 3, approvalRules: pack.approvalRuleDefaults, roleNamesAr };
     }
     case 4:
@@ -287,45 +330,108 @@ export function applyAnswer(state: SetupState, step: SetupStep, answer: StepAnsw
     ]);
   }
 
-  let answers: Partial<SetupAnswers> = { ...state.answers };
-  let completedSteps = [...state.completedSteps];
-
-  if (answer.step === 1) {
-    const changedProfile = answers.profileKey !== undefined && answers.profileKey !== answer.profileKey;
-    if (changedProfile) {
-      answers = { profileKey: answer.profileKey, revenueLines: answer.revenueLines };
-      completedSteps = [];
-    } else {
-      answers.profileKey = answer.profileKey;
-      if (answer.revenueLines !== undefined) answers.revenueLines = answer.revenueLines;
-    }
-  } else if (answer.step === 2) {
-    answers.departments = answer.departments;
-    answers.positions = answer.positions;
-    // A free-text re-answer (parsed by the model) never carries `holders`
-    // and must not wipe a choice already made in the picker; a structured
-    // answer that *does* carry `holders` (even `[]`) replaces it outright.
-    if (answer.holders !== undefined) answers.holders = answer.holders;
-    // Holders are a convenience over positions, not a contract of their own:
-    // prune any entry whose (roleKey, departmentCode) no longer names a
-    // position in the list just answered, dropping the rest silently.
-    if (answers.holders !== undefined) {
-      const positionKeys = new Set(answer.positions.map((p) => `${p.roleKey}\u0000${p.departmentCode ?? ''}`));
-      answers.holders = answers.holders.filter((h) => positionKeys.has(`${h.roleKey}\u0000${h.departmentCode ?? ''}`));
-    }
-  } else if (answer.step === 3) {
-    answers.approvalRules = answer.approvalRules;
-  } else if (answer.step === 4) {
-    answers.acceptedDocTypeKeys = answer.acceptedDocTypeKeys;
-  } else if (answer.step === 5) {
-    answers.items = answer.items;
-  } else {
-    answers.terminology = answer.terminology;
-  }
+  // Discovered answers survive an edit (the edited step becomes the
+  // administrator's own); a different profile makes them meaningless, so the
+  // session turns into today's manual wizard.
+  const applied: AppliedAnswer =
+    answer.step === 1
+      ? applyProfileAnswer(state, answer)
+      : { answers: mergeAnswer(state.answers, answer), completedSteps: [...state.completedSteps], discovery: state.discovery, manual: state.manual };
+  const { answers } = applied;
 
   // profileKey is always set by now: either this call just set it (step 1),
   // or the step-order check above already refused the call.
-  const profileKey = answers.profileKey as ProfileKey;
+  validateAgainstPack(answers.profileKey as ProfileKey, answers, applied.discovery, loadPack);
+
+  const completedSteps = applied.completedSteps.includes(step)
+    ? applied.completedSteps
+    : [...applied.completedSteps, step].sort((a, b) => a - b);
+
+  const discovery =
+    applied.discovery === undefined
+      ? undefined
+      : { ...applied.discovery, sources: { ...applied.discovery.sources, [String(step)]: 'manual' as SetupSource } };
+
+  const next: SetupState = { step: nextOpenStep(completedSteps), answers, completedSteps };
+  if (applied.manual !== undefined) next.manual = applied.manual;
+  if (discovery !== undefined) next.discovery = discovery;
+  return next;
+}
+
+/** What one answer leaves behind, before the pack check and the completion
+ *  bookkeeping `applyAnswer` does after it. */
+interface AppliedAnswer {
+  answers: Partial<SetupAnswers>;
+  completedSteps: SetupStep[];
+  discovery: DiscoveryMeta | undefined;
+  manual: boolean | undefined;
+}
+
+/** Step 1: pick (or re-pick) the profile. A *different* profile than before
+ *  clears steps 2–6, their completion and the discovery. */
+function applyProfileAnswer(state: SetupState, answer: Extract<StepAnswer, { step: 1 }>): AppliedAnswer {
+  const changedProfile = state.answers.profileKey !== undefined && state.answers.profileKey !== answer.profileKey;
+  if (changedProfile) {
+    return {
+      answers: { profileKey: answer.profileKey, revenueLines: answer.revenueLines },
+      completedSteps: [],
+      discovery: undefined,
+      manual: true,
+    };
+  }
+  const answers: Partial<SetupAnswers> = { ...state.answers };
+  answers.profileKey = answer.profileKey;
+  if (answer.revenueLines !== undefined) answers.revenueLines = answer.revenueLines;
+  return { answers, completedSteps: [...state.completedSteps], discovery: state.discovery, manual: state.manual };
+}
+
+/** Steps 2–6: the answer laid over the answers so far. */
+function mergeAnswer(current: Partial<SetupAnswers>, answer: Exclude<StepAnswer, { step: 1 }>): Partial<SetupAnswers> {
+  const answers: Partial<SetupAnswers> = { ...current };
+  switch (answer.step) {
+    case 2:
+      answers.departments = answer.departments;
+      answers.positions = answer.positions;
+      mergeHolders(answers, answer);
+      break;
+    case 3:
+      answers.approvalRules = answer.approvalRules;
+      break;
+    case 4:
+      answers.acceptedDocTypeKeys = answer.acceptedDocTypeKeys;
+      break;
+    case 5:
+      answers.items = answer.items;
+      break;
+    case 6:
+      answers.terminology = answer.terminology;
+      break;
+  }
+  return answers;
+}
+
+function mergeHolders(answers: Partial<SetupAnswers>, answer: Extract<StepAnswer, { step: 2 }>): void {
+  // A free-text re-answer (parsed by the model) never carries `holders`
+  // and must not wipe a choice already made in the picker; a structured
+  // answer that *does* carry `holders` (even `[]`) replaces it outright.
+  if (answer.holders !== undefined) answers.holders = answer.holders;
+  // Holders are a convenience over positions, not a contract of their own:
+  // prune any entry whose (roleKey, departmentCode) no longer names a
+  // position in the list just answered, dropping the rest silently.
+  if (answers.holders !== undefined) {
+    const positionKeys = new Set(answer.positions.map((p) => `${p.roleKey}\u0000${p.departmentCode ?? ''}`));
+    answers.holders = answers.holders.filter((h) => positionKeys.has(`${h.roleKey}\u0000${h.departmentCode ?? ''}`));
+  }
+}
+
+/** Refuses answers the pack cannot take: a profile that does not load, or
+ *  answers that, laid over the pack, break a cross-check T-14 wrote. */
+function validateAgainstPack(
+  profileKey: ProfileKey,
+  answers: Partial<SetupAnswers>,
+  discovery: DiscoveryMeta | undefined,
+  loadPack: (key: string) => ProfilePack,
+): void {
   let pack: ProfilePack;
   try {
     pack = loadPack(profileKey);
@@ -335,17 +441,20 @@ export function applyAnswer(state: SetupState, step: SetupStep, answer: StepAnsw
     ]);
   }
   try {
-    effectivePack(pack, answers as SetupAnswers);
+    effectivePack(pack, withDiscovery(answers as SetupAnswers, discovery));
   } catch (err) {
     if (err instanceof PlanError) {
       throw new MachineError('invalid_answer', err.message, err.issues);
     }
     throw err;
   }
+}
 
-  if (!completedSteps.includes(step)) completedSteps = [...completedSteps, step].sort((a, b) => a - b);
-
-  return { step: nextOpenStep(completedSteps), answers, completedSteps };
+/** The answers with what discovery knows about NPI laid on (its roles and the
+ *  per-step sources) — what `effectivePack` and the plan read. */
+function withDiscovery(answers: SetupAnswers, discovery: DiscoveryMeta | undefined): SetupAnswers {
+  if (discovery === undefined) return answers;
+  return { ...answers, npiRoleSets: discovery.roleSets, sources: discovery.sources };
 }
 
 /**
@@ -371,7 +480,7 @@ export function toAnswers(state: SetupState): SetupAnswers {
       { path: 'profileKey', message: 'not answered yet' },
     ]);
   }
-  return state.answers as SetupAnswers;
+  return withDiscovery(state.answers as SetupAnswers, state.discovery);
 }
 
 export function isReadyForPlan(state: SetupState): boolean {

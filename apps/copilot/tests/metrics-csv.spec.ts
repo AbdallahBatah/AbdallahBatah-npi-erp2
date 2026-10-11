@@ -122,8 +122,8 @@ describe('metricsToCsv', () => {
 
   it('ends with CRLF and uses CRLF between all lines', () => {
     expect(csv.endsWith('\r\n')).toBe(true);
-    expect(csv.replace(/\r\n/g, '').includes('\n')).toBe(false);
-    expect(csv.replace(/\r\n/g, '').includes('\r')).toBe(false);
+    expect(csv.replaceAll(/\r\n/g, '').includes('\n')).toBe(false);
+    expect(csv.replaceAll(/\r\n/g, '').includes('\r')).toBe(false);
   });
 
   it('has exactly 6 data lines after the header', () => {

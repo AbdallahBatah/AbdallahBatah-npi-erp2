@@ -127,7 +127,7 @@ const ROLE_DEFS = [
 // underscore in a domain label), e.g. admin@om-provider.scratch.madar.test.
 /** E-mail domain of a scratch org's users: underscores become hyphens. */
 function scratchDomain(key: string): string {
-  return `${key.replace(/_/g, '-')}.scratch.madar.test`;
+  return `${key.replaceAll('_', '-')}.scratch.madar.test`;
 }
 
 const USER_DEFS = [
@@ -187,8 +187,10 @@ function assertLocalDatabase(): void {
     return;
   }
   if (!['localhost', '127.0.0.1', '::1'].includes(hostname)) {
+    // The host name is deliberately not echoed: it is derived from DATABASE_URL,
+    // and a connection string's parts do not belong in a log line.
     console.error(
-      `Refusing to run against a non-local database (host "${hostname}"). ` +
+      'Refusing to run against a non-local database. ' +
         'This script deletes and recreates organizations and must only ever run against a local database.',
     );
     process.exit(1);

@@ -64,7 +64,7 @@ export function ChangePasswordButton() {
           className="grid gap-4"
           onSubmit={(ev) => {
             ev.preventDefault();
-            submit();
+            void submit();
           }}
         >
           <Field label={t('pw.current')}>

@@ -6,6 +6,7 @@ import { formatNumber } from '@/i18n/format';
 import { Card } from '@/components/ui/Card';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { keyedLines } from '@/components/ui/keys';
 import type { SetupStep as SetupStepNumber } from '@/onboarding/machine';
 import type { StepOutcome } from '@/onboarding/apply';
 import type { SetupApplyResult, SetupPreviewResult } from '@/onboarding/service';
@@ -35,8 +36,8 @@ function Section({ titleKey, lines, tone }: { titleKey: ArKey; lines: string[]; 
     <div className="flex flex-col gap-1">
       <h4 className="text-sm font-bold text-slate-900">{t(titleKey)}</h4>
       <ul className={`list-inside list-disc text-sm ${toneClass}`}>
-        {lines.map((line, i) => (
-          <li key={i}>{line}</li>
+        {keyedLines(lines).map(({ key, line }) => (
+          <li key={key}>{line}</li>
         ))}
       </ul>
     </div>
@@ -150,8 +151,10 @@ export function DiffCard({ preview, applyResult, applying, onApprove, onChooseSt
             </p>
             {applyResult.persisted.holdersSkipped.length > 0 ? (
               <ul className="list-inside list-disc text-sm text-warning-700">
-                {applyResult.persisted.holdersSkipped.map((skip, i) => (
-                  <li key={i}>{t(`setup.holder_skipped.${skip.reason}` as ArKey)}</li>
+                {applyResult.persisted.holdersSkipped.map((skip) => (
+                  <li key={`${skip.roleKey}-${skip.departmentCode ?? ''}-${skip.npiUserId}-${skip.reason}`}>
+                    {t(`setup.holder_skipped.${skip.reason}` as ArKey)}
+                  </li>
                 ))}
               </ul>
             ) : null}
@@ -167,9 +170,9 @@ export function DiffCard({ preview, applyResult, applying, onApprove, onChooseSt
           <div className="flex flex-col gap-3">
             <p className="text-sm text-slate-500">{t('setup.apply.note')}</p>
             {applying ? (
-              <div role="status" aria-busy="true" className="text-sm text-slate-600">
+              <output aria-busy="true" className="text-sm text-slate-600">
                 {t('setup.applying')}
-              </div>
+              </output>
             ) : null}
             <div className="flex items-center justify-between gap-2">
               <Button type="button" variant="secondary" onClick={() => setChoosingStep((v) => !v)} disabled={applying}>

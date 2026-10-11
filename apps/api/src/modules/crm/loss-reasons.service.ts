@@ -40,7 +40,7 @@ export class LossReasonsService {
   async create(user: AuthUser, dto: CreateLossReasonDto) {
     const nameAr = dto.nameAr.trim();
     const nameEn = dto.nameEn.trim();
-    return this.prisma
+    return await this.prisma
       .$transaction(async (tx) => {
         const taken = await tx.lossReason.findFirst({
           where: { organizationId: user.organizationId, nameAr },
@@ -68,7 +68,7 @@ export class LossReasonsService {
       });
   }
 
-  async update(user: AuthUser, id: string, dto: UpdateLossReasonDto) {
+  update(user: AuthUser, id: string, dto: UpdateLossReasonDto) {
     return this.prisma
       .$transaction(async (tx) => {
         const existing = await tx.lossReason.findFirst({ where: { id, organizationId: user.organizationId } });

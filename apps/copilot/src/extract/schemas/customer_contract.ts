@@ -39,6 +39,7 @@ import {
   textField,
   withWarning,
   wire,
+  NO_FLAGS,
   type AssessFlags,
 } from './common';
 
@@ -237,7 +238,7 @@ export interface AssessedCustomerContract {
  */
 export function assessCustomerContract(
   out: CustomerContractOutput,
-  flags: AssessFlags = { ligatureSuspect: false },
+  flags: AssessFlags = NO_FLAGS,
 ): {
   assessed: AssessedCustomerContract;
   values: CustomerContractValues | null;

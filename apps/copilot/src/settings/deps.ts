@@ -6,6 +6,8 @@
 import { getDb } from '@/db';
 import { createNpiClient } from '@/npi/client';
 import type { SettingsDb, SettingsDeps } from './service';
+import type { SyncActionDb } from './sync';
+import type { SyncNpi } from '@/onboarding/sync';
 
 export function buildSettingsDeps(npiToken: string): SettingsDeps {
   const db = getDb();
@@ -15,6 +17,15 @@ export function buildSettingsDeps(npiToken: string): SettingsDeps {
     // against — the same friction `api/setup/route.ts` works around with its
     // own `db` cast.
     db: db as unknown as SettingsDb,
+    npi: createNpiClient({ token: npiToken }),
+  };
+}
+
+/** Deps of the manual NPI sync (`POST /api/settings/sync`): the copilot's
+ *  database and NPI under the administrator's own token. */
+export function buildSyncActionDeps(npiToken: string): { db: SyncActionDb; npi: SyncNpi } {
+  return {
+    db: getDb() as unknown as SyncActionDb,
     npi: createNpiClient({ token: npiToken }),
   };
 }

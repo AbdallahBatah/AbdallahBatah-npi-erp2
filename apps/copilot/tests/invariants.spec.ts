@@ -70,7 +70,7 @@ interface HitLine {
 /** Every line of `file` the regex matches (1-based). The regex is cloned without
  *  the `g`/`y` flags, so a global regex never carries `lastIndex` between lines. */
 function linesMatching(file: string, regex: RegExp): HitLine[] {
-  const probe = new RegExp(regex.source, regex.flags.replace(/[gy]/g, ''));
+  const probe = new RegExp(regex.source, regex.flags.replaceAll(/[gy]/g, ''));
   const hits: HitLine[] = [];
   read(file)
     .split(/\r?\n/)
@@ -431,7 +431,7 @@ describe('invariant 4: every NPI call goes through src/npi/client.ts with the us
         callSites += 1;
 
         const where = at(file, lineNo);
-        const arg = balancedArgument(text, start + m[0].length - 1).replace(/\s+/g, ' ').trim();
+        const arg = balancedArgument(text, start + m[0].length - 1).replaceAll(/\s+/g, ' ').trim();
 
         if (/\btoken\s*:\s*(?:process\.env|['"`][^'"`]+['"`])/.test(arg)) {
           violations.push(`${where}  token taken from the environment or a literal: createNpiClient(${arg})`);

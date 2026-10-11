@@ -141,10 +141,10 @@ export function SetupStep({
           </div>
 
           {parsing ? (
-            <div role="status" aria-busy="true" className="flex items-center gap-2 text-sm text-slate-600">
+            <output aria-busy="true" className="flex items-center gap-2 text-sm text-slate-600">
               <Spinner className="h-4 w-4" />
               {t('setup.loading')}
-            </div>
+            </output>
           ) : null}
 
           {unclear ? (

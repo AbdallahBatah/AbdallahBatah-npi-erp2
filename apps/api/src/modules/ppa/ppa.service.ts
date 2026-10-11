@@ -141,7 +141,7 @@ export class PpaService {
 
     const start = new Date(dto.periodStart);
     const end = new Date(dto.periodEnd);
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
       throw new BadRequestException('Invalid settlement period');
     }
 

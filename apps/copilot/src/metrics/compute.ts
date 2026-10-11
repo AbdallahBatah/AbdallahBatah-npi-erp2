@@ -506,7 +506,11 @@ export function computeChatEntry(
     return { ...base, value: null, rawValue: null, verdict: 'no_data', measuredAt: null };
   }
 
-  const latest = evaluated.map((f) => runTimeIso(f.run, now)).sort().at(-1) ?? now.toISOString();
+  // Same-format ISO strings order chronologically under plain comparison.
+  const latest =
+    evaluated
+      .map((f) => runTimeIso(f.run, now))
+      .reduce<string | null>((max, iso) => (max === null || iso > max ? iso : max), null) ?? now.toISOString();
   const met = fieldsRaw >= FIELDS_CORRECT_TARGET && ratioRaw !== null && ratioRaw <= TIME_RATIO_TARGET;
 
   return {

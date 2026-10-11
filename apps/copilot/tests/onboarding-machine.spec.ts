@@ -828,16 +828,39 @@ describe('handleSetupAction / getSetupState — non-admin refusal', () => {
 });
 
 describe('getSetupState — one open session per org, reused', () => {
-  it('creates a session on first call and reuses it afterwards', async () => {
+  it('creates a session on first call and reuses it afterwards (T-47a: a manual one stays at step 1)', async () => {
     const { deps, fake } = buildDeps();
+    // The wizard seeds a fresh session from NPI unless the administrator chose
+    // to type the steps (`manual`); this test is about the session row itself.
+    fake.sessions.push({
+      id: 'sess_manual',
+      npiOrgId: 'org1',
+      npiUserId: 'u1',
+      stepsJson: { ...initialState(), manual: true },
+      completedAt: null,
+      profileChosen: null,
+    });
     const first = await getSetupState(deps, adminSetupCaller);
     expect(fake.sessions).toHaveLength(1);
-    expect(first.state).toEqual(initialState());
+    expect(first.state).toEqual({ ...initialState(), manual: true });
     expect(first.question).toEqual({ step: 1, key: 'setup.q1', textAr: t('setup.q1') });
 
     const second = await getSetupState(deps, adminSetupCaller);
     expect(fake.sessions).toHaveLength(1); // not a new row
     expect(second.state).toEqual(first.state);
+  });
+
+  it('T-47a: a fresh organization session is seeded from NPI and shows the summary, once', async () => {
+    const { deps, fake } = buildDeps();
+    const first = await getSetupState(deps, adminSetupCaller);
+    expect(fake.sessions).toHaveLength(1);
+    expect(first.state.step).toBe(7);
+    expect(first.state.discovery?.discovered).toBe(true);
+    expect(first.summary).not.toBeNull();
+
+    const second = await getSetupState(deps, adminSetupCaller);
+    expect(fake.sessions).toHaveLength(1);
+    expect(second.state).toEqual(first.state); // not read from NPI a second time
   });
 });
 

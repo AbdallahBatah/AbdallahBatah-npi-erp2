@@ -53,7 +53,7 @@ export class CustomerContactsService {
     });
   }
 
-  async create(user: AuthUser, customerId: string, dto: CreateContactDto) {
+  create(user: AuthUser, customerId: string, dto: CreateContactDto) {
     return this.prisma.$transaction(async (tx) => {
       await this.customerFor(tx, user, customerId, true);
       if (dto.isPrimary) await this.clearPrimary(tx, user.organizationId, customerId);
@@ -85,7 +85,7 @@ export class CustomerContactsService {
     });
   }
 
-  async update(user: AuthUser, customerId: string, contactId: string, dto: UpdateContactDto) {
+  update(user: AuthUser, customerId: string, contactId: string, dto: UpdateContactDto) {
     return this.prisma.$transaction(async (tx) => {
       await this.customerFor(tx, user, customerId, true);
       const existing = await tx.customerContact.findFirst({

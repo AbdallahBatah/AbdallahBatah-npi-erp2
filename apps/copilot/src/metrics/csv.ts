@@ -13,7 +13,7 @@ const EOL = '\r\n';
 export function csvCell(value: string | number | null): string {
   if (value === null) return '';
   if (typeof value === 'number') return String(value);
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
 /** The machine figure of a card: a share or ratio with 4 decimals, minutes

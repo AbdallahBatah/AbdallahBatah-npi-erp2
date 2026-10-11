@@ -4,6 +4,11 @@
 // belongs to T-20); free-text answers only ever use sentences
 // `src/onboarding/parse.ts` resolves deterministically, so no test calls the
 // real model. Runs on both the `desktop` and `mobile` Playwright projects.
+//
+// T-47a: a session nobody has typed into is seeded from NPI and opens on the
+// summary («هذا ما قرأته من NPI»). The `beforeEach` below therefore opens a
+// session marked `manual` for the tests that walk the steps one by one; the
+// tests of the automatic setup start from no session at all.
 import type { APIRequestContext, Page, Route } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { t } from '../src/i18n/ar';
@@ -69,6 +74,24 @@ function waitForPreviewResponse(page: Page) {
       return false;
     }
   });
+}
+
+/** The dry-run diff of the open session, asked for directly (the page already
+ *  ran it on the server, so no `preview` request goes out from the browser). */
+async function fetchPreview(page: Page): Promise<PreviewBody> {
+  const res = await page.request.post('/copilot/api/setup', { data: { action: 'preview' } });
+  expect(res.ok()).toBe(true);
+  return (await res.json()) as PreviewBody;
+}
+
+/** Starts the wizard with no session, so the page reads NPI and seeds one. */
+async function openAutomaticSetup(page: Page, request: APIRequestContext): Promise<void> {
+  const admin = readAdminCredentials();
+  await resetOpenSetupSessions(await npiOrgId(request, admin), { manual: false });
+  await signIn(page, admin);
+  await page.goto('/copilot/setup');
+  await waitForHydration(page);
+  await expect(page.getByTestId('setup-summary')).toBeVisible();
 }
 
 interface PlanStepLike {
@@ -240,20 +263,24 @@ test.describe('setup screens (T-18)', () => {
     await expect(page.getByRole('heading', { name: t('setup.q1') })).toBeVisible();
   });
 
-  test('apply mocked as a full success shows setup.apply.done and the per-step outcomes', async ({ page }) => {
-    const admin = readAdminCredentials();
-    await signIn(page, admin);
-    await page.goto('/copilot/setup');
-    await waitForHydration(page);
+  test('summary, confirm, diff, then apply mocked as a full success shows setup.apply.done and the per-step outcomes', async ({ page, request }) => {
+    await openAutomaticSetup(page, request);
 
-    await sendFreeText(page, 'إحنا مقاول EPC');
-    await page.getByRole('button', { name: t('setup.save_step') }).click();
-    const previewResponsePromise = waitForPreviewResponse(page);
-    for (const _q of ['q3', 'q4', 'q5', 'q6']) {
-      await sendFreeText(page, 'نعم كما هو');
-    }
+    // The summary: the profile card first, then one card per remaining step.
+    await expect(page.getByRole('heading', { name: t('setup.summary.title') })).toBeVisible();
+    await expect(page.getByTestId('setup-summary-profile')).toBeVisible();
+    for (const n of [2, 3, 4, 5, 6]) await expect(page.getByTestId(`setup-summary-card-${n}`)).toBeVisible();
+    await expect(page.getByRole('button', { name: t('setup.summary.change') })).toHaveCount(6);
 
-    const preview = (await (await previewResponsePromise).json()) as PreviewBody;
+    const preview = await fetchPreview(page);
+    // What NPI already holds is never proposed again: the diff only creates or
+    // updates what the pack-default steps (rules, say) add on top of the reading.
+    expect(preview.plan.steps.some((s) => s.kind === 'item')).toBe(false);
+    expect(preview.plan.steps.some((s) => s.kind === 'role' && s.action === 'update')).toBe(false);
+
+    await page.getByRole('button', { name: t('setup.summary.confirm') }).click();
+    await expect(page.getByTestId('setup-diff-card')).toBeVisible();
+    await expect(page.getByTestId('setup-summary')).toHaveCount(0);
 
     await page.route(SETUP_PATH, async (route) => {
       const body = await postedBody(route);
@@ -341,6 +368,30 @@ test.describe('setup screens (T-18)', () => {
     await expect(page.getByTestId('setup-apply-step').filter({ hasText: npiMessage })).toBeVisible();
   });
 
+  test('«غيّر» on a card opens that step, and saving it returns to the summary with the card marked as the administrator\u2019s', async ({ page, request }) => {
+    await openAutomaticSetup(page, request);
+
+    await page.getByTestId('setup-summary-card-6').getByRole('button', { name: t('setup.summary.change') }).click();
+    await expect(page.getByRole('heading', { name: t('setup.q6') })).toBeVisible();
+    await page.getByRole('button', { name: t('setup.save_step') }).click();
+
+    await expect(page.getByTestId('setup-summary')).toBeVisible();
+    await expect(page.getByTestId('setup-summary-card-6').getByText(t('setup.summary.source.manual'))).toBeVisible();
+    await expect(page.getByTestId('setup-summary-card-2').getByText(t('setup.summary.source.npi'))).toBeVisible();
+  });
+
+  test('«أفضّل ملء الخطوات يدوياً» leaves the summary for the step-by-step wizard at step 1', async ({ page, request }) => {
+    await openAutomaticSetup(page, request);
+    await page.getByRole('button', { name: t('setup.summary.manual') }).click();
+    await expect(page.getByRole('heading', { name: t('setup.q1') })).toBeVisible();
+    await expect(page.getByTestId('setup-summary')).toHaveCount(0);
+
+    // And it stays manual after a reload.
+    await page.reload();
+    await waitForHydration(page);
+    await expect(page.getByRole('heading', { name: t('setup.q1') })).toBeVisible();
+  });
+
   test('no horizontal scroll at 390px on steps 1, 2 and 7', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const admin = readAdminCredentials();
@@ -368,5 +419,15 @@ test.describe('setup screens (T-18)', () => {
     }
     await expect(page.getByTestId('setup-diff-card')).toBeVisible();
     await assertNoScroll();
+  });
+
+  test('no horizontal scroll at 390px on the summary and its diff', async ({ page, request }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openAutomaticSetup(page, request);
+    const scrolls = () => page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+    expect(await scrolls()).toBe(false);
+    await page.getByRole('button', { name: t('setup.summary.confirm') }).click();
+    await expect(page.getByTestId('setup-diff-card')).toBeVisible();
+    expect(await scrolls()).toBe(false);
   });
 });

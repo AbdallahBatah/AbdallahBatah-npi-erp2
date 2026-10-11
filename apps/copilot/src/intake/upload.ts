@@ -6,7 +6,7 @@
 //
 // This module must never import from src/llm, src/privacy or src/npi — a
 // model is never involved in intake (enforced by a source guard test).
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import convertHeic from 'heic-convert';
@@ -72,7 +72,7 @@ const EXTENSION_RE = /\.[A-Za-z0-9]{1,10}$/;
 export function sanitizeFileName(name: string): string {
   const lastSegment = name.split(/[/\\]/).pop() ?? '';
   let cleaned = lastSegment.replace(FORBIDDEN_NAME_CHARS, '');
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  cleaned = cleaned.replaceAll(/\s+/g, ' ').trim();
   if (cleaned.length === 0) return 'document';
 
   if (cleaned.length > MAX_FILE_NAME_LENGTH) {
@@ -120,7 +120,9 @@ export function createFsStorage(root: string): DocumentStorage {
       const segments = assertSafeRelPath(relPath);
       const fullPath = path.join(root, ...segments);
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      const tmpPath = `${fullPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      // An unguessable temp name (not Math.random): nothing else on the host
+      // can predict and pre-create it next to the documents.
+      const tmpPath = `${fullPath}.tmp-${process.pid}-${randomUUID()}`;
       try {
         await fs.writeFile(tmpPath, bytes);
         await fs.rename(tmpPath, fullPath);
@@ -245,7 +247,7 @@ export type UploadOutcome =
   | { status: 'existing'; document: DocumentSummary }
   | { status: 'refused'; reason: UploadRefusal; detail?: string };
 
-async function defaultConvertHeic(bytes: Uint8Array): Promise<Uint8Array> {
+function defaultConvertHeic(bytes: Uint8Array): Promise<Uint8Array> {
   return convertHeic({ buffer: bytes, format: 'JPEG', quality: 0.9 });
 }
 

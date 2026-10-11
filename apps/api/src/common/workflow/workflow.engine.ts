@@ -443,7 +443,7 @@ export class WorkflowEngine {
       }));
   }
 
-  async instanceFor(organizationId: string, documentType: string, documentId: string) {
+  instanceFor(organizationId: string, documentType: string, documentId: string) {
     return this.prisma.wfInstance.findFirst({
       where: { organizationId, documentType, documentId },
       include: {

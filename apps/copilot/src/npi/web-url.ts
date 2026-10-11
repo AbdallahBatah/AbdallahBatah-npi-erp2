@@ -9,6 +9,8 @@
 //      requiring the env var to be set.
 //   3. `''` in production with no env var — same-origin behind the reverse
 //      proxy, so a relative path still resolves correctly.
+import { stripTrailingSlashes } from './base-url';
+
 const DEV_FALLBACK_BASE = 'http://localhost:3000';
 
 function resolveBase(): string {
@@ -25,6 +27,6 @@ export function npiWebUrl(path: string): string {
   if (!path.startsWith('/')) {
     throw new Error(`npiWebUrl: path must start with "/", got ${JSON.stringify(path)}`);
   }
-  const base = resolveBase().replace(/\/+$/, '');
+  const base = stripTrailingSlashes(resolveBase());
   return `${base}${path}`;
 }

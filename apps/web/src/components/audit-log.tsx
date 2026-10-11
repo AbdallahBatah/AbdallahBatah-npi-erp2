@@ -121,7 +121,7 @@ const ACTION_AR: Record<string, string> = {
 
 /** English fallback: SOME_TOKEN → "Some token". */
 function humanize(token: string): string {
-  const s = token.replace(/_/g, ' ').toLowerCase();
+  const s = token.replaceAll('_', ' ').toLowerCase();
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 

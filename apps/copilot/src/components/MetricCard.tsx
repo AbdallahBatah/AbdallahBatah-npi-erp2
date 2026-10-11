@@ -1,6 +1,7 @@
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { t, type ArKey } from '@/i18n/ar';
 import { formatDateTime } from '@/i18n/format';
+import { keyedLines } from '@/components/ui/keys';
 import type { MetricCardView, MetricVerdict } from '@/metrics/types';
 
 const VERDICT_TONE: Record<MetricVerdict, BadgeTone> = {
@@ -85,8 +86,8 @@ export function MetricCard({ card }: { card: MetricCardView }) {
 
       {card.detailsAr.length > 0 ? (
         <ul data-testid="metric-details" className="flex flex-col gap-1 text-xs text-slate-600">
-          {card.detailsAr.map((line, i) => (
-            <li key={i}>{line}</li>
+          {keyedLines(card.detailsAr).map(({ key, line }) => (
+            <li key={key}>{line}</li>
           ))}
         </ul>
       ) : null}

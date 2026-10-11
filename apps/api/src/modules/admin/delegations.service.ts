@@ -94,7 +94,7 @@ export class DelegationsService {
 
     const startsAt = new Date(dto.startsAt);
     const endsAt = new Date(dto.endsAt);
-    if (isNaN(+startsAt) || isNaN(+endsAt)) {
+    if (Number.isNaN(+startsAt) || Number.isNaN(+endsAt)) {
       throw new BadRequestException('Invalid startsAt/endsAt date');
     }
     if (endsAt <= startsAt) {

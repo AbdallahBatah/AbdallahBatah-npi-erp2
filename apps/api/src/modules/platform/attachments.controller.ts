@@ -34,7 +34,7 @@ export class AttachmentsController {
   ) {
     const { attachment, stream } = await this.attachments.download(user, id);
     // RFC 5987 filename* so Arabic names survive the round-trip.
-    const encoded = encodeURIComponent(attachment.fileName).replace(/'/g, '%27');
+    const encoded = encodeURIComponent(attachment.fileName).replaceAll("'", '%27');
     res.setHeader('Content-Type', attachment.mimeType);
     res.setHeader('Content-Length', String(attachment.sizeBytes));
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encoded}`);

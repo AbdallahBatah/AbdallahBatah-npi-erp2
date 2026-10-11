@@ -277,7 +277,7 @@ export default function DepartmentsPage() {
           className="grid gap-4"
           onSubmit={(ev) => {
             ev.preventDefault();
-            submit();
+            void submit();
           }}
         >
           {!edit && (
@@ -367,7 +367,7 @@ export default function DepartmentsPage() {
           className="grid gap-4"
           onSubmit={(ev) => {
             ev.preventDefault();
-            submitMembers();
+            void submitMembers();
           }}
         >
           <p className="text-xs leading-5 text-slate-500">{t('dept.membersHint')}</p>

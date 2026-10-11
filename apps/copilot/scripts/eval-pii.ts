@@ -94,7 +94,7 @@ function ratio(part: number, whole: number): number {
 }
 
 function compact(s: string): string {
-  return normalizeArabic(s).replace(/[\s-]/g, '');
+  return normalizeArabic(s).replaceAll(/[\s-]/g, '');
 }
 
 function placeholdersIn(out: string): string[] {
@@ -286,7 +286,7 @@ async function main(): Promise<void> {
 
   const outDir = path.join(process.cwd(), 'test-results', 'pii');
   mkdirSync(outDir, { recursive: true });
-  const stamp = startedAt.toISOString().replace(/[:.]/g, '-');
+  const stamp = startedAt.toISOString().replaceAll(/[:.]/g, '-');
   const reportPath = path.join(outDir, `${stamp}.json`);
   writeFileSync(
     reportPath,

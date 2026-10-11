@@ -22,6 +22,7 @@
 // administrator with that user's own JWT, after the dry-run diff was shown.
 import type { components, paths } from './types';
 import { mapNpiError, networkError, timeoutError } from './errors';
+import { stripTrailingSlashes } from './base-url';
 
 export interface CreateNpiClientOptions {
   /** Defaults to `NPI_API_BASE`, then `http://localhost:4000/api`. Already
@@ -48,7 +49,7 @@ interface RequestOptions {
 }
 
 function buildUrl(baseUrl: string, path: string, query?: Query): string {
-  const url = new URL(baseUrl.replace(/\/+$/, '') + path);
+  const url = new URL(stripTrailingSlashes(baseUrl) + path);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined) url.searchParams.set(key, String(value));

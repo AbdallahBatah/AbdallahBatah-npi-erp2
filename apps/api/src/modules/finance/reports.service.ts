@@ -52,7 +52,7 @@ export class ReportsService {
       ? new Date(fromStr)
       : (defaultFrom ?? new Date(Date.UTC(now.getUTCFullYear(), 0, 1)));
     let to = toStr ? new Date(toStr) : now;
-    if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
       throw new BadRequestException('Invalid from/to date');
     }
     if (toStr && /^\d{4}-\d{2}-\d{2}$/.test(toStr.trim())) {

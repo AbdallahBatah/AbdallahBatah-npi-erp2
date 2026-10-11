@@ -268,7 +268,10 @@ export async function reassignPosition(
   }
 
   // The predecessor is the open holder with the latest start.
-  const latest = holders.length === 0 ? null : holders.reduce((a, b) => (b.startedAt.getTime() >= a.startedAt.getTime() ? b : a));
+  const latest = holders.reduce<(typeof holders)[number] | null>(
+    (a, b) => (a === null || b.startedAt.getTime() >= a.startedAt.getTime() ? b : a),
+    null,
+  );
 
   const body = await buildHandoverBody({ db, npi: deps.npi, now: () => now }, caller, {
     positionId: position.id,

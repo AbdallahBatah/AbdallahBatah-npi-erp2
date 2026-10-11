@@ -1,6 +1,7 @@
 import { t, type ArKey } from '@/i18n/ar';
 import { Card } from '@/components/ui/Card';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { keyedLines } from '@/components/ui/keys';
 import { npiWebUrl } from '@/npi/web-url';
 import type { ExecutionLog, ExecutionStep, ExecutionStepState, FlowType } from '@/intake/types';
 
@@ -45,9 +46,9 @@ function StatusLines({ log, flow }: { log: ExecutionLog; flow: FlowType }) {
   if (log.status === 'pending') return <p className="text-sm text-slate-700">{t('exec.pending')}</p>;
   if (log.status === 'running') {
     return (
-      <p role="status" className="text-sm text-slate-700">
+      <output className="block text-sm text-slate-700">
         {t('exec.running')}
-      </p>
+      </output>
     );
   }
   if (log.status === 'done') {
@@ -55,11 +56,11 @@ function StatusLines({ log, flow }: { log: ExecutionLog; flow: FlowType }) {
     const hasManual = log.steps.some((s) => s.state === 'manual');
     return (
       <div className="flex flex-col gap-1">
-        <p role="status" className="text-sm font-semibold text-success-700">
+        <output className="block text-sm font-semibold text-success-700">
           {t('exec.done_all')}
-        </p>
-        {lines.map((line, i) => (
-          <p key={i} className="break-words text-sm font-semibold text-success-700">
+        </output>
+        {keyedLines(lines).map(({ key, line }) => (
+          <p key={key} className="break-words text-sm font-semibold text-success-700">
             {line}
           </p>
         ))}

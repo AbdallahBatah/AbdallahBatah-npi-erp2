@@ -19,6 +19,7 @@ import { formatDate, formatDay } from '@/lib/format';
 import { Btn, EmptyRow, Field, Modal } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { Icon } from '@/components/icons';
+import { lineKeys } from '@/lib/keys';
 
 export interface Person {
   id: string;
@@ -432,6 +433,7 @@ export function FollowUpTasksPanel({
     ...(withOpp ? [t('tasks.col.opportunity')] : []),
     '',
   ];
+  const headKeys = lineKeys(head);
 
   return (
     <div>
@@ -448,7 +450,7 @@ export function FollowUpTasksPanel({
           <thead className="bg-slate-50">
             <tr>
               {head.map((h, i) => (
-                <th key={i} scope="col" className="th">
+                <th key={headKeys[i]} scope="col" className="th">
                   {h}
                 </th>
               ))}

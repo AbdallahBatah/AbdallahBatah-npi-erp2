@@ -44,7 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       roleId: user.roleId,
       roleKey: user.role.key,
       roleIds: roles.map((r) => r.id),
-      permissions: [...new Set(roles.flatMap((r) => r.permissions))].sort(),
+      permissions: [...new Set(roles.flatMap((r) => r.permissions))].sort((a, b) => a.localeCompare(b, 'en')),
       locale: user.locale,
     };
   }

@@ -536,7 +536,7 @@ export default function InvoiceDetailPage() {
             ev.preventDefault();
             const f = new FormData(ev.currentTarget);
             const amount = cnFull ? undefined : Number(f.get('amount'));
-            createCreditNote(String(f.get('reason') || '').trim(), amount);
+            void createCreditNote(String(f.get('reason') || '').trim(), amount);
           }}
         >
           <p className="rounded-lg bg-warning-50 p-3 text-xs leading-relaxed text-warning-800">

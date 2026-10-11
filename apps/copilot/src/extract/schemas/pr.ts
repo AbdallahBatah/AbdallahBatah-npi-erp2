@@ -19,7 +19,7 @@
 import { z } from 'zod';
 import type { components } from '../../npi/types';
 import { assessField, type AssessedField } from './field';
-import { amountField, codeField, currencyField, dateNotPastField, defined, quantityField, round2, textField, wire, type AssessFlags } from './common';
+import { amountField, codeField, currencyField, dateNotPastField, defined, quantityField, round2, textField, wire, NO_FLAGS, type AssessFlags } from './common';
 
 export const PrLineOutputSchema = z.object({
   itemName: wire('اسم الصنف كما ورد (بلا كمية ولا سعر)'),
@@ -155,7 +155,7 @@ export function requisitionDtoFrom(values: PrValues, resolved: PrResolution, jus
  *  - `values.lines` keeps only usable lines (a name and a valid quantity);
  *    `assessed.lines` keeps all, so the card can show the one that failed.
  */
-export function assessPr(out: PrOutput, flags: AssessFlags = { ligatureSuspect: false }): { assessed: AssessedPr; values: PrValues | null } {
+export function assessPr(out: PrOutput, flags: AssessFlags = NO_FLAGS): { assessed: AssessedPr; values: PrValues | null } {
   let justification = textField(out.justification);
   if (justification.value !== null && justification.value.trim().length < JUSTIFICATION_MIN) {
     justification = assessField<string>({ value: null, confidence: justification.confidence, evidence: justification.evidence, page: justification.page });

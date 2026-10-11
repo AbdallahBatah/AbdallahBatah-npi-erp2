@@ -5,6 +5,7 @@ import { buildEditDeps } from '@/agents/context';
 import { Chat, type ChatFirstData } from '@/components/chat/Chat';
 import { HomeTilesGrid, HomeTilesSkeleton } from '@/components/HomeTiles';
 import { ShellFrame } from '@/components/ShellFrame';
+import { SyncBanner } from '@/components/SyncBanner';
 import { getServerSession, type ActiveSession } from '@/auth/session';
 import { loadConversationHistory } from '@/chat/history';
 import { getDb } from '@/db';
@@ -13,6 +14,8 @@ import { getIntakeView } from '@/intake/job';
 import type { IntakeView } from '@/intake/types';
 import { createNpiClient } from '@/npi/client';
 import { NpiError } from '@/npi/errors';
+import { buildSyncBanner } from '@/settings/sync';
+import type { SyncBannerView } from '@/settings/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +76,24 @@ async function readChatFirstData(session: ActiveSession): Promise<ChatFirstData 
 }
 
 /**
+ * The unseen NPI change for an administrator (T-47b), read on the server like
+ * the chat's first data so the banner is in the first HTML and shifts nothing
+ * after hydration. A failed read just means no banner.
+ */
+async function readSyncBanner(session: ActiveSession): Promise<SyncBannerView | null> {
+  try {
+    const row = await getDb().firmConfig.findUnique({
+      where: { npiOrgId: session.user.npiOrgId },
+      select: { lastSyncDiffJson: true, lastSyncSeenAt: true },
+    });
+    return buildSyncBanner(row, session.user.permissions);
+  } catch (err) {
+    console.error('[copilot] first data for the sync banner failed', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/**
  * The home screen (T-08): greeting, the four NPI tiles, and the chat panel
  * (T-12) — per spec/madar/03-DESIGN-SPEC.md §3's "Home+Chat" row.
  *
@@ -109,7 +130,7 @@ export default async function HomePage() {
   if (!session) redirect('/login');
 
   const npi = createNpiClient({ token: session.npiToken });
-  const chatFirstData = await readChatFirstData(session);
+  const [chatFirstData, syncBanner] = await Promise.all([readChatFirstData(session), readSyncBanner(session)]);
   // Set by the middleware (T-44): the inline scroll script in `Chat` needs it to run under the CSP.
   const scriptNonce = headers().get('x-nonce') ?? undefined;
 
@@ -119,6 +140,7 @@ export default async function HomePage() {
         <h1 className="text-lg font-bold text-slate-900">
           {t('home.greeting', { name: session.user.nameAr })}
         </h1>
+        {syncBanner ? <SyncBanner banner={syncBanner} /> : null}
         <Suspense fallback={<HomeTilesSkeleton />}>
           <HomeTilesGrid npi={npi} />
         </Suspense>

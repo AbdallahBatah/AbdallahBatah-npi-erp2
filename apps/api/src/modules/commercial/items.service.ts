@@ -29,7 +29,7 @@ export class ItemsService {
   async create(user: AuthUser, dto: CreateItemDto) {
     // The unit cost is cost data: setting it needs finance.costs.view.
     if (dto.unitCost !== undefined) assertCanSetCosts(user);
-    return this.prisma.item.create({
+    return await this.prisma.item.create({
       data: {
         organizationId: user.organizationId,
         sku: dto.sku,
