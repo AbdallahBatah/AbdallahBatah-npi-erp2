@@ -1,0 +1,66 @@
+name: SonarCloud
+
+# CI-based SonarQube Cloud analysis (replaces the project's Automatic Analysis,
+# which failed on every commit). Runs the two jest suites with coverage first so
+# the dashboard shows coverage, then uploads one analysis for the monorepo
+# (sonar-project.properties). Not part of `ci-gate` yet: the quality gate is
+# informational until the owner decides to make it blocking.
+#
+# Secrets: SONAR_TOKEN (a SonarQube Cloud user or project token with Execute
+# Analysis on eyad62689-lab_npi-erp). Pull requests from forks have no secrets
+# and are skipped.
+
+on:
+  push:
+    branches: [main, 'feat/**', 'feature/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: sonar-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: SonarQube Cloud needs it for blame and "new code".
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Same as ci.yml: the api tests import @npi/db from dist/.
+      - name: Build database and shared packages
+        run: |
+          npm run build -w @npi/db
+          npm run build -w @npi/shared
+
+      # Each suite writes lcov with paths relative to its own workspace
+      # (`SF:src/...`); the scanner resolves them from the repo root, so the
+      # workspace prefix is added. `continue-on-error`: a red suite is ci.yml's
+      # job to report — here the analysis should still run, without coverage.
+      - name: API unit tests with coverage
+        continue-on-error: true
+        run: |
+          npm test -w @npi/api -- --ci --coverage --coverageReporters=lcov --coverageDirectory=coverage
+          sed -i 's#^SF:#SF:apps/api/#' apps/api/coverage/lcov.info
+
+      - name: Copilot unit tests with coverage
+        continue-on-error: true
+        run: |
+          npm test -w @npi/copilot -- --ci --coverage --coverageReporters=lcov --coverageDirectory=coverage
+          sed -i 's#^SF:#SF:apps/copilot/#' apps/copilot/coverage/lcov.info
+
+      - name: SonarQube Cloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

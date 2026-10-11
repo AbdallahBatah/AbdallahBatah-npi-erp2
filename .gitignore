@@ -59,3 +59,6 @@ testsprite_tests/tmp/
 
 # Runtime upload store of the api (per-organization files), never committed
 apps/api/uploads/
+
+# jest coverage reports (SonarCloud workflow and local runs)
+coverage/
