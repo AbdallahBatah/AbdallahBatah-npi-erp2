@@ -336,7 +336,11 @@ export function repairPdfTextWithFlags(text: string): { text: string; flags: Pic
     .replace(/ا([أإآ])ل/g, 'ال$1')
     .replace(/اال/g, 'الا')
     .replace(/[  ]{2,}/g, ' ')
-    .replace(/ +\n/g, '\n')
+    // Trailing whitespace per line. `trimEnd` instead of `/ +\n/`: an
+    // unanchored ` +` retried from every space is quadratic on long runs.
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   return { text: repaired, flags: { ligatureSuspect } };

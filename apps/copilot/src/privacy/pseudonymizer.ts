@@ -433,7 +433,10 @@ class ClaimedRanges {
 
 // ─── Structured identifier patterns (Pass 1) ──────────────────────────────
 
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+// Bounded to the RFC limits (local part 64, label 63, at most nine labels,
+// TLD 2–24) so a scan of free text stays linear: the unbounded `+` versions
+// were quadratic on long runs of address characters (SonarCloud S8786).
+const EMAIL_RE = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}/g;
 const IBAN_RE = /\bSA(?:[ ]?[0-9]){22}\b/gi;
 const VAT_RE = /(?<!\d)3\d{13}3(?!\d)/g;
 const PHONE_RE = /(?:\+966[ -]?|00966[ -]?|0)5[ -]?\d(?:[ -]?\d){7}/g;

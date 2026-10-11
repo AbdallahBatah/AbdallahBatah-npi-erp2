@@ -20,7 +20,7 @@ function describeRoles(user: UserWithRoles) {
   const all = [user.role, ...user.extraRoles.map((er) => er.role)];
   return {
     roles: all.map((r) => ({ id: r.id, key: r.key, nameAr: r.nameAr, nameEn: r.nameEn })),
-    permissions: [...new Set(all.flatMap((r) => r.permissions))].sort(),
+    permissions: [...new Set(all.flatMap((r) => r.permissions))].sort((a, b) => a.localeCompare(b, 'en')),
   };
 }
 

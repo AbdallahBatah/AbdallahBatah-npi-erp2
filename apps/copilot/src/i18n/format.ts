@@ -46,7 +46,7 @@ export function formatDateTime(d: Date | string): string {
  *  `48236` → `"0.0482"`. An unparsable value renders as `"0.0000"` rather
  *  than throwing inside a table cell. */
 export function formatUsdMicro(micro: bigint | number | string): string {
-  const n = typeof micro === 'bigint' ? Number(micro) : Number(micro);
+  const n = Number(micro);
   const dollars = Number.isFinite(n) ? n / 1_000_000 : 0;
   return dollars.toLocaleString(LOCALE, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 }

@@ -218,7 +218,7 @@ function vendorLeadTimeFacts(orders: NpiPurchaseOrderRow[]): UnstampedFact[] {
         vendorCode: vendor.code,
         avgDays,
         sampleSize: n,
-        poCodes: [...codes].sort(),
+        poCodes: [...codes].sort((a, b) => a.localeCompare(b, 'en')),
       },
       confidence: n >= 3 ? 0.9 : n === 2 ? 0.8 : 0.6,
     });
@@ -286,7 +286,7 @@ function recurringItemFacts(orders: NpiPurchaseOrderRow[]): UnstampedFact[] {
         poCount: seen.poIds.size,
         totalQty,
         uom,
-        vendorIds: [...seen.vendorIds].sort(),
+        vendorIds: [...seen.vendorIds].sort((a, b) => a.localeCompare(b, 'en')),
         lastVendorId: seen.last.vendor.id,
       },
       confidence: 0.9,

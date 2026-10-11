@@ -14,7 +14,9 @@ export const SAUDI_VAT_RE = /^3\d{13}3$/;
 /** Commercial registration numbers are 10 digits (the seed's `1010…`). */
 export const SAUDI_CR_RE = /^\d{10}$/;
 export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Dot-separated, non-empty domain labels: the classes exclude `.` so the
+ *  pattern never backtracks across label boundaries (SonarCloud S8786). */
+export const EMAIL_RE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
 /** U+27E6, the opening bracket of every pseudonymizer placeholder. A value
  *  still carrying one after rehydration is a placeholder the model altered
