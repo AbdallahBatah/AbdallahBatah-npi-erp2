@@ -76,7 +76,7 @@ export function asciiDigits(text: string): string {
  * («1.150.000») are thousands separators too.
  */
 export function parseNumber(text: string): number | null {
-  let s = asciiDigits(text).replaceAll(/[٬\s,]/g, '').replaceAll('٫', '.').replaceAll(/[^\d.\-]/g, '');
+  let s = asciiDigits(text).replaceAll(/[٬\s,]/g, '').replaceAll('٫', '.').replaceAll(/[^\d.-]/g, '');
   if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replaceAll('.', '');
   if (!/\d/.test(s)) return null;
   const n = Number(s);
