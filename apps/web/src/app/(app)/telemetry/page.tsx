@@ -68,7 +68,7 @@ export default function TelemetryPage() {
     if (!(await confirm({ title: t('confirm.simulateTitle'), message: t('confirm.simulateMsg') })))
       return;
     // A deliberately bad day 2 days ago exercises the CRITICAL alert → auto WO path.
-    run('simulate', () => api.post('/telemetry/simulate', { projectId: prj.id, days: 14, badDayOffset: 2 }));
+    void run('simulate', () => api.post('/telemetry/simulate', { projectId: prj.id, days: 14, badDayOffset: 2 }));
   }
 
   const maxKwh = Math.max(1, ...(dash?.series ?? []).map((s) => Math.max(s.energyKwh, s.expectedKwh ?? 0)));

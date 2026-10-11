@@ -214,7 +214,7 @@ export function SetupWizard({
   // With server-provided first data (T-39b, D-23) the mount needs no GET;
   // `load` stays for the error state's retry. Same pattern as `IntakePanel`.
   useEffect(() => {
-    if (initialData === undefined) load();
+    if (initialData === undefined) void load();
   }, [load, initialData]);
 
   // Step 7 is never answered; its content comes from a live `preview`,
@@ -236,6 +236,11 @@ export function SetupWizard({
       }
       setPreview(result.preview);
       setPhase('ready');
+    }).catch(() => {
+      // `previewSetup` never rejects; this only guards a throw inside the handler above.
+      if (cancelled) return;
+      setErrorMessage(t('state.error'));
+      setPhase('error');
     });
     return () => {
       cancelled = true;

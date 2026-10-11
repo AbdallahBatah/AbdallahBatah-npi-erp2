@@ -266,7 +266,7 @@ export function ApprovalInbox({ onDecided }: { onDecided?: () => void }) {
             className="grid gap-4"
             onSubmit={(ev) => {
               ev.preventDefault();
-              submit();
+              void submit();
             }}
           >
             <div className="rounded-lg bg-slate-50 p-3 text-sm">

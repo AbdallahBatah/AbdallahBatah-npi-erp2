@@ -272,7 +272,7 @@ export default function DelegationsPage() {
           className="grid gap-4"
           onSubmit={(ev) => {
             ev.preventDefault();
-            submit();
+            void submit();
           }}
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -62,7 +62,7 @@ function ListPanel() {
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   return (
@@ -128,7 +128,7 @@ function DocPanel({ id, isAdmin }: { id: string; isAdmin: boolean }) {
   }, [id]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   async function handleNarrate() {

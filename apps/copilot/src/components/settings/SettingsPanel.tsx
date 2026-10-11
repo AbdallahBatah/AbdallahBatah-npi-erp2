@@ -60,7 +60,7 @@ export function SettingsPanel({ initialData }: { initialData?: SettingsView } = 
   // With server-provided first data (T-39b, D-23) the mount needs no GET;
   // `load` stays for the error state's retry. Same pattern as `IntakePanel`.
   useEffect(() => {
-    if (initialData === undefined) load();
+    if (initialData === undefined) void load();
   }, [load, initialData]);
 
   async function handleSaveModules(modules: ModuleKey[]): Promise<SaveOutcome> {

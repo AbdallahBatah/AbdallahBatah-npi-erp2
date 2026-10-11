@@ -127,7 +127,7 @@ export default function WorkOrderDetailPage() {
       !(await confirm({ title: t('confirm.closeWoTitle'), message: t('confirm.closeWoMsg'), danger: true }))
     )
       return;
-    run('close', () => api.post(`/fsm/work-orders/${id}/close`, {}));
+    void run('close', () => api.post(`/fsm/work-orders/${id}/close`, {}));
   }
 
   async function cancelWo() {
@@ -135,7 +135,7 @@ export default function WorkOrderDetailPage() {
       !(await confirm({ title: t('confirm.cancelWoTitle'), message: t('confirm.cancelWoMsg'), danger: true }))
     )
       return;
-    run('cancel', () => api.post(`/fsm/work-orders/${id}/cancel`, {}));
+    void run('cancel', () => api.post(`/fsm/work-orders/${id}/cancel`, {}));
   }
 
   function openComplete() {

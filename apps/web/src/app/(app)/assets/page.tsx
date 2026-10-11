@@ -95,7 +95,7 @@ export default function AssetsPage() {
   async function install(id: string) {
     if (!(await confirm({ title: t('confirm.installTitle'), message: t('confirm.installMsg') })))
       return;
-    act(`install:${id}`, () => api.post(`/procurement/serial-units/${id}/install`, {}));
+    void act(`install:${id}`, () => api.post(`/procurement/serial-units/${id}/install`, {}));
   }
 
   async function transfer(serialUnitId: string) {
@@ -114,7 +114,7 @@ export default function AssetsPage() {
       !(await confirm({ title: t('confirm.replaceTitle'), message: t('confirm.replaceMsg'), danger: true }))
     )
       return;
-    act(`replace:${claimId}`, () =>
+    void act(`replace:${claimId}`, () =>
       api.post(`/fsm/warranty-claims/${claimId}/replace`, {
         replacementSerialUnitId: replPick[claimId],
       }),

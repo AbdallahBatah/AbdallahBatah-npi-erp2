@@ -197,7 +197,7 @@ export function CustomerMergeCard() {
             className="grid gap-4"
             onSubmit={(e) => {
               e.preventDefault();
-              runMerge(confirming);
+              void runMerge(confirming);
             }}
           >
             <p className="text-sm leading-7 text-slate-700">{t('cust.merge.confirmMsg')}</p>

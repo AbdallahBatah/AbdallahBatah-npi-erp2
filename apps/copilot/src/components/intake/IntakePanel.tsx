@@ -64,7 +64,7 @@ export function IntakePanel({ id, compact = false, initialView }: IntakePanelPro
   useEffect(() => {
     // A pre-read view skips the first fetch; `load` still serves retries and
     // the «state» refresh below.
-    if (initialView === undefined) load();
+    if (initialView === undefined) void load();
   }, [load, initialView]);
 
   async function run(action: IntakeAction) {

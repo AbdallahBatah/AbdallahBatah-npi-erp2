@@ -634,7 +634,7 @@ export default function AdminPage() {
           className="grid gap-4"
           onSubmit={(ev) => {
             ev.preventDefault();
-            submitUser();
+            void submitUser();
           }}
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -731,7 +731,7 @@ export default function AdminPage() {
           className="grid gap-4"
           onSubmit={(ev) => {
             ev.preventDefault();
-            submitSetPassword();
+            void submitSetPassword();
           }}
         >
           <Field label={t('adm.user.newPassword')} hint={t('adm.user.passwordHint')}>
@@ -764,7 +764,7 @@ export default function AdminPage() {
           className="grid gap-4"
           onSubmit={(ev) => {
             ev.preventDefault();
-            submitRole();
+            void submitRole();
           }}
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

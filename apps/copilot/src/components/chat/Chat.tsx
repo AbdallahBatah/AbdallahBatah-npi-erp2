@@ -121,9 +121,9 @@ export function Chat({
   // `submitIntake` closes over state and is a new function every render; the
   // memoised `Message` needs one stable callback, so the chips call through
   // this ref (T-39).
-  const submitIntakeRef = useRef<(input: { documentId: string; forcedFlow: FlowType }) => void>(() => {});
+  const submitIntakeRef = useRef<(input: { documentId: string; forcedFlow: FlowType }) => Promise<void>>(() => Promise.resolve());
   const handleChooseFlow = useCallback((flow: FlowType, documentId: string) => {
-    submitIntakeRef.current({ documentId, forcedFlow: flow });
+    void submitIntakeRef.current({ documentId, forcedFlow: flow });
   }, []);
 
   const load = useCallback(async () => {
@@ -162,7 +162,7 @@ export function Chat({
   // With server-provided first data (T-39b, D-23) the mount needs no GET;
   // `load` stays for the error state's retry. Same pattern as `IntakePanel`.
   useEffect(() => {
-    if (initialData === undefined) load();
+    if (initialData === undefined) void load();
   }, [load, initialData]);
 
   // A server-rendered thread was already scrolled to its end by the inline
@@ -241,7 +241,7 @@ export function Chat({
       setPendingConsent({ document });
     } else {
       appendNotice(t('chat.document_text_ready'));
-      submitIntake({ documentId: document.id, text: takeDraft() });
+      void submitIntake({ documentId: document.id, text: takeDraft() });
     }
   }
 
@@ -313,7 +313,7 @@ export function Chat({
     setPendingConsent(null);
     setConsentError(null);
     appendNotice(t(decision === 'approved' ? 'chat.consent_recorded' : 'chat.consent_cancelled'));
-    if (decision === 'approved') submitIntake({ documentId: pendingConsent.document.id, text: takeDraft() });
+    if (decision === 'approved') void submitIntake({ documentId: pendingConsent.document.id, text: takeDraft() });
   }
 
   async function handleSend() {
