@@ -84,7 +84,11 @@ export const ALL_PERMISSIONS: PermissionKey[] = Object.values(PERMISSIONS);
  * What a permission lets you do, for the role editor's grid. The existing model
  * folds "create" and "edit" into a single `write` key, so the grid shows one
  * "create & edit" column — expanding the model was deliberately out of scope.
- * `special` keys (manage, costs.view, attachment.*) sit outside the grid.
+ * `view` is the key that opens its screen (for /admin, /departments and
+ * /delegations that is a `.manage` key); `special` keys sit outside the three
+ * columns, under their screen's row when they have one. Set per row, not
+ * derived from the key's suffix: the audit log's `.read` is a tab of /admin,
+ * not a screen's view key (ADR-02 §3-6).
  */
 export type PermissionAction = 'view' | 'write' | 'approve' | 'special';
 
@@ -92,7 +96,9 @@ export type PermissionAction = 'view' | 'write' | 'approve' | 'special';
  * Bilingual catalog for the role editor UI. Served by /admin/permissions so
  * the web app has exactly one source of truth for what each key means.
  * Grouped in sidebar order. Additive over the original shape: `screenAr/En`
- * names the screen (a grid row) and `action` its column.
+ * names the screen (a grid row), `screen` is that row's sidebar path and
+ * `action` its column. Only ever add fields: Madar reads `key`, `groupAr` and
+ * `labelAr` from every element of GET /admin/permissions.
  */
 export interface PermissionMeta {
   key: PermissionKey;
@@ -102,26 +108,24 @@ export interface PermissionMeta {
   labelEn: string;
   screenAr: string;
   screenEn: string;
+  /**
+   * The `href` of the screen-registry entry (screens.ts) whose editor row the
+   * key belongs to: a view key's own screen, and the write / approve / special
+   * keys acted on there. `null` = no single sidebar screen (the key works on
+   * several, or on none), so the editors list it under special permissions.
+   * A view key that still opens several screens until P1-6 sits on the screen
+   * it keeps after the split. A plain string because this file stays
+   * import-free; screens.spec.ts checks every value against the registry.
+   */
+  screen: string | null;
   action: PermissionAction;
 }
 
-/** `*.read` → view, `*.write` → write, `*.approve` → approve, everything else special. */
-const actionOf = (key: string): PermissionAction =>
-  key.startsWith('platform.attachment.')
-    ? 'special'
-    : key.endsWith('.read')
-      ? 'view'
-      : key.endsWith('.write')
-        ? 'write'
-        : key.endsWith('.approve')
-          ? 'approve'
-          : 'special';
-
-/** [key, labelAr, labelEn, screenAr, screenEn] */
-type Row = [PermissionKey, string, string, string, string];
+/** [key, labelAr, labelEn, screenAr, screenEn, screen, action] */
+type Row = [PermissionKey, string, string, string, string, string | null, PermissionAction];
 
 const g = (groupAr: string, groupEn: string, rows: Row[]): PermissionMeta[] =>
-  rows.map(([key, labelAr, labelEn, screenAr, screenEn]) => ({
+  rows.map(([key, labelAr, labelEn, screenAr, screenEn, screen, action]) => ({
     key,
     groupAr,
     groupEn,
@@ -129,61 +133,70 @@ const g = (groupAr: string, groupEn: string, rows: Row[]): PermissionMeta[] =>
     labelEn,
     screenAr,
     screenEn,
-    action: actionOf(key),
+    screen,
+    action,
   }));
 
 export const PERMISSION_CATALOG: PermissionMeta[] = [
   ...g('المبيعات والتعاقد', 'Sales & contracting', [
-    [PERMISSIONS.LEAD_READ, 'عرض العملاء المحتملين', 'View leads', 'العملاء المحتملون', 'Leads'],
-    [PERMISSIONS.LEAD_WRITE, 'إدارة العملاء المحتملين', 'Manage leads', 'العملاء المحتملون', 'Leads'],
-    [PERMISSIONS.CUSTOMER_READ, 'عرض العملاء', 'View customers', 'العملاء', 'Customers'],
-    [PERMISSIONS.CUSTOMER_WRITE, 'إدارة العملاء', 'Manage customers', 'العملاء', 'Customers'],
-    [PERMISSIONS.CUSTOMER_MERGE, 'دمج العملاء المكررين', 'Merge duplicate customers', 'العملاء', 'Customers'],
-    [PERMISSIONS.OPPORTUNITY_READ, 'عرض الفرص', 'View opportunities', 'الفرص', 'Opportunities'],
-    [PERMISSIONS.OPPORTUNITY_WRITE, 'إدارة الفرص', 'Manage opportunities', 'الفرص', 'Opportunities'],
-    [PERMISSIONS.PROPOSAL_READ, 'عرض العروض', 'View proposals', 'عروض الأسعار', 'Proposals'],
-    [PERMISSIONS.PROPOSAL_WRITE, 'إدارة العروض', 'Manage proposals', 'عروض الأسعار', 'Proposals'],
-    [PERMISSIONS.PROPOSAL_APPROVE, 'اعتماد العروض', 'Approve proposals', 'عروض الأسعار', 'Proposals'],
-    [PERMISSIONS.CONTRACT_READ, 'عرض العقود', 'View contracts', 'العقود', 'Contracts'],
-    [PERMISSIONS.CONTRACT_WRITE, 'إدارة العقود', 'Manage contracts', 'العقود', 'Contracts'],
-    [PERMISSIONS.ITEM_READ, 'عرض الأصناف', 'View items', 'الأصناف', 'Items'],
-    [PERMISSIONS.ITEM_WRITE, 'إدارة الأصناف', 'Manage items', 'الأصناف', 'Items'],
+    [PERMISSIONS.LEAD_READ, 'عرض العملاء المحتملين', 'View leads', 'العملاء المحتملون', 'Leads', '/leads', 'view'],
+    [PERMISSIONS.LEAD_WRITE, 'إدارة العملاء المحتملين', 'Manage leads', 'العملاء المحتملون', 'Leads', '/leads', 'write'],
+    [PERMISSIONS.CUSTOMER_READ, 'عرض العملاء', 'View customers', 'العملاء', 'Customers', '/customers', 'view'],
+    [PERMISSIONS.CUSTOMER_WRITE, 'إدارة العملاء', 'Manage customers', 'العملاء', 'Customers', '/customers', 'write'],
+    [PERMISSIONS.CUSTOMER_MERGE, 'دمج العملاء المكررين', 'Merge duplicate customers', 'العملاء', 'Customers', '/customers', 'special'],
+    [PERMISSIONS.OPPORTUNITY_READ, 'عرض الفرص', 'View opportunities', 'الفرص', 'Opportunities', '/opportunities', 'view'],
+    [PERMISSIONS.OPPORTUNITY_WRITE, 'إدارة الفرص', 'Manage opportunities', 'الفرص', 'Opportunities', '/opportunities', 'write'],
+    [PERMISSIONS.PROPOSAL_READ, 'عرض العروض', 'View proposals', 'عروض الأسعار', 'Proposals', '/proposals', 'view'],
+    [PERMISSIONS.PROPOSAL_WRITE, 'إدارة العروض', 'Manage proposals', 'عروض الأسعار', 'Proposals', '/proposals', 'write'],
+    [PERMISSIONS.PROPOSAL_APPROVE, 'اعتماد العروض', 'Approve proposals', 'عروض الأسعار', 'Proposals', '/proposals', 'approve'],
+    [PERMISSIONS.CONTRACT_READ, 'عرض العقود', 'View contracts', 'العقود', 'Contracts', '/contracts', 'view'],
+    [PERMISSIONS.CONTRACT_WRITE, 'إدارة العقود', 'Manage contracts', 'العقود', 'Contracts', '/contracts', 'write'],
+    [PERMISSIONS.ITEM_READ, 'عرض الأصناف', 'View items', 'الأصناف', 'Items', '/items', 'view'],
+    [PERMISSIONS.ITEM_WRITE, 'إدارة الأصناف', 'Manage items', 'الأصناف', 'Items', '/items', 'write'],
   ]),
   ...g('التنفيذ والتوريد', 'Delivery & supply', [
-    [PERMISSIONS.PROJECT_READ, 'عرض المشاريع', 'View projects', 'المشاريع', 'Projects'],
-    [PERMISSIONS.PROJECT_WRITE, 'إدارة المشاريع', 'Manage projects', 'المشاريع', 'Projects'],
-    [PERMISSIONS.PROJECT_APPROVE, 'اعتماد أوامر التغيير', 'Approve change orders', 'المشاريع', 'Projects'],
-    [PERMISSIONS.PROCUREMENT_READ, 'عرض المشتريات والمخزون', 'View procurement & stock', 'المشتريات والمخزون', 'Procurement & stock'],
-    [PERMISSIONS.PROCUREMENT_WRITE, 'إدارة المشتريات والمخزون', 'Manage procurement & stock', 'المشتريات والمخزون', 'Procurement & stock'],
-    [PERMISSIONS.PROCUREMENT_APPROVE, 'اعتماد المشتريات', 'Approve procurement', 'المشتريات والمخزون', 'Procurement & stock'],
-    [PERMISSIONS.REQUISITION_WRITE, 'رفع طلبات الشراء', 'Raise purchase requisitions', 'طلبات الشراء', 'Purchase requisitions'],
-    [PERMISSIONS.ASSET_READ, 'عرض الأصول المتسلسلة', 'View serialised assets', 'الأصول المتسلسلة', 'Serialised assets'],
+    [PERMISSIONS.PROJECT_READ, 'عرض المشاريع', 'View projects', 'المشاريع', 'Projects', '/projects', 'view'],
+    [PERMISSIONS.PROJECT_WRITE, 'إدارة المشاريع', 'Manage projects', 'المشاريع', 'Projects', '/projects', 'write'],
+    [PERMISSIONS.PROJECT_APPROVE, 'اعتماد أوامر التغيير', 'Approve change orders', 'المشاريع', 'Projects', '/projects', 'approve'],
+    [PERMISSIONS.PROCUREMENT_READ, 'عرض المشتريات والمخزون', 'View procurement & stock', 'المشتريات والمخزون', 'Procurement & stock', '/procurement', 'view'],
+    [PERMISSIONS.PROCUREMENT_WRITE, 'إدارة المشتريات والمخزون', 'Manage procurement & stock', 'المشتريات والمخزون', 'Procurement & stock', '/procurement', 'write'],
+    [PERMISSIONS.PROCUREMENT_APPROVE, 'اعتماد المشتريات', 'Approve procurement', 'المشتريات والمخزون', 'Procurement & stock', '/procurement', 'approve'],
+    [PERMISSIONS.REQUISITION_WRITE, 'رفع طلبات الشراء', 'Raise purchase requisitions', 'طلبات الشراء', 'Purchase requisitions', '/requisitions', 'write'],
+    [PERMISSIONS.ASSET_READ, 'عرض الأصول المتسلسلة', 'View serialised assets', 'الأصول المتسلسلة', 'Serialised assets', '/assets', 'view'],
   ]),
   ...g('التشغيل', 'Operations', [
-    [PERMISSIONS.WORKORDER_READ, 'عرض أوامر العمل', 'View work orders', 'أوامر العمل', 'Work orders'],
-    [PERMISSIONS.WORKORDER_WRITE, 'إدارة أوامر العمل', 'Manage work orders', 'أوامر العمل', 'Work orders'],
+    [PERMISSIONS.WORKORDER_READ, 'عرض أوامر العمل', 'View work orders', 'أوامر العمل', 'Work orders', '/workorders', 'view'],
+    [PERMISSIONS.WORKORDER_WRITE, 'إدارة أوامر العمل', 'Manage work orders', 'أوامر العمل', 'Work orders', '/workorders', 'write'],
   ]),
   ...g('المالية', 'Finance', [
-    [PERMISSIONS.INVOICE_READ, 'عرض الفواتير', 'View invoices', 'الفواتير', 'Invoices'],
-    [PERMISSIONS.INVOICE_WRITE, 'إصدار الفواتير والتحصيل', 'Issue invoices & collect', 'الفواتير', 'Invoices'],
-    [PERMISSIONS.PAYMENT_READ, 'عرض مستحقات الموردين', 'View vendor payables', 'مستحقات الموردين', 'Vendor payables'],
-    [PERMISSIONS.PAYMENT_WRITE, 'سداد الموردين', 'Pay vendors', 'مستحقات الموردين', 'Vendor payables'],
-    [PERMISSIONS.LEDGER_READ, 'عرض دفتر الأستاذ والتقارير', 'View ledger & reports', 'دفتر الأستاذ والتقارير', 'Ledger & reports'],
-    [PERMISSIONS.PERIOD_MANAGE, 'إدارة الفترات المالية والإقفال', 'Manage fiscal periods & closing', 'الفترات المالية', 'Fiscal periods'],
-    [PERMISSIONS.COSTS_VIEW, 'عرض التكاليف والهوامش', 'View costs & margins', 'التكاليف والهوامش', 'Costs & margins'],
+    [PERMISSIONS.INVOICE_READ, 'عرض الفواتير', 'View invoices', 'الفواتير', 'Invoices', '/invoices', 'view'],
+    [PERMISSIONS.INVOICE_WRITE, 'إصدار الفواتير والتحصيل', 'Issue invoices & collect', 'الفواتير', 'Invoices', '/invoices', 'write'],
+    [PERMISSIONS.PAYMENT_READ, 'عرض مستحقات الموردين', 'View vendor payables', 'مستحقات الموردين', 'Vendor payables', '/payables', 'view'],
+    [PERMISSIONS.PAYMENT_WRITE, 'سداد الموردين', 'Pay vendors', 'مستحقات الموردين', 'Vendor payables', '/payables', 'write'],
+    [PERMISSIONS.LEDGER_READ, 'عرض دفتر الأستاذ والتقارير', 'View ledger & reports', 'دفتر الأستاذ والتقارير', 'Ledger & reports', '/ledger', 'view'],
+    // Fiscal years and period closing are a section of the statements screen.
+    [PERMISSIONS.PERIOD_MANAGE, 'إدارة الفترات المالية والإقفال', 'Manage fiscal periods & closing', 'الفترات المالية', 'Fiscal periods', '/statements', 'special'],
+    // Cost columns appear on items, proposals, projects, procurement,
+    // requisitions, work orders and finance reports: no single screen.
+    [PERMISSIONS.COSTS_VIEW, 'عرض التكاليف والهوامش', 'View costs & margins', 'التكاليف والهوامش', 'Costs & margins', null, 'special'],
   ]),
   ...g('المنصة', 'Platform', [
-    [PERMISSIONS.ATTACHMENT_READ, 'عرض المرفقات', 'View attachments', 'المرفقات', 'Attachments'],
-    [PERMISSIONS.ATTACHMENT_WRITE, 'رفع وحذف المرفقات', 'Upload & delete attachments', 'المرفقات', 'Attachments'],
+    // The files tab of every detail page that has one: no single screen.
+    [PERMISSIONS.ATTACHMENT_READ, 'عرض المرفقات', 'View attachments', 'المرفقات', 'Attachments', null, 'special'],
+    [PERMISSIONS.ATTACHMENT_WRITE, 'رفع وحذف المرفقات', 'Upload & delete attachments', 'المرفقات', 'Attachments', null, 'special'],
   ]),
   ...g('الإدارة', 'Administration', [
-    [PERMISSIONS.USER_MANAGE, 'إدارة المستخدمين والأدوار', 'Manage users & roles', 'المستخدمون والأدوار', 'Users & roles'],
-    [PERMISSIONS.ORG_MANAGE, 'إعدادات المنشأة', 'Organization settings', 'إعدادات المنشأة', 'Organization settings'],
-    [PERMISSIONS.AUDIT_READ, 'عرض سجل التدقيق', 'View audit log', 'سجل التدقيق', 'Audit log'],
-    [PERMISSIONS.APPROVAL_MANAGE, 'ضبط مصفوفة الاعتماد', 'Configure approval matrix', 'مصفوفة الاعتماد', 'Approval matrix'],
-    [PERMISSIONS.DEPARTMENT_MANAGE, 'إدارة الأقسام', 'Manage departments', 'الأقسام', 'Departments'],
-    [PERMISSIONS.DELEGATION_MANAGE, 'إدارة التفويض المؤقت', 'Manage temporary delegations', 'التفويض المؤقت', 'Temporary delegations'],
-    [PERMISSIONS.WORKFLOW_MANAGE, 'مراقبة سير العمل والأحداث', 'Monitor workflow & events', 'سير العمل والأحداث', 'Workflow & events'],
+    [PERMISSIONS.USER_MANAGE, 'إدارة المستخدمين والأدوار', 'Manage users & roles', 'المستخدمون والأدوار', 'Users & roles', '/admin', 'view'],
+    // Organization settings and the audit log are tabs of /admin.
+    [PERMISSIONS.ORG_MANAGE, 'إعدادات المنشأة', 'Organization settings', 'إعدادات المنشأة', 'Organization settings', '/admin', 'special'],
+    [PERMISSIONS.AUDIT_READ, 'عرض سجل التدقيق', 'View audit log', 'سجل التدقيق', 'Audit log', '/admin', 'special'],
+    // The matrix is a tab of /admin, but the key also opens the history view
+    // of /approvals: two screens, so none.
+    [PERMISSIONS.APPROVAL_MANAGE, 'ضبط مصفوفة الاعتماد', 'Configure approval matrix', 'مصفوفة الاعتماد', 'Approval matrix', null, 'special'],
+    [PERMISSIONS.DEPARTMENT_MANAGE, 'إدارة الأقسام', 'Manage departments', 'الأقسام', 'Departments', '/departments', 'view'],
+    [PERMISSIONS.DELEGATION_MANAGE, 'إدارة التفويض المؤقت', 'Manage temporary delegations', 'التفويض المؤقت', 'Temporary delegations', '/delegations', 'view'],
+    // The workflow monitor is a panel of the task box, its only screen.
+    [PERMISSIONS.WORKFLOW_MANAGE, 'مراقبة سير العمل والأحداث', 'Monitor workflow & events', 'سير العمل والأحداث', 'Workflow & events', '/inbox', 'special'],
   ]),
 ];
 

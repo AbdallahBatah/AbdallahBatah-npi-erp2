@@ -3,7 +3,15 @@
  * sidebar and the global search's command entries. Keeping it here means a new
  * screen becomes reachable from Ctrl+K the moment it appears in the sidebar,
  * with the same permission gate applied in both places.
+ *
+ * Which screens exist, their group, their order and the key that opens each
+ * come from the shared screen registry (packages/shared/src/screens.ts, ADR-02
+ * §3-6), which the role and user editors' previews read too, and where the
+ * reasons for each screen's placement are written down. This file adds only
+ * the web app's own part: the i18n key and the icon.
  */
+import { SCREEN_GROUPS, SCREENS, type ScreenHref } from '@npi/shared';
+
 export interface NavItem {
   href: string;
   key: string;
@@ -18,81 +26,44 @@ export interface NavSection {
   items: NavItem[];
 }
 
-export const NAV_SECTIONS: NavSection[] = [
-  {
-    // The screens every user may open: none of them carries a `perm`, so this
-    // group is never empty and always comes first.
-    labelAr: 'عام',
-    labelEn: 'General',
-    items: [
-      { href: '/dashboard', key: 'nav.dashboard', icon: 'dashboard' },
-      // No `perm` on either: both are self-scoped to the caller's own role by
-      // the server, so every user needs to reach them — including ones who
-      // administer nothing.
-      { href: '/inbox', key: 'nav.inbox', icon: 'square-check' },
-      { href: '/approvals', key: 'nav.approvals', icon: 'stamp' },
-      // The Madar copilot (T-08): a separate Next.js app mounted at
-      // `/copilot`, outside this app's own routes. No `perm` — every user
-      // may open the assistant, same reasoning as inbox/approvals above.
-      { href: '/copilot', key: 'nav.madar', icon: 'message-circle' },
-    ],
-  },
-  {
-    labelAr: 'المبيعات والتعاقد',
-    labelEn: 'Sales & contracting',
-    items: [
-      { href: '/leads', key: 'nav.leads', icon: 'target', perm: 'crm.lead.read' },
-      { href: '/customers', key: 'nav.customers', icon: 'users', perm: 'crm.customer.read' },
-      { href: '/opportunities', key: 'nav.opportunities', icon: 'lightbulb', perm: 'crm.opportunity.read' },
-      // CRM Step 5: the team's follow-up tasks (the inbox shows only the caller's own, due today or late).
-      { href: '/tasks', key: 'nav.tasks', icon: 'square-check', perm: 'crm.customer.read' },
-      { href: '/proposals', key: 'nav.proposals', icon: 'file-text', perm: 'commercial.proposal.read' },
-      { href: '/contracts', key: 'nav.contracts', icon: 'file-signature', perm: 'commercial.contract.read' },
-    ],
-  },
-  {
-    labelAr: 'التنفيذ والتوريد',
-    labelEn: 'Delivery & supply',
-    items: [
-      { href: '/projects', key: 'nav.projects', icon: 'building', perm: 'projects.project.read' },
-      { href: '/requisitions', key: 'nav.requisitions', icon: 'file-text', perm: 'scm.procurement.read' },
-      { href: '/procurement', key: 'nav.procurement', icon: 'cart', perm: 'scm.procurement.read' },
-      { href: '/assets', key: 'nav.assets', icon: 'scan', perm: 'assets.serialunit.read' },
-      { href: '/items', key: 'nav.items', icon: 'package', perm: 'commercial.item.read' },
-    ],
-  },
-  {
-    labelAr: 'التشغيل',
-    labelEn: 'Operations',
-    items: [
-      { href: '/workorders', key: 'nav.workorders', icon: 'wrench', perm: 'fsm.workorder.read' },
-    ],
-  },
-  {
-    labelAr: 'المالية',
-    labelEn: 'Finance',
-    items: [
-      { href: '/invoices', key: 'nav.invoices', icon: 'receipt', perm: 'finance.invoice.read' },
-      { href: '/payables', key: 'nav.payables', icon: 'wallet', perm: 'finance.payment.read' },
-      { href: '/finance', key: 'nav.finance', icon: 'bar-chart', perm: 'finance.ledger.read' },
-      { href: '/statements', key: 'nav.statements', icon: 'scale', perm: 'finance.ledger.read' },
-      { href: '/ledger', key: 'nav.ledger', icon: 'book', perm: 'finance.ledger.read' },
-    ],
-  },
-  {
-    labelAr: 'الإدارة',
-    labelEn: 'Administration',
-    items: [
-      { href: '/admin', key: 'nav.admin', icon: 'shield-users', perm: 'admin.user.manage' },
-      // M4's two organisation-structure screens. They are separate routes, not
-      // tabs of /admin, because their permissions are separate: an
-      // organization can hand someone the department list or the delegation
-      // register without also handing them user and role administration.
-      { href: '/departments', key: 'nav.departments', icon: 'building', perm: 'admin.department.manage' },
-      { href: '/delegations', key: 'nav.delegations', icon: 'key', perm: 'admin.delegation.manage' },
-    ],
-  },
-];
+/** The i18n key and icon of every registry screen; a screen missing here does not compile. */
+const NAV_META: Record<ScreenHref, { key: string; icon: string }> = {
+  '/dashboard': { key: 'nav.dashboard', icon: 'dashboard' },
+  '/inbox': { key: 'nav.inbox', icon: 'square-check' },
+  '/approvals': { key: 'nav.approvals', icon: 'stamp' },
+  '/copilot': { key: 'nav.madar', icon: 'message-circle' },
+  '/leads': { key: 'nav.leads', icon: 'target' },
+  '/customers': { key: 'nav.customers', icon: 'users' },
+  '/opportunities': { key: 'nav.opportunities', icon: 'lightbulb' },
+  '/tasks': { key: 'nav.tasks', icon: 'square-check' },
+  '/proposals': { key: 'nav.proposals', icon: 'file-text' },
+  '/contracts': { key: 'nav.contracts', icon: 'file-signature' },
+  '/projects': { key: 'nav.projects', icon: 'building' },
+  '/requisitions': { key: 'nav.requisitions', icon: 'file-text' },
+  '/procurement': { key: 'nav.procurement', icon: 'cart' },
+  '/assets': { key: 'nav.assets', icon: 'scan' },
+  '/items': { key: 'nav.items', icon: 'package' },
+  '/workorders': { key: 'nav.workorders', icon: 'wrench' },
+  '/invoices': { key: 'nav.invoices', icon: 'receipt' },
+  '/payables': { key: 'nav.payables', icon: 'wallet' },
+  '/finance': { key: 'nav.finance', icon: 'bar-chart' },
+  '/statements': { key: 'nav.statements', icon: 'scale' },
+  '/ledger': { key: 'nav.ledger', icon: 'book' },
+  '/admin': { key: 'nav.admin', icon: 'shield-users' },
+  '/departments': { key: 'nav.departments', icon: 'building' },
+  '/delegations': { key: 'nav.delegations', icon: 'key' },
+};
+
+export const NAV_SECTIONS: NavSection[] = SCREEN_GROUPS.map((group) => ({
+  labelAr: group.labelAr,
+  labelEn: group.labelEn,
+  items: SCREENS.filter((s) => s.group === group.key).map((s) => ({
+    href: s.href,
+    ...NAV_META[s.href],
+    // A screen with no view key carries no `perm`, as before the registry.
+    ...(s.view ? { perm: s.view } : {}),
+  })),
+}));
 
 /** Flat list — what the command palette searches over. */
 export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);
