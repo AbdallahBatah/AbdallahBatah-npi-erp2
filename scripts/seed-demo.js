@@ -188,37 +188,101 @@ const step = async (name, fn) => {
       }
     }
 
-    // ── 5. Project #2 → PO → receive w/ serials → bill → install ──────────
+    // ── 5. Project #2 → PO → approve → send → receive → inspect → accept → bill → match
+    //       → approve → schedule → install serials
     let prj2 = (await call('GET', '/projects')).find((p) => p.contractId === contract2.id);
     if (!prj2) prj2 = await step('مشروع المستشفى', () => call('POST', '/projects', { contractId: contract2.id }));
     if (prj2) {
       const vendors = await call('GET', '/procurement/vendors');
-      const po = await step('أمر شراء 60 لوح', () =>
-        call('POST', '/procurement/purchase-orders', {
-          vendorId: vendors[0].id,
-          projectId: prj2.id,
-          lines: [
-            { itemId: mod.id, qty: 60, unitPrice: 780 },
-            { itemId: rail.id, qty: 120, unitPrice: 42 },
-          ],
-        }),
-      );
-      if (po) {
-        await step('اعتماد أمر الشراء', () => call('POST', `/procurement/purchase-orders/${po.id}/approve`, {}));
-        const poFull = await call('GET', `/procurement/purchase-orders/${po.id}`);
-        const modLine = poFull.lines.find((l) => l.item.sku === 'MOD-550');
-        const railLine = poFull.lines.find((l) => l.item.sku === 'MNT-RAIL');
-        const serials = Array.from({ length: 20 }, (_, i) => `DEMO-MOD-${String(i + 1).padStart(3, '0')}`);
-        const grn = await step('استلام جزئي (20 لوح + قضبان)', () =>
-          call('POST', `/procurement/purchase-orders/${po.id}/receive`, {
+      // The M4 workflow engine split what used to be two calls into the real procurement
+      // flow (spec §7). Purchase order: DRAFT → approve → APPROVED → send → SENT; `receive`
+      // refuses anything but SENT / PARTIALLY_RECEIVED. Goods receipt: a delivery note
+      // (DRAFT) → inspect → INSPECTED → accept → ACCEPTED — only acceptance moves stock,
+      // creates the serial units and books the project actuals, and only an ACCEPTED
+      // receipt can be billed. Vendor bill: DRAFT → match → MATCHED → approve → APPROVED
+      // (the journal Dr WIP + Dr VAT input / Cr AP is posted here) → schedule → SCHEDULED.
+      // Signatures: the order total (51,840 before VAT) sits under the seeded 100,000
+      // matrix band, so the admin's approve clears without a second signer; bill approve
+      // and schedule need PAYMENT_WRITE, which admin@npi.sa holds (ALL_PERMISSIONS in
+      // seed.ts) — a tenant with separated roles would run those two as accountant@npi.sa.
+      // Rerun-safe the same way the rest of the script is: the hospital's existing order
+      // is picked up wherever an earlier run left it (each stage checks the status first)
+      // instead of raising a second order, so the DEMO-MOD serials are never offered twice.
+      const poList = await call('GET', '/procurement/purchase-orders');
+      let po = poList.find((p) => p.projectId === prj2.id && p.vendorId === vendors[0].id && p.status !== 'CANCELLED');
+      if (!po)
+        po = await step('أمر شراء 60 لوح', () =>
+          call('POST', '/procurement/purchase-orders', {
+            vendorId: vendors[0].id,
+            projectId: prj2.id,
             lines: [
-              { poLineId: modLine.id, qty: 20, serials },
-              { poLineId: railLine.id, qty: 120 },
+              { itemId: mod.id, qty: 60, unitPrice: 780 },
+              { itemId: rail.id, qty: 120, unitPrice: 42 },
             ],
           }),
         );
-        if (grn) await step('ترحيل فاتورة المورد', () => call('POST', '/procurement/bills', { goodsReceiptId: grn.id }));
-        const units = await call('GET', '/procurement/serial-units?state=IN_STOCK');
+      if (po) {
+        const poDetail = () => call('GET', `/procurement/purchase-orders/${po.id}`);
+        let poFull = await poDetail();
+        if (poFull.status === 'DRAFT') {
+          await step('اعتماد أمر الشراء', () => call('POST', `/procurement/purchase-orders/${po.id}/approve`, {}));
+          poFull = await poDetail();
+        }
+        // PENDING_APPROVAL here would mean the matrix parked it (≥ 100,000: pm then
+        // accountant sign in the approvals inbox); the demo order is below that band.
+        if (poFull.status === 'APPROVED') {
+          await step('إرسال أمر الشراء للمورد', () => call('POST', `/procurement/purchase-orders/${po.id}/send`, {}));
+          poFull = await poDetail();
+        }
+
+        // The latest receipt on the order (the detail lists them newest first).
+        let grn = poFull.goodsReceipts?.[0] ?? null;
+        if (!grn && poFull.status === 'SENT') {
+          const modLine = poFull.lines.find((l) => l.item.sku === 'MOD-550');
+          const railLine = poFull.lines.find((l) => l.item.sku === 'MNT-RAIL');
+          const serials = Array.from({ length: 20 }, (_, i) => `DEMO-MOD-${String(i + 1).padStart(3, '0')}`);
+          grn = await step('استلام جزئي (20 لوح + قضبان) — إذن تسليم', () =>
+            call('POST', `/procurement/purchase-orders/${po.id}/receive`, {
+              lines: [
+                { poLineId: modLine.id, qty: 20, serials },
+                { poLineId: railLine.id, qty: 120 },
+              ],
+              notes: 'التسليم الأول: 20 لوحاً وكل قضبان التثبيت',
+            }),
+          );
+        }
+        // inspect / accept / match / approve / schedule take a WorkflowActionDto: `action`
+        // is required by validation (the service reads only `comment`).
+        if (grn?.status === 'DRAFT')
+          grn = (await step('فحص الاستلام', () =>
+            call('POST', `/procurement/receipts/${grn.id}/inspect`, { action: 'INSPECT', comment: 'الكميات والأرقام التسلسلية مطابقة لإذن التسليم' }),
+          )) ?? grn;
+        if (grn?.status === 'INSPECTED')
+          grn = (await step('قبول الاستلام (دخول المخزون وتسجيل الأرقام التسلسلية)', () =>
+            call('POST', `/procurement/receipts/${grn.id}/accept`, { action: 'ACCEPT' }),
+          )) ?? grn;
+
+        if (grn?.status === 'ACCEPTED') {
+          poFull = await poDetail();
+          let bill = poFull.vendorBills?.find((b) => b.goodsReceiptId === grn.id) ?? null;
+          if (!bill)
+            bill = await step('تسجيل فاتورة المورد', () =>
+              call('POST', '/procurement/bills', { goodsReceiptId: grn.id, vendorRef: 'VINV-2026-0458' }),
+            );
+          if (bill?.status === 'DRAFT')
+            bill = (await step('المطابقة الثلاثية للفاتورة', () =>
+              call('POST', `/procurement/bills/${bill.id}/match`, { action: 'MATCH' }),
+            )) ?? bill;
+          if (bill?.status === 'MATCHED')
+            bill = (await step('اعتماد الفاتورة (ترحيل القيد)', () =>
+              call('POST', `/procurement/bills/${bill.id}/approve`, { action: 'APPROVE', comment: 'اعتماد فاتورة التسليم الأول' }),
+            )) ?? bill;
+          if (bill?.status === 'APPROVED')
+            await step('جدولة الفاتورة للدفع', () => call('POST', `/procurement/bills/${bill.id}/schedule`, { action: 'SCHEDULE' }));
+        }
+
+        // Serial units exist only once the receipt is ACCEPTED (see above).
+        const units = await call('GET', '/procurement/serial-units?state=IN_STOCK&search=DEMO-MOD-');
         const demoUnits = units.filter((u) => u.serialNo.startsWith('DEMO-MOD-')).slice(0, 8);
         for (const u of demoUnits) await step(`تركيب ${u.serialNo}`, () => call('POST', `/procurement/serial-units/${u.id}/install`, {}));
       }
