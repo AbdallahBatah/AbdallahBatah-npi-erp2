@@ -8,9 +8,11 @@
 import { ALL_PERMISSIONS, PERMISSION_CATALOG } from '@npi/shared';
 
 describe('PERMISSION_CATALOG', () => {
-  it('is a flat array of 40 entries, one per permission key', () => {
+  // 40 at P1-4; P1-6 added crm.task.read, scm.requisition.read,
+  // finance.report.read and finance.statement.read.
+  it('is a flat array of 44 entries, one per permission key', () => {
     expect(Array.isArray(PERMISSION_CATALOG)).toBe(true);
-    expect(PERMISSION_CATALOG).toHaveLength(40);
+    expect(PERMISSION_CATALOG).toHaveLength(44);
     expect(PERMISSION_CATALOG.map((p) => p.key).sort()).toEqual([...ALL_PERMISSIONS].sort());
   });
 

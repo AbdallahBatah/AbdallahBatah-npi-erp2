@@ -42,24 +42,34 @@ function scratchOrgId(key: ProfileKey): string {
 }
 
 // ── Permission sets ──────────────────────────────────────────────────────
-// packages/shared/src/permissions.ts exports the same 34 keys as ALL_PERMISSIONS
-// below (as PERMISSIONS/ALL_PERMISSIONS), but @npi/shared is not a declared
+// Hand copies of seed.ts's role arrays, since @npi/shared is not a declared
 // dependency of @npi/db (only @prisma/client is) — importing it here would
 // work only by accident of npm workspace hoisting. Copied instead, per the
 // same "kept in sync by comment" convention seed.ts already uses.
+//
+// They were copied before CRM Phase 1 and still lack the five keys it added
+// (crm.customer.merge, commercial.proposal.approve, projects.project.approve,
+// scm.procurement.approve, finance.costs.view): ALL_PERMISSIONS below holds 39
+// of packages/shared/src/permissions.ts's 44 keys. P1-6 applied migration
+// 0030's rule to every array here, as to seed.ts's: crm.task.read wherever
+// crm.customer.read, scm.requisition.read wherever scm.procurement.read, and
+// finance.report.read with finance.statement.read wherever finance.ledger.read.
 
-// Copied from packages/db/prisma/seed.ts (lines 18-34); keep in sync.
+// Copied from packages/db/prisma/seed.ts ALL_PERMISSIONS (lines 18-37), less
+// the CRM Phase 1 keys; keep in sync.
 const ALL_PERMISSIONS = [
-  'crm.customer.read', 'crm.customer.write',
+  'crm.customer.read', 'crm.customer.write', 'crm.task.read',
   'crm.lead.read', 'crm.lead.write',
   'crm.opportunity.read', 'crm.opportunity.write',
   'commercial.item.read', 'commercial.item.write',
   'commercial.proposal.read', 'commercial.proposal.write',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.report.read', 'finance.statement.read',
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
   'projects.project.read', 'projects.project.write',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.procurement.write',
+  'scm.requisition.read', 'scm.requisition.write',
   'assets.serialunit.read',
   'fsm.workorder.read', 'fsm.workorder.write',
   'admin.org.manage', 'admin.user.manage', 'admin.audit.read', 'admin.approval.manage',
@@ -67,52 +77,61 @@ const ALL_PERMISSIONS = [
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
-// Copied from packages/db/prisma/seed.ts (lines 36-45); keep in sync.
+// Copied from packages/db/prisma/seed.ts SALES_PERMISSIONS (lines 45-56), less
+// the CRM Phase 1 keys; keep in sync.
 const SALES_PERMISSIONS = [
-  'crm.customer.read', 'crm.customer.write',
+  'crm.customer.read', 'crm.customer.write', 'crm.task.read',
   'crm.lead.read', 'crm.lead.write',
   'crm.opportunity.read', 'crm.opportunity.write',
   'commercial.item.read',
   'commercial.proposal.read', 'commercial.proposal.write',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.report.read', 'finance.statement.read',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
-// Copied from packages/db/prisma/seed.ts (lines 48-55); keep in sync.
+// Copied from packages/db/prisma/seed.ts ACCOUNTANT_PERMISSIONS (lines 59-69),
+// less the CRM Phase 1 keys; keep in sync.
 const ACCOUNTANT_PERMISSIONS = [
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.report.read', 'finance.statement.read',
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
-  'crm.customer.read',
+  'crm.customer.read', 'crm.task.read',
   'commercial.contract.read', 'commercial.proposal.read', 'commercial.item.read',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.procurement.write',
+  'scm.requisition.read', 'scm.requisition.write',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
-// Copied from packages/db/prisma/seed.ts (lines 58-67); keep in sync.
+// Copied from packages/db/prisma/seed.ts PM_PERMISSIONS (lines 72-83), less the
+// CRM Phase 1 keys; keep in sync.
 const PM_PERMISSIONS = [
   'projects.project.read', 'projects.project.write',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.procurement.write',
+  'scm.requisition.read', 'scm.requisition.write',
   'assets.serialunit.read',
   'commercial.contract.read', 'commercial.item.read',
-  'crm.customer.read',
+  'crm.customer.read', 'crm.task.read',
   'fsm.workorder.read',
   'finance.invoice.read',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
-// Copied from packages/db/prisma/seed.ts (lines 70-80); keep in sync.
+// Copied from packages/db/prisma/seed.ts SITE_ENGINEER_PERMISSIONS (lines
+// 100-110); keep in sync.
 const SITE_ENGINEER_PERMISSIONS = [
   'fsm.workorder.read', 'fsm.workorder.write',
   'assets.serialunit.read',
-  'scm.procurement.read', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.requisition.read', 'scm.requisition.write',
   'commercial.item.read',
   'projects.project.read',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
-// Identical in keys/names/permission sets to the demo seed's five roles
-// (packages/db/prisma/seed.ts lines 99-136).
+// The demo seed's first five roles by key and name (packages/db/prisma/seed.ts
+// lines 129-158), with the permission sets above; the seed's sixth role,
+// executive, is not created here.
 const ROLE_DEFS = [
   { key: 'admin', nameAr: 'مدير النظام', nameEn: 'Administrator', permissions: ALL_PERMISSIONS },
   { key: 'sales', nameAr: 'مندوب مبيعات', nameEn: 'Sales Representative', permissions: SALES_PERMISSIONS },

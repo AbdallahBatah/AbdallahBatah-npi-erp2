@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@npi/db';
 import {
+  PERMISSIONS,
   defaultRemindAt,
   isBeforeToday,
   normalizeValidUntil,
@@ -125,15 +126,24 @@ export class FollowUpTasksService {
   }
 
   /**
-   * The people a task may be given to: the ACTIVE users of the caller's organization, by
-   * Arabic name, with nothing but the three fields a picker needs (no e-mail, role or
-   * status). The caller is included — the screen drops "me" itself, because "me" is the
-   * default when nobody is picked. Read behind the write key: only someone who may create
-   * a task has a reason to ask.
+   * The people a task may be given to: the ACTIVE users of the caller's organization who
+   * may open the tasks screen (`crm.task.read` through their primary role or an extra
+   * one, ADR-02 §5), by Arabic name, with nothing but the three fields a picker needs (no
+   * e-mail, role or status). The caller is included when they hold the key — the screen
+   * drops "me" itself, because "me" is the default when nobody is picked. Read behind the
+   * write key: only someone who may create a task has a reason to ask.
+   *
+   * The predicate is role-level, the shape of NotificationService.notify; P1-7 replaces
+   * it with the effective set (roles plus GRANT minus DENY overrides).
    */
   assignees(user: AuthUser) {
+    const holdsTaskRead = { permissions: { has: PERMISSIONS.TASK_READ } };
     return this.prisma.user.findMany({
-      where: { organizationId: user.organizationId, isActive: true },
+      where: {
+        organizationId: user.organizationId,
+        isActive: true,
+        OR: [{ role: holdsTaskRead }, { extraRoles: { some: { role: holdsTaskRead } } }],
+      },
       select: { id: true, nameAr: true, nameEn: true },
       orderBy: { nameAr: 'asc' },
     });

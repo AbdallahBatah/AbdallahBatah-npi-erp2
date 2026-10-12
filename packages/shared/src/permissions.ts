@@ -11,6 +11,13 @@ export const PERMISSIONS = {
   // undone from the app, so it is its own key — held by `admin` and `executive`
   // only — rather than a side effect of `crm.customer.write`.
   CUSTOMER_MERGE: 'crm.customer.merge',
+  // ADR-02 (P1-6): one view key per screen. This key and the three other
+  // P1-6 *_READ keys below each took one screen off a key that used to open
+  // two or three (this one /tasks off crm.customer.read). Migration 0030
+  // grants each to every role holding the old key, so no role sees or reaches
+  // anything different at deploy. The old keys keep their remaining screen and
+  // their meaning: Madar stores them as the source of what it remembers.
+  TASK_READ: 'crm.task.read',
   LEAD_READ: 'crm.lead.read',
   LEAD_WRITE: 'crm.lead.write',
   OPPORTUNITY_READ: 'crm.opportunity.read',
@@ -28,6 +35,10 @@ export const PERMISSIONS = {
   INVOICE_READ: 'finance.invoice.read',
   INVOICE_WRITE: 'finance.invoice.write',
   LEDGER_READ: 'finance.ledger.read',
+  // P1-6: the finance reports (POC, VAT return, profitability) and the
+  // financial statements (with the fiscal-year list), split off LEDGER_READ.
+  REPORT_READ: 'finance.report.read',
+  STATEMENT_READ: 'finance.statement.read',
   // CRM Phase 1: sees unit costs, margins and budget/actual cost figures. The
   // server nulls every COST_FIELDS key for a user without it (see
   // CostRedactionInterceptor); the UI merely hides the columns.
@@ -49,6 +60,8 @@ export const PERMISSIONS = {
   // this; only a buyer needs PROCUREMENT_WRITE. Collapsing the two would mean
   // every engineer who wants a cable can also approve purchase orders.
   REQUISITION_WRITE: 'scm.requisition.write',
+  // P1-6: the requisitions screen, split off PROCUREMENT_READ.
+  REQUISITION_READ: 'scm.requisition.read',
   // M4: departments and delegations are delegation-of-authority settings —
   // who signs for whom, and for which unit — not preferences. Grouped with the
   // approval matrix because they configure the same control.
@@ -113,9 +126,8 @@ export interface PermissionMeta {
    * key belongs to: a view key's own screen, and the write / approve / special
    * keys acted on there. `null` = no single sidebar screen (the key works on
    * several, or on none), so the editors list it under special permissions.
-   * A view key that still opens several screens until P1-6 sits on the screen
-   * it keeps after the split. A plain string because this file stays
-   * import-free; screens.spec.ts checks every value against the registry.
+   * A plain string because this file stays import-free; screens.spec.ts
+   * checks every value against the registry.
    */
   screen: string | null;
   action: PermissionAction;
@@ -144,6 +156,7 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     [PERMISSIONS.CUSTOMER_READ, 'عرض العملاء', 'View customers', 'العملاء', 'Customers', '/customers', 'view'],
     [PERMISSIONS.CUSTOMER_WRITE, 'إدارة العملاء', 'Manage customers', 'العملاء', 'Customers', '/customers', 'write'],
     [PERMISSIONS.CUSTOMER_MERGE, 'دمج العملاء المكررين', 'Merge duplicate customers', 'العملاء', 'Customers', '/customers', 'special'],
+    [PERMISSIONS.TASK_READ, 'عرض مهام المتابعة', 'View follow-up tasks', 'مهام المتابعة', 'Follow-up tasks', '/tasks', 'view'],
     [PERMISSIONS.OPPORTUNITY_READ, 'عرض الفرص', 'View opportunities', 'الفرص', 'Opportunities', '/opportunities', 'view'],
     [PERMISSIONS.OPPORTUNITY_WRITE, 'إدارة الفرص', 'Manage opportunities', 'الفرص', 'Opportunities', '/opportunities', 'write'],
     [PERMISSIONS.PROPOSAL_READ, 'عرض العروض', 'View proposals', 'عروض الأسعار', 'Proposals', '/proposals', 'view'],
@@ -161,6 +174,7 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     [PERMISSIONS.PROCUREMENT_READ, 'عرض المشتريات والمخزون', 'View procurement & stock', 'المشتريات والمخزون', 'Procurement & stock', '/procurement', 'view'],
     [PERMISSIONS.PROCUREMENT_WRITE, 'إدارة المشتريات والمخزون', 'Manage procurement & stock', 'المشتريات والمخزون', 'Procurement & stock', '/procurement', 'write'],
     [PERMISSIONS.PROCUREMENT_APPROVE, 'اعتماد المشتريات', 'Approve procurement', 'المشتريات والمخزون', 'Procurement & stock', '/procurement', 'approve'],
+    [PERMISSIONS.REQUISITION_READ, 'عرض طلبات الشراء', 'View purchase requisitions', 'طلبات الشراء', 'Purchase requisitions', '/requisitions', 'view'],
     [PERMISSIONS.REQUISITION_WRITE, 'رفع طلبات الشراء', 'Raise purchase requisitions', 'طلبات الشراء', 'Purchase requisitions', '/requisitions', 'write'],
     [PERMISSIONS.ASSET_READ, 'عرض الأصول المتسلسلة', 'View serialised assets', 'الأصول المتسلسلة', 'Serialised assets', '/assets', 'view'],
   ]),
@@ -173,9 +187,11 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     [PERMISSIONS.INVOICE_WRITE, 'إصدار الفواتير والتحصيل', 'Issue invoices & collect', 'الفواتير', 'Invoices', '/invoices', 'write'],
     [PERMISSIONS.PAYMENT_READ, 'عرض مستحقات الموردين', 'View vendor payables', 'مستحقات الموردين', 'Vendor payables', '/payables', 'view'],
     [PERMISSIONS.PAYMENT_WRITE, 'سداد الموردين', 'Pay vendors', 'مستحقات الموردين', 'Vendor payables', '/payables', 'write'],
-    [PERMISSIONS.LEDGER_READ, 'عرض دفتر الأستاذ والتقارير', 'View ledger & reports', 'دفتر الأستاذ والتقارير', 'Ledger & reports', '/ledger', 'view'],
+    [PERMISSIONS.REPORT_READ, 'عرض التقارير المالية', 'View finance reports', 'التقارير المالية', 'Finance reports', '/finance', 'view'],
+    [PERMISSIONS.STATEMENT_READ, 'عرض القوائم المالية', 'View financial statements', 'القوائم المالية', 'Financial statements', '/statements', 'view'],
     // Fiscal years and period closing are a section of the statements screen.
     [PERMISSIONS.PERIOD_MANAGE, 'إدارة الفترات المالية والإقفال', 'Manage fiscal periods & closing', 'الفترات المالية', 'Fiscal periods', '/statements', 'special'],
+    [PERMISSIONS.LEDGER_READ, 'عرض دفتر الأستاذ', 'View general ledger', 'دفتر الأستاذ', 'General ledger', '/ledger', 'view'],
     // Cost columns appear on items, proposals, projects, procurement,
     // requisitions, work orders and finance reports: no single screen.
     [PERMISSIONS.COSTS_VIEW, 'عرض التكاليف والهوامش', 'View costs & margins', 'التكاليف والهوامش', 'Costs & margins', null, 'special'],

@@ -362,10 +362,9 @@ export class CustomersService {
     const tasks: Array<Promise<void>> = [];
 
     // CRM Step 5: the communication log (the latest entries; the rest is paged by
-    // GET /activities) and the OPEN follow-up tasks. The page itself needs the customer
-    // read key, which every caller of this method has.
+    // GET /activities). The page itself needs the customer read key, which every
+    // caller of this method has, and so does the log.
     const logWhere = { organizationId: org, customerId: id };
-    const openTasksWhere = { organizationId: org, customerId: id, status: 'OPEN' as const };
     tasks.push(
       Promise.all([
         this.prisma.activity.findMany({
@@ -375,21 +374,32 @@ export class CustomersService {
           take: ACTIVITY_TAKE,
         }),
         this.prisma.activity.count({ where: logWhere }),
-        this.prisma.followUpTask.findMany({
-          where: openTasksWhere,
-          include: TASK_INCLUDE,
-          orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }],
-          take: TAKE,
-        }),
-        this.prisma.followUpTask.count({ where: openTasksWhere }),
-      ]).then(async ([entries, entriesCount, openTasks, openTasksCount]) => {
-        const now = new Date();
+      ]).then(async ([entries, entriesCount]) => {
         out.activities = await withAttachmentCounts(this.prisma, org, entries);
-        out.tasks = openTasks.map((t) => withDueState(t, now));
         counts.activities = entriesCount;
-        counts.tasks = openTasksCount;
       }),
     );
+
+    // ...and the OPEN follow-up tasks, behind the key of the /tasks screen since P1-6
+    // (GET /tasks needs the same one).
+    if (has(PERMISSIONS.TASK_READ)) {
+      const openTasksWhere = { organizationId: org, customerId: id, status: 'OPEN' as const };
+      tasks.push(
+        Promise.all([
+          this.prisma.followUpTask.findMany({
+            where: openTasksWhere,
+            include: TASK_INCLUDE,
+            orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }],
+            take: TAKE,
+          }),
+          this.prisma.followUpTask.count({ where: openTasksWhere }),
+        ]).then(([openTasks, openTasksCount]) => {
+          const now = new Date();
+          out.tasks = openTasks.map((t) => withDueState(t, now));
+          counts.tasks = openTasksCount;
+        }),
+      );
+    }
 
     if (has(PERMISSIONS.OPPORTUNITY_READ)) {
       const where = { organizationId: org, customerId: id };

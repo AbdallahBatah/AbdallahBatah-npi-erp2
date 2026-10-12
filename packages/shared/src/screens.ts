@@ -8,8 +8,7 @@
  * the user then actually sees.
  *
  * One view key per screen that has one (ADR-02 hard rule 5), enforced by
- * apps/api/src/common/screens.spec.ts. The keys still shared by two or three
- * screens are listed in SHARED_VIEW_KEYS_UNTIL_P1_6 and nowhere else.
+ * apps/api/src/common/screens.spec.ts with no exception since P1-6.
  *
  * Imports only from `./permissions`, never the reverse: that file must stay
  * import-free (apps/copilot/tests/catalog.spec.ts reads it by relative path).
@@ -90,11 +89,11 @@ const SCREEN_ENTRIES = [
     labelEn: 'Opportunities',
   },
   // CRM Step 5: the team's follow-up tasks (the inbox shows only the caller's
-  // own, due today or late). Shares the customers' key until P1-6.
+  // own, due today or late).
   {
     href: '/tasks',
     group: 'sales',
-    view: PERMISSIONS.CUSTOMER_READ,
+    view: PERMISSIONS.TASK_READ,
     labelAr: 'مهام المتابعة',
     labelEn: 'Follow-up tasks',
   },
@@ -121,11 +120,10 @@ const SCREEN_ENTRIES = [
     labelAr: 'المشاريع',
     labelEn: 'Projects',
   },
-  // Shares procurement's key until P1-6.
   {
     href: '/requisitions',
     group: 'delivery',
-    view: PERMISSIONS.PROCUREMENT_READ,
+    view: PERMISSIONS.REQUISITION_READ,
     labelAr: 'طلبات الشراء',
     labelEn: 'Requisitions',
   },
@@ -175,18 +173,17 @@ const SCREEN_ENTRIES = [
     labelAr: 'مستحقات الموردين',
     labelEn: 'Vendor payables',
   },
-  // The three accounting screens share the ledger's key until P1-6.
   {
     href: '/finance',
     group: 'finance',
-    view: PERMISSIONS.LEDGER_READ,
+    view: PERMISSIONS.REPORT_READ,
     labelAr: 'التقارير المالية',
     labelEn: 'Finance reports',
   },
   {
     href: '/statements',
     group: 'finance',
-    view: PERMISSIONS.LEDGER_READ,
+    view: PERMISSIONS.STATEMENT_READ,
     labelAr: 'القوائم المالية',
     labelEn: 'Financial statements',
   },
@@ -237,20 +234,17 @@ export interface Screen extends ScreenEntry {
 export const SCREENS: readonly Screen[] = SCREEN_ENTRIES;
 
 /**
- * The only view keys allowed to open more than one screen, each with exactly
- * the screens it opens today. ADR-02 task 4 (P1-6) splits them —
- * `crm.task.read` takes /tasks, `scm.requisition.read` /requisitions,
- * `finance.report.read` /finance and `finance.statement.read` /statements —
- * and empties this object; the registry test then holds every view key to a
- * single screen. Do not add to it.
+ * View keys allowed to open more than one screen: none. Empty since ADR-02
+ * task 4 (P1-6) split the three keys that did — `crm.task.read` took /tasks
+ * off `crm.customer.read`, `scm.requisition.read` /requisitions off
+ * `scm.procurement.read`, and `finance.report.read` /finance and
+ * `finance.statement.read` /statements off `finance.ledger.read`. It must stay
+ * empty (hard rule 5: one view key per screen), and the registry test checks
+ * that it is and that no key opens two screens. Do not add to it.
  */
 export const SHARED_VIEW_KEYS_UNTIL_P1_6: Readonly<
   Partial<Record<PermissionKey, readonly ScreenHref[]>>
-> = {
-  'crm.customer.read': ['/customers', '/tasks'],
-  'scm.procurement.read': ['/requisitions', '/procurement'],
-  'finance.ledger.read': ['/finance', '/statements', '/ledger'],
-};
+> = {};
 
 /**
  * The screens a holder of `permissions` may open, in registry order: those with

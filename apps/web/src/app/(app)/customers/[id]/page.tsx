@@ -107,7 +107,7 @@ interface Overview {
   contracts?: ContractRow[];
   projects?: ProjectRow[];
   claims?: ClaimRow[];
-  /** CRM Step 5: the latest log entries and the OPEN follow-up tasks. */
+  /** CRM Step 5: the latest log entries and the OPEN follow-up tasks (absent without crm.task.read). */
   activities?: ActivityRow[];
   tasks?: TaskRow[];
 }
@@ -218,7 +218,8 @@ export default function CustomerPage() {
   const tabs = [
     { key: 'contacts', label: t('cust.tab.contacts'), count: data.counts.contacts },
     { key: 'activities', label: t('cust.tab.activities'), count: data.counts.activities },
-    { key: 'tasks', label: t('cust.tab.tasks'), count: data.counts.tasks },
+    // The server sends the open tasks only to a holder of crm.task.read (P1-6).
+    ...(data.tasks ? [{ key: 'tasks', label: t('cust.tab.tasks'), count: data.counts.tasks }] : []),
     ...(data.opportunities ? [{ key: 'opportunities', label: t('cust.tab.opportunities'), count: data.counts.opportunities }] : []),
     ...(data.proposals ? [{ key: 'proposals', label: t('cust.tab.proposals'), count: data.counts.proposals }] : []),
     ...(data.contracts ? [{ key: 'contracts', label: t('cust.tab.contracts'), count: data.counts.contracts }] : []),

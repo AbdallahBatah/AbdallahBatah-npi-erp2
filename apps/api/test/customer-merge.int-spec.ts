@@ -367,6 +367,9 @@ describe('customer merge', () => {
     expect(o.proposals).toBeUndefined();
     expect(o.projects).toBeUndefined();
     expect(o.claims).toBeUndefined();
+    // No crm.task.read either (P1-6) → no open-tasks section and no task count.
+    expect(o.tasks).toBeUndefined();
+    expect(o.counts.tasks).toBeUndefined();
     const bare = (await customers.overview({ ...USER_M, permissions: ['crm.customer.read'] } as AuthUser, survivor.id)) as Record<string, any>;
     expect(bare.opportunities).toBeUndefined();
     expect(bare.contacts).toHaveLength(2);

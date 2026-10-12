@@ -943,7 +943,8 @@ describe('summarizePlanAr', () => {
     const s = summarizePlanAr(plan, pack());
     expect(s.npi).toHaveLength(13);
     expect(s.npi[0]).toBe('إنشاء القسم «المبيعات» (SALES)');
-    expect(s.npi).toContain('إنشاء الدور «مدير المشاريع» — 13 صلاحية');
+    // The epc pack's pm role: 13 keys, 15 since NPI's P1-6 split (crm.task.read, scm.requisition.read).
+    expect(s.npi).toContain('إنشاء الدور «مدير المشاريع» — 15 صلاحية');
     expect(s.npi).toContain('إنشاء الصنف MOD-600 «لوح شمسي 600 واط»');
     expect(s.already).toEqual(['الدور «مدير النظام»']);
     expect(s.blocked[1]).toBe(

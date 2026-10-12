@@ -55,7 +55,7 @@ describe('screen registry', () => {
     }
   });
 
-  it('gives no view key to two screens, except exactly the allow-list P1-6 empties', () => {
+  it('gives no view key to two screens, with no exception since P1-6', () => {
     const screensByKey = new Map<string, string[]>();
     for (const s of SCREENS) {
       if (s.view !== undefined)
@@ -64,8 +64,9 @@ describe('screen registry', () => {
     const shared = Object.fromEntries(
       [...screensByKey].filter(([, hrefs]) => hrefs.length > 1),
     );
-    // Both sides become {} together once the three keys are split.
-    expect(shared).toEqual(SHARED_VIEW_KEYS_UNTIL_P1_6);
+    expect(shared).toEqual({});
+    // The allow-list P1-4 introduced is empty and must stay so (ADR-02 hard rule 5).
+    expect(SHARED_VIEW_KEYS_UNTIL_P1_6).toEqual({});
   });
 });
 
@@ -82,13 +83,13 @@ describe('visibleScreens', () => {
     const keys = Object.freeze([
       'admin.user.manage',
       'no.such.key',
-      'crm.lead.read',
       'finance.ledger.read',
+      'crm.lead.read',
+      'finance.statement.read',
     ]);
     expect(hrefsOf(visibleScreens(keys))).toEqual([
       ...GENERAL,
       '/leads',
-      '/finance',
       '/statements',
       '/ledger',
       '/admin',
@@ -99,6 +100,64 @@ describe('visibleScreens', () => {
     expect(
       hrefsOf(visibleScreens(['scm.procurement.write', 'scm.procurement.approve'])),
     ).toEqual(GENERAL);
+  });
+});
+
+// ADR-02 task 4 (P1-6): the three keys that opened several screens were split.
+// Migration 0030 grants each new key to every role holding its old key, so the
+// "old + granted" sets below are what every such role holds after deploy.
+describe('the split of the three shared view keys (P1-6)', () => {
+  const SPLIT: ReadonlyArray<{ old: string; granted: string[]; before: string[] }> = [
+    { old: 'crm.customer.read', granted: ['crm.task.read'], before: ['/customers', '/tasks'] },
+    {
+      old: 'scm.procurement.read',
+      granted: ['scm.requisition.read'],
+      before: ['/requisitions', '/procurement'],
+    },
+    {
+      old: 'finance.ledger.read',
+      granted: ['finance.report.read', 'finance.statement.read'],
+      before: ['/finance', '/statements', '/ledger'],
+    },
+  ];
+
+  it.each([
+    ['crm.customer.read', '/customers'],
+    ['crm.task.read', '/tasks'],
+    ['scm.procurement.read', '/procurement'],
+    ['scm.requisition.read', '/requisitions'],
+    ['finance.ledger.read', '/ledger'],
+    ['finance.report.read', '/finance'],
+    ['finance.statement.read', '/statements'],
+  ])('%s alone opens %s and nothing else', (key, href) => {
+    expect(hrefsOf(visibleScreens([key]))).toEqual([...GENERAL, href]);
+  });
+
+  it.each(SPLIT)(
+    'a role holding $old and what the migration grants sees exactly what $old opened before',
+    ({ old, granted, before }) => {
+      expect(hrefsOf(visibleScreens([old, ...granted]))).toEqual([...GENERAL, ...before]);
+    },
+  );
+
+  it('keeps the old keys and adds the four new ones as view keys of their screens', () => {
+    for (const { old, granted } of SPLIT) {
+      expect(ALL_PERMISSIONS).toContain(old);
+      for (const k of granted) expect(ALL_PERMISSIONS).toContain(k);
+    }
+    const viewRow = (key: string) => PERMISSION_CATALOG.find((p) => p.key === key);
+    expect(viewRow('crm.task.read')).toMatchObject({ action: 'view', screen: '/tasks' });
+    expect(viewRow('scm.requisition.read')).toMatchObject({ action: 'view', screen: '/requisitions' });
+    expect(viewRow('finance.report.read')).toMatchObject({ action: 'view', screen: '/finance' });
+    expect(viewRow('finance.statement.read')).toMatchObject({ action: 'view', screen: '/statements' });
+    expect(viewRow('finance.ledger.read')).toMatchObject({
+      action: 'view',
+      screen: '/ledger',
+      labelAr: 'عرض دفتر الأستاذ',
+      labelEn: 'View general ledger',
+      screenAr: 'دفتر الأستاذ',
+      screenEn: 'General ledger',
+    });
   });
 });
 
@@ -159,9 +218,7 @@ describe('PERMISSION_CATALOG against the registry', () => {
       if (s.view === undefined) continue;
       const row = PERMISSION_CATALOG.find((p) => p.key === s.view);
       expect(row?.action).toBe('view');
-      const sharedWith = SHARED_VIEW_KEYS_UNTIL_P1_6[s.view];
-      if (sharedWith) expect(sharedWith).toContain(row?.screen);
-      else expect(row?.screen).toBe(s.href);
+      expect(row?.screen).toBe(s.href);
     }
   });
 

@@ -47,7 +47,7 @@ export default function DashboardPage() {
   // A user without the permission must never see the tile at all: firing the
   // call anyway and rendering the 403 as "—" makes the system look broken.
   const canCrm = can('crm.lead.read'); // /reference/dashboard
-  const canTasks = can('crm.customer.read'); // /tasks/summary — independent of canCrm
+  const canTasks = can('crm.task.read'); // /tasks/summary — independent of canCrm
   const canFin = can('finance.invoice.read'); // /finance/summary
   const canOps = can('fsm.workorder.read'); // work-order summary
 

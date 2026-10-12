@@ -374,10 +374,10 @@ describe('a tenant cannot reach another tenant by id', () => {
     });
     it('the dashboard summary never counts the neighbour’s tasks', async () => {
       // the neighbour's task is open and long overdue: it counts for its own assignee ...
-      const own = await followUpTasks.mySummary({ userId: B.userId, organizationId: B.organizationId, permissions: ['crm.customer.read'] } as unknown as AuthUser);
+      const own = await followUpTasks.mySummary({ userId: B.userId, organizationId: B.organizationId, permissions: ['crm.task.read'] } as unknown as AuthUser);
       expect(own.overdue).toBe(1);
       // ... and not for anyone asking inside the attacker's organization, even with the neighbour's user id
-      const crossed = await followUpTasks.mySummary({ userId: B.userId, organizationId: ATTACKER.organizationId, permissions: ['crm.customer.read'] } as unknown as AuthUser);
+      const crossed = await followUpTasks.mySummary({ userId: B.userId, organizationId: ATTACKER.organizationId, permissions: ['crm.task.read'] } as unknown as AuthUser);
       expect(crossed).toEqual({ dueToday: 0, overdue: 0 });
     });
     it('cannot attach a file to the neighbour’s log entry (404 from the entity check)', async () => {

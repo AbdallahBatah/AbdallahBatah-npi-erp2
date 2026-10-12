@@ -16,17 +16,19 @@ const prisma = new PrismaClient();
 // Full permission surface for the current slice. Kept in sync with
 // packages/shared/src/permissions.ts (the API imports it from there).
 const ALL_PERMISSIONS = [
-  'crm.customer.read', 'crm.customer.write', 'crm.customer.merge',
+  'crm.customer.read', 'crm.customer.write', 'crm.customer.merge', 'crm.task.read',
   'crm.lead.read', 'crm.lead.write',
   'crm.opportunity.read', 'crm.opportunity.write',
   'commercial.item.read', 'commercial.item.write',
   'commercial.proposal.read', 'commercial.proposal.write', 'commercial.proposal.approve',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.report.read', 'finance.statement.read',
   'finance.costs.view',
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
   'projects.project.read', 'projects.project.write', 'projects.project.approve',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve',
+  'scm.requisition.read', 'scm.requisition.write',
   'assets.serialunit.read',
   'fsm.workorder.read', 'fsm.workorder.write',
   'admin.org.manage', 'admin.user.manage', 'admin.audit.read', 'admin.approval.manage',
@@ -34,14 +36,21 @@ const ALL_PERMISSIONS = [
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
+// P1-6 (migration 0030_split_view_permissions): every array here holds
+// crm.task.read wherever it holds crm.customer.read, scm.requisition.read
+// wherever scm.procurement.read, and finance.report.read with
+// finance.statement.read wherever finance.ledger.read — the view keys split off
+// for /tasks, /requisitions, /finance and /statements. Keep the rule when
+// editing a role, and in madar-scratch-orgs.ts and Madar's six packs.
 const SALES_PERMISSIONS = [
-  'crm.customer.read', 'crm.customer.write',
+  'crm.customer.read', 'crm.customer.write', 'crm.task.read',
   'crm.lead.read', 'crm.lead.write',
   'crm.opportunity.read', 'crm.opportunity.write',
   'commercial.item.read',
   'commercial.proposal.read', 'commercial.proposal.write',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.report.read', 'finance.statement.read',
   'finance.costs.view',
   'platform.attachment.read', 'platform.attachment.write',
 ];
@@ -49,11 +58,13 @@ const SALES_PERMISSIONS = [
 // المحاسب: كل المال + قراءة سياقه (عقود/عملاء/مشتريات لفواتير الموردين)
 const ACCOUNTANT_PERMISSIONS = [
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.report.read', 'finance.statement.read',
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
   'finance.costs.view',
-  'crm.customer.read',
+  'crm.customer.read', 'crm.task.read',
   'commercial.contract.read', 'commercial.proposal.read', 'commercial.item.read',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve',
+  'scm.requisition.read', 'scm.requisition.write',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
@@ -61,10 +72,11 @@ const ACCOUNTANT_PERMISSIONS = [
 const PM_PERMISSIONS = [
   'projects.project.read', 'projects.project.write', 'projects.project.approve',
   'finance.costs.view',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve',
+  'scm.requisition.read', 'scm.requisition.write',
   'assets.serialunit.read',
   'commercial.contract.read', 'commercial.item.read',
-  'crm.customer.read',
+  'crm.customer.read', 'crm.task.read',
   'fsm.workorder.read',
   'finance.invoice.read',
   'platform.attachment.read', 'platform.attachment.write',
@@ -91,7 +103,7 @@ const SITE_ENGINEER_PERMISSIONS = [
   // M4: the exact case the requisition/procurement split exists for — a site
   // engineer may ask the company to buy a cable, and must not be able to
   // approve the purchase order that buys it.
-  'scm.procurement.read', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.requisition.read', 'scm.requisition.write',
   'commercial.item.read',
   'projects.project.read',
   'platform.attachment.read', 'platform.attachment.write',

@@ -12,7 +12,7 @@ export class ReportsController {
 
   /** FIN-05: IFRS-15 percentage-of-completion per contract. */
   @Get('poc')
-  @RequirePermissions(PERMISSIONS.LEDGER_READ)
+  @RequirePermissions(PERMISSIONS.REPORT_READ)
   poc(@CurrentUser() user: AuthUser) {
     return this.reports.poc(user);
   }
@@ -26,7 +26,7 @@ export class ReportsController {
 
   /** FIN-03: box-style VAT return for a period (defaults to current quarter). */
   @Get('vat-return')
-  @RequirePermissions(PERMISSIONS.LEDGER_READ)
+  @RequirePermissions(PERMISSIONS.REPORT_READ)
   vatReturn(
     @CurrentUser() user: AuthUser,
     @Query('from') from?: string,
@@ -37,7 +37,7 @@ export class ReportsController {
 
   /** FIN-07: estimate-vs-billed contract profitability. */
   @Get('profitability')
-  @RequirePermissions(PERMISSIONS.LEDGER_READ)
+  @RequirePermissions(PERMISSIONS.REPORT_READ)
   profitability(@CurrentUser() user: AuthUser) {
     return this.reports.profitability(user);
   }
@@ -55,7 +55,7 @@ export class ReportsController {
 
   /** FIN-01: profit and loss for a period. */
   @Get('income-statement')
-  @RequirePermissions(PERMISSIONS.LEDGER_READ)
+  @RequirePermissions(PERMISSIONS.STATEMENT_READ)
   incomeStatement(
     @CurrentUser() user: AuthUser,
     @Query('from') from?: string,
@@ -66,7 +66,7 @@ export class ReportsController {
 
   /** FIN-01: financial position at a date. */
   @Get('balance-sheet')
-  @RequirePermissions(PERMISSIONS.LEDGER_READ)
+  @RequirePermissions(PERMISSIONS.STATEMENT_READ)
   balanceSheet(@CurrentUser() user: AuthUser, @Query('asOf') asOf?: string) {
     return this.reports.balanceSheet(user, asOf);
   }

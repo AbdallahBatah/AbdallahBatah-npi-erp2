@@ -113,7 +113,7 @@ describe('profile packs on disk', () => {
     expect(packs.map((p) => p.key)).toEqual([...PROFILE_KEYS]);
   });
 
-  it.each(keys)('pack "%s": admin role holds exactly NPI\'s 35 keys', (key) => {
+  it.each(keys)('pack "%s": admin role holds exactly NPI\'s catalogue keys', (key) => {
     const pack = loadProfilePack(key);
     const adminPermissions = [...pack.rolePermissionSets.admin.permissions].sort();
     const allKeys = [...PERMISSION_CATALOG.map((p) => p.key)].sort();
@@ -157,11 +157,15 @@ describe('profile packs on disk', () => {
 describe('G-M2-1: packs only name permissions NPI\'s live catalog serves', () => {
   // `02` §7 said NPI's permission surface had 35 keys. CRM phase 1 (merged into
   // this branch at 26acb7c) added five — crm.customer.merge, commercial.proposal.approve,
-  // projects.project.approve, scm.procurement.approve, finance.costs.view — so
-  // `PERMISSION_CATALOG` (packages/shared/src/permissions.ts) now lists 40, and
-  // every pack's admin role was topped up to match (2026-10-10).
-  it('NPI\'s permission catalog has exactly 40 keys', () => {
-    expect(PERMISSION_CATALOG).toHaveLength(40);
+  // projects.project.approve, scm.procurement.approve, finance.costs.view — and every
+  // pack's admin role was topped up to match (2026-10-10). NPI's ADR-02 task 4 (P1-6,
+  // 2026-10-12) split four view keys off three shared ones — crm.task.read,
+  // scm.requisition.read, finance.report.read, finance.statement.read — so
+  // `PERMISSION_CATALOG` (packages/shared/src/permissions.ts) now lists 44. Every
+  // pack's admin role holds all 44, and every other pack role gained each new key
+  // where it holds the old one, the rule of NPI's migration 0030.
+  it('NPI\'s permission catalog has exactly 44 keys', () => {
+    expect(PERMISSION_CATALOG).toHaveLength(44);
   });
 
   const npiKeys = permissionKeysOf(readPermissionCatalog(PERMISSION_CATALOG));

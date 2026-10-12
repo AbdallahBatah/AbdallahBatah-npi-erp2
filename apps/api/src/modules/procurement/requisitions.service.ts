@@ -695,9 +695,3 @@ export class RequisitionsService implements OnModuleInit {
     if (!project) throw new NotFoundException('Project not found');
   }
 }
-
-/** Re-exported so the controller can declare permissions without a second import. */
-export const REQUISITION_PERMISSIONS = {
-  read: PERMISSIONS.PROCUREMENT_READ,
-  write: PERMISSIONS.PROCUREMENT_WRITE,
-} as const;

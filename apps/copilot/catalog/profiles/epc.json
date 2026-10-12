@@ -26,16 +26,16 @@
       "nameAr": "مدير النظام",
       "nameEn": "Administrator",
       "permissions": [
-        "crm.customer.read", "crm.customer.write",
+        "crm.customer.read", "crm.customer.write", "crm.task.read",
         "crm.lead.read", "crm.lead.write",
         "crm.opportunity.read", "crm.opportunity.write",
         "commercial.item.read", "commercial.item.write",
         "commercial.proposal.read", "commercial.proposal.write",
         "commercial.contract.read", "commercial.contract.write",
-        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read", "finance.report.read", "finance.statement.read",
         "finance.payment.read", "finance.payment.write", "finance.period.manage",
         "projects.project.read", "projects.project.write",
-        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.read", "scm.requisition.write",
         "admin.department.manage", "admin.delegation.manage", "admin.workflow.manage",
         "assets.serialunit.read",
         "fsm.workorder.read", "fsm.workorder.write",
@@ -48,13 +48,13 @@
       "nameAr": "مندوب مبيعات",
       "nameEn": "Sales Representative",
       "permissions": [
-        "crm.customer.read", "crm.customer.write",
+        "crm.customer.read", "crm.customer.write", "crm.task.read",
         "crm.lead.read", "crm.lead.write",
         "crm.opportunity.read", "crm.opportunity.write",
         "commercial.item.read",
         "commercial.proposal.read", "commercial.proposal.write",
         "commercial.contract.read", "commercial.contract.write",
-        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read", "finance.report.read", "finance.statement.read",
         "platform.attachment.read", "platform.attachment.write"
       ]
     },
@@ -63,10 +63,10 @@
       "nameEn": "Project Manager",
       "permissions": [
         "projects.project.read", "projects.project.write",
-        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.read", "scm.requisition.write",
         "assets.serialunit.read",
         "commercial.contract.read", "commercial.item.read",
-        "crm.customer.read",
+        "crm.customer.read", "crm.task.read",
         "fsm.workorder.read",
         "finance.invoice.read",
         "platform.attachment.read", "platform.attachment.write"
@@ -76,11 +76,11 @@
       "nameAr": "محاسب",
       "nameEn": "Accountant",
       "permissions": [
-        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read",
+        "finance.invoice.read", "finance.invoice.write", "finance.ledger.read", "finance.report.read", "finance.statement.read",
         "finance.payment.read", "finance.payment.write", "finance.period.manage",
-        "crm.customer.read",
+        "crm.customer.read", "crm.task.read",
         "commercial.contract.read", "commercial.proposal.read", "commercial.item.read",
-        "scm.procurement.read", "scm.procurement.write", "scm.requisition.write",
+        "scm.procurement.read", "scm.procurement.write", "scm.requisition.read", "scm.requisition.write",
         "platform.attachment.read", "platform.attachment.write"
       ]
     },
@@ -90,7 +90,7 @@
       "permissions": [
         "fsm.workorder.read", "fsm.workorder.write",
         "assets.serialunit.read",
-        "scm.procurement.read", "scm.requisition.write",
+        "scm.procurement.read", "scm.requisition.read", "scm.requisition.write",
         "commercial.item.read",
         "projects.project.read",
         "platform.attachment.read", "platform.attachment.write"
