@@ -230,11 +230,17 @@ test.describe('home screen (T-08)', () => {
     }
   });
 
-  test('apps/web nav.ts and messages.ts carry the Madar copilot entry (static check — apps/web is not started here)', () => {
+  test('the screen registry, apps/web nav.ts and messages.ts carry the Madar copilot entry (static check — apps/web is not started here)', () => {
+    // Since ADR-02 task 2 (NPI P1-4, 2026-10-12) the sidebar screens live in
+    // the shared screen registry and nav.ts only adds the icon and the i18n
+    // key per href — so the link is asserted where each half of it now lives.
+    const screensPath = path.resolve(__dirname, '..', '..', '..', 'packages', 'shared', 'src', 'screens.ts');
+    const screensSrc = readFileSync(screensPath, 'utf8');
+    expect(screensSrc).toMatch(/href:\s*'\/copilot'/);
+
     const navPath = path.resolve(__dirname, '..', '..', '..', 'apps', 'web', 'src', 'lib', 'nav.ts');
     const navSrc = readFileSync(navPath, 'utf8');
-    expect(navSrc).toMatch(/href:\s*'\/copilot'/);
-    expect(navSrc).toMatch(/key:\s*'nav\.madar'/);
+    expect(navSrc).toMatch(/'\/copilot':\s*\{\s*key:\s*'nav\.madar'/);
 
     const messagesPath = path.resolve(__dirname, '..', '..', '..', 'apps', 'web', 'src', 'lib', 'messages.ts');
     const messagesSrc = readFileSync(messagesPath, 'utf8');

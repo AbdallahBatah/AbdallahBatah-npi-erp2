@@ -38,14 +38,16 @@ const ACCOUNTS = [
  * permission list from /auth/me and predict 200-or-403 from that. This asserts
  * the guard wiring still matches the declaration, and it keeps passing when
  * the seed's permission sets change — which they do, every time a package
- * adds a screen.
+ * adds a screen. A route may list several keys: holding ANY one of them is
+ * enough (the pick lists of ADR-02 §3-3, any-of on the server since P1-5).
  */
 const GUARDED_ROUTES = [
   ['/leads', 'crm.lead.read'],
   ['/customers', 'crm.customer.read'],
   ['/opportunities', 'crm.opportunity.read'],
-  ['/tasks', 'crm.customer.read'],
-  ['/tasks/summary', 'crm.customer.read'],
+  // ADR-02 task 4 (P1-6): one view key per screen — /tasks has its own.
+  ['/tasks', 'crm.task.read'],
+  ['/tasks/summary', 'crm.task.read'],
   ['/tasks/assignees', 'crm.customer.write'],
   ['/reference/dashboard', 'crm.lead.read'],
   ['/proposals', 'commercial.proposal.read'],
@@ -54,11 +56,16 @@ const GUARDED_ROUTES = [
   ['/finance/invoices', 'finance.invoice.read'],
   ['/finance/summary', 'finance.invoice.read'],
   ['/finance/reports/trial-balance', 'finance.ledger.read'],
-  ['/finance/reports/income-statement', 'finance.ledger.read'],
-  ['/finance/reports/balance-sheet', 'finance.ledger.read'],
-  ['/finance/reports/vat-return', 'finance.ledger.read'],
+  // P1-6: the statements and the reports split off the ledger key.
+  ['/finance/reports/income-statement', 'finance.statement.read'],
+  ['/finance/reports/balance-sheet', 'finance.statement.read'],
+  ['/finance/fiscal/years', 'finance.statement.read'],
+  ['/finance/reports/vat-return', 'finance.report.read'],
+  ['/finance/reports/poc', 'finance.report.read'],
   ['/finance/payables/outstanding', 'finance.payment.read'],
   ['/projects', 'projects.project.read'],
+  // P1-6: the requisitions screen has its own view key.
+  ['/requisitions', 'scm.requisition.read'],
   ['/procurement/vendors', 'scm.procurement.read'],
   ['/procurement/purchase-orders', 'scm.procurement.read'],
   ['/procurement/serial-units', 'assets.serialunit.read'],
@@ -67,6 +74,12 @@ const GUARDED_ROUTES = [
   ['/admin/users', 'admin.user.manage'],
   ['/admin/roles', 'admin.user.manage'],
   ['/admin/audit', 'admin.audit.read'],
+  // P1-5: the pick lists, any one key of the list's LOOKUP_ACCESS row.
+  ['/reference/lookups/items', ['commercial.item.read', 'scm.requisition.write', 'scm.procurement.write', 'commercial.proposal.write', 'fsm.workorder.write']],
+  ['/reference/lookups/projects', ['projects.project.read', 'scm.procurement.write']],
+  ['/reference/lookups/customers', ['crm.customer.read', 'crm.opportunity.write']],
+  ['/reference/lookups/vendors', ['scm.procurement.read', 'projects.project.write']],
+  ['/reference/lookups/locations', ['scm.procurement.read', 'assets.serialunit.read', 'fsm.workorder.write']],
 ];
 
 // ── tiny harness ───────────────────────────────────────────────────────────
@@ -207,11 +220,13 @@ async function main() {
 
     const mismatches = [];
     for (const [path, perm] of GUARDED_ROUTES) {
-      const shouldPass = held.includes(perm);
+      const needs = Array.isArray(perm) ? perm : [perm];
+      const shouldPass = needs.some((p) => held.includes(p));
       const r = await call(path, { token });
       const allowed = r.status !== 403;
       if (allowed !== shouldPass) {
-        mismatches.push(`${path} (needs ${perm}) → ${r.status}, expected ${shouldPass ? 'not 403' : '403'}`);
+        const label = needs.length === 1 ? needs[0] : `any of ${needs.join(' | ')}`;
+        mismatches.push(`${path} (needs ${label}) → ${r.status}, expected ${shouldPass ? 'not 403' : '403'}`);
       }
     }
     await check(
