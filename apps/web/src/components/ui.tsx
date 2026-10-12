@@ -478,6 +478,7 @@ export function Modal({
   onClose,
   children,
   dirty,
+  wide,
 }: {
   open: boolean;
   title: string;
@@ -485,6 +486,8 @@ export function Modal({
   children: ReactNode;
   /** When true, closing (outside-click, ✕, Esc) asks before discarding input. */
   dirty?: boolean;
+  /** A wider panel, for an editor with a side panel (the role editor's sidebar preview). */
+  wide?: boolean;
 }) {
   const { t } = useI18n();
   const [confirmClose, setConfirmClose] = useState(false);
@@ -513,7 +516,7 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="card w-full max-w-2xl border-slate-200 p-6 shadow-2xl outline-none"
+        className={`card w-full ${wide ? 'max-w-5xl' : 'max-w-2xl'} border-slate-200 p-6 shadow-2xl outline-none`}
       >
         <div className="mb-5 flex items-center justify-between">
           <h2 id={titleId} className="text-lg font-bold text-slate-900">

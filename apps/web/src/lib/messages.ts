@@ -667,7 +667,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'adm.role.grid.approve': 'اعتماد',
     'adm.role.gridHint': 'عمود «إنشاء وتعديل» مفتاح واحد يجمع الإنشاء والتعديل معاً؛ الخلية الفارغة تعني أن الشاشة لا تملك هذه الصلاحية.',
     'adm.role.special': 'صلاحيات خاصة',
-    'adm.role.specialHint': 'صلاحيات لا تنتمي لعمود الشبكة: التكاليف والهوامش، المرفقات، وإدارة المنشأة والنظام.',
+    'adm.role.specialHint': 'صلاحيات لا تخص شاشة واحدة: التكاليف والهوامش، المرفقات، وضبط مصفوفة الاعتماد.',
     'adm.user.primaryRole': 'الدور الأساسي',
     'adm.user.rolePlaceholder': '— اختر الدور —',
     'adm.user.roleRequired': 'اختر دوراً للمستخدم',
@@ -1241,6 +1241,17 @@ export const messages: Record<Locale, Record<string, string>> = {
     'apr.blocked.noPermission':
       'لا يمكنك اعتماده — صلاحية اعتماد هذا المستند غير مفعّلة لحسابك أو لمن فوّضك. يعتمده زميل آخر في الدور نفسه.',
     'inbox.blocked.noPermission': 'صلاحية اعتماد هذا المستند غير مفعّلة لحسابك أو لمن فوّضك.',
+    // ADR-02 §3-6 (P1-9): the role editor's rows follow the sidebar, with its preview and the separation-of-duties warning.
+    'adm.role.grid.everyone': 'للجميع',
+    'adm.role.grid.needsView': 'فعّل «عرض» لهذه الشاشة أولاً',
+    'adm.role.grid.viewHint': 'إطفاء «عرض» يطفئ بقية الصف: لا إنشاء ولا اعتماد على شاشة لا تُفتح.',
+    'adm.role.preview.title': 'معاينة القائمة الجانبية',
+    'adm.role.preview.count': 'سيرى {n} شاشة من {total}',
+    'adm.role.preview.hint': 'ما يظهر لحامل هذا الدور وحده، قبل أدواره الإضافية واستثناءاته.',
+    'adm.role.sod.title': 'تعارض في فصل المهام',
+    'adm.role.sod.hint':
+      'هذا الدور يتيح لشخص واحد أن يُتمّ الدورة وحده. النظام لا يمنع هذا الجمع، لكنه يطلب إقرارك ويسجّله في سجل التدقيق. والضابط الأقوى قاعدة اعتماد في المصفوفة.',
+    'adm.role.sod.ack': 'أقرّ بهذا التعارض',
   },
   en: {
     'app.name': 'NPI Solar ERP',
@@ -1904,7 +1915,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'adm.role.grid.approve': 'Approve',
     'adm.role.gridHint': 'The "Create & edit" column is a single key covering both creating and editing; an empty cell means the screen has no such permission.',
     'adm.role.special': 'Special permissions',
-    'adm.role.specialHint': 'Permissions that do not belong to a grid column: costs & margins, attachments, and organization / system administration.',
+    'adm.role.specialHint': 'Permissions that belong to no single screen: costs & margins, attachments, and the approval matrix.',
     'adm.user.primaryRole': 'Primary role',
     'adm.user.rolePlaceholder': '— choose a role —',
     'adm.user.roleRequired': 'Choose a role for the user',
@@ -2483,5 +2494,17 @@ export const messages: Record<Locale, Record<string, string>> = {
       'You cannot approve this — the approve permission for this document is not active for your account, or for the person who delegated to you. A colleague in the same role signs.',
     'inbox.blocked.noPermission':
       'The approve permission for this document is not active for your account, or for the person who delegated to you.',
+    // ADR-02 §3-6 (P1-9): the role editor's rows follow the sidebar, with its preview and the separation-of-duties warning.
+    'adm.role.grid.everyone': 'Everyone',
+    'adm.role.grid.needsView': 'Turn on View for this screen first',
+    'adm.role.grid.viewHint':
+      'Turning View off turns the rest of the row off: nothing is created or approved on a screen that does not open.',
+    'adm.role.preview.title': 'Sidebar preview',
+    'adm.role.preview.count': 'Will see {n} of {total} screens',
+    'adm.role.preview.hint': 'What a holder of this role alone sees, before their extra roles and exceptions.',
+    'adm.role.sod.title': 'Separation-of-duties conflict',
+    'adm.role.sod.hint':
+      'This role lets one person complete the cycle alone. The system does not forbid it, but asks you to acknowledge it and records that in the audit log. An approval rule in the matrix is the stronger control.',
+    'adm.role.sod.ack': 'I acknowledge this conflict',
   },
 };

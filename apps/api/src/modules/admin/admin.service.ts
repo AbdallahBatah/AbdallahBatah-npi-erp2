@@ -9,7 +9,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { EffectivePermissionsService } from '../../common/effective-permissions.service';
 import { holdsEffectively } from '../../common/permission-predicates';
-import { ALL_PERMISSIONS, PERMISSIONS, type PermissionEffect } from '@npi/shared';
+import {
+  ALL_PERMISSIONS,
+  APPROVAL_DOCUMENTS,
+  PERMISSIONS,
+  sodConflicts,
+  type PermissionEffect,
+} from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 import {
   CreateRoleDto,
@@ -72,6 +78,21 @@ interface OverrideRow {
 
 const byPermission = (a: { permission: string }, b: { permission: string }) =>
   a.permission.localeCompare(b.permission, 'en');
+
+/** A pair of SOD_CONFLICTS as the audit row carries it. */
+interface SodPair {
+  a: string;
+  b: string;
+}
+
+/** What a role save's audit row records about separation of duties. */
+interface SodAudit {
+  sodConflicts: SodPair[];
+  sodAcknowledged: boolean;
+}
+
+/** The keys the approval matrix signs with (APPROVAL_DOCUMENTS), for hard rule 8. */
+const APPROVE_KEYS: ReadonlySet<string> = new Set(APPROVAL_DOCUMENTS.map((d) => d.permission));
 
 /**
  * User & role administration. The one invariant everything here protects:
@@ -469,25 +490,39 @@ export class AdminService {
     if (exists) throw new BadRequestException('Role key already in use');
     const nameAr = dto.nameAr.trim();
     const nameEn = (dto.nameEn ?? '').trim() || nameAr;
-    const role = await this.prisma.role.create({
-      data: {
-        organizationId: user.organizationId,
-        key: dto.key,
-        nameAr,
-        nameEn,
-        permissions: this.validatePermissions(dto.permissions),
-      },
-      include: { _count: { select: { users: true } } },
+    const permissions = this.validatePermissions(dto.permissions);
+    const sod = this.sodForAudit(permissions, dto.acknowledgeSod);
+
+    // The role and its audit row commit together (hard rule 3).
+    return this.prisma.$transaction(async (tx) => {
+      const role = await tx.role.create({
+        data: {
+          organizationId: user.organizationId,
+          key: dto.key,
+          nameAr,
+          nameEn,
+          permissions,
+        },
+        include: { _count: { select: { users: true } } },
+      });
+      await this.audit.record(
+        {
+          organizationId: user.organizationId,
+          actorId: user.userId,
+          entityType: 'Role',
+          entityId: role.id,
+          action: 'CREATE',
+          after: {
+            key: dto.key,
+            nameAr,
+            permissions: role.permissions,
+            ...(sod.sodConflicts.length ? sod : {}),
+          },
+        },
+        tx,
+      );
+      return role;
     });
-    await this.audit.record({
-      organizationId: user.organizationId,
-      actorId: user.userId,
-      entityType: 'Role',
-      entityId: role.id,
-      action: 'CREATE',
-      after: { key: dto.key, nameAr, permissions: role.permissions },
-    });
-    return role;
   }
 
   async updateRole(user: AuthUser, id: string, dto: UpdateRoleDto) {
@@ -499,10 +534,18 @@ export class AdminService {
       !!permissions &&
       role.permissions.includes(PERMISSIONS.USER_MANAGE) &&
       !permissions.includes(PERMISSIONS.USER_MANAGE);
+    // The approve keys this save takes off the role (hard rule 8).
+    const removedApproveKeys = permissions
+      ? role.permissions.filter((k) => APPROVE_KEYS.has(k) && !permissions.includes(k))
+      : [];
+    // A rename saves no permission set, so it records nothing about one.
+    const sod = permissions ? this.sodForAudit(permissions, dto.acknowledgeSod) : null;
 
-    // The role, the lockout post-condition and the audit row commit together.
+    // The approval-seat guard, the role, the lockout post-condition and the
+    // audit row commit together.
     return this.prisma.$transaction(async (tx) => {
       if (stripsUserManage) await this.lockUserAdministration(tx, user.organizationId);
+      await this.assertNoApprovalSeat(tx, user.organizationId, id, removedApproveKeys);
       const updated = await tx.role.update({
         where: { id },
         data: {
@@ -527,11 +570,83 @@ export class AdminService {
           entityId: id,
           action: 'UPDATE',
           before: { permissions: role.permissions, nameAr: role.nameAr },
-          after: { permissions: updated.permissions, nameAr: updated.nameAr },
+          after: {
+            permissions: updated.permissions,
+            nameAr: updated.nameAr,
+            ...(sod?.sodConflicts.length ? sod : {}),
+          },
         },
         tx,
       );
       return updated;
+    });
+  }
+
+  /**
+   * Separation of duties: the pairs of SOD_CONFLICTS the saved set holds and
+   * whether the editor acknowledged them (`acknowledgeSod`), for the audit
+   * row, which carries both only when the set holds a pair. Nothing is
+   * refused here: ADR-02 §3-1 has the table warn the editors and record the
+   * acknowledgement, while the binding control is the approval engine at
+   * decision time (and the `admin` role holds every pair by definition).
+   */
+  private sodForAudit(permissions: string[], acknowledged: boolean | undefined): SodAudit {
+    return {
+      sodConflicts: sodConflicts(permissions).map(({ a, b }) => ({ a, b })),
+      sodAcknowledged: acknowledged === true,
+    };
+  }
+
+  /**
+   * ADR-02 hard rule 8: a role that signs in an ACTIVE approval rule, or in a
+   * PENDING step of an open (PENDING) request, keeps the approve key of that
+   * document type; without it the chain would stop at a step nobody can sign.
+   * Open requests are checked as well as the matrix because a request's steps
+   * are copied from its rule at submission (common/approval.service.ts), so
+   * editing the rule does not free them. 400 with code APPROVAL_SEAT naming
+   * the rules (the web turns them into a sentence) and counting the open
+   * requests. Runs inside the role's transaction, before the write.
+   */
+  private async assertNoApprovalSeat(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    roleId: string,
+    removedApproveKeys: string[],
+  ): Promise<void> {
+    const documentTypes = APPROVAL_DOCUMENTS.filter((d) =>
+      removedApproveKeys.includes(d.permission),
+    ).map((d) => d.value);
+    if (documentTypes.length === 0) return;
+
+    const rules = await tx.approvalRule.findMany({
+      where: {
+        organizationId,
+        isActive: true,
+        documentType: { in: documentTypes },
+        steps: { some: { roleId } },
+      },
+      select: { id: true, documentType: true, minAmount: true, maxAmount: true },
+      orderBy: [{ documentType: 'asc' }, { minAmount: 'asc' }],
+    });
+    const openRequests = await tx.approvalStep.count({
+      where: {
+        roleId,
+        status: 'PENDING',
+        request: { organizationId, status: 'PENDING', documentType: { in: documentTypes } },
+      },
+    });
+    if (rules.length === 0 && openRequests === 0) return;
+    throw new BadRequestException({
+      statusCode: 400,
+      message: 'Role signs in an approval rule',
+      code: 'APPROVAL_SEAT',
+      rules: rules.map((r) => ({
+        id: r.id,
+        documentType: r.documentType,
+        minAmount: Number(r.minAmount),
+        maxAmount: r.maxAmount === null ? null : Number(r.maxAmount),
+      })),
+      openRequests,
     });
   }
 

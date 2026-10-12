@@ -131,6 +131,15 @@ export class CreateRoleDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   permissions!: string[];
+
+  /**
+   * The editor saw the separation-of-duties warning for this permission set
+   * and saves it anyway (ADR-02 §3-1). Recorded in the audit row with the
+   * pairs of SOD_CONFLICTS (@npi/shared) the set holds; never required.
+   */
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeSod?: boolean;
 }
 
 export class UpdateRoleDto {
@@ -149,6 +158,15 @@ export class UpdateRoleDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   permissions?: string[];
+
+  /**
+   * The editor saw the separation-of-duties warning for this permission set
+   * and saves it anyway (ADR-02 §3-1). Recorded in the audit row with the
+   * pairs of SOD_CONFLICTS (@npi/shared) the set holds; never required.
+   */
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeSod?: boolean;
 }
 
 export class UpdateOrgDto {

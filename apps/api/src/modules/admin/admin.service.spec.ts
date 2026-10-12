@@ -3,7 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { PERMISSIONS } from '@npi/shared';
 import { AdminService } from './admin.service';
-import { SetUserPermissionsDto } from './dto';
+import { SetUserPermissionsDto, UpdateRoleDto } from './dto';
 import { EffectivePermissionsService } from '../../common/effective-permissions.service';
 import { holdsEffectively } from '../../common/permission-predicates';
 import type { AuthUser } from '../../common/auth-user';
@@ -48,7 +48,9 @@ const prismaWith = (over: Record<string, unknown> = {}) => {
     },
     role: {
       findFirst: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
       count: jest.fn().mockResolvedValue(0),
       update: jest.fn(),
       delete: jest.fn(),
@@ -63,6 +65,7 @@ const prismaWith = (over: Record<string, unknown> = {}) => {
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       createMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
+    approvalRule: { findMany: jest.fn().mockResolvedValue([]) },
     approvalRuleStep: { count: jest.fn().mockResolvedValue(0) },
     approvalStep: { count: jest.fn().mockResolvedValue(0) },
     $executeRaw: jest.fn().mockResolvedValue(0),
@@ -74,6 +77,7 @@ const prismaWith = (over: Record<string, unknown> = {}) => {
     role: Record<string, jest.Mock>;
     userRole: Record<string, jest.Mock>;
     userPermissionOverride: Record<string, jest.Mock>;
+    approvalRule: Record<string, jest.Mock>;
     approvalRuleStep: Record<string, jest.Mock>;
     approvalStep: Record<string, jest.Mock>;
     $executeRaw: jest.Mock;
@@ -338,6 +342,294 @@ describe('AdminService.updateRole - the lockout post-condition', () => {
     });
     expect(prisma.$executeRaw).not.toHaveBeenCalled();
     expect(prisma.user.count).not.toHaveBeenCalled();
+  });
+});
+
+/** The exception a promise rejects with; fails the test if it resolves. */
+const refusal = async (p: Promise<unknown>): Promise<BadRequestException> => {
+  try {
+    await p;
+  } catch (e) {
+    return e as BadRequestException;
+  }
+  throw new Error('expected the call to be refused');
+};
+
+describe('AdminService - separation of duties on role saves (ADR-02 §3-1)', () => {
+  // Three of the six pairs of SOD_CONFLICTS, plus a key that is in none.
+  const CONFLICTING = [
+    PERMISSIONS.REQUISITION_WRITE,
+    PERMISSIONS.PROCUREMENT_WRITE,
+    PERMISSIONS.PROCUREMENT_APPROVE,
+    PERMISSIONS.PAYMENT_WRITE,
+    PERMISSIONS.CUSTOMER_READ,
+  ];
+  const PAIRS = [
+    { a: PERMISSIONS.REQUISITION_WRITE, b: PERMISSIONS.PROCUREMENT_APPROVE },
+    { a: PERMISSIONS.PROCUREMENT_WRITE, b: PERMISSIONS.PROCUREMENT_APPROVE },
+    { a: PERMISSIONS.PROCUREMENT_WRITE, b: PERMISSIONS.PAYMENT_WRITE },
+  ];
+  const buyer = () => ({ ...role('role-buyer', [PERMISSIONS.PROCUREMENT_READ]), organizationId: 'org1' });
+
+  it('updateRole: a conflicting set without the acknowledgement is saved, and the audit row carries the pairs with sodAcknowledged false', async () => {
+    const prisma = prismaWith();
+    prisma.role.findFirst.mockResolvedValue(buyer());
+    prisma.role.update.mockResolvedValue({ ...buyer(), permissions: CONFLICTING });
+    await expect(
+      make(prisma).updateRole(admin(), 'role-buyer', { permissions: CONFLICTING }),
+    ).resolves.toMatchObject({ permissions: CONFLICTING });
+    expect(prisma.role.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ permissions: CONFLICTING }) }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'Role',
+        action: 'UPDATE',
+        after: { permissions: CONFLICTING, nameAr: 'role-buyer', sodConflicts: PAIRS, sodAcknowledged: false },
+      }),
+      prisma,
+    );
+    // acknowledgeSod: false records the same
+    await make(prisma).updateRole(admin(), 'role-buyer', { permissions: CONFLICTING, acknowledgeSod: false });
+    expect(audit.record.mock.calls[1][0].after).toMatchObject({ sodConflicts: PAIRS, sodAcknowledged: false });
+  });
+
+  it('updateRole: with acknowledgeSod the set is saved and the pairs go to the audit row, inside the transaction', async () => {
+    const prisma = prismaWith();
+    prisma.role.findFirst.mockResolvedValue(buyer());
+    prisma.role.update.mockResolvedValue({ ...buyer(), permissions: CONFLICTING });
+    await expect(
+      make(prisma).updateRole(admin(), 'role-buyer', { permissions: CONFLICTING, acknowledgeSod: true }),
+    ).resolves.toMatchObject({ permissions: CONFLICTING });
+    expect(prisma.role.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ permissions: CONFLICTING }) }),
+    );
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'Role',
+        action: 'UPDATE',
+        after: { permissions: CONFLICTING, nameAr: 'role-buyer', sodConflicts: PAIRS, sodAcknowledged: true },
+      }),
+      prisma,
+    );
+  });
+
+  it('updateRole: a set with no pair records neither field; a rename saves no set, so it records neither either', async () => {
+    const prisma = prismaWith();
+    prisma.role.findFirst.mockResolvedValue(buyer());
+    prisma.role.update.mockResolvedValue({ ...buyer(), permissions: [PERMISSIONS.PROCUREMENT_WRITE] });
+    await make(prisma).updateRole(admin(), 'role-buyer', {
+      permissions: [PERMISSIONS.PROCUREMENT_READ, PERMISSIONS.PROCUREMENT_WRITE],
+    });
+    expect(audit.record.mock.calls[0][0].after).not.toHaveProperty('sodConflicts');
+    expect(audit.record.mock.calls[0][0].after).not.toHaveProperty('sodAcknowledged');
+
+    // A role that already holds every pair is renamed without the box ticked.
+    prisma.role.findFirst.mockResolvedValue({ ...buyer(), permissions: CONFLICTING });
+    prisma.role.update.mockResolvedValue({ ...buyer(), permissions: CONFLICTING, nameAr: 'مشتريات' });
+    await expect(
+      make(prisma).updateRole(admin(), 'role-buyer', { nameAr: 'مشتريات' }),
+    ).resolves.toBeDefined();
+    expect(audit.record.mock.calls[1][0].after).not.toHaveProperty('sodConflicts');
+    expect(audit.record.mock.calls[1][0].after).not.toHaveProperty('sodAcknowledged');
+  });
+
+  it('createRole: a conflicting set without the acknowledgement is created, and the audit row carries the pairs with sodAcknowledged false', async () => {
+    const prisma = prismaWith();
+    prisma.role.create.mockResolvedValue({ ...role('role-new', CONFLICTING), _count: { users: 0 } });
+    await expect(
+      make(prisma).createRole(admin(), { key: 'buyer', nameAr: 'مشتريات', permissions: CONFLICTING }),
+    ).resolves.toMatchObject({ id: 'role-new' });
+    expect(prisma.role.create).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'CREATE',
+        after: {
+          key: 'buyer',
+          nameAr: 'مشتريات',
+          permissions: CONFLICTING,
+          sodConflicts: PAIRS,
+          sodAcknowledged: false,
+        },
+      }),
+      prisma,
+    );
+  });
+
+  it('createRole: with acknowledgeSod the role is created and audited with the pairs, inside one transaction', async () => {
+    const prisma = prismaWith();
+    prisma.role.create.mockResolvedValue({ ...role('role-new', CONFLICTING), _count: { users: 0 } });
+    await expect(
+      make(prisma).createRole(admin(), {
+        key: 'buyer',
+        nameAr: ' مشتريات ',
+        permissions: CONFLICTING,
+        acknowledgeSod: true,
+      }),
+    ).resolves.toMatchObject({ id: 'role-new' });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.role.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { organizationId: 'org1', key: 'buyer', nameAr: 'مشتريات', nameEn: 'مشتريات', permissions: CONFLICTING },
+      }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      {
+        organizationId: 'org1',
+        actorId: 'admin1',
+        entityType: 'Role',
+        entityId: 'role-new',
+        action: 'CREATE',
+        after: {
+          key: 'buyer',
+          nameAr: 'مشتريات',
+          permissions: CONFLICTING,
+          sodConflicts: PAIRS,
+          sodAcknowledged: true,
+        },
+      },
+      prisma,
+    );
+  });
+
+  it('createRole: a set with no pair records neither field', async () => {
+    const prisma = prismaWith();
+    prisma.role.create.mockResolvedValue({ ...role('role-new', [PERMISSIONS.LEAD_READ]), _count: { users: 0 } });
+    await make(prisma).createRole(admin(), { key: 'reader', nameAr: 'قارئ', permissions: [PERMISSIONS.LEAD_READ] });
+    expect(audit.record.mock.calls[0][0].after).toEqual({
+      key: 'reader',
+      nameAr: 'قارئ',
+      permissions: [PERMISSIONS.LEAD_READ],
+    });
+  });
+
+  it('UpdateRoleDto accepts acknowledgeSod as a boolean only', async () => {
+    const errorsOf = async (body: unknown) => validate(plainToInstance(UpdateRoleDto, body));
+    await expect(errorsOf({ permissions: ['crm.lead.read'], acknowledgeSod: true })).resolves.toEqual([]);
+    await expect(errorsOf({ permissions: ['crm.lead.read'] })).resolves.toEqual([]);
+    expect(await errorsOf({ permissions: ['crm.lead.read'], acknowledgeSod: 'yes' })).not.toEqual([]);
+  });
+});
+
+describe('AdminService.updateRole - the approval-seat guard (ADR-02 hard rule 8)', () => {
+  const PM_KEYS = [
+    PERMISSIONS.PROJECT_READ,
+    PERMISSIONS.PROJECT_APPROVE,
+    PERMISSIONS.PROCUREMENT_READ,
+    PERMISSIONS.PROCUREMENT_APPROVE,
+    PERMISSIONS.PROPOSAL_APPROVE,
+  ];
+  const pm = () => ({ ...role('role-pm', PM_KEYS), organizationId: 'org1' });
+  const without = (...keys: string[]) => PM_KEYS.filter((k) => !keys.includes(k));
+  const PO_RULE = { id: 'rule-po', documentType: 'PURCHASE_ORDER', minAmount: '100000', maxAmount: null };
+
+  it('removing scm.procurement.approve from a role in an active PO rule answers 400 APPROVAL_SEAT naming the rule; nothing written', async () => {
+    const prisma = prismaWith();
+    prisma.role.findFirst.mockResolvedValue(pm());
+    prisma.approvalRule.findMany.mockResolvedValue([PO_RULE]);
+    const e = await refusal(
+      make(prisma).updateRole(admin(), 'role-pm', { permissions: without(PERMISSIONS.PROCUREMENT_APPROVE) }),
+    );
+    expect(e).toBeInstanceOf(BadRequestException);
+    expect(e.message).toBe('Role signs in an approval rule');
+    expect(e.getResponse()).toEqual({
+      statusCode: 400,
+      message: 'Role signs in an approval rule',
+      code: 'APPROVAL_SEAT',
+      rules: [{ id: 'rule-po', documentType: 'PURCHASE_ORDER', minAmount: 100000, maxAmount: null }],
+      openRequests: 0,
+    });
+    // every document type signed with that key, active rules only, this role's steps only
+    expect(prisma.approvalRule.findMany.mock.calls[0][0].where).toEqual({
+      organizationId: 'org1',
+      isActive: true,
+      documentType: { in: ['PURCHASE_REQUISITION', 'PURCHASE_ORDER', 'PROGRESS_CLAIM'] },
+      steps: { some: { roleId: 'role-pm' } },
+    });
+    // read inside the role's transaction, before any write
+    expect(prisma.$transaction.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.approvalRule.findMany.mock.invocationCallOrder[0],
+    );
+    expect(prisma.role.update).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('a role in a pending step of an open request answers 400 too, counting the requests', async () => {
+    const prisma = prismaWith();
+    prisma.role.findFirst.mockResolvedValue(pm());
+    prisma.approvalStep.count.mockResolvedValue(2);
+    const e = await refusal(
+      make(prisma).updateRole(admin(), 'role-pm', { permissions: without(PERMISSIONS.PROJECT_APPROVE) }),
+    );
+    expect(e.getResponse()).toEqual({
+      statusCode: 400,
+      message: 'Role signs in an approval rule',
+      code: 'APPROVAL_SEAT',
+      rules: [],
+      openRequests: 2,
+    });
+    expect(prisma.approvalStep.count.mock.calls[0][0].where).toEqual({
+      roleId: 'role-pm',
+      status: 'PENDING',
+      request: { organizationId: 'org1', status: 'PENDING', documentType: { in: ['CHANGE_ORDER'] } },
+    });
+    expect(prisma.role.update).not.toHaveBeenCalled();
+  });
+
+  it('names every rule and keeps a band ceiling; commercial.proposal.approve looks at proposals only', async () => {
+    const prisma = prismaWith();
+    prisma.role.findFirst.mockResolvedValue(pm());
+    prisma.approvalRule.findMany.mockResolvedValue([
+      { id: 'rule-p1', documentType: 'PROPOSAL', minAmount: '0', maxAmount: '50000' },
+      { id: 'rule-p2', documentType: 'PROPOSAL', minAmount: '50000', maxAmount: null },
+    ]);
+    prisma.approvalStep.count.mockResolvedValue(1);
+    const e = await refusal(
+      make(prisma).updateRole(admin(), 'role-pm', { permissions: without(PERMISSIONS.PROPOSAL_APPROVE) }),
+    );
+    expect((e.getResponse() as { rules: unknown[] }).rules).toEqual([
+      { id: 'rule-p1', documentType: 'PROPOSAL', minAmount: 0, maxAmount: 50000 },
+      { id: 'rule-p2', documentType: 'PROPOSAL', minAmount: 50000, maxAmount: null },
+    ]);
+    expect(prisma.approvalRule.findMany.mock.calls[0][0].where.documentType).toEqual({ in: ['PROPOSAL'] });
+  });
+
+  it('removing a key that is not an approve key looks at no rule and saves', async () => {
+    const prisma = prismaWith();
+    prisma.role.findFirst.mockResolvedValue(pm());
+    prisma.role.update.mockResolvedValue({ ...pm(), permissions: without(PERMISSIONS.PROJECT_READ) });
+    await expect(
+      make(prisma).updateRole(admin(), 'role-pm', { permissions: without(PERMISSIONS.PROJECT_READ) }),
+    ).resolves.toBeDefined();
+    expect(prisma.approvalRule.findMany).not.toHaveBeenCalled();
+    expect(prisma.approvalStep.count).not.toHaveBeenCalled();
+    expect(prisma.role.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('removing an approve key no active rule and no open request uses saves, after looking', async () => {
+    const prisma = prismaWith();
+    prisma.role.findFirst.mockResolvedValue(pm());
+    prisma.role.update.mockResolvedValue({ ...pm(), permissions: without(PERMISSIONS.PROCUREMENT_APPROVE) });
+    await expect(
+      make(prisma).updateRole(admin(), 'role-pm', { permissions: without(PERMISSIONS.PROCUREMENT_APPROVE) }),
+    ).resolves.toBeDefined();
+    expect(prisma.approvalRule.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.approvalStep.count).toHaveBeenCalledTimes(1);
+    expect(prisma.approvalRule.findMany.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.role.update.mock.invocationCallOrder[0],
+    );
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'UPDATE' }), prisma);
+  });
+
+  it('keeping the approve keys, adding one, or a rename looks at no rule', async () => {
+    const prisma = prismaWith();
+    prisma.role.findFirst.mockResolvedValue(pm());
+    prisma.role.update.mockResolvedValue(pm());
+    await make(prisma).updateRole(admin(), 'role-pm', { permissions: [...PM_KEYS, PERMISSIONS.LEAD_READ] });
+    await make(prisma).updateRole(admin(), 'role-pm', { nameAr: 'مدير المشاريع' });
+    expect(prisma.approvalRule.findMany).not.toHaveBeenCalled();
+    expect(prisma.approvalStep.count).not.toHaveBeenCalled();
   });
 });
 
