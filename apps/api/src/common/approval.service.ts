@@ -9,7 +9,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
 import { NotificationService } from './notification.service';
-import { DelegationService } from './delegation.service';
+import { DelegationService, type ActiveDelegation } from './delegation.service';
+import { EffectivePermissionsService } from './effective-permissions.service';
 import {
   APPROVAL_DOCUMENTS,
   APPROVAL_DOCUMENT_META,
@@ -84,13 +85,15 @@ export interface ApprovalRequestView {
   }>;
   /**
    * Inbox rows only. A request can be at the caller's role and still be
-   * unsignable *by them* — they raised it, or they signed an earlier step.
+   * unsignable *by them* — they raised it, they signed an earlier step, or
+   * the document's approve key is not in their effective set (or, through a
+   * delegation, not in the delegator's: ADR-02 §3-1).
    * Those rows stay visible rather than being filtered out: if the caller is
    * the only holder of that role, the chain is stuck and the organization
    * needs to see that, not wonder where the document went.
    */
   canDecide?: boolean;
-  blockedReason?: 'RAISED_BY_YOU' | 'ALREADY_SIGNED';
+  blockedReason?: 'RAISED_BY_YOU' | 'ALREADY_SIGNED' | 'NO_PERMISSION';
   /**
    * Inbox rows only. Set when the caller reaches this step through a temporary
    * delegation rather than their own role — the UI must say so before they
@@ -137,6 +140,7 @@ export class ApprovalService implements OnApplicationBootstrap {
     private readonly audit: AuditService,
     private readonly notifications: NotificationService,
     private readonly delegations: DelegationService,
+    private readonly effective: EffectivePermissionsService,
   ) {}
 
   /**
@@ -318,20 +322,23 @@ export class ApprovalService implements OnApplicationBootstrap {
     // Deciding is the same authority as doing. The route cannot declare this
     // statically (it depends on the request's document type), and the role's
     // permissions may have been edited since the rule was saved — so it is
-    // checked here, against the caller's live permission set.
+    // checked here, against the caller's live permission set: the effective
+    // one (ADR-02), so a GRANT gives the key and a DENY takes it away. The key
+    // alone is never a seat — the role check below still applies.
     const required = APPROVAL_DOCUMENT_META[request.documentType as ApprovalDocumentType].permission;
     if (!user.permissions.includes(required)) {
       throw new ForbiddenException('Insufficient permissions');
     }
-    // The caller's own role, or a role lent to them by an active delegation.
-    // Checked in that order so the common case costs no extra query.
-    let delegation: { id: string; fromUserId: string } | null = null;
+    // The caller's own role, or a role lent to them by an active delegation
+    // whose delegator still holds the key. Checked in that order so the common
+    // case costs no extra query.
+    let delegation: ActiveDelegation | null = null;
     if (!user.roleIds.includes(step.roleId)) {
-      delegation = await this.delegations.delegationFor(
-        user.organizationId,
-        user.userId,
-        step.roleId,
+      const lent = (await this.delegations.rolesFor(user.organizationId, user.userId)).filter(
+        (d) => d.roleId === step.roleId,
       );
+      const keys = await this.delegatorPermissions(lent);
+      delegation = lent.find((d) => keys.get(d.fromUserId)?.has(required)) ?? null;
       if (!delegation) {
         throw new ForbiddenException('Your role is not the approver at this step');
       }
@@ -441,8 +448,8 @@ export class ApprovalService implements OnApplicationBootstrap {
     // Own role plus any lent to them right now. A delegate whose window has
     // closed simply stops seeing the rows — nothing has to be un-assigned.
     const delegated = await this.delegations.rolesFor(user.organizationId, user.userId);
-    const byRole = new Map(delegated.map((d) => [d.roleId, d]));
-    const roleIds = [...new Set([...user.roleIds, ...byRole.keys()])];
+    const delegatorKeys = await this.delegatorPermissions(delegated);
+    const roleIds = [...new Set([...user.roleIds, ...delegated.map((d) => d.roleId)])];
 
     const rows = await this.prisma.approvalRequest.findMany({
       where: {
@@ -462,18 +469,31 @@ export class ApprovalService implements OnApplicationBootstrap {
       })
       .map((r) => {
         const current = r.steps.find((s) => s.sequence === r.currentStep)!;
+        const required = APPROVAL_DOCUMENT_META[r.documentType as ApprovalDocumentType].permission;
         const raisedByYou = r.raisedById === user.userId;
         const alreadySigned = r.steps.some((s) => s.decidedById === user.userId);
-        const via = user.roleIds.includes(current.roleId) ? undefined : byRole.get(current.roleId);
+        // Through a delegation: the one whose delegator holds this document's
+        // key, as decide() picks it, or else the first, to say whose it is.
+        const lent = user.roleIds.includes(current.roleId)
+          ? []
+          : delegated.filter((d) => d.roleId === current.roleId);
+        const via = lent.find((d) => delegatorKeys.get(d.fromUserId)?.has(required)) ?? lent[0];
         const lentByRaiser = !!via && via.fromUserId === r.raisedById;
+        // decide() would answer 403: the key is not in the caller's effective
+        // set, or the delegation lends nothing for this document.
+        const noPermission =
+          !user.permissions.includes(required) ||
+          (!!via && !delegatorKeys.get(via.fromUserId)?.has(required));
         return {
           ...this.view(r),
-          canDecide: !raisedByYou && !alreadySigned && !lentByRaiser,
+          canDecide: !raisedByYou && !alreadySigned && !lentByRaiser && !noPermission,
           blockedReason: raisedByYou
             ? ('RAISED_BY_YOU' as const)
             : alreadySigned
               ? ('ALREADY_SIGNED' as const)
-              : undefined,
+              : noPermission
+                ? ('NO_PERMISSION' as const)
+                : undefined,
           viaDelegationFrom: via?.fromUserName,
           escalated: current.escalatedAt !== null,
         };
@@ -549,6 +569,21 @@ export class ApprovalService implements OnApplicationBootstrap {
   }
 
   // ── internals ─────────────────────────────────────────────────────────────
+
+  /**
+   * Each delegator's effective permission set, by user id. A delegation lends
+   * the delegator's ROLE, and only for documents the delegator could approve
+   * themselves: a DENY of the approve key on the delegator means the
+   * delegation lends nothing for that document (ADR-02 §3-1). No delegations,
+   * no query.
+   */
+  private async delegatorPermissions(
+    delegations: readonly ActiveDelegation[],
+  ): Promise<Map<string, Set<string>>> {
+    const ids = [...new Set(delegations.map((d) => d.fromUserId))];
+    const sets = await Promise.all(ids.map((id) => this.effective.forUser(id)));
+    return new Map(ids.map((id, i) => [id, new Set(sets[i]?.permissions ?? [])]));
+  }
 
   /**
    * The submitter's department, used when the caller does not state one. A

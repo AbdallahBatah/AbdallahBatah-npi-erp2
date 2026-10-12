@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   ArrayUnique,
@@ -10,8 +11,9 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
-import { SAUDI_VAT_OR_EMPTY_RE } from '@npi/shared';
+import { ALL_PERMISSIONS, SAUDI_VAT_OR_EMPTY_RE, type PermissionEffect } from '@npi/shared';
 
 export class CreateUserDto {
   @IsEmail()
@@ -74,6 +76,32 @@ export class UpdateUserDto {
   @IsOptional()
   @IsIn(['AR', 'EN'])
   locale?: 'AR' | 'EN';
+}
+
+/** One per-user exception: a key added to the user's roles, or taken away (ADR-02 §3-1). */
+export class PermissionOverrideDto {
+  @IsIn(ALL_PERMISSIONS, { message: 'Unknown permission key: $value' })
+  permission!: string;
+
+  @IsIn(['GRANT', 'DENY'])
+  effect!: PermissionEffect;
+
+  /** Optional for now (one administrator; a mandatory field would be filled with noise). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string | null;
+}
+
+/** PUT /admin/users/:id/permissions — REPLACES the whole set; [] clears it. */
+export class SetUserPermissionsDto {
+  @IsArray()
+  @ArrayUnique((o: PermissionOverrideDto) => o?.permission, {
+    message: 'Overrides must not name the same permission twice',
+  })
+  @ValidateNested({ each: true })
+  @Type(() => PermissionOverrideDto)
+  overrides!: PermissionOverrideDto[];
 }
 
 export class ResetPasswordDto {

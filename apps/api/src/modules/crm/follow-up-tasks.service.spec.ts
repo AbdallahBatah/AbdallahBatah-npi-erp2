@@ -14,6 +14,7 @@ import { PERMISSIONS_KEY } from '../../common/decorators';
 import { FollowUpTasksService } from './follow-up-tasks.service';
 import { FollowUpTasksController } from './follow-up-tasks.controller';
 import type { AuthUser } from '../../common/auth-user';
+import { holdsEffectively } from '../../common/permission-predicates';
 
 const NOW = new Date('2026-10-08T10:00:00.000Z');
 
@@ -563,13 +564,12 @@ describe('FollowUpTasksService.assignees — who a task may be given to', () => 
     prisma.user.findMany.mockResolvedValue([{ id: 'u2', nameAr: 'أحمد', nameEn: 'Ahmad' }]);
     await svc.assignees(USER);
     const args = prisma.user.findMany.mock.calls[0][0];
-    // P1-6 (ADR-02 §5): only someone who can open /tasks may be given a task — through the
-    // primary role or an extra one, the shape of NotificationService.notify.
-    const holds = { permissions: { has: PERMISSIONS.TASK_READ } };
+    // P1-6 (ADR-02 §5): only someone who can open /tasks may be given a task; P1-7: the key
+    // held effectively — the primary role, an extra one or a GRANT, and not DENIED.
     expect(args.where).toEqual({
       organizationId: 'org1',
       isActive: true,
-      OR: [{ role: holds }, { extraRoles: { some: { role: holds } } }],
+      AND: [holdsEffectively(PERMISSIONS.TASK_READ)],
     });
     expect(args.orderBy).toEqual({ nameAr: 'asc' });
   });

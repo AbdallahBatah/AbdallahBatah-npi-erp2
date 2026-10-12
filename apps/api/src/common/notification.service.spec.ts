@@ -6,6 +6,8 @@
  * writes nothing for a user who is inactive or belongs to another organization.
  */
 import { NotificationService } from './notification.service';
+import { holdsEffectively, holdsRole } from './permission-predicates';
+import { fixtureUser, matchesWhere } from './testing/user-where';
 
 const INPUT = {
   organizationId: 'org1',
@@ -80,5 +82,65 @@ describe('NotificationService.notifyUserBestEffort', () => {
     const { svc, client } = setup();
     client.notification.create.mockRejectedValue(new Error('db down'));
     await expect(svc.notifyUserBestEffort(INPUT)).resolves.toBe(0);
+  });
+});
+
+/**
+ * ADR-02 (P1-7): the fan-out follows the EFFECTIVE set. The double evaluates
+ * the real where-clause against fixture users, so these say who is notified.
+ */
+describe('NotificationService.notify — recipients hold the key effectively', () => {
+  const KEY = 'scm.procurement.approve';
+  const PM = { id: 'role-pm', permissions: [KEY] };
+  const SALES = { id: 'role-sales', permissions: ['crm.lead.read'] };
+  const users = [
+    fixtureUser('holder', PM),
+    fixtureUser('denied', PM, { permissionOverrides: [{ permission: KEY, effect: 'DENY' }] }),
+    fixtureUser('granted', SALES, { permissionOverrides: [{ permission: KEY, effect: 'GRANT' }] }),
+    fixtureUser('extra', SALES, { extraRoles: [{ roleId: PM.id, role: PM }] }),
+    fixtureUser('plain', SALES),
+    fixtureUser('leaver', PM, { isActive: false }),
+    fixtureUser('stranger', PM, { organizationId: 'org2' }),
+  ];
+
+  function fanOut() {
+    const client = {
+      user: {
+        findMany: jest.fn(async ({ where }: { where: object }) =>
+          users.filter((u) => matchesWhere(where, u)).map((u) => ({ id: u.id })),
+        ),
+      },
+      notification: {
+        createMany: jest.fn(async ({ data }: { data: Array<{ userId: string }> }) => ({ count: data.length })),
+      },
+    };
+    const svc = new NotificationService(client as never);
+    const recipients = () =>
+      (client.notification.createMany.mock.calls[0]?.[0].data ?? []).map((d) => d.userId);
+    return { svc, client, recipients };
+  }
+  const base = { organizationId: 'org1', permission: KEY, type: 'APPROVAL_PENDING', titleAr: 'ع', titleEn: 'T' };
+
+  it('a denied holder is not notified, a granted one is', async () => {
+    const { svc, recipients } = fanOut();
+    await expect(svc.notify(base)).resolves.toBe(3);
+    expect(recipients()).toEqual(['holder', 'granted', 'extra']);
+  });
+
+  it('with roleId: holds that role (primary or extra) AND holds the key effectively', async () => {
+    const { svc, client, recipients } = fanOut();
+    await svc.notify({ ...base, roleId: PM.id });
+    expect(recipients()).toEqual(['holder', 'extra']);
+    expect(client.user.findMany.mock.calls[0][0].where).toEqual({
+      organizationId: 'org1',
+      isActive: true,
+      AND: [holdsRole(PM.id), holdsEffectively(KEY)],
+    });
+  });
+
+  it('still never notifies the actor', async () => {
+    const { svc, recipients } = fanOut();
+    await svc.notify({ ...base, excludeUserId: 'holder' });
+    expect(recipients()).toEqual(['granted', 'extra']);
   });
 });

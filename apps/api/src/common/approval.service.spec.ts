@@ -78,13 +78,37 @@ const noDelegations = {
   delegatesOf: jest.fn().mockResolvedValue([]),
 };
 
-const make = (prisma: unknown, delegations: unknown = noDelegations) =>
+// ADR-02 (P1-7): a delegator's effective set is loaded only when a delegation
+// is in play; by default nobody is found, which lends nothing.
+const noEffective = { forUser: jest.fn().mockResolvedValue(null) };
+
+const make = (prisma: unknown, delegations: unknown = noDelegations, effective: unknown = noEffective) =>
   new ApprovalService(
     prisma as never,
     audit as never,
     notifications as never,
     delegations as never,
+    effective as never,
   );
+
+/** One active delegation of `roleId` from `fromUserId`, and that delegator's effective keys. */
+const delegationFrom = (fromUserId: string, roleId: string, keys: string[], id = `d-${fromUserId}`) => ({
+  delegation: { id, fromUserId, fromUserName: `name-${fromUserId}`, roleId },
+  keys,
+});
+const delegationsOf = (...lent: Array<ReturnType<typeof delegationFrom>>) => ({
+  delegations: {
+    rolesFor: jest.fn().mockResolvedValue(lent.map((l) => l.delegation)),
+    delegationFor: jest.fn(),
+    delegatesOf: jest.fn().mockResolvedValue([]),
+  },
+  effective: {
+    forUser: jest.fn(async (userId: string) => {
+      const l = lent.find((x) => x.delegation.fromUserId === userId);
+      return l ? { permissions: l.keys } : null;
+    }),
+  },
+});
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -374,6 +398,72 @@ describe('ApprovalService.decide', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
+  // ── ADR-02 (P1-7): the key is effective, and a key is never a seat ──────────
+
+  it('a user GRANTED the approve key but outside the step role cannot sign — a key is no seat (403)', async () => {
+    const prisma = withRequest(pendingRequest(), {});
+    // the effective set holds the key (as a GRANT would put it there), the roles do not hold the step
+    await expect(
+      make(prisma).decide(user({ roleId: 'role-sales', roleIds: ['role-sales'] }), 'req1', 'APPROVE'),
+    ).rejects.toThrow(new ForbiddenException('Your role is not the approver at this step'));
+    expect(prisma.approvalStep.update).not.toHaveBeenCalled();
+  });
+
+  it('the raiser holding the step role and the key (granted or not) still cannot sign (403)', async () => {
+    const prisma = withRequest(pendingRequest({ raisedById: 'u1' }), {});
+    await expect(make(prisma).decide(user(), 'req1', 'APPROVE')).rejects.toThrow(
+      new ForbiddenException('You cannot approve a document you submitted yourself'),
+    );
+    expect(prisma.approvalStep.update).not.toHaveBeenCalled();
+  });
+
+  it('a holder of the step role DENIED the approve key cannot sign (403)', async () => {
+    const prisma = withRequest(pendingRequest(), {});
+    await expect(
+      make(prisma).decide(user({ permissions: ['scm.procurement.write'] }), 'req1', 'APPROVE'),
+    ).rejects.toThrow(new ForbiddenException('Insufficient permissions'));
+  });
+
+  it('a delegate of a delegator DENIED the approve key gets nothing from the delegation (403)', async () => {
+    const prisma = withRequest(pendingRequest(), {});
+    const { delegations, effective } = delegationsOf(
+      delegationFrom('u-boss', 'role-pm', ['scm.procurement.write']),
+    );
+    await expect(
+      make(prisma, delegations, effective).decide(
+        user({ roleId: 'role-sales', roleIds: ['role-sales'] }),
+        'req1',
+        'APPROVE',
+      ),
+    ).rejects.toThrow(new ForbiddenException('Your role is not the approver at this step'));
+    expect(effective.forUser).toHaveBeenCalledWith('u-boss');
+    expect(prisma.approvalStep.update).not.toHaveBeenCalled();
+  });
+
+  it('a delegate of a delegator who holds the key signs, and the step records that delegation', async () => {
+    const prisma = withRequest(pendingRequest(), { currentStep: 2, status: 'PENDING' });
+    const { delegations, effective } = delegationsOf(
+      delegationFrom('u-denied', 'role-pm', ['scm.procurement.write']),
+      delegationFrom('u-boss', 'role-pm', ['scm.procurement.approve']),
+    );
+    const res = await make(prisma, delegations, effective).decide(
+      user({ roleId: 'role-sales', roleIds: ['role-sales'] }),
+      'req1',
+      'APPROVE',
+    );
+    expect(res.applied).toBe(false);
+    // of the two delegations of the step role, the one that lends something
+    expect(prisma.approvalStep.update.mock.calls[0][0].data.delegationId).toBe('d-u-boss');
+  });
+
+  it('acting through one’s own role needs no delegation lookup at all', async () => {
+    const prisma = withRequest(pendingRequest(), { currentStep: 2, status: 'PENDING' });
+    const { delegations, effective } = delegationsOf();
+    await make(prisma, delegations, effective).decide(user(), 'req1', 'APPROVE');
+    expect(delegations.rolesFor).not.toHaveBeenCalled();
+    expect(effective.forUser).not.toHaveBeenCalled();
+  });
+
   it('advances to the next step without applying the document', async () => {
     const prisma = withRequest(pendingRequest(), { currentStep: 2, status: 'PENDING' });
     const svc = make(prisma);
@@ -564,6 +654,62 @@ describe('ApprovalService.inbox', () => {
     const prisma = prismaWith();
     prisma.approvalRequest.findMany.mockResolvedValue([row(), row({ id: 'r2', raisedById: 'u1' })]);
     await expect(make(prisma).inboxCount(user())).resolves.toBe(1);
+  });
+
+  // ── ADR-02 (P1-7): canDecide follows the effective set ────────────────────
+
+  it('a holder of the step role DENIED the approve key sees the row, unsignable, NO_PERMISSION — and no badge', async () => {
+    const prisma = prismaWith();
+    prisma.approvalRequest.findMany.mockResolvedValue([row()]);
+    const denied = user({ permissions: ['scm.procurement.write', 'projects.project.approve'] });
+    const [item] = await make(prisma).inbox(denied);
+    expect(item.canDecide).toBe(false);
+    expect(item.blockedReason).toBe('NO_PERMISSION');
+    await expect(make(prisma).inboxCount(denied)).resolves.toBe(0);
+  });
+
+  it('the older reasons keep precedence over NO_PERMISSION', async () => {
+    const denied = user({ permissions: [] });
+    const prisma = prismaWith();
+    prisma.approvalRequest.findMany.mockResolvedValue([row({ raisedById: 'u1' })]);
+    const [item] = await make(prisma).inbox(denied);
+    expect(item.blockedReason).toBe('RAISED_BY_YOU');
+  });
+
+  it('through a delegation from a delegator DENIED the key: visible, unsignable, NO_PERMISSION, and says whose it is', async () => {
+    const prisma = prismaWith();
+    prisma.approvalRequest.findMany.mockResolvedValue([row()]);
+    const { delegations, effective } = delegationsOf(
+      delegationFrom('u-boss', 'role-pm', ['scm.procurement.write']),
+    );
+    const svc = make(prisma, delegations, effective);
+    const delegate = user({ roleId: 'role-sales', roleIds: ['role-sales'] });
+    const [item] = await svc.inbox(delegate);
+    expect(item.canDecide).toBe(false);
+    expect(item.blockedReason).toBe('NO_PERMISSION');
+    expect(item.viaDelegationFrom).toBe('name-u-boss');
+    await expect(svc.inboxCount(delegate)).resolves.toBe(0);
+  });
+
+  it('through a delegation from a delegator who holds the key: signable', async () => {
+    const prisma = prismaWith();
+    prisma.approvalRequest.findMany.mockResolvedValue([row()]);
+    const { delegations, effective } = delegationsOf(
+      delegationFrom('u-boss', 'role-pm', ['scm.procurement.approve']),
+    );
+    const [item] = await make(prisma, delegations, effective).inbox(
+      user({ roleId: 'role-sales', roleIds: ['role-sales'] }),
+    );
+    expect(item.canDecide).toBe(true);
+    expect(item.blockedReason).toBeUndefined();
+    expect(item.viaDelegationFrom).toBe('name-u-boss');
+  });
+
+  it('with no delegations it loads no one else’s permissions', async () => {
+    const prisma = prismaWith();
+    prisma.approvalRequest.findMany.mockResolvedValue([row()]);
+    await make(prisma).inbox(user());
+    expect(noEffective.forUser).not.toHaveBeenCalled();
   });
 });
 

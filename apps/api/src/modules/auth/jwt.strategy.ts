@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { PrismaService } from '../../prisma/prisma.service';
+import { EffectivePermissionsService } from '../../common/effective-permissions.service';
 import { JWT_SECRET } from './jwt.constants';
 import type { AuthUser } from '../../common/auth-user';
 
@@ -12,7 +12,7 @@ interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(private readonly effective: EffectivePermissionsService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -21,22 +21,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   /**
-   * Re-loads the user (and its role's live permissions) on every request, so a
-   * revoked user or a changed role takes effect immediately rather than living
-   * on in a stale token.
+   * Re-loads the user (their roles' live permissions and their overrides) on
+   * every request, so a revoked user, a changed role or a new GRANT / DENY
+   * takes effect immediately rather than living on in a stale token.
    */
   async validate(payload: JwtPayload): Promise<AuthUser> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      include: { role: true, extraRoles: { include: { role: true } } },
-    });
-
-    if (!user || !user.isActive || user.organizationId !== payload.org) {
+    const found = await this.effective.forUser(payload.sub);
+    if (!found || !found.user.isActive || found.user.organizationId !== payload.org) {
       throw new UnauthorizedException();
     }
 
-    // Primary role first, then the extra ones; permissions are the union.
-    const roles = [user.role, ...user.extraRoles.map((er) => er.role)];
+    // Primary role first, then the extra ones; permissions are the effective
+    // set (ADR-02): the union of the roles, plus GRANT, minus DENY.
+    const { user, roles, permissions } = found;
     return {
       userId: user.id,
       organizationId: user.organizationId,
@@ -44,7 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       roleId: user.roleId,
       roleKey: user.role.key,
       roleIds: roles.map((r) => r.id),
-      permissions: [...new Set(roles.flatMap((r) => r.permissions))].sort((a, b) => a.localeCompare(b, 'en')),
+      permissions,
       locale: user.locale,
     };
   }

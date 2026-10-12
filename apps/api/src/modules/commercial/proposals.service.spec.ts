@@ -12,6 +12,8 @@ import { BadRequestException, ConflictException, ForbiddenException } from '@nes
 import { Prisma } from '@npi/db';
 import { PERMISSIONS, WF_ACTIONS } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
+import { holdsEffectively, holdsRole } from '../../common/permission-predicates';
+import { fixtureUser, matchesWhere } from '../../common/testing/user-where';
 import { ProposalsService } from './proposals.service';
 
 const D = (v: string | number) => new Prisma.Decimal(v);
@@ -426,6 +428,66 @@ describe('ProposalsService.submit — the gate in front of the matrix', () => {
     const { svc, tx } = build({ proposal: draft() });
     await svc.submit(sales, 'p1');
     expect(tx.$executeRaw).toHaveBeenCalled(); // pg_advisory_xact_lock
+  });
+});
+
+describe('ProposalsService.submit — another approver is counted on the EFFECTIVE set (ADR-02, P1-7)', () => {
+  const draft = () => proposalRow({ revisions: [revision()] });
+  const EXEC = { id: 'role-exec', permissions: [APPROVE] };
+  const EXEC_NO_KEY = { id: 'role-exec', permissions: [PERMISSIONS.PROPOSAL_READ] };
+  const SALES = { id: 'role-sales', permissions: [WRITE] };
+  /** `user.count` answers from fixture users through the real where-clause. */
+  const withUsers = (users: ReturnType<typeof fixtureUser>[]) => {
+    const b = build({ proposal: draft() });
+    b.prisma.user.count.mockImplementation(async ({ where }: { where: object }) =>
+      users.filter((u) => matchesWhere(where, u)).length,
+    );
+    return b;
+  };
+
+  it('asks for: holds the step role (primary or extra) AND holds the approve key effectively', async () => {
+    const { svc, prisma } = withUsers([fixtureUser('u-exec', EXEC)]);
+    await svc.submit(sales, 'p1');
+    expect(prisma.user.count.mock.calls[0][0].where).toEqual({
+      organizationId: 'org1',
+      isActive: true,
+      id: { not: 'u-sales' },
+      AND: [holdsRole('role-exec'), holdsEffectively(APPROVE)],
+    });
+  });
+
+  it('the only other executive DENIED the approve key is no approver (409)', async () => {
+    const { svc, approvals } = withUsers([
+      fixtureUser('u-exec', EXEC, { permissionOverrides: [{ permission: APPROVE, effect: 'DENY' }] }),
+    ]);
+    await expect(svc.submit(sales, 'p1')).rejects.toThrow(
+      new ConflictException('No other approver is available for this proposal'),
+    );
+    expect(approvals.gate).not.toHaveBeenCalled();
+  });
+
+  it('an executive whose role lacks the key but who was GRANTED it counts', async () => {
+    const { svc, approvals } = withUsers([
+      fixtureUser('u-exec', EXEC_NO_KEY, { permissionOverrides: [{ permission: APPROVE, effect: 'GRANT' }] }),
+    ]);
+    await svc.submit(sales, 'p1');
+    expect(approvals.gate).toHaveBeenCalled();
+  });
+
+  it('a GRANT of the key without the step role is no seat (409)', async () => {
+    const { svc } = withUsers([
+      fixtureUser('u-other', SALES, { permissionOverrides: [{ permission: APPROVE, effect: 'GRANT' }] }),
+    ]);
+    await expect(svc.submit(sales, 'p1')).rejects.toThrow(ConflictException);
+  });
+
+  it('a delegate must hold the key effectively, and so must the delegator (beside the role seat)', async () => {
+    const { svc, prisma } = build({ proposal: draft(), approver: 0 });
+    prisma.approvalDelegation.count.mockResolvedValue(1);
+    await svc.submit(sales, 'p1');
+    const where = prisma.approvalDelegation.count.mock.calls[0][0].where;
+    expect(where.toUser).toEqual({ isActive: true, AND: [holdsEffectively(APPROVE)] });
+    expect(where.fromUser).toEqual({ isActive: true, roleId: 'role-exec', AND: [holdsEffectively(APPROVE)] });
   });
 });
 

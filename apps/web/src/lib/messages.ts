@@ -1237,6 +1237,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     'dlg.noOverlap': 'لا يمكن أن يتداخل تفويضان ساريان بين الشخصين نفسيهما.',
     // ADR-02 §3-3: a pick list this account may not read — the field is disabled, the page still works.
     'lookup.unavailable': 'القائمة غير متاحة لحسابك',
+    // ADR-02 §3-1: the approve key is not in this account's effective set, or the delegation lends nothing for it.
+    'apr.blocked.noPermission':
+      'لا يمكنك اعتماده — صلاحية اعتماد هذا المستند غير مفعّلة لحسابك أو لمن فوّضك. يعتمده زميل آخر في الدور نفسه.',
+    'inbox.blocked.noPermission': 'صلاحية اعتماد هذا المستند غير مفعّلة لحسابك أو لمن فوّضك.',
   },
   en: {
     'app.name': 'NPI Solar ERP',
@@ -2474,5 +2478,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     'dlg.noOverlap': 'Two active delegations between the same two people cannot overlap.',
     // ADR-02 §3-3: a pick list this account may not read — the field is disabled, the page still works.
     'lookup.unavailable': 'This list is not available to your account',
+    // ADR-02 §3-1: the approve key is not in this account's effective set, or the delegation lends nothing for it.
+    'apr.blocked.noPermission':
+      'You cannot approve this — the approve permission for this document is not active for your account, or for the person who delegated to you. A colleague in the same role signs.',
+    'inbox.blocked.noPermission':
+      'The approve permission for this document is not active for your account, or for the person who delegated to you.',
   },
 };

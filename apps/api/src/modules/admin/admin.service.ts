@@ -7,9 +7,19 @@ import bcrypt from 'bcryptjs';
 import type { Prisma } from '@npi/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
-import { ALL_PERMISSIONS, PERMISSIONS } from '@npi/shared';
+import { EffectivePermissionsService } from '../../common/effective-permissions.service';
+import { holdsEffectively } from '../../common/permission-predicates';
+import { ALL_PERMISSIONS, PERMISSIONS, type PermissionEffect } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
-import { CreateRoleDto, CreateUserDto, ResetPasswordDto, UpdateOrgDto, UpdateRoleDto, UpdateUserDto } from './dto';
+import {
+  CreateRoleDto,
+  CreateUserDto,
+  ResetPasswordDto,
+  SetUserPermissionsDto,
+  UpdateOrgDto,
+  UpdateRoleDto,
+  UpdateUserDto,
+} from './dto';
 
 const ORG_SELECT = {
   id: true,
@@ -53,24 +63,35 @@ function shapeUser(row: UserRow) {
   return { ...rest, roles: [row.role, ...extraRoles.map((er) => er.role)] };
 }
 
-/** A user holds `permission` through their primary role or any extra role. */
-const holdsPermission = (permission: string): Prisma.UserWhereInput => ({
-  OR: [
-    { role: { permissions: { has: permission } } },
-    { extraRoles: { some: { role: { permissions: { has: permission } } } } },
-  ],
-});
+/** One override as it is stored, compared and audited. */
+interface OverrideRow {
+  permission: string;
+  effect: PermissionEffect;
+  reason: string | null;
+}
+
+const byPermission = (a: { permission: string }, b: { permission: string }) =>
+  a.permission.localeCompare(b.permission, 'en');
 
 /**
  * User & role administration. The one invariant everything here protects:
  * the organization must never end up without an active user who can manage
  * users — a locked-out tenant is unrecoverable without database surgery.
+ *
+ * ADR-02 hard rule 4 makes it a post-condition: every change that can take
+ * `admin.user.manage` away (deactivating a user, changing their roles,
+ * stripping the key from a role, a DENY override) writes first, then counts
+ * the active users who still hold the key EFFECTIVELY, inside the same
+ * transaction and under a per-organization advisory lock; zero rolls the
+ * write back. A read-then-write pre-check races: two administrators demoting
+ * each other at the same moment would both see the other still in place.
  */
 @Injectable()
 export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly effective: EffectivePermissionsService,
   ) {}
 
   // ── users ─────────────────────────────────────────────────────────────────
@@ -158,46 +179,35 @@ export class AdminService {
   async updateUser(user: AuthUser, id: string, dto: UpdateUserDto) {
     const target = await this.prisma.user.findFirst({
       where: { id, organizationId: user.organizationId },
-      include: { role: true, extraRoles: { include: { role: true } } },
+      include: { extraRoles: true },
     });
     if (!target) throw new NotFoundException('User not found');
 
     if (dto.isActive === false && id === user.userId) {
       throw new BadRequestException('You cannot deactivate your own account');
     }
-    const newPrimary =
-      dto.roleId && dto.roleId !== target.roleId
-        ? await this.getRoleOwned(user.organizationId, dto.roleId)
-        : target.role;
+    const newRoleId = dto.roleId && dto.roleId !== target.roleId ? dto.roleId : null;
+    const newPrimaryId = newRoleId
+      ? (await this.getRoleOwned(user.organizationId, newRoleId)).id
+      : target.roleId;
 
     // The extra roles after this update. Omitted → unchanged, except that a
     // role promoted to primary stops being an extra (it would be held twice).
     const currentExtraIds = target.extraRoles.map((er) => er.roleId);
     const nextExtraIds =
       dto.extraRoleIds !== undefined
-        ? await this.validateExtraRoles(user.organizationId, newPrimary.id, dto.extraRoleIds)
-        : currentExtraIds.filter((rid) => rid !== newPrimary.id);
+        ? await this.validateExtraRoles(user.organizationId, newPrimaryId, dto.extraRoleIds)
+        : currentExtraIds.filter((rid) => rid !== newPrimaryId);
     const extraRolesChanged =
       dto.extraRoleIds !== undefined || nextExtraIds.length !== currentExtraIds.length;
+    // What can take user management away from someone: switching them off or
+    // changing the roles they hold. A rename or a locale change cannot.
+    const touchesAuthority = dto.isActive === false || !!newRoleId || extraRolesChanged;
 
-    // Lockout guard: would this update strip the org's last active user-manager?
-    // A user manages users through their primary role OR any extra role.
-    const holdsNow =
-      target.role.permissions.includes(PERMISSIONS.USER_MANAGE) ||
-      target.extraRoles.some((er) => er.role.permissions.includes(PERMISSIONS.USER_MANAGE));
-    let holdsAfter = newPrimary.permissions.includes(PERMISSIONS.USER_MANAGE);
-    if (!holdsAfter && nextExtraIds.length) {
-      const nextExtras = await this.prisma.role.findMany({
-        where: { id: { in: nextExtraIds }, organizationId: user.organizationId },
-        select: { permissions: true },
-      });
-      holdsAfter = nextExtras.some((r) => r.permissions.includes(PERMISSIONS.USER_MANAGE));
-    }
-    const losesManage = holdsNow && (dto.isActive === false || !holdsAfter);
-    if (losesManage) await this.assertAnotherManagerExists(user.organizationId, target.id);
-
-    // Primary role, flags and the extra-role set change together or not at all.
+    // Primary role, flags, the extra-role set and the audit row change together
+    // or not at all.
     const updated = await this.prisma.$transaction(async (tx) => {
+      if (touchesAuthority) await this.lockUserAdministration(tx, user.organizationId);
       await tx.user.update({
         where: { id },
         data: {
@@ -216,21 +226,31 @@ export class AdminService {
           });
         }
       }
+      if (touchesAuthority) {
+        await this.assertAdministratorRemains(
+          tx,
+          user.organizationId,
+          'Cannot remove the last active administrator',
+        );
+      }
+      await this.audit.record(
+        {
+          organizationId: user.organizationId,
+          actorId: user.userId,
+          entityType: 'User',
+          entityId: id,
+          action: 'UPDATE',
+          before: {
+            roleId: target.roleId,
+            extraRoleIds: currentExtraIds,
+            isActive: target.isActive,
+            nameAr: target.nameAr,
+          },
+          after: { ...(dto as unknown as Record<string, unknown>), extraRoleIds: nextExtraIds },
+        },
+        tx,
+      );
       return tx.user.findUniqueOrThrow({ where: { id }, select: USER_SELECT });
-    });
-    await this.audit.record({
-      organizationId: user.organizationId,
-      actorId: user.userId,
-      entityType: 'User',
-      entityId: id,
-      action: 'UPDATE',
-      before: {
-        roleId: target.roleId,
-        extraRoleIds: currentExtraIds,
-        isActive: target.isActive,
-        nameAr: target.nameAr,
-      },
-      after: { ...(dto as unknown as Record<string, unknown>), extraRoleIds: nextExtraIds },
     });
     return shapeUser(updated);
   }
@@ -255,19 +275,172 @@ export class AdminService {
     return { ok: true };
   }
 
-  /** 400 unless at least one OTHER active user still holds admin.user.manage. */
-  private async assertAnotherManagerExists(organizationId: string, excludeUserId: string) {
-    const others = await this.prisma.user.count({
+  // ── per-user permission overrides (ADR-02 §3-1) ────────────────────────────
+
+  /**
+   * What a user's permissions are made of: their roles (primary first, each
+   * with its keys), their GRANT / DENY overrides (by key, with who saved each)
+   * and the effective set the server enforces. A user of another organization
+   * is a 404, as everywhere else.
+   */
+  async getUserPermissions(user: AuthUser, id: string) {
+    const found = await this.effective.forUser(id);
+    if (!found || found.user.organizationId !== user.organizationId) {
+      throw new NotFoundException('User not found');
+    }
+    // The override has no User relation (it outlives its author, like the
+    // audit trail), so resolve the authors' names in one batch.
+    const creatorIds = [
+      ...new Set(found.overrides.map((o) => o.createdById).filter((c): c is string => !!c)),
+    ];
+    const creators = creatorIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: creatorIds }, organizationId: user.organizationId },
+          select: { id: true, nameAr: true, nameEn: true },
+        })
+      : [];
+    const byId = new Map(creators.map((c) => [c.id, c]));
+    return {
+      roles: found.roles.map((r) => ({
+        id: r.id,
+        key: r.key,
+        nameAr: r.nameAr,
+        nameEn: r.nameEn,
+        permissions: r.permissions,
+      })),
+      overrides: [...found.overrides].sort(byPermission).map((o) => ({
+        permission: o.permission,
+        effect: o.effect,
+        reason: o.reason,
+        createdAt: o.createdAt,
+        createdBy: o.createdById ? (byId.get(o.createdById) ?? null) : null,
+      })),
+      effective: found.permissions,
+    };
+  }
+
+  /**
+   * REPLACES the user's whole set of overrides. One transaction: the
+   * organization's lock, the replace, the lockout post-condition (hard rule 4:
+   * a DENY of `admin.user.manage` on the last administrator, or dropping the
+   * GRANT that made them one, rolls back with a 400), and one audit row with
+   * the set before and after (hard rule 3). Answers what the GET answers.
+   */
+  async setUserPermissions(user: AuthUser, id: string, dto: SetUserPermissionsDto) {
+    const next = this.validateOverrides(dto.overrides);
+    const target = await this.prisma.user.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!target) throw new NotFoundException('User not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockUserAdministration(tx, user.organizationId);
+      // Read under the lock, so the audit's "before" is what this save replaced.
+      const before: OverrideRow[] = (
+        await tx.userPermissionOverride.findMany({
+          where: { userId: id },
+          select: { permission: true, effect: true, reason: true },
+        })
+      ).sort(byPermission);
+      // Saving the set that is already there changes nothing, so it writes
+      // nothing: no rows rewritten under a new author and date, and no audit
+      // line claiming a change that did not happen.
+      const unchanged =
+        before.length === next.length &&
+        before.every(
+          (b, i) =>
+            b.permission === next[i].permission &&
+            b.effect === next[i].effect &&
+            b.reason === next[i].reason,
+        );
+      if (unchanged) return;
+
+      await tx.userPermissionOverride.deleteMany({ where: { userId: id } });
+      if (next.length) {
+        await tx.userPermissionOverride.createMany({
+          data: next.map((o) => ({
+            organizationId: user.organizationId,
+            userId: id,
+            permission: o.permission,
+            effect: o.effect,
+            reason: o.reason,
+            createdById: user.userId,
+          })),
+        });
+      }
+      await this.assertAdministratorRemains(
+        tx,
+        user.organizationId,
+        'Cannot remove the last active administrator',
+      );
+      await this.audit.record(
+        {
+          organizationId: user.organizationId,
+          actorId: user.userId,
+          entityType: 'User',
+          entityId: id,
+          action: 'PERMISSION_OVERRIDE',
+          before: { overrides: before },
+          after: { overrides: next },
+        },
+        tx,
+      );
+    });
+    return this.getUserPermissions(user, id);
+  }
+
+  /**
+   * Known keys only, each named once; a blank reason is no reason. Sorted by
+   * key, the order the set is compared, stored and audited in. The DTO checks
+   * the same at the edge; this keeps the service honest on its own.
+   */
+  private validateOverrides(overrides: SetUserPermissionsDto['overrides']): OverrideRow[] {
+    const valid = new Set<string>(ALL_PERMISSIONS);
+    const unknown = overrides.map((o) => o.permission).filter((p) => !valid.has(p));
+    if (unknown.length) {
+      throw new BadRequestException(`Unknown permission key: ${unknown.join(', ')}`);
+    }
+    if (new Set(overrides.map((o) => o.permission)).size !== overrides.length) {
+      throw new BadRequestException('Overrides must not name the same permission twice');
+    }
+    return overrides
+      .map((o) => ({ permission: o.permission, effect: o.effect, reason: o.reason?.trim() || null }))
+      .sort(byPermission);
+  }
+
+  // ── the lockout post-condition (ADR-02 hard rule 4) ───────────────────────
+
+  /**
+   * Serialises, per organization, every transaction that can take user
+   * management away, so each one's post-condition counts after the previous
+   * one has committed. Released when the transaction ends.
+   */
+  private async lockUserAdministration(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+  ): Promise<void> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`user-admin:${organizationId}`}))`;
+  }
+
+  /**
+   * After the write, inside its transaction: 400 (which rolls the write back)
+   * unless at least one active user of the organization still holds
+   * `admin.user.manage` effectively — through a role or a GRANT, not DENIED.
+   */
+  private async assertAdministratorRemains(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    message: string,
+  ): Promise<void> {
+    const left = await tx.user.count({
       where: {
         organizationId,
         isActive: true,
-        id: { not: excludeUserId },
-        ...holdsPermission(PERMISSIONS.USER_MANAGE),
+        AND: [holdsEffectively(PERMISSIONS.USER_MANAGE)],
       },
     });
-    if (others === 0) {
-      throw new BadRequestException('Cannot remove the last active administrator');
-    }
+    if (left === 0) throw new BadRequestException(message);
   }
 
   // ── roles ─────────────────────────────────────────────────────────────────
@@ -319,62 +492,47 @@ export class AdminService {
 
   async updateRole(user: AuthUser, id: string, dto: UpdateRoleDto) {
     const role = await this.getRoleOwned(user.organizationId, id);
+    const permissions = dto.permissions ? this.validatePermissions(dto.permissions) : undefined;
+    // Only taking the key off a role can leave the organization without an
+    // administrator; adding keys or renaming cannot.
+    const stripsUserManage =
+      !!permissions &&
+      role.permissions.includes(PERMISSIONS.USER_MANAGE) &&
+      !permissions.includes(PERMISSIONS.USER_MANAGE);
 
-    let permissions: string[] | undefined;
-    if (dto.permissions) {
-      permissions = this.validatePermissions(dto.permissions);
-      // Lockout guard: stripping user-management from this role must leave the
-      // org at least one active manager through some other role.
-      if (
-        role.permissions.includes(PERMISSIONS.USER_MANAGE) &&
-        !permissions.includes(PERMISSIONS.USER_MANAGE)
-      ) {
-        const others = await this.prisma.user.count({
-          where: {
-            organizationId: user.organizationId,
-            isActive: true,
-            // Another user keeps user-management through some role OTHER than
-            // the one being edited — as their primary or as an extra role.
-            OR: [
-              { roleId: { not: role.id }, role: { permissions: { has: PERMISSIONS.USER_MANAGE } } },
-              {
-                extraRoles: {
-                  some: {
-                    roleId: { not: role.id },
-                    role: { permissions: { has: PERMISSIONS.USER_MANAGE } },
-                  },
-                },
-              },
-            ],
-          },
-        });
-        if (others === 0) {
-          throw new BadRequestException(
-            'Cannot remove user management from the last administrator role',
-          );
-        }
+    // The role, the lockout post-condition and the audit row commit together.
+    return this.prisma.$transaction(async (tx) => {
+      if (stripsUserManage) await this.lockUserAdministration(tx, user.organizationId);
+      const updated = await tx.role.update({
+        where: { id },
+        data: {
+          nameAr: dto.nameAr?.trim() || undefined,
+          nameEn: dto.nameEn?.trim() || undefined,
+          permissions,
+        },
+        include: { _count: { select: { users: true } } },
+      });
+      if (stripsUserManage) {
+        await this.assertAdministratorRemains(
+          tx,
+          user.organizationId,
+          'Cannot remove user management from the last administrator role',
+        );
       }
-    }
-
-    const updated = await this.prisma.role.update({
-      where: { id },
-      data: {
-        nameAr: dto.nameAr?.trim() || undefined,
-        nameEn: dto.nameEn?.trim() || undefined,
-        permissions,
-      },
-      include: { _count: { select: { users: true } } },
+      await this.audit.record(
+        {
+          organizationId: user.organizationId,
+          actorId: user.userId,
+          entityType: 'Role',
+          entityId: id,
+          action: 'UPDATE',
+          before: { permissions: role.permissions, nameAr: role.nameAr },
+          after: { permissions: updated.permissions, nameAr: updated.nameAr },
+        },
+        tx,
+      );
+      return updated;
     });
-    await this.audit.record({
-      organizationId: user.organizationId,
-      actorId: user.userId,
-      entityType: 'Role',
-      entityId: id,
-      action: 'UPDATE',
-      before: { permissions: role.permissions, nameAr: role.nameAr },
-      after: { permissions: updated.permissions, nameAr: updated.nameAr },
-    });
-    return updated;
   }
 
   async deleteRole(user: AuthUser, id: string) {

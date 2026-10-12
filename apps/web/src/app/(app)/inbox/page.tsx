@@ -162,7 +162,9 @@ export default function InboxPage() {
                       <div className="mt-1 text-xs text-slate-500">
                         {task.blockedReason === 'RAISED_BY_YOU'
                           ? t('inbox.blocked.raisedByYou')
-                          : t('inbox.blocked.alreadySigned')}
+                          : task.blockedReason === 'NO_PERMISSION'
+                            ? t('inbox.blocked.noPermission')
+                            : t('inbox.blocked.alreadySigned')}
                       </div>
                     )}
                   </td>

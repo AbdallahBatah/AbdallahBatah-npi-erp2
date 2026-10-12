@@ -8,6 +8,7 @@ import { NotificationService } from './notification.service';
 import { ApprovalService } from './approval.service';
 import { ApprovalEscalationScheduler } from './approval-escalation.scheduler';
 import { DelegationService } from './delegation.service';
+import { EffectivePermissionsService } from './effective-permissions.service';
 import { WorkflowEngine } from './workflow/workflow.engine';
 import { OutboxService } from './workflow/outbox.service';
 import { EventDispatcher } from './workflow/event-dispatcher.service';
@@ -33,6 +34,7 @@ import { EventDispatcher } from './workflow/event-dispatcher.service';
     NotificationService,
     ApprovalService,
     DelegationService,
+    EffectivePermissionsService,
     ApprovalEscalationScheduler,
     OutboxService,
     WorkflowEngine,
@@ -47,6 +49,7 @@ import { EventDispatcher } from './workflow/event-dispatcher.service';
     NotificationService,
     ApprovalService,
     DelegationService,
+    EffectivePermissionsService,
     OutboxService,
     WorkflowEngine,
     EventDispatcher,
