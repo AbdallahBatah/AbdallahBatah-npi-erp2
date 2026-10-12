@@ -77,7 +77,14 @@ export class ReportsService {
    */
   async poc(user: AuthUser): Promise<PocRow[]> {
     const contracts = await this.prisma.contract.findMany({
-      where: { organizationId: user.organizationId, status: { in: ['ACTIVE', 'CLOSED'] } },
+      where: {
+        organizationId: user.organizationId,
+        status: { in: ['ACTIVE', 'CLOSED'] },
+        // PPA (energy-sale) contracts carry no milestones and a zero contract value, and
+        // their revenue is recognised as billed by the settlement invoice. Left in, they
+        // would surface as a contract liability that recognize() could post.
+        contractType: { not: 'PPA' },
+      },
       include: {
         customer: { select: { nameAr: true, nameEn: true } },
         milestones: { select: { amount: true, status: true } },
