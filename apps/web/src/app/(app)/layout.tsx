@@ -3,6 +3,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { screenForPath } from '@npi/shared';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { Icon } from '@/components/icons';
@@ -21,6 +22,28 @@ const ROLE_LABELS: Record<string, { ar: string; en: string }> = {
   finance: { ar: 'مالية', en: 'Finance' },
   ops: { ar: 'تشغيل', en: 'Operations' },
 };
+
+/**
+ * Shown in place of a page whose screen the user may not open (ADR-02 §3-5):
+ * a direct link, a bookmark, or a page left open while the key was withdrawn.
+ * Quiet on purpose — it replaces the page and the red error card its refused
+ * requests would have drawn, and the sidebar and search stay where they are.
+ */
+function ScreenNotEnabled() {
+  const { t } = useI18n();
+  return (
+    <div className="card mx-auto mt-6 max-w-lg p-8 text-center">
+      <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+        <Icon name="lock" className="h-5 w-5" />
+      </div>
+      <h1 className="text-base font-bold text-slate-900">{t('nav.screenOff')}</h1>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{t('nav.screenOffHint')}</p>
+      <Link href="/dashboard" className="btn-ghost mt-5">
+        {t('nav.dashboard')}
+      </Link>
+    </div>
+  );
+}
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, loading, logout, can } = useAuth();
@@ -63,6 +86,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       </div>
     );
   }
+
+  // Page guard: the registry screen this path belongs to, if its view key is
+  // missing. Evaluated only past the loading gate above, so it never flashes
+  // while the session is still being read; `can` follows every refresh.
+  const screen = screenForPath(pathname);
+  const screenOff = screen?.view !== undefined && !can(screen.view);
 
   return (
     <div className="flex min-h-screen">
@@ -219,7 +248,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
       {/* lg:pt-16 keeps page headers clear of the floating bell. */}
       <main className="flex-1 overflow-x-auto p-4 pt-20 lg:ms-[264px] lg:p-8 lg:pt-16">
-        <div className="mx-auto max-w-7xl">{children}</div>
+        <div className="mx-auto max-w-7xl">{screenOff ? <ScreenNotEnabled /> : children}</div>
       </main>
     </div>
   );

@@ -16,6 +16,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'nav.invoices': 'الفواتير',
     'nav.ledger': 'دفتر الأستاذ',
     'nav.logout': 'تسجيل الخروج',
+    'nav.screenOff': 'هذه الشاشة غير مفعّلة لحسابك',
+    'nav.screenOffHint': 'اطلب من مدير النظام تفعيلها إن كنت تحتاجها',
 
     'common.create': 'إنشاء',
     'common.edit': 'تعديل',
@@ -1250,6 +1252,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'nav.invoices': 'Invoices',
     'nav.ledger': 'General ledger',
     'nav.logout': 'Sign out',
+    'nav.screenOff': 'This screen is not enabled for your account',
+    'nav.screenOffHint': 'Ask your administrator to enable it if you need it',
 
     'common.create': 'Create',
     'common.edit': 'Edit',

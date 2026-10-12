@@ -20,6 +20,19 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Window event fired when a request outside `/auth/*` answers 403. A 403 on a
+ * screen the user could open usually means a permission was withdrawn while
+ * the page was open, so the AuthProvider re-reads the session on it (ADR-02
+ * §3-5) and the sidebar and page guard catch up at once.
+ */
+export const FORBIDDEN_EVENT = 'npi:forbidden';
+
+function announceForbidden(path: string) {
+  if (typeof window === 'undefined' || path.startsWith('/auth/')) return;
+  window.dispatchEvent(new Event(FORBIDDEN_EVENT));
+}
+
 export async function apiFetch<T = any>(
   path: string,
   options: RequestInit = {},
@@ -46,6 +59,8 @@ export async function apiFetch<T = any>(
     }
     throw new ApiError(401, 'Session expired');
   }
+
+  if (res.status === 403) announceForbidden(path);
 
   if (res.status === 204) return undefined as T;
 
@@ -94,6 +109,7 @@ export async function apiUpload<T = any>(path: string, file: File): Promise<T> {
   } catch {
     throw new ApiError(0, 'Network unreachable');
   }
+  if (res.status === 403) announceForbidden(path);
   const text = await res.text();
   let body: any;
   try {
@@ -117,6 +133,7 @@ export async function apiDownload(path: string, fileName: string): Promise<void>
     throw new ApiError(0, 'Network unreachable');
   }
   if (!res.ok) {
+    if (res.status === 403) announceForbidden(path);
     let message = res.statusText;
     try {
       message = (await res.json())?.message ?? message;
