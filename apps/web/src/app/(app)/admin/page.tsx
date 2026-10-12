@@ -8,7 +8,7 @@
  * The API enforces the lockout guards; the UI just avoids offering footguns
  * (no deactivate button on yourself).
  */
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
@@ -121,6 +121,7 @@ export default function AdminPage() {
   const [uEmail, setUEmail] = useState('');
   const [uPassword, setUPassword] = useState('');
   const [uRoleId, setURoleId] = useState('');
+  const uRoleRef = useRef<HTMLSelectElement>(null);
   const [uExtra, setUExtra] = useState<Set<string>>(new Set());
 
   // set-password modal
@@ -229,7 +230,10 @@ export default function AdminPage() {
     setUNameEn('');
     setUEmail('');
     setUPassword('');
-    setURoleId(roles?.[0]?.id ?? '');
+    // No preselected role: the first one in the list is usually the
+    // administrator, and a new account must not get it just because nobody
+    // changed the select. The admin picks one; the form refuses until then.
+    setURoleId('');
     setUExtra(new Set());
     setUOpen(true);
   }
@@ -244,6 +248,12 @@ export default function AdminPage() {
     setUOpen(true);
   }
   async function submitUser() {
+    // The select's `required` normally stops the form first; this keeps the
+    // API from ever receiving an empty role and shows the same native message.
+    if (!uRoleId) {
+      uRoleRef.current?.reportValidity();
+      return;
+    }
     const nameAr = uNameAr.trim() || uNameEn.trim();
     const nameEn = uNameEn.trim() || uNameAr.trim();
     // The primary role can never also be an additional one.
@@ -670,10 +680,15 @@ export default function AdminPage() {
             </Field>
           )}
           <Field label={t('adm.user.primaryRole')}>
+            {/* Native constraint validation, like the fields above. The global
+                handler in i18n.tsx would say only "this field is required";
+                onInvalid runs after it and names what is missing. */}
             <select
+              ref={uRoleRef}
               className="input"
               required
               value={uRoleId}
+              onInvalid={(e) => e.currentTarget.setCustomValidity(t('adm.user.roleRequired'))}
               onChange={(e) => {
                 setURoleId(e.target.value);
                 // Promoting a role to primary removes it from the additional ones.
@@ -684,6 +699,11 @@ export default function AdminPage() {
                 });
               }}
             >
+              {!uRoleId && (
+                <option value="" disabled>
+                  {t('adm.user.rolePlaceholder')}
+                </option>
+              )}
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
                   {roleName(r)}

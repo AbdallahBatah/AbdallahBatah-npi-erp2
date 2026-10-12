@@ -183,7 +183,9 @@ export default function DashboardPage() {
         <div className="card p-8 text-center text-sm text-slate-500">{t('dash.noMetrics')}</div>
       )}
 
-      {/* Workflow */}
+      {/* Workflow — the sales funnel (lead → opportunity → proposal → contract),
+          shown only to a role that can read leads (same flag as the CRM tiles). */}
+      {canCrm && (
       <div className="card mt-6 p-6">
         <h2 className="mb-5 text-sm font-bold text-slate-800">{t('dash.flow')}</h2>
         <div className="flex flex-wrap items-center gap-2">
@@ -200,6 +202,7 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 }

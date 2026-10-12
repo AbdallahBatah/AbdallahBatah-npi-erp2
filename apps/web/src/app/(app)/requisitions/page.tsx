@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
@@ -57,6 +58,7 @@ interface DraftLine {
 
 export default function RequisitionsPage() {
   const { locale, t } = useI18n();
+  const { can } = useAuth();
   const { act, busy } = useAct();
   const ar = locale === 'ar';
 
@@ -115,9 +117,11 @@ export default function RequisitionsPage() {
         title={t('pr.title')}
         subtitle={t('pr.hint')}
         action={
-          <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
-            {t('pr.new')}
-          </Btn>
+          can('scm.requisition.write') ? (
+            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+              {t('pr.new')}
+            </Btn>
+          ) : undefined
         }
       />
 
