@@ -42,13 +42,22 @@ API listens on 4000; routes are under `/api`.
 
 ## Seeded logins
 
+Since P1-13 the seed writes the company's seven roles from `ROLE_PRESETS`
+(`packages/shared/src/presets.ts`) beside `admin` and `sales`, one login each.
+Sidebar screens in brackets, of 24. The three accounts without a password here
+have theirs in `ACCOUNTS` of `scripts/api-smoke.mjs` (and in `seed.ts`).
+
 | Email | Password | Role |
 |---|---|---|
-| `admin@npi.sa` | `Admin@123` | all permissions |
-| `sales@npi.sa` | `Sales@123` | CRM + commercial |
-| `accountant@npi.sa` | `Acc@12345` | finance + scm r/w |
-| `pm@npi.sa` | `Pm@123456` | projects + scm r/w |
-| `engineer@npi.sa` | `Eng@12345` | fsm + reads, **no finance** |
+| `admin@npi.sa` | `Admin@123` | `admin`: all permissions (24) |
+| `sales@npi.sa` | `Sales@123` | `sales`: CRM + commercial |
+| `ceo@npi.sa` | see `ACCOUNTS` | `executive` المدير العام: reads and approvals, no write key; signs every PO, proposal and change order, and a claim's second step (17) |
+| `pm@npi.sa` | `Pm@123456` | `pm` مدير عام المشاريع: CRM, proposals, contracts, projects; signs every requisition and a claim's first step (12) |
+| `tech@npi.sa` | see `ACCOUNTS` | `technical_office` المكتب الفني: proposals, items, procurement write (9) |
+| `engineer@npi.sa` | `Eng@12345` | `site_engineer` مهندس المشاريع: projects + requisitions, **no finance, no procurement** (6) |
+| `finance@npi.sa` | see `ACCOUNTS` | `finance_manager` الإدارة المالية: invoices, procurement write, reports, periods (12) |
+| `accountant@npi.sa` | `Acc@12345` | `accountant` المحاسب: procurement read + vendor payments only (6) |
+| `store@npi.sa` | see `ACCOUNTS` | `warehouse_keeper` أمين المستودع: procurement read/write, items read (6) |
 
 `engineer` is the most useful negative-case account: it is the role that
 exposed the "403 rendered as an error banner" defect class.

@@ -38,6 +38,7 @@ import { OpportunitiesService } from '../src/modules/crm/opportunities.service';
 import { ProcurementService } from '../src/modules/procurement/procurement.service';
 import { PayablesService } from '../src/modules/finance/payables.service';
 import type { AuthUser } from '../src/common/auth-user';
+import { authUserFor } from './support/proposal-stack';
 
 const prisma = new PrismaService();
 const numbering = new NumberingService(prisma);
@@ -55,11 +56,15 @@ const invoices = new InvoicesService(prisma, numbering, audit, posting, tax, new
 const reports = new ReportsService(prisma, audit, posting);
 const contracts = new ContractsService(prisma, numbering, audit, notifications, new OpportunitiesService(prisma, numbering, audit, outbox));
 const procurement = new ProcurementService(prisma, numbering, audit, posting, tax, approvals, notifications, engine, events);
+// What Nest does on start: hand the matrix the purchase order's applier.
+procurement.onModuleInit();
 const payables = new PayablesService(prisma, numbering, audit, posting);
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 let USER: AuthUser;
+/** ceo@npi.sa, the seeded executive: signs every purchase order (P1-13). */
+let CEO: AuthUser;
 let organizationId: string;
 
 /** Signed ledger balance (debit − credit) of one account, straight from the journal. */
@@ -77,20 +82,17 @@ beforeAll(async () => {
   if (!['localhost', '127.0.0.1', '::1'].includes(new URL(url).hostname)) {
     throw new Error('Refusing to run against a non-local database');
   }
-  const org = await prisma.organization.findFirst({ select: { id: true } });
-  if (!org) throw new Error('No organization — run npm run db:seed');
-  organizationId = org.id;
+  if (!(await prisma.user.findUnique({ where: { email: 'admin@npi.sa' }, select: { id: true } }))) {
+    throw new Error('No seeded admin@npi.sa — run npm run db:seed');
+  }
   // The M4 workflow engine checks the caller's live permissions itself, so the
   // test user must carry the real permission set of its role, not a bare id.
-  const user = await prisma.user.findFirst({
-    where: { organizationId },
-    select: { id: true, role: { select: { permissions: true } } },
-  });
-  USER = {
-    userId: user!.id,
-    organizationId,
-    permissions: user!.role?.permissions ?? [],
-  } as unknown as AuthUser;
+  // The seeded administrator (every key): the organization's first user was the
+  // accountant, who holds three keys since the company's roles became the
+  // seed's default (P1-13).
+  USER = await authUserFor(prisma, 'admin@npi.sa');
+  CEO = await authUserFor(prisma, 'ceo@npi.sa');
+  organizationId = USER.organizationId;
 });
 
 afterAll(async () => {
@@ -173,9 +175,17 @@ describe('a full cycle, then the five reconciliations', () => {
       vendorId: vendor!.id,
       lines: [{ itemId: item!.id, qty: 1_000, unitPrice: 20 }],
     } as never);
-    // 23,000 total sits under the 100,000 approval threshold, so this clears
-    // in one step rather than entering the matrix.
-    await procurement.approvePo(USER, po.id);
+    // P1-13: the seeded PURCHASE_ORDER rule runs from 0 SAR, so the order
+    // waits for the executive's signature; the last signature applies it.
+    const raised = (await procurement.approvePo(USER, po.id)) as {
+      status?: string;
+      pendingApproval?: { id: string };
+    };
+    expect(raised.status).toBe('PENDING_APPROVAL');
+    const request = raised.pendingApproval;
+    expect(request).toBeDefined();
+    const signed = await approvals.decide(CEO, request!.id, 'APPROVE');
+    expect(signed.applied).toBe(true);
     // M4: goods may only be received against an order the vendor was told about.
     await procurement.sendPo(USER, po.id);
 

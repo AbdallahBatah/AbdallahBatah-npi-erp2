@@ -23,12 +23,19 @@ function valueOf(flag) {
 }
 
 // ── seeded accounts ────────────────────────────────────────────────────────
+// One login per seeded role (packages/db/prisma/seed.ts): admin, sales, and the
+// company's seven roles, which are ROLE_PRESETS since P1-13 (the executive,
+// the three below it, and finance management, technical office and warehouse).
 const ACCOUNTS = [
   { key: 'admin', email: 'admin@npi.sa', password: 'Admin@123' },
   { key: 'sales', email: 'sales@npi.sa', password: 'Sales@123' },
   { key: 'accountant', email: 'accountant@npi.sa', password: 'Acc@12345' },
   { key: 'pm', email: 'pm@npi.sa', password: 'Pm@123456' },
   { key: 'engineer', email: 'engineer@npi.sa', password: 'Eng@12345' },
+  { key: 'executive', email: 'ceo@npi.sa', password: 'Ceo@12345' },
+  { key: 'finance', email: 'finance@npi.sa', password: 'Fin@12345' },
+  { key: 'tech', email: 'tech@npi.sa', password: 'Tech@12345' },
+  { key: 'store', email: 'store@npi.sa', password: 'Store@12345' },
 ];
 
 /**
@@ -73,6 +80,8 @@ const GUARDED_ROUTES = [
   ['/fsm/work-orders/summary', 'fsm.workorder.read'],
   ['/admin/users', 'admin.user.manage'],
   ['/admin/roles', 'admin.user.manage'],
+  // P1-11: the presets page's preview.
+  ['/admin/role-presets', 'admin.user.manage'],
   ['/admin/audit', 'admin.audit.read'],
   // P1-5: the pick lists, any one key of the list's LOOKUP_ACCESS row.
   ['/reference/lookups/items', ['commercial.item.read', 'scm.requisition.write', 'scm.procurement.write', 'commercial.proposal.write', 'fsm.workorder.write']],
@@ -141,10 +150,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * `/auth/login` is throttled to 5 per minute per IP (bcrypt makes it a
- * credential-stuffing target). This suite needs exactly five logins for the
- * five seeded roles, which is the entire budget — so every later check that
- * touches the login endpoint has to wait the window out or it reads a 429 as
- * a product failure. `loginWindowOpensAt` tracks when that is safe again.
+ * credential-stuffing target). This suite logs in once per seeded role — nine
+ * since P1-13, more than one window's budget — so `login()` waits the limiter
+ * out once when the sixth meets it, and every later check that touches the
+ * login endpoint has to wait the window out or it reads a 429 as a product
+ * failure. `firstLoginAt` tracks when that is safe again.
  */
 let firstLoginAt = 0;
 const LOGIN_WINDOW_MS = 61_000;
@@ -364,8 +374,8 @@ async function main() {
     return r.status === 401 ? true : `status ${r.status}, expected 401`;
   });
 
-  // The five role logins above used the whole 5/min budget. Wait it out rather
-  // than reading the resulting 429 as "the password check is broken".
+  // The role logins above used the 5/min budget. Wait it out rather than
+  // reading the resulting 429 as "the password check is broken".
   await waitForLoginWindow('the wrong-password check needs a real 401, not a 429');
 
   await check('wrong password does not authenticate', async () => {

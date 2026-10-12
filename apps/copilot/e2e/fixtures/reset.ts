@@ -46,7 +46,7 @@ import type { CreatedEntity } from '../../src/intake/types';
 import { readItems } from '../../src/npi/admin';
 import { readVendorsBrief } from '../../src/npi/approvals';
 import { readEntityRef, readList } from '../../src/npi/responses';
-import { readAdminCredentials } from './accounts';
+import { readAdminCredentials, readSeededAccount } from './accounts';
 import { API_BASE } from './no-bypass';
 import { npiGet, npiLogin, type NpiSession } from './scratch-orgs';
 
@@ -277,16 +277,37 @@ export async function npiPurchaseOrderDetail(request: APIRequestContext, token: 
  *    `PurchaseOrder` row with its lines (`procurement.service.ts:242`): `id`,
  *    `code` (schema.prisma:952,955);
  *  - `POST …/:id/approve` (:55-59, no body): `approvePo` (:260-305) runs the
- *    matrix; below the seeded 100,000 PO rule (and with no rule for the
- *    caller's department) the verdict is `cleared` and one call takes the
- *    order DRAFT -> PENDING_APPROVAL -> APPROVED (:338); when a rule does
- *    park it the answer is `{ …order, pendingApproval }` (:302) and the next
- *    step would be refused, so that is reported as such;
+ *    matrix; since NPI's P1-13 the seeded PURCHASE_ORDER rule runs from 0 SAR
+ *    with the executive as its one step, so the answer is
+ *    `{ …order, pendingApproval }` (:302) and the order waits in
+ *    PENDING_APPROVAL; the seeded executive (`ceo@npi.sa`) then signs it in
+ *    NPI's inbox (`GET /approvals/inbox`, `POST /approvals/:id/decide`), and
+ *    the last signature takes it to APPROVED. With no rule covering it the
+ *    verdict is `cleared` and the one call already approves it;
  *  - `POST …/:id/send` (:62-66, no body): APPROVED -> SENT (:370-388).
  * The order is read back and the call throws unless it is `SENT`.
  * `lineIdBySku` is read from that detail (a PO line's id is not on the create
  * response keyed by SKU).
  */
+/**
+ * Signs a parked purchase order as the seeded executive, the one step of the
+ * seeded PURCHASE_ORDER rule: his inbox row for the order, then his decision.
+ * The test process plays the person who signs orders, with his own token,
+ * through NPI's API (the same precedent as the administrator's writes here).
+ */
+async function signAsExecutive(request: APIRequestContext, ref: NpiEntityRef): Promise<void> {
+  const executive = await npiLogin(request, readSeededAccount('executive'));
+  const inbox = await npiGet(request, executive.token, '/approvals/inbox');
+  if (!Array.isArray(inbox)) throw new Error('sentPurchaseOrder: GET /approvals/inbox is not a list');
+  const row = inbox
+    .map((r) => rec(r, 'inbox row'))
+    .find((r) => r.documentType === 'PURCHASE_ORDER' && r.documentId === ref.id);
+  if (row === undefined) {
+    throw new Error(`sentPurchaseOrder: ${ref.code} waits for approval but is not in the executive's inbox`);
+  }
+  await npiPost(request, executive.token, `/approvals/${encodeURIComponent(String(row.id))}/decide`, { decision: 'APPROVE' });
+}
+
 export async function sentPurchaseOrder(
   request: APIRequestContext,
   lines: PoLineSpec[],
@@ -313,9 +334,7 @@ export async function sentPurchaseOrder(
 
   const approved = rec(await npiPost(request, token, `/procurement/purchase-orders/${encodeURIComponent(ref.id)}/approve`), 'approved purchase order');
   if (approved.pendingApproval !== undefined && approved.pendingApproval !== null) {
-    throw new Error(
-      `sentPurchaseOrder: ${ref.code} was parked in an approval chain by NPI's matrix (status ${String(approved.status)}), so it cannot be sent`,
-    );
+    await signAsExecutive(request, ref);
   }
   await npiPost(request, token, `/procurement/purchase-orders/${encodeURIComponent(ref.id)}/send`);
 

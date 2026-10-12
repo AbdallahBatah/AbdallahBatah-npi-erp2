@@ -7,9 +7,10 @@
  * while its signature chain (`ApprovalRequest`, status PENDING) was still
  * waiting on someone else, and let the requester approve their own request.
  *
- * This suite drives the real seeded matrix — the PURCHASE_REQUISITION band
- * (`minAmount: 10_000`, chain `['pm']`, see packages/db/prisma/seed.ts) —
- * through the real WorkflowEngine and ApprovalService, using the real seeded
+ * This suite drives the real seeded matrix — the PURCHASE_REQUISITION rule
+ * (from 0 SAR, chain `['pm']`: PROPOSED_APPROVAL_RULES, which
+ * packages/db/prisma/seed.ts writes since P1-13) — through the real
+ * WorkflowEngine and ApprovalService, using the real seeded
  * users and their real role permissions. The point is to prove the fix
  * against the shipped configuration, not a hand-built stand-in for it.
  *
@@ -96,15 +97,21 @@ async function authUserFor(email: string): Promise<AuthUser> {
 }
 
 /**
- * accountant@npi.sa — holds both scm.requisition.write (can submit) and
- * scm.procurement.write (would pass the engine's bare permission check on
- * APPROVE). Deliberately NOT engineer@npi.sa: a site engineer never holds
- * scm.procurement.write at all, so using them as the requester would make the
- * self-approval case pass for the wrong reason (missing permission, not the
- * self-approval guard) and prove nothing about the actual defect.
+ * admin@npi.sa — holds scm.requisition.write (can submit) and every approve
+ * key (would pass the engine's bare permission check on APPROVE), and is not
+ * the chain's 'pm' step. Since P1-13 the company's seven roles are the seed's
+ * default and none of them both raises a requisition and holds
+ * scm.procurement.write, so the administrator is the requester. Deliberately
+ * NOT engineer@npi.sa: a site engineer holds no procurement key at all, so
+ * using them as the requester would make the self-approval case pass for the
+ * wrong reason (missing permission, not the self-approval guard) and prove
+ * nothing about the actual defect.
  */
 let REQUESTER: AuthUser;
-/** admin@npi.sa — holds scm.procurement.write, but is not the chain's 'pm' step. */
+/**
+ * ceo@npi.sa (the executive) — holds scm.procurement.approve, the APPROVE
+ * transition's key, but is not the chain's 'pm' step.
+ */
 let NON_STEP: AuthUser;
 /** pm@npi.sa — the seeded chain's one step for PURCHASE_REQUISITION. */
 let PM: AuthUser;
@@ -121,24 +128,25 @@ beforeAll(async () => {
   // type's applier too, and nothing else is under test here).
   requisitions.onModuleInit();
 
-  REQUESTER = await authUserFor('accountant@npi.sa');
-  NON_STEP = await authUserFor('admin@npi.sa');
+  REQUESTER = await authUserFor('admin@npi.sa');
+  NON_STEP = await authUserFor('ceo@npi.sa');
   PM = await authUserFor('pm@npi.sa');
 
   // Fail loudly here rather than produce a confusing assertion failure deep
   // in a test if the seed ever changes these roles' permissions.
   if (
     !REQUESTER.permissions.includes('scm.requisition.write') ||
-    !REQUESTER.permissions.includes('scm.procurement.write')
+    !REQUESTER.permissions.includes('scm.procurement.approve') ||
+    REQUESTER.roleKey === 'pm'
   ) {
     throw new Error(
-      'Fixture assumption broken: accountant@npi.sa must hold both scm.requisition.write ' +
-        'and scm.procurement.write for the self-approval case to test the real guard',
+      'Fixture assumption broken: admin@npi.sa must hold scm.requisition.write and ' +
+        'scm.procurement.approve outside the pm role for the self-approval case to test the real guard',
     );
   }
-  if (!NON_STEP.permissions.includes('scm.procurement.write') || NON_STEP.roleKey === 'pm') {
+  if (!NON_STEP.permissions.includes('scm.procurement.approve') || NON_STEP.roleKey === 'pm') {
     throw new Error(
-      'Fixture assumption broken: admin@npi.sa is not a valid non-step holder of scm.procurement.write',
+      'Fixture assumption broken: ceo@npi.sa is not a valid non-step holder of scm.procurement.approve',
     );
   }
   if (PM.roleKey !== 'pm') {
@@ -150,7 +158,12 @@ beforeAll(async () => {
     select: { id: true, unitCost: true },
   });
   itemId = item.id;
-  if (Number(item.unitCost) * 2 < 10_000) {
+  const band = await prisma.approvalRule.findFirstOrThrow({
+    where: { organizationId: REQUESTER.organizationId, documentType: 'PURCHASE_REQUISITION', isActive: true },
+    orderBy: { minAmount: 'asc' },
+    select: { minAmount: true },
+  });
+  if (Number(item.unitCost) * 2 < Number(band.minAmount)) {
     throw new Error(
       'Fixture assumption broken: 2x INV-50K no longer clears the PURCHASE_REQUISITION band',
     );
@@ -209,12 +222,12 @@ async function instanceOf(prId: string) {
 }
 
 describe('a purchase requisition cannot be approved outside its signature chain', () => {
-  it('refuses a non-step user who holds scm.procurement.write but is not the chain step', async () => {
+  it('refuses a non-step user who holds scm.procurement.approve but is not the chain step', async () => {
     const prId = await submittedRequisition();
 
-    await expect(requisitions.act(NON_STEP, prId, 'APPROVE')).rejects.toThrow(
-      ForbiddenException,
-    );
+    const refused = requisitions.act(NON_STEP, prId, 'APPROVE');
+    await expect(refused).rejects.toThrow(ForbiddenException);
+    await expect(refused).rejects.toThrow('Your role is not the approver at this step');
 
     const pr = await prOf(prId);
     expect(pr.status).toBe('PENDING_APPROVAL');
@@ -228,9 +241,9 @@ describe('a purchase requisition cannot be approved outside its signature chain'
   it('refuses the requester approving their own requisition', async () => {
     const prId = await submittedRequisition();
 
-    await expect(requisitions.act(REQUESTER, prId, 'APPROVE')).rejects.toThrow(
-      ForbiddenException,
-    );
+    const refused = requisitions.act(REQUESTER, prId, 'APPROVE');
+    await expect(refused).rejects.toThrow(ForbiddenException);
+    await expect(refused).rejects.toThrow('You cannot approve a requisition you raised yourself');
 
     const pr = await prOf(prId);
     expect(pr.status).toBe('PENDING_APPROVAL');

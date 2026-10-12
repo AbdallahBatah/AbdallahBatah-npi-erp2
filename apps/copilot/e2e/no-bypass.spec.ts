@@ -32,7 +32,7 @@
 //    records the tests create are NOT deleted afterwards: they stay as the
 //    users' own history in `npi_copilot` / `npi_erp` (demo data only), exactly
 //    like every earlier e2e run, and `llm_audit` rows are an audit trail.
-//  - D-T28-4  Describe 3 is a SIMULATION. The project manager cannot reach a
+//  - D-T28-4  Describe 3 is a SIMULATION. The executive cannot reach a
 //    contract card through the chat (describe 1 proves that gate), so the
 //    fixture creates the job directly, standing in for «a permission was
 //    revoked between preview and approval». What is under test is the
@@ -298,9 +298,10 @@ test.describe('a PR from the copilot lands in the matrix; the copilot cannot app
     expect(pr.pendingApproval).not.toBeNull();
     expect(pr.pendingApproval?.status).toBe('PENDING');
     expect(pr.pendingApproval?.currentStep).toBe(1);
-    // seed.ts `roleDefs`: key 'pm' has nameEn 'Project Manager'; the seeded
-    // PURCHASE_REQUISITION rule (>= 10,000) is the chain ['pm'].
-    expect(pr.pendingApproval?.steps[0]?.role.nameEn).toBe('Project Manager');
+    // NPI's seed writes the company roles (ROLE_PRESETS, P1-13): key 'pm' has
+    // nameEn 'Projects general manager', and the seeded PURCHASE_REQUISITION
+    // rule (from 0 SAR) is the chain ['pm'].
+    expect(pr.pendingApproval?.steps[0]?.role.nameEn).toBe('Projects general manager');
     // What the trail holds: `engine.open` writes OPEN at creation, the submit
     // transition writes SUBMIT. No APPROVE, by anyone.
     expect(pr.workflow.history.map((h) => h.actionCode)).toEqual(['OPEN', 'SUBMIT']);
@@ -441,11 +442,13 @@ test.describe('a refused step is reported verbatim and writes nothing (D-T28-4; 
 
   test.beforeAll(async ({ request }, testInfo) => {
     if (testInfo.project.name !== 'desktop') return;
-    // SIMULATION (D-T28-4): the pm has no `commercial.contract.write` and
-    // cannot reach this card through the chat (describe 1). The job is made
-    // directly, standing in for a permission revoked between preview and
-    // approval. The pm CAN read customers, so the preview resolves normally.
-    seeded = await seedPreviewJob(request, readSeededAccount('pm'), 'customer_contract', CONTRACT_SENTENCE);
+    // SIMULATION (D-T28-4): the executive has no `commercial.contract.write`
+    // and cannot reach this card through the chat (describe 1). The job is
+    // made directly, standing in for a permission revoked between preview and
+    // approval. The executive CAN read customers, so the preview resolves
+    // normally. (The project manager played this part until NPI's P1-13 made
+    // the company roles the seed's default: `pm` now holds contract write.)
+    seeded = await seedPreviewJob(request, readSeededAccount('executive'), 'customer_contract', CONTRACT_SENTENCE);
     expect(seeded.llmCalls).toBe(1);
 
     const admin = await npiLogin(request, readAdminCredentials());
@@ -457,7 +460,7 @@ test.describe('a refused step is reported verbatim and writes nothing (D-T28-4; 
   test.afterAll(disconnectNoBypassDb);
 
   test('(a) the card reports NPI\'s refusal verbatim, stops at step 2 and runs nothing after it', async ({ page }) => {
-    await signIn(page, readSeededAccount('pm'));
+    await signIn(page, readSeededAccount('executive'));
     await page.goto(`/copilot/documents/${seeded.jobId}`);
 
     await expect(card(page)).toBeVisible();

@@ -71,7 +71,7 @@ What it covers and, more usefully, **why each check earns its place**:
 | Group | Checks | Why it matters |
 |---|---|---|
 | Reachability | `/health` reports `db:up` | Distinguishes "API down" from "API up, database gone" — otherwise every later failure is noise. |
-| Auth | all five seeded roles log in; `/auth/me` returns permissions | A stale seed after a deploy silently strips permissions; this catches it before a user hits a 403. |
+| Auth | every seeded role logs in (nine since P1-13); `/auth/me` returns permissions | A stale seed after a deploy silently strips permissions; this catches it before a user hits a 403. |
 | Permission enforcement | for every route in the map, each role's actual result is compared against what its **own** permission list predicts | The guard is global and fail-closed. This asserts the wiring still matches the declaration, and it keeps working when the seed's permission sets change, because expectations are derived per-role at runtime rather than hardcoded. |
 | Accounting | trial balance `isBalanced` and Σdebit = Σcredit; balance sheet balanced; every journal entry balanced individually | `PostingService.journal` is the single path for automatic entries and checks balance per entry. An unbalanced ledger means something bypassed it. |
 | ZATCA | the PIH chain links: each document's `previousInvoiceHash` equals the previous document's `invoiceHash` | The hash chain is the integrity claim made to the tax authority. A break is not cosmetic. |
@@ -125,8 +125,8 @@ Two things about driving this app by script:
   rather than all 19 in one call.
 
 Re-run the sweep as `engineer@npi.sa` / `Eng@12345`. A role with no finance
-permissions must see fewer sidebar links (7, against admin's 19) and must not
-render a load-error card anywhere — **a 403 rendered as an error banner is the
+permissions must see fewer sidebar links (6 of 24 since P1-13, against admin's
+24) and must not render a load-error card anywhere — **a 403 rendered as an error banner is the
 recurring defect class on this project**, and it has shipped twice: once on the
 dashboard, where a site engineer saw every metric as "—", and once on `/ppa`,
 where an unconditional `/projects` fetch replaced the whole page with an error
@@ -140,11 +140,15 @@ and one can rot without the other:
 [...document.querySelectorAll('button[class*="btn-"]')].map(b => b.innerText.trim()).filter(Boolean)
 ```
 
-For the site engineer this should be **empty on `/procurement`** (read-only
-there) while `/workorders` still offers its create buttons. On `/assets`, the
-fault and RMA buttons appear but install/transfer must not — those need
-`scm.procurement.write`, which `assets.serialunit.read` does not imply. That
-asymmetry is easy to get wrong and worth checking every pass.
+Since P1-13 the seeded roles are the company's seven (`ROLE_PRESETS`), so pick
+the account by the key that gates the button. The executive (`ceo@npi.sa`, 17
+screens) holds no write key at all: this should be **empty on every screen he
+sees**. The warehouse keeper (`store@npi.sa`) holds `scm.procurement.write`
+without `scm.procurement.approve`: `/procurement` may offer create and receive,
+never approve. `/assets` and `/workorders` belong to no company role (ADR-02 §7,
+administrator only); on `/assets` install/transfer need `scm.procurement.write`,
+which `assets.serialunit.read` does not imply — an asymmetry to check whenever a
+custom role holds the one without the other.
 
 ## 4. Report
 

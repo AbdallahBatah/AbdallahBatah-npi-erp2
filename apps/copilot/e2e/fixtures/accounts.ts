@@ -61,11 +61,21 @@ export function readSiteEngineerCredentials(): SeededAccount {
   return { email: 'engineer@npi.sa', password: match[1], nameAr: match[2] };
 }
 
-/** The three seeded accounts that sit in `userDefs` in seed.ts, by role key. */
-export type SeededRole = 'accountant' | 'pm' | 'site_engineer';
+/**
+ * The seeded accounts that sit in `userDefs` in seed.ts, by role key: one per
+ * company role since NPI's P1-13 made ROLE_PRESETS the seed's default.
+ */
+export type SeededRole =
+  | 'accountant'
+  | 'pm'
+  | 'site_engineer'
+  | 'executive'
+  | 'finance_manager'
+  | 'technical_office'
+  | 'warehouse_keeper';
 
 /**
- * One of the three accounts in seed.ts's `userDefs` array, by role key:
+ * One of the accounts in seed.ts's `userDefs` array, by role key:
  * `{ email: 'pm@npi.sa', pass: '…', nameAr: '…', nameEn: '…', role: 'pm' }`.
  * E-mail, password and Arabic name are read from that entry, never hardcoded.
  */

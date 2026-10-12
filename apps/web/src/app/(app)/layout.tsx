@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { screenForPath } from '@npi/shared';
+import { ROLE_PRESETS, screenForPath } from '@npi/shared';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { Icon } from '@/components/icons';
@@ -13,12 +13,12 @@ import { ChangePasswordButton } from '@/components/change-password';
 import { NAV_SECTIONS } from '@/lib/nav';
 import { Spinner } from '@/components/ui';
 
+// Fallback names for a session that carries no role name of its own; the
+// company's seven roles take theirs from the presets the seed writes (P1-13).
 const ROLE_LABELS: Record<string, { ar: string; en: string }> = {
   admin: { ar: 'مسؤول النظام', en: 'Administrator' },
   sales: { ar: 'مبيعات', en: 'Sales' },
-  accountant: { ar: 'محاسب', en: 'Accountant' },
-  pm: { ar: 'مدير مشاريع', en: 'Project Manager' },
-  site_engineer: { ar: 'مهندس موقع', en: 'Site Engineer' },
+  ...Object.fromEntries(ROLE_PRESETS.map((p) => [p.key, { ar: p.nameAr, en: p.nameEn }])),
   finance: { ar: 'مالية', en: 'Finance' },
   ops: { ar: 'تشغيل', en: 'Operations' },
 };

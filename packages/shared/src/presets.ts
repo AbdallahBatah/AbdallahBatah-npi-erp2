@@ -2,14 +2,18 @@
  * The company's seven roles as presets, and the five approval rules the matrix
  * needs once they are in place (ADR-02 §3-4, the owner's answers in §8).
  *
- * Nothing applies these by itself. No migration and no seed writes them (hard
- * rule 7: a migration never renames a role, changes its keys, moves a user or
- * edits an approval rule). The owner opens the presets page, reads the
- * preview of each one (GET /admin/role-presets: create, same or differs, the
- * keys added and removed, the users affected, what would refuse it today) and
- * applies them one at a time by his own click, through the role and matrix
- * services and their guards and audit rows. Users are never moved: he gives
- * each user one role from his form.
+ * No migration writes them (hard rule 7: a migration never renames a role,
+ * changes its keys, moves a user or edits an approval rule). Since P1-13
+ * (owner decision 2026-10-12) the seed does: packages/db/prisma/seed.ts takes
+ * both lists as they are, so a fresh database — and the demo server after its
+ * nightly reset — starts with the seven roles and the five rules, and the
+ * presets page reads every one «same». On a database that predates them, or
+ * after an administrator has edited a role or a rule, the owner opens the
+ * presets page, reads the preview of each one (GET /admin/role-presets:
+ * create, same or differs, the keys added and removed, the users affected,
+ * what would refuse it today) and applies them one at a time by his own
+ * click, through the role and matrix services and their guards and audit
+ * rows. Users are never moved: he gives each user one role from his form.
  *
  * The order the guards impose (hard rule 8): create the new roles and rename,
  * then apply the five rules, then narrow `pm`, `accountant`, `executive` and

@@ -19,21 +19,33 @@ async function call(method, path, body) {
   if (!res.ok) throw new Error(`${method} ${path} → ${res.status}: ${json?.message ?? text}`);
   return json;
 }
+/**
+ * Sign in. The login route allows 5 attempts a minute per address; a run started right
+ * after another one (three logins each) can meet the limiter, so a 429 is waited out once.
+ */
+async function login(email, password) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.status === 429 && attempt === 0) {
+      console.log('… login limiter engaged (5 a minute) — waiting 61 s once');
+      await new Promise((r) => setTimeout(r, 61_000));
+      continue;
+    }
+    if (!res.ok) throw new Error(`login ${email} → ${res.status}: ${json?.message}`);
+    return json.accessToken;
+  }
+}
 /** Run `fn` with another user's token (the executive signs what the salesperson raises), then restore. */
 const tokens = new Map(); // one login per user: the login route is rate-limited
 async function asUser(email, password, fn) {
   const saved = TOKEN;
   try {
-    if (!tokens.has(email)) {
-      const res = await fetch(`${API}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(`login ${email} → ${res.status}: ${json?.message}`);
-      tokens.set(email, json.accessToken);
-    }
+    if (!tokens.has(email)) tokens.set(email, await login(email, password));
     TOKEN = tokens.get(email);
     return await fn();
   } finally {
@@ -51,9 +63,42 @@ const step = async (name, fn) => {
   }
 };
 
+// The seeded signers. P1-13: seed.ts writes the five rules of PROPOSED_APPROVAL_RULES
+// (packages/shared/src/presets.ts), every one from 0 SAR, so every order and claim the demo
+// raises waits in an approvals inbox: order → executive; claim → pm, then executive.
+const CEO = { email: 'ceo@npi.sa', password: 'Ceo@12345', titleAr: 'المدير العام' };
+const PM = { email: 'pm@npi.sa', password: 'Pm@123456', titleAr: 'مدير عام المشاريع' };
+
+/**
+ * Signs the open chain of one document, step by step, each step by the seeded user holding
+ * that step's role (`chain`, in signing order). A signer whose inbox does not hold the
+ * document is passed over without a line: on a rerun the chain may already be past them.
+ * Returns false when a signature was refused (the step() line says why).
+ */
+async function signChain(documentType, documentId, chain, label) {
+  for (const who of chain) {
+    let row;
+    try {
+      row = await asUser(who.email, who.password, async () =>
+        (await call('GET', '/approvals/inbox')).find((r) => r.documentType === documentType && r.documentId === documentId),
+      );
+    } catch (e) {
+      console.log(`~ اعتماد ${who.titleAr}: ${label} — skipped (${String(e.message).slice(0, 90)})`);
+      return false;
+    }
+    if (!row) continue;
+    const signed = await step(`اعتماد ${who.titleAr}: ${label}`, () =>
+      asUser(who.email, who.password, () =>
+        call('POST', `/approvals/${row.id}/decide`, { decision: 'APPROVE', note: `اعتماد ${label}` }),
+      ),
+    );
+    if (!signed) return false;
+  }
+  return true;
+}
+
 (async () => {
-  const login = await call('POST', '/auth/login', { email: 'admin@npi.sa', password: 'Admin@123' });
-  TOKEN = login.accessToken;
+  TOKEN = await login('admin@npi.sa', 'Admin@123');
 
   // ── 1. Customers ────────────────────────────────────────────────────────
   const customerDefs = [
@@ -107,7 +152,7 @@ const step = async (name, fn) => {
     const raised = await step(`رفع العرض للاعتماد: ${name}`, () => call('POST', `/proposals/${p.id}/submit`, {}));
     if (!raised || upTo === 'pending') return;
     const signed = await step(`اعتماد الرئيس التنفيذي: ${name}`, () =>
-      asUser('ceo@npi.sa', 'Ceo@12345', async () => {
+      asUser(CEO.email, CEO.password, async () => {
         const inbox = await call('GET', '/approvals/inbox');
         const row = inbox.find((r) => r.documentType === 'PROPOSAL' && r.documentId === p.id);
         if (!row) throw new Error('not in the executive inbox');
@@ -201,10 +246,11 @@ const step = async (name, fn) => {
       // creates the serial units and books the project actuals, and only an ACCEPTED
       // receipt can be billed. Vendor bill: DRAFT → match → MATCHED → approve → APPROVED
       // (the journal Dr WIP + Dr VAT input / Cr AP is posted here) → schedule → SCHEDULED.
-      // Signatures: the order total (51,840 before VAT) sits under the seeded 100,000
-      // matrix band, so the admin's approve clears without a second signer; bill approve
-      // and schedule need PAYMENT_WRITE, which admin@npi.sa holds (ALL_PERMISSIONS in
-      // seed.ts) — a tenant with separated roles would run those two as accountant@npi.sa.
+      // Signatures (P1-13): the admin's approve raises the order for approval and the seeded
+      // PURCHASE_ORDER rule (from 0 SAR, executive) parks it in PENDING_APPROVAL until
+      // ceo@npi.sa signs it in the approvals inbox; the final signature applies it (APPROVED).
+      // Bill approve and schedule need PAYMENT_WRITE, which admin@npi.sa holds (every key) —
+      // with the company's roles alone the accountant (accountant@npi.sa) does those two.
       // Rerun-safe the same way the rest of the script is: the hospital's existing order
       // is picked up wherever an earlier run left it (each stage checks the status first)
       // instead of raising a second order, so the DEMO-MOD serials are never offered twice.
@@ -225,11 +271,13 @@ const step = async (name, fn) => {
         const poDetail = () => call('GET', `/procurement/purchase-orders/${po.id}`);
         let poFull = await poDetail();
         if (poFull.status === 'DRAFT') {
-          await step('اعتماد أمر الشراء', () => call('POST', `/procurement/purchase-orders/${po.id}/approve`, {}));
+          await step('رفع أمر الشراء للاعتماد', () => call('POST', `/procurement/purchase-orders/${po.id}/approve`, {}));
           poFull = await poDetail();
         }
-        // PENDING_APPROVAL here would mean the matrix parked it (≥ 100,000: pm then
-        // accountant sign in the approvals inbox); the demo order is below that band.
+        if (poFull.status === 'PENDING_APPROVAL') {
+          await signChain('PURCHASE_ORDER', po.id, [CEO], 'أمر الشراء');
+          poFull = await poDetail();
+        }
         if (poFull.status === 'APPROVED') {
           await step('إرسال أمر الشراء للمورد', () => call('POST', `/procurement/purchase-orders/${po.id}/send`, {}));
           poFull = await poDetail();
@@ -287,17 +335,32 @@ const step = async (name, fn) => {
         for (const u of demoUnits) await step(`تركيب ${u.serialNo}`, () => call('POST', `/procurement/serial-units/${u.id}/install`, {}));
       }
 
-      // Subcontract + claim
-      const sub = await step('عقد باطن أعمال مدنية', () =>
-        call('POST', '/procurement/subcontracts', {
-          vendorId: vendors[0].id, projectId: prj2.id,
-          scopeAr: 'الأعمال المدنية وقواعد الهياكل', scopeEn: 'Civil works & foundations',
-          amount: 180000, retentionPct: 10,
-        }),
+      // Subcontract + claim. The admin's approve raises the claim and the seeded
+      // PROGRESS_CLAIM rule (from 0 SAR) has pm@npi.sa sign it, then ceo@npi.sa; the last
+      // signature posts the accounting (APPROVED). Rerun-safe like the order above: the
+      // hospital's subcontract and its first claim are picked up wherever a run left them.
+      const SUB_SCOPE_AR = 'الأعمال المدنية وقواعد الهياكل';
+      let sub = (await call('GET', '/procurement/subcontracts')).find(
+        (a) => a.project?.id === prj2.id && a.scopeAr === SUB_SCOPE_AR,
       );
+      if (!sub)
+        sub = await step('عقد باطن أعمال مدنية', () =>
+          call('POST', '/procurement/subcontracts', {
+            vendorId: vendors[0].id, projectId: prj2.id,
+            scopeAr: SUB_SCOPE_AR, scopeEn: 'Civil works & foundations',
+            amount: 180000, retentionPct: 10,
+          }),
+        );
       if (sub) {
-        const claim = await step('مستخلص أول 60,000', () => call('POST', `/procurement/subcontracts/${sub.id}/claims`, { claimedAmount: 60000 }));
-        if (claim) await step('اعتماد المستخلص', () => call('POST', `/procurement/claims/${claim.id}/approve`, {}));
+        let claim = sub.claims?.find((c) => c.sequence === 1) ?? null;
+        if (!claim) claim = await step('مستخلص أول 60,000', () => call('POST', `/procurement/subcontracts/${sub.id}/claims`, { claimedAmount: 60000 }));
+        if (claim?.status === 'SUBMITTED') {
+          const open = (await call('GET', '/approvals/history?documentType=PROGRESS_CLAIM&status=PENDING')).rows.find(
+            (r) => r.documentId === claim.id,
+          );
+          const raised = open ?? (await step('رفع المستخلص للاعتماد', () => call('POST', `/procurement/claims/${claim.id}/approve`, {})));
+          if (raised) await signChain('PROGRESS_CLAIM', claim.id, [PM, CEO], 'المستخلص الأول');
+        }
       }
 
       // Steps 6 (telemetry simulation) and 7 (PPA terms and settlement) went with the two hidden sections (owner decision 2026-10-12); their routes are no longer registered.

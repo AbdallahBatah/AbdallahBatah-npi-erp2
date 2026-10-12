@@ -270,8 +270,8 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   },
   {
     re: /no other approver is available/i,
-    ar: 'لا يوجد معتمِد آخر غيرك لهذا العرض — لا يعتمد أحد عرضاً رفعه بنفسه. يلزم حامل آخر لدور الإدارة العليا، أو تفويض مؤقت من غيرك',
-    en: 'There is no other approver for this proposal - nobody approves what they raised themselves. Another holder of the executive role, or a temporary delegation from someone else, is needed',
+    ar: 'لا يوجد معتمِد آخر غيرك لهذا العرض — لا يعتمد أحد عرضاً رفعه بنفسه. يلزم حامل آخر لدور المدير العام، أو تفويض مؤقت من غيرك',
+    en: 'There is no other approver for this proposal - nobody approves what they raised themselves. Another holder of the general manager role, or a temporary delegation from someone else, is needed',
   },
   {
     re: /proposal revision has expired/i,
