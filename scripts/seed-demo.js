@@ -236,21 +236,7 @@ const step = async (name, fn) => {
         if (claim) await step('اعتماد المستخلص', () => call('POST', `/procurement/claims/${claim.id}/approve`, {}));
       }
 
-      // ── 6. Telemetry on the new plant → alerts + auto WOs ───────────────
-      await step('محاكاة 14 يوم قراءات لمحطة المستشفى', () =>
-        call('POST', '/telemetry/simulate', { projectId: prj2.id, days: 14, badDayOffset: 3 }),
-      );
-
-      // ── 7. PPA on hospital project ──────────────────────────────────────
-      const term = await step('شروط PPA للمستشفى', () =>
-        call('POST', '/ppa/terms', { projectId: prj2.id, ratePerKwh: 0.29, escalationPctPerYear: 2.5, fixedMonthlyFee: 3500 }),
-      );
-      if (term) {
-        const end = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
-        const start = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-        const run = await step('تسوية الفترة → فاتورة', () => call('POST', `/ppa/terms/${term.id}/settle`, { periodStart: start, periodEnd: end }));
-        if (run?.invoiceId) await step('إصدار فاتورة التسوية', () => call('POST', `/finance/invoices/${run.invoiceId}/issue`, {}));
-      }
+      // Steps 6 (telemetry simulation) and 7 (PPA terms and settlement) went with the two hidden sections (owner decision 2026-10-12); their routes are no longer registered.
     }
   }
 

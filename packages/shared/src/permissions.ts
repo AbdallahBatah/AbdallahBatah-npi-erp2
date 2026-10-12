@@ -160,8 +160,8 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     [PERMISSIONS.ASSET_READ, 'عرض الأصول المتسلسلة', 'View serialised assets', 'الأصول المتسلسلة', 'Serialised assets'],
   ]),
   ...g('التشغيل', 'Operations', [
-    [PERMISSIONS.WORKORDER_READ, 'عرض أوامر العمل والمراقبة', 'View work orders & telemetry', 'أوامر العمل والمراقبة', 'Work orders & telemetry'],
-    [PERMISSIONS.WORKORDER_WRITE, 'إدارة أوامر العمل', 'Manage work orders', 'أوامر العمل والمراقبة', 'Work orders & telemetry'],
+    [PERMISSIONS.WORKORDER_READ, 'عرض أوامر العمل', 'View work orders', 'أوامر العمل', 'Work orders'],
+    [PERMISSIONS.WORKORDER_WRITE, 'إدارة أوامر العمل', 'Manage work orders', 'أوامر العمل', 'Work orders'],
   ]),
   ...g('المالية', 'Finance', [
     [PERMISSIONS.INVOICE_READ, 'عرض الفواتير', 'View invoices', 'الفواتير', 'Invoices'],

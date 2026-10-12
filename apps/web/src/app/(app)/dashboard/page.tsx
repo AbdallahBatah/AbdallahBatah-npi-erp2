@@ -26,7 +26,6 @@ interface FinSummary {
   retentionHeld: number | string;
 }
 interface WoSummary { open: number; inProgress: number; overdue: number; closedThisMonth: number }
-interface TelDash { plants: number; openAlerts: number; totalActualKwh: number; portfolioPr: number | null }
 
 /** Tailwind needs literal class names — map a tile count to its grid. */
 const GRID_COLS: Record<number, string> = {
@@ -43,7 +42,6 @@ export default function DashboardPage() {
   const [tasksSum, setTasksSum] = useState<TasksSummary | null>(null);
   const [fin, setFin] = useState<FinSummary | null>(null);
   const [wo, setWo] = useState<WoSummary | null>(null);
-  const [tel, setTel] = useState<TelDash | null>(null);
 
   // One flag per data source, keyed to the permission its endpoint requires.
   // A user without the permission must never see the tile at all: firing the
@@ -51,16 +49,13 @@ export default function DashboardPage() {
   const canCrm = can('crm.lead.read'); // /reference/dashboard
   const canTasks = can('crm.customer.read'); // /tasks/summary — independent of canCrm
   const canFin = can('finance.invoice.read'); // /finance/summary
-  const canOps = can('fsm.workorder.read'); // work-order summary + telemetry
+  const canOps = can('fsm.workorder.read'); // work-order summary
 
   useEffect(() => {
     if (canCrm) api.get<Summary>('/reference/dashboard').then(setData).catch(() => setData(null));
     if (canTasks) api.get<TasksSummary>('/tasks/summary').then(setTasksSum).catch(() => setTasksSum(null));
     if (canFin) api.get<FinSummary>('/finance/summary').then(setFin).catch(() => setFin(null));
-    if (canOps) {
-      api.get<WoSummary>('/fsm/work-orders/summary').then(setWo).catch(() => setWo(null));
-      api.get<TelDash>('/telemetry/dashboard').then(setTel).catch(() => setTel(null));
-    }
+    if (canOps) api.get<WoSummary>('/fsm/work-orders/summary').then(setWo).catch(() => setWo(null));
   }, [canCrm, canTasks, canFin, canOps]);
 
   // A tile needs both its data source and read access to the page it links to.
@@ -129,7 +124,7 @@ export default function DashboardPage() {
 
       {/* Row 2: money + operations */}
       {(canCrm || canOps) && (
-      <div className={`mt-4 grid grid-cols-1 gap-4 ${GRID_COLS[(canCrm ? 1 : 0) + (canOps ? 2 : 0)] ?? 'lg:grid-cols-3'}`}>
+      <div className={`mt-4 grid grid-cols-1 gap-4 ${GRID_COLS[(canCrm ? 1 : 0) + (canOps ? 1 : 0)] ?? 'lg:grid-cols-2'}`}>
         {canCrm && (
         <div className="stat">
           <p className="text-xs font-semibold text-slate-500">{t('dash.pipeline')}</p>
@@ -179,36 +174,6 @@ export default function DashboardPage() {
           </div>
         </Link>
         )}
-
-        {canOps && (
-        <Link href="/telemetry" className="stat group">
-          <div className="flex items-start justify-between">
-            <p className="text-xs font-semibold text-slate-500">{t('tel.title')}</p>
-            <Icon name="activity" className="h-5 w-5 text-slate-300 transition group-hover:text-brand-500" />
-          </div>
-          <div className="mt-2 flex items-end justify-between">
-            <div>
-              <p className="text-lg font-bold tabular-nums text-slate-900">
-                {tel ? `${num(Math.round(tel.totalActualKwh))}` : '—'}
-                <span className="ms-1 text-xs font-medium text-slate-500">kWh</span>
-              </p>
-              <p className="mt-0.5 text-xs text-slate-500">{t('tel.actual14')}</p>
-            </div>
-            <div className="text-end">
-              <p className={`text-lg font-bold tabular-nums ${tel?.portfolioPr && tel.portfolioPr < 0.8 ? 'text-warning-700' : 'text-success-700'}`}>
-                {tel?.portfolioPr != null ? `${Math.round(tel.portfolioPr * 100)}%` : '—'}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-500">PR</p>
-            </div>
-            <div className="text-end">
-              <p className={`text-lg font-bold tabular-nums ${(tel?.openAlerts ?? 0) > 0 ? 'text-danger-700' : 'text-success-700'}`}>
-                {num(tel?.openAlerts)}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-500">{t('tel.openAlerts')}</p>
-            </div>
-          </div>
-        </Link>
-        )}
       </div>
       )}
 
@@ -233,13 +198,6 @@ export default function DashboardPage() {
               )}
             </div>
           ))}
-          <Icon name="chevron-end" className="h-4 w-4 text-slate-300 rtl:-scale-x-100" />
-          <div className="flex items-center gap-2.5 rounded-xl border border-solar-200 bg-gradient-to-b from-solar-50 to-white px-4 py-3">
-            <Icon name="zap" className="h-4 w-4 text-solar-500" />
-            <span className="text-sm font-semibold text-solar-700">
-              {locale === 'ar' ? 'تشغيل + تسوية' : 'Operate + settle'}
-            </span>
-          </div>
         </div>
       </div>
     </div>

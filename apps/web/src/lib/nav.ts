@@ -49,8 +49,6 @@ export const NAV_SECTIONS: NavSection[] = [
     labelEn: 'Operations',
     items: [
       { href: '/workorders', key: 'nav.workorders', icon: 'wrench', perm: 'fsm.workorder.read' },
-      { href: '/telemetry', key: 'nav.telemetry', icon: 'activity', perm: 'fsm.workorder.read' },
-      { href: '/ppa', key: 'nav.ppa', icon: 'zap', perm: 'finance.invoice.read' },
     ],
   },
   {

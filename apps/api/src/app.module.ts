@@ -17,8 +17,6 @@ import { FinanceModule } from './modules/finance/finance.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ProcurementModule } from './modules/procurement/procurement.module';
 import { FsmModule } from './modules/fsm/fsm.module';
-import { TelemetryModule } from './modules/telemetry/telemetry.module';
-import { PpaModule } from './modules/ppa/ppa.module';
 import { ReferenceModule } from './modules/reference/reference.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { AdminModule } from './modules/admin/admin.module';
@@ -43,8 +41,9 @@ import { InboxModule } from './modules/inbox/inbox.module';
     ProjectsModule,
     ProcurementModule,
     FsmModule,
-    TelemetryModule,
-    PpaModule,
+    // TelemetryModule and PpaModule are deliberately not registered (owner
+    // decision 2026-10-12): the two sections are hidden, their code and tables
+    // stay. See docs/owner-changes-2026-10/GAP_AR.md section 3-1.
     ReferenceModule,
     PlatformModule,
     AdminModule,

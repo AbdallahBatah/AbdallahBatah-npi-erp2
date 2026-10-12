@@ -64,7 +64,6 @@ const GUARDED_ROUTES = [
   ['/procurement/serial-units', 'assets.serialunit.read'],
   ['/fsm/work-orders', 'fsm.workorder.read'],
   ['/fsm/work-orders/summary', 'fsm.workorder.read'],
-  ['/telemetry/dashboard', 'fsm.workorder.read'],
   ['/admin/users', 'admin.user.manage'],
   ['/admin/roles', 'admin.user.manage'],
   ['/admin/audit', 'admin.audit.read'],

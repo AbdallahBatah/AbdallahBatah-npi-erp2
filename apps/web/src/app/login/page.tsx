@@ -48,8 +48,8 @@ export default function LoginPage() {
 
   const highlights =
     locale === 'ar'
-      ? ['فوترة ZATCA المرحلة الثانية', 'من العميل المحتمل إلى العقد إلى الأصل', 'مراقبة المحطات وتسوية PPA']
-      : ['ZATCA Phase-2 e-invoicing', 'Lead → contract → asset, one spine', 'Plant monitoring & PPA settlement'];
+      ? ['فوترة ZATCA المرحلة الثانية', 'من العميل المحتمل إلى العقد إلى الأصل', 'المشاريع والمشتريات والاعتمادات في نظام واحد']
+      : ['ZATCA Phase-2 e-invoicing', 'Lead → contract → asset, one spine', 'Projects, procurement and approvals in one system'];
 
   return (
     <div className="flex min-h-screen bg-ink-950">
