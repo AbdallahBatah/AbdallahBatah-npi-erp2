@@ -79,7 +79,7 @@ export default function RequisitionsPage() {
 
   useEffect(() => {
     if (!open || items.length) return;
-    api.get<ItemOption[]>('/commercial/items').then(setItems).catch(() => setItems([]));
+    api.get<ItemOption[]>('/items').then(setItems).catch(() => setItems([]));
   }, [open, items.length]);
 
   const total = lines.reduce(
