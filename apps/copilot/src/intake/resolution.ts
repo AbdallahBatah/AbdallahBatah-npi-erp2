@@ -3,6 +3,14 @@
 // `src/extract/resolve.ts`, and returns the `FlowResolution` the preview card
 // is built from. Reads only — nothing here writes to NPI.
 //
+// Items and projects are matched against NPI's pick lists
+// (`GET /reference/lookups/{items,projects}`, ADR-02 §3-3), which a form's
+// working key opens without the owning screen: an engineer who may raise a
+// requisition matches its items without `commercial.item.read`. Customers
+// and vendors stay on their full lists, because BR-09 matches a party by its
+// VAT number first and the pick lists carry names only; a project's WBS
+// elements stay on the project record (`GET /projects/:id`).
+//
 // A list NPI refuses or cannot serve (a site engineer cannot read the
 // department directory, for one) never fails the job: the pick becomes
 // `unreadable`, a note says so once, and the value stays as the document
@@ -50,17 +58,26 @@ export type ResolutionNpi = Pick<
   NpiClient,
   | 'listCustomers'
   | 'listVendors'
-  | 'listProjects'
+  | 'lookupProjects'
   | 'getProject'
   | 'listDepartments'
   | 'listRequisitions'
   | 'listPurchaseOrders'
   | 'getPurchaseOrder'
-  | 'listItems'
+  | 'lookupItems'
 >;
 
 type Unreadable = Extract<EntityPick, { kind: 'unreadable' }>;
-type ListName = 'customers' | 'vendors' | 'projects' | 'departments' | 'items' | 'requisitions' | 'purchase_orders' | 'purchase_order_detail';
+type ListName =
+  | 'customers'
+  | 'vendors'
+  | 'projects'
+  | 'project_wbs'
+  | 'departments'
+  | 'items'
+  | 'requisitions'
+  | 'purchase_orders'
+  | 'purchase_order_detail';
 
 interface Ctx {
   npi: ResolutionNpi;
@@ -124,7 +141,7 @@ const pickVendor = (ctx: Ctx, v: VendorValues) => pickParty(ctx, 'vendors', v, {
 
 async function pickProject(ctx: Ctx, query: { code: string | null; name: string | null }): Promise<EntityPick | undefined> {
   if (query.code === null && query.name === null) return undefined;
-  const read = await readOnce(ctx, 'projects', () => ctx.npi.listProjects(), projectsFromNpi);
+  const read = await readOnce(ctx, 'projects', () => ctx.npi.lookupProjects(), projectsFromNpi);
   if (!read.ok) return read.pick;
   const found = resolveProject(query, read.value);
   if (found.kind === 'matched') {
@@ -171,10 +188,12 @@ async function pickRequisition(ctx: Ctx, code: string | null): Promise<EntityPic
 }
 
 /** The WBS elements of the matched project (NPI has no WBS list). `null`
- *  when there is no matched project or its record cannot be read. */
+ *  when there is no matched project or its record cannot be read. The record
+ *  has its own note: the pick list that matched the project is open to more
+ *  keys than the record itself (`projects.project.read`). */
 async function projectWbs(ctx: Ctx, project: EntityPick | undefined): Promise<WbsRef[] | null> {
   if (project?.kind !== 'matched') return null;
-  const read = await readOnce(ctx, 'projects', () => ctx.npi.getProject(project.id), wbsFromProject);
+  const read = await readOnce(ctx, 'project_wbs', () => ctx.npi.getProject(project.id), wbsFromProject);
   return read.ok ? read.value : null;
 }
 
@@ -189,7 +208,7 @@ interface ItemLine {
 
 async function resolveItemLines(ctx: Ctx, lines: ItemLine[], project: EntityPick | undefined): Promise<LineResolution[]> {
   if (lines.length === 0) return [];
-  const items = await readOnce(ctx, 'items', () => ctx.npi.listItems(), itemsFromNpi);
+  const items = await readOnce(ctx, 'items', () => ctx.npi.lookupItems(), itemsFromNpi);
   const wbs = lines.some((l) => l.wbsCode !== null || l.wbsName !== null) ? await projectWbs(ctx, project) : null;
 
   return lines.map((line): LineResolution => {

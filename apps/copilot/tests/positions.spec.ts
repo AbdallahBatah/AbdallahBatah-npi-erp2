@@ -8,7 +8,7 @@ import path from 'node:path';
 process.env.COPILOT_PROMPTS_DIR = path.join(__dirname, '..', 'prompts');
 
 import { loadPrompt, clearPromptCache } from '../src/prompts/load';
-import { KNOWN_ROLE_KEYS, personaFileFor, loadPersona, buildTitleAr } from '../src/positions/persona';
+import { BORROWED_PERSONAS, KNOWN_ROLE_KEYS, personaFileFor, loadPersona, buildTitleAr } from '../src/positions/persona';
 import { resolvePosition, type PositionsDb, type PositionsNpi } from '../src/positions/resolve';
 import { NpiError } from '../src/npi/errors';
 import type { NpiMe } from '../src/npi/responses';
@@ -62,6 +62,58 @@ describe('personaFileFor / loadPersona', () => {
       expect(loadPersona(roleKey)).toBe(onDisk);
     },
   );
+
+  // ADR-02 §3-4: the company presets add three role keys and rename three.
+  it.each([
+    ['finance_manager', 'accountant'],
+    ['warehouse_keeper', 'site_engineer'],
+  ])('lends the preset role "%s" the persona of "%s"', (roleKey, persona) => {
+    expect(personaFileFor(roleKey)).toBe(`positions/${persona}.md`);
+    const onDisk = readFileSync(path.join(PROMPTS_ROOT, 'positions', `${persona}.md`), 'utf8');
+    expect(loadPersona(roleKey)).toBe(onDisk);
+  });
+
+  it.each(['technical_office', 'executive', '__proto__', 'constructor', 'toString'])(
+    'gives "%s" the default persona (no persona of its own, nothing borrowed)',
+    (roleKey) => {
+      expect(personaFileFor(roleKey)).toBe('positions/default.md');
+    },
+  );
+
+  it('borrows only from the five known personas, never for one of the five', () => {
+    for (const [roleKey, persona] of BORROWED_PERSONAS) {
+      expect(KNOWN_ROLE_KEYS).toContain(persona);
+      expect(KNOWN_ROLE_KEYS as readonly string[]).not.toContain(roleKey);
+    }
+  });
+
+  // A persona read by more than one role, or by a role NPI renames, carries
+  // no role title of its own: the position line above it has NPI's role name.
+  // Titles are matched as whole words, before and after the presets' renames.
+  const ROLE_TITLES = [
+    'محاسب',
+    'المحاسب',
+    'مدير مشاريع',
+    'مدير المشاريع',
+    'مدير عام المشاريع',
+    'موظف المشاريع',
+    'مهندس موقع',
+    'مهندس الموقع',
+    'مهندس المشاريع',
+    'أمين المستودع',
+    'الإدارة المالية',
+    'الإدارة العليا',
+    'المدير العام',
+  ];
+  it.each(['accountant', 'pm', 'site_engineer'])('persona file "%s.md" names no role title', (name) => {
+    const text = readFileSync(path.join(PROMPTS_ROOT, 'positions', `${name}.md`), 'utf8');
+    const words = text.split(/[\s،؛.:—«»()]+/).filter((word) => word.length > 0);
+    const named = ROLE_TITLES.filter((title) => {
+      const parts = title.split(' ');
+      return words.some((_, i) => parts.every((part, j) => words[i + j] === part));
+    });
+    expect(named).toEqual([]);
+  });
 
   const ALL_PERSONA_FILES = [...KNOWN_ROLE_KEYS, 'default'];
 

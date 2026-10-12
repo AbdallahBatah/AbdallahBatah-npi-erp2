@@ -282,6 +282,41 @@ describe('createNpiClient — the writes execution adds (T-27)', () => {
   });
 });
 
+describe('createNpiClient — the pick lists intake matches against (ADR-02 §3-3)', () => {
+  it.each([
+    ['lookupItems', 'http://api.test/api/reference/lookups/items'],
+    ['lookupProjects', 'http://api.test/api/reference/lookups/projects'],
+  ] as const)('%s GETs %s with the Bearer token and no body, and returns the bare array', async (method, url) => {
+    const rows = [{ id: 'x-1', code: 'X-00001', nameAr: 'س' }];
+    const fetchImpl = jest.fn(async () => fakeResponse(200, rows));
+    const client = createNpiClient({ baseUrl: 'http://api.test/api', token: 'tkn-123', fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const result = await client[method]();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [calledUrl, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(calledUrl).toBe(url);
+    expect(init.method).toBe('GET');
+    expect(init.body).toBeUndefined();
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tkn-123');
+    expect(result).toEqual(rows);
+  });
+
+  it.each(['lookupItems', 'lookupProjects'] as const)('%s: a caller with no key of the list gets a forbidden NpiError, never retried', async (method) => {
+    const fetchImpl = jest.fn(async () => fakeResponse(403, { statusCode: 403, message: 'Forbidden resource' }));
+    const client = createNpiClient({ baseUrl: 'http://api.test/api', token: 't', fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const error = await client[method]().then(
+      () => null,
+      (err: unknown) => err,
+    );
+
+    expect(error).toBeInstanceOf(NpiError);
+    expect(error).toMatchObject({ kind: 'forbidden', status: 403 });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('client.ts guard — approvals and deletes must never appear', () => {
   it('contains none of the forbidden action/endpoint markers', () => {
     const src = readFileSync(path.join(__dirname, '..', 'src', 'npi', 'client.ts'), 'utf8');

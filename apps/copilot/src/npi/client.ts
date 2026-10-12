@@ -157,6 +157,31 @@ export function createNpiClient(options: CreateNpiClientOptions) {
       return request(ctx, 'GET', '/procurement/vendors');
     },
 
+    // Pick lists (ADR-02 §3-3): names only, for matching the names a document
+    // gives. Each is open to a holder of ANY key in its row of NPI's
+    // `LOOKUP_ACCESS` (packages/shared/src/lookups.ts) — the owning screen's
+    // read key, or the working key of a form that needs the list — so a 403
+    // here means the user may neither open that screen nor fill such a form.
+
+    /**
+     * `GET /reference/lookups/items` — a bare array of `{ id, sku, nameAr,
+     * nameEn, uom, isSerialised, unitCost }`, `unitCost` nulled by NPI for a
+     * caller without `finance.costs.view` (as on `GET /items`). A
+     * requisition writer reads it without `commercial.item.read`.
+     */
+    lookupItems() {
+      return request(ctx, 'GET', '/reference/lookups/items');
+    },
+
+    /**
+     * `GET /reference/lookups/projects` — a bare array of `{ id, code, nameAr,
+     * nameEn }`, for `projects.project.read` or `scm.procurement.write`. No
+     * WBS elements: those stay on `getProject`, behind the projects screen.
+     */
+    lookupProjects() {
+      return request(ctx, 'GET', '/reference/lookups/projects');
+    },
+
     listContracts() {
       return request(ctx, 'GET', '/contracts');
     },

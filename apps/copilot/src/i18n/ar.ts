@@ -679,6 +679,7 @@ export const ar = {
   'preview.list.customers': 'قائمة العملاء',
   'preview.list.vendors': 'قائمة المورّدين',
   'preview.list.projects': 'قائمة المشاريع',
+  'preview.list.project_wbs': 'بنود العمل في المشروع',
   'preview.list.departments': 'قائمة الأقسام',
   'preview.list.items': 'قائمة الأصناف',
   'preview.list.requisitions': 'قائمة طلبات الشراء',

@@ -140,6 +140,8 @@ export interface ProjectRef {
   nameEn: string | null;
 }
 
+/** Rows of `GET /reference/lookups/projects` (the pick list intake matches
+ *  against) or of `GET /projects`, whose rows carry the same fields and more. */
 export function projectsFromNpi(body: unknown): ProjectRef[] {
   const out: ProjectRef[] = [];
   for (const row of readList(body)) {
@@ -202,6 +204,8 @@ function num(value: unknown): number | null {
   return null;
 }
 
+/** Rows of `GET /reference/lookups/items` (the pick list intake matches
+ *  against) or of `GET /items`, whose rows carry the same fields and more. */
 export function itemsFromNpi(body: unknown): ItemRef[] {
   const out: ItemRef[] = [];
   for (const row of readList(body)) {
