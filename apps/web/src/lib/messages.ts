@@ -1233,6 +1233,8 @@ export const messages: Record<Locale, Record<string, string>> = {
       'لا يُستخدم لاعتماد مستند رفعه المفوِّض نفسه، ولا مستند رفعه المفوَّض إليه.',
     'dlg.rule.recorded': 'يُسجَّل على كل توقيع يتيحه، فلا يقول السجل «اعتمده المدير» وهو مسافر.',
     'dlg.noOverlap': 'لا يمكن أن يتداخل تفويضان ساريان بين الشخصين نفسيهما.',
+    // ADR-02 §3-3: a pick list this account may not read — the field is disabled, the page still works.
+    'lookup.unavailable': 'القائمة غير متاحة لحسابك',
   },
   en: {
     'app.name': 'NPI Solar ERP',
@@ -2466,5 +2468,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'dlg.rule.recorded':
       'It is recorded on every signature it enables, so the trail never says “the manager approved this” while the manager was away.',
     'dlg.noOverlap': 'Two active delegations between the same two people cannot overlap.',
+    // ADR-02 §3-3: a pick list this account may not read — the field is disabled, the page still works.
+    'lookup.unavailable': 'This list is not available to your account',
   },
 };

@@ -9,6 +9,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
+import { useLookup } from '@/lib/lookups';
 import { formatMoney, formatDate } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can, Btn, PageSkeleton } from '@/components/ui';
 import { AttachmentsCard } from '@/components/attachments';
@@ -131,7 +132,11 @@ export default function ProjectDetailPage() {
   const [subAmount, setSubAmount] = useState(0);
   const [subRet, setSubRet] = useState(10);
   const [subWbs, setSubWbs] = useState('');
-  const [vendors, setVendors] = useState<{ id: string; code: string; nameAr: string; nameEn: string }[]>([]);
+  // The subcontract dialog's vendor list, earned by projects.project.write
+  // itself (ADR-02 §3-3) — a project manager without the procurement screen
+  // used to get an empty list here, the refusal swallowed.
+  const vendorList = useLookup<{ id: string; code: string; nameAr: string; nameEn: string }>('vendors');
+  const vendors = vendorList.rows;
   // Claim inline input per agreement
   const [claimAmounts, setClaimAmounts] = useState<Record<string, number>>({});
 
@@ -141,7 +146,6 @@ export default function ProjectDetailPage() {
       .get<Project>(`/projects/${id}`)
       .then(setP)
       .catch((e) => setLoadErr(translateError(e, locale)));
-    api.get('/procurement/vendors').then(setVendors).catch(() => {});
   }, [id, locale]);
   useEffect(load, [load]);
 
@@ -663,8 +667,8 @@ export default function ProjectDetailPage() {
       {/* Subcontract modal */}
       <Modal open={subOpen} title={t('sub.new')} onClose={() => setSubOpen(false)}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label={t('po.vendor')}>
-            <select className="input" value={subVendorId} onChange={(e) => setSubVendorId(e.target.value)}>
+          <Field label={t('po.vendor')} hint={vendorList.state === 'unavailable' ? t('lookup.unavailable') : undefined}>
+            <select className="input" value={subVendorId} onChange={(e) => setSubVendorId(e.target.value)} disabled={vendorList.state === 'unavailable'}>
               <option value="">—</option>
               {vendors.map((v) => (
                 <option key={v.id} value={v.id}>{v.code} · {pick(v, 'name')}</option>
