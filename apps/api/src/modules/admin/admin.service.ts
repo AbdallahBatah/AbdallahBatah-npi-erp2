@@ -91,6 +91,12 @@ interface SodAudit {
   sodAcknowledged: boolean;
 }
 
+/** Where a role signs (hard rule 8): what an APPROVAL_SEAT refusal names. */
+export interface ApprovalSeats {
+  rules: Array<{ id: string; documentType: string; minAmount: number; maxAmount: number | null }>;
+  openRequests: number;
+}
+
 /** The keys the approval matrix signs with (APPROVAL_DOCUMENTS), for hard rule 8. */
 const APPROVE_KEYS: ReadonlySet<string> = new Set(APPROVAL_DOCUMENTS.map((d) => d.permission));
 
@@ -117,13 +123,32 @@ export class AdminService {
 
   // ── users ─────────────────────────────────────────────────────────────────
 
+  /**
+   * The organization's users, each with how many GRANT and DENY overrides
+   * they carry (`overrides: { grant, deny }`) — the list's «+2 −1» badge
+   * (ADR-02 §3-6) — counted in one grouped query, not one request per row.
+   */
   async listUsers(user: AuthUser) {
-    const rows = await this.prisma.user.findMany({
-      where: { organizationId: user.organizationId },
-      select: USER_SELECT,
-      orderBy: { createdAt: 'asc' },
-    });
-    return rows.map(shapeUser);
+    const [rows, counts] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { organizationId: user.organizationId },
+        select: USER_SELECT,
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.userPermissionOverride.groupBy({
+        by: ['userId', 'effect'],
+        where: { organizationId: user.organizationId },
+        _count: { _all: true },
+      }),
+    ]);
+    const byUser = new Map<string, { grant: number; deny: number }>();
+    for (const c of counts) {
+      const n = byUser.get(c.userId) ?? { grant: 0, deny: 0 };
+      if (c.effect === 'GRANT') n.grant = c._count._all;
+      else n.deny = c._count._all;
+      byUser.set(c.userId, n);
+    }
+    return rows.map((r) => ({ ...shapeUser(r), overrides: byUser.get(r.id) ?? { grant: 0, deny: 0 } }));
   }
 
   /**
@@ -454,14 +479,35 @@ export class AdminService {
     organizationId: string,
     message: string,
   ): Promise<void> {
-    const left = await tx.user.count({
-      where: {
-        organizationId,
-        isActive: true,
-        AND: [holdsEffectively(PERMISSIONS.USER_MANAGE)],
-      },
-    });
+    const left = await this.countAdministrators(organizationId, undefined, tx);
     if (left === 0) throw new BadRequestException(message);
+  }
+
+  /**
+   * The active users of the organization who hold `admin.user.manage`
+   * effectively: the count the post-condition above checks. With
+   * `losingRoleId`, counted as if that role no longer held the key: a
+   * read-only answer to "would taking it off this role lock the organization
+   * out?", for the role presets' preview (role-presets.service.ts).
+   */
+  countAdministrators(
+    organizationId: string,
+    losingRoleId?: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<number> {
+    const key = PERMISSIONS.USER_MANAGE;
+    const holds: Prisma.UserWhereInput[] = [holdsEffectively(key)];
+    if (losingRoleId) {
+      // ...through something other than that role.
+      holds.push({
+        OR: [
+          { role: { id: { not: losingRoleId }, permissions: { has: key } } },
+          { extraRoles: { some: { roleId: { not: losingRoleId }, role: { permissions: { has: key } } } } },
+          { permissionOverrides: { some: { permission: key, effect: 'GRANT' } } },
+        ],
+      });
+    }
+    return db.user.count({ where: { organizationId, isActive: true, AND: holds } });
   }
 
   // ── roles ─────────────────────────────────────────────────────────────────
@@ -613,12 +659,35 @@ export class AdminService {
     roleId: string,
     removedApproveKeys: string[],
   ): Promise<void> {
-    const documentTypes = APPROVAL_DOCUMENTS.filter((d) =>
-      removedApproveKeys.includes(d.permission),
-    ).map((d) => d.value);
-    if (documentTypes.length === 0) return;
+    const seats = await this.findApprovalSeats(organizationId, roleId, removedApproveKeys, tx);
+    if (!seats) return;
+    throw new BadRequestException({
+      statusCode: 400,
+      message: 'Role signs in an approval rule',
+      code: 'APPROVAL_SEAT',
+      ...seats,
+    });
+  }
 
-    const rules = await tx.approvalRule.findMany({
+  /**
+   * The read side of the guard above: the active rules of the document types
+   * whose approve key is among `removedKeys` (other keys are ignored) that
+   * `roleId` signs in, and the open requests with a pending step for it;
+   * `null` when there are none and the keys may go. Read-only, so the role
+   * presets' preview (role-presets.service.ts) asks it without writing.
+   */
+  async findApprovalSeats(
+    organizationId: string,
+    roleId: string,
+    removedKeys: readonly string[],
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<ApprovalSeats | null> {
+    const documentTypes = APPROVAL_DOCUMENTS.filter((d) => removedKeys.includes(d.permission)).map(
+      (d) => d.value,
+    );
+    if (documentTypes.length === 0) return null;
+
+    const rules = await db.approvalRule.findMany({
       where: {
         organizationId,
         isActive: true,
@@ -628,18 +697,15 @@ export class AdminService {
       select: { id: true, documentType: true, minAmount: true, maxAmount: true },
       orderBy: [{ documentType: 'asc' }, { minAmount: 'asc' }],
     });
-    const openRequests = await tx.approvalStep.count({
+    const openRequests = await db.approvalStep.count({
       where: {
         roleId,
         status: 'PENDING',
         request: { organizationId, status: 'PENDING', documentType: { in: documentTypes } },
       },
     });
-    if (rules.length === 0 && openRequests === 0) return;
-    throw new BadRequestException({
-      statusCode: 400,
-      message: 'Role signs in an approval rule',
-      code: 'APPROVAL_SEAT',
+    if (rules.length === 0 && openRequests === 0) return null;
+    return {
       rules: rules.map((r) => ({
         id: r.id,
         documentType: r.documentType,
@@ -647,7 +713,7 @@ export class AdminService {
         maxAmount: r.maxAmount === null ? null : Number(r.maxAmount),
       })),
       openRequests,
-    });
+    };
   }
 
   async deleteRole(user: AuthUser, id: string) {

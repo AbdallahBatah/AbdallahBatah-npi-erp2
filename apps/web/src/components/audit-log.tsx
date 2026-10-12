@@ -104,6 +104,7 @@ const ACTION_AR: Record<string, string> = {
   ISSUE_CLEAR: 'إصدار فاتورة إلكترونية',
   PASSWORD_CHANGE: 'تغيير كلمة المرور',
   PASSWORD_RESET: 'إعادة تعيين كلمة المرور',
+  PERMISSION_OVERRIDE: 'تعديل استثناءات الصلاحيات',
   PAY: 'سداد',
   POST: 'ترحيل',
   RAISE: 'إطلاق تنبيه',

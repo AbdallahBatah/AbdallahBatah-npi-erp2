@@ -3,30 +3,33 @@
 /**
  * User & role administration — the screen that lets a real customer run the
  * system without touching the seed. Two tabs: users (create/edit/deactivate/
- * set password, primary + additional roles) and roles (one row per sidebar
- * screen from the shared screen registry, with a live sidebar preview and the
- * separation-of-duties warning, ADR-02 §3-6). The API enforces the lockout
- * and approval-seat guards; the UI just avoids offering
- * footguns (no deactivate button on yourself).
+ * set password, the primary role, and the per-user permission overrides with
+ * their «+2 −1» badge) and roles (one row per sidebar screen from the shared
+ * screen registry, with a live sidebar preview and the separation-of-duties
+ * warning, ADR-02 §3-6). The API enforces the lockout and approval-seat
+ * guards; the UI just avoids offering footguns (no deactivate button on
+ * yourself).
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import {
-  SCREEN_GROUPS,
-  SCREENS,
-  sodConflicts,
-  visibleGroups,
-  type Screen,
-  type ScreenGroup,
-} from '@npi/shared';
+import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
-import { NAV_ITEMS } from '@/lib/nav';
 import { PageHeader, LoadError, Modal, Field, StatusBadge, useConfirm, Btn, Tabs, PageSkeleton } from '@/components/ui';
-import { Icon } from '@/components/icons';
+import {
+  PermissionGrid,
+  SidebarPreview,
+  SodWarning,
+  rowDependents,
+  usePermissionGrid,
+  useSodAck,
+  type GridRow,
+  type PermMeta,
+} from '@/components/permission-grid';
+import { UserPermissionsDialog } from '@/components/user-permissions';
 import { AuditLogCard } from '@/components/audit-log';
 import { ApprovalMatrixCard } from '@/components/approval-matrix';
 import { CustomerMergeCard } from '@/components/customer-merge';
@@ -52,6 +55,8 @@ interface UserRow {
   role: RoleRef;
   /** Primary role first, then the additional ones. */
   roles?: RoleRef[];
+  /** How many GRANT / DENY overrides the user carries — the «+2 −1» badge. */
+  overrides?: { grant: number; deny: number };
 }
 interface RoleRef {
   id: string;
@@ -59,42 +64,6 @@ interface RoleRef {
   nameAr: string;
   nameEn: string;
 }
-type PermAction = 'view' | 'write' | 'approve' | 'special';
-interface PermMeta {
-  key: string;
-  groupAr: string;
-  groupEn: string;
-  labelAr: string;
-  labelEn: string;
-  screenAr: string;
-  screenEn: string;
-  /** The registry href of the screen the key belongs to; null = no single screen. */
-  screen: string | null;
-  action: PermAction;
-}
-const GRID_COLUMNS = ['view', 'write', 'approve'] as const;
-type GridColumn = (typeof GRID_COLUMNS)[number];
-/** One row of the role grid: one sidebar screen (ADR-02 §3-6). */
-interface GridRow {
-  screen: Screen;
-  /** A General screen: no view key, every user opens it. Shown as a fixed «everyone» row. */
-  fixed: boolean;
-  cells: Partial<Record<GridColumn, PermMeta>>;
-  /** Special keys acted on this screen, listed as a line under the row. */
-  specials: PermMeta[];
-}
-interface GridGroup {
-  group: ScreenGroup;
-  rows: GridRow[];
-}
-/** The write / approve / special keys of a row: what turning its view off turns off. */
-const rowDependents = (row: GridRow): string[] => [
-  ...(row.cells.write ? [row.cells.write.key] : []),
-  ...(row.cells.approve ? [row.cells.approve.key] : []),
-  ...row.specials.map((p) => p.key),
-];
-/** Icon of each screen, the sidebar's own (lib/nav.ts). */
-const NAV_ICON = new Map(NAV_ITEMS.map((i) => [i.href, i.icon]));
 interface OrgSettings {
   legalNameAr: string;
   legalNameEn: string;
@@ -163,6 +132,9 @@ export default function AdminPage() {
   const [pOpen, setPOpen] = useState<UserRow | null>(null);
   const [pValue, setPValue] = useState('');
 
+  // per-user permission overrides (ADR-02 §3-6): the user whose editor is open
+  const [ovrUser, setOvrUser] = useState<UserRow | null>(null);
+
   // role modal state
   const [rOpen, setROpen] = useState(false);
   const [rEdit, setREdit] = useState<RoleRow | null>(null);
@@ -170,9 +142,6 @@ export default function AdminPage() {
   const [rNameEn, setRNameEn] = useState('');
   const [rKey, setRKey] = useState('');
   const [rPerms, setRPerms] = useState<Set<string>>(new Set());
-  // The separation-of-duties pairs acknowledged, as a signature of the pairs:
-  // a pair added after ticking the box asks again.
-  const [rSodAck, setRSodAck] = useState('');
   // The approval-seat refusal (hard rule 8), kept in the dialog beside the cells.
   const [rSeatErr, setRSeatErr] = useState('');
 
@@ -241,47 +210,14 @@ export default function AdminPage() {
     if (await act('orgLogo', () => api.patch<OrgSettings>('/admin/org', { logoDataUrl: '' }))) loadOrg();
   }
 
-  // The role editor grid (ADR-02 §3-6): the screen registry's groups and
-  // screens in sidebar order, one row per screen named as the sidebar names it.
-  // Cells are the catalogue keys whose `screen` is the row's href, by action;
-  // a cell with no key is empty. Special keys of a screen sit under its row;
-  // those of no single screen (and any key whose screen the registry lacks,
-  // so no key is ever hidden) go to the special-permissions section.
-  const { gridGroups, specials } = useMemo(() => {
-    const hrefs = new Set<string>(SCREENS.map((sc) => sc.href));
-    const byScreen = new Map<string, PermMeta[]>();
-    const loose: PermMeta[] = [];
-    for (const p of catalog) {
-      if (p.screen && hrefs.has(p.screen)) byScreen.set(p.screen, [...(byScreen.get(p.screen) ?? []), p]);
-      else loose.push(p);
-    }
-    const groups: GridGroup[] = SCREEN_GROUPS.map((group) => ({
-      group,
-      rows: SCREENS.filter((sc) => sc.group === group.key).map((screen) => {
-        const keys = byScreen.get(screen.href) ?? [];
-        const cells: GridRow['cells'] = {};
-        for (const p of keys) if (p.action !== 'special') cells[p.action] = p;
-        return {
-          screen,
-          fixed: screen.view === undefined,
-          cells,
-          specials: keys.filter((p) => p.action === 'special'),
-        };
-      }),
-    })).filter((g) => g.rows.length > 0);
-    return { gridGroups: groups, specials: loose };
-  }, [catalog]);
+  // The role editor grid (ADR-02 §3-6), shared with the per-user override
+  // editor: one row per sidebar screen, cells from the catalogue.
+  const { gridGroups, specials } = usePermissionGrid(catalog);
 
-  // The draft as the sidebar would show it — visibleGroups is the registry's
-  // own rule (a screen with no view key, or whose view key is held), the one
-  // the real sidebar applies to the same registry — and the
-  // separation-of-duties pairs it holds.
+  // The draft as the preview draws it and the separation-of-duties pairs it
+  // holds, with their acknowledgement.
   const draft = useMemo(() => [...rPerms], [rPerms]);
-  const preview = useMemo(() => visibleGroups(draft), [draft]);
-  const previewCount = preview.reduce((n, g) => n + g.screens.length, 0);
-  const conflicts = useMemo(() => sodConflicts(draft), [draft]);
-  const conflictSig = conflicts.map((c) => `${c.a}+${c.b}`).join('|');
-  const sodAcked = conflicts.length > 0 && rSodAck === conflictSig;
+  const sod = useSodAck(draft);
 
   /**
    * Sets one key of the draft. Turning a screen's view off turns the rest of
@@ -300,13 +236,6 @@ export default function AdminPage() {
     setRPerms(next);
     setRSeatErr('');
   }
-  /**
-   * A write / approve / special cell is offered only while its screen's view
-   * is on. One already held without the view (a role saved before this
-   * editor, or by Madar) stays enabled so it can be cleared.
-   */
-  const cellDisabled = (row: GridRow, key: string) =>
-    !row.fixed && !!row.cells.view && !rPerms.has(row.cells.view.key) && !rPerms.has(key);
 
   function openCreateUser() {
     setUEdit(null);
@@ -331,6 +260,12 @@ export default function AdminPage() {
     setUExtra(new Set((u.roles ?? [u.role]).filter((r) => r.id !== u.role.id).map((r) => r.id)));
     setUOpen(true);
   }
+  // Extra roles stay in the database and the API (a second seat in the
+  // approval matrix), but the field leaves the form except for a user who
+  // already holds some (ADR-02 §3-1); a new user never gets it. Decided by
+  // what the user held when the dialog opened, so unticking the last one
+  // does not hide the field mid-edit.
+  const showExtraRoles = !!uEdit && (uEdit.roles ?? [uEdit.role]).some((r) => r.id !== uEdit.role.id);
   async function submitUser() {
     // The select's `required` normally stops the form first; this keeps the
     // API from ever receiving an empty role and shows the same native message.
@@ -340,8 +275,9 @@ export default function AdminPage() {
     }
     const nameAr = uNameAr.trim() || uNameEn.trim();
     const nameEn = uNameEn.trim() || uNameAr.trim();
-    // The primary role can never also be an additional one.
-    const extraRoleIds = [...uExtra].filter((id) => id !== uRoleId);
+    // The primary role can never also be an additional one. Without the
+    // field the set is not sent: omitted means unchanged to the API.
+    const extraRoleIds = showExtraRoles ? [...uExtra].filter((id) => id !== uRoleId) : undefined;
     const ok = uEdit
       ? await act('user', () =>
           api.patch(`/admin/users/${uEdit.id}`, { nameAr, nameEn, roleId: uRoleId, extraRoleIds }),
@@ -389,7 +325,7 @@ export default function AdminPage() {
     setRNameEn('');
     setRKey('');
     setRPerms(new Set());
-    setRSodAck('');
+    sod.reset();
     setRSeatErr('');
     setROpen(true);
   }
@@ -399,7 +335,7 @@ export default function AdminPage() {
     setRNameEn(r.nameEn);
     setRKey(r.key);
     setRPerms(new Set(r.permissions));
-    setRSodAck('');
+    sod.reset();
     setRSeatErr('');
     setROpen(true);
   }
@@ -409,7 +345,7 @@ export default function AdminPage() {
     const permissions = [...rPerms];
     // Sent only for a set that holds a pair, once the box is ticked (the
     // button is disabled until then); the server records the pairs.
-    const acknowledgeSod = sodAcked ? true : undefined;
+    const acknowledgeSod = sod.acked ? true : undefined;
     setRSeatErr('');
     const save = async () => {
       try {
@@ -454,9 +390,15 @@ export default function AdminPage() {
               {t('adm.user.new')}
             </Btn>
           ) : tab === 'roles' ? (
-            <Btn variant="primary" icon="plus" onClick={openCreateRole}>
-              {t('adm.role.new')}
-            </Btn>
+            <span className="flex items-center gap-2">
+              {/* ADR-02 §3-4: the seven company presets, applied one at a time after a diff (P1-11). */}
+              <Link href="/admin/presets" className="btn-ghost">
+                {t('adm.role.presets')}
+              </Link>
+              <Btn variant="primary" icon="plus" onClick={openCreateRole}>
+                {t('adm.role.new')}
+              </Btn>
+            </span>
           ) : undefined
         }
       />
@@ -661,6 +603,20 @@ export default function AdminPage() {
                           {roleName(r)}
                         </span>
                       ))}
+                      {u.overrides && u.overrides.grant + u.overrides.deny > 0 && (
+                        <span
+                          className="badge bg-info-50 text-info-800"
+                          dir="ltr"
+                          data-testid="override-badge"
+                          title={t('adm.ovr.badgeTitle')
+                            .replace('{grant}', String(u.overrides.grant))
+                            .replace('{deny}', String(u.overrides.deny))}
+                        >
+                          {[u.overrides.grant > 0 && `+${u.overrides.grant}`, u.overrides.deny > 0 && `−${u.overrides.deny}`]
+                            .filter(Boolean)
+                            .join(' ')}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="td">
@@ -670,6 +626,9 @@ export default function AdminPage() {
                   <td className="td">
                     <div className="flex flex-wrap gap-1.5">
                       <Btn sm onClick={() => openEditUser(u)}>{t('common.edit')}</Btn>
+                      <Btn sm icon="lock" onClick={() => setOvrUser(u)}>
+                        {t('adm.ovr.button')}
+                      </Btn>
                       <Btn sm icon="key" onClick={() => { setPOpen(u); setPValue(''); }}>
                         {t('adm.user.resetPass')}
                       </Btn>
@@ -813,27 +772,29 @@ export default function AdminPage() {
               ))}
             </select>
           </Field>
-          <Field label={t('adm.user.extraRoles')} hint={t('adm.user.extraRolesHint')}>
-            <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-slate-200 p-2 sm:grid-cols-2">
-              {roles
-                .filter((r) => r.id !== uRoleId)
-                .map((r) => (
-                  <label key={r.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-xs text-slate-700 hover:bg-slate-50">
-                    <input
-                      type="checkbox"
-                      checked={uExtra.has(r.id)}
-                      onChange={(e) => {
-                        const next = new Set(uExtra);
-                        if (e.target.checked) next.add(r.id);
-                        else next.delete(r.id);
-                        setUExtra(next);
-                      }}
-                    />
-                    {roleName(r)}
-                  </label>
-                ))}
-            </div>
-          </Field>
+          {showExtraRoles && (
+            <Field label={t('adm.user.extraRoles')} hint={t('adm.user.extraRolesHint')}>
+              <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-slate-200 p-2 sm:grid-cols-2">
+                {roles
+                  .filter((r) => r.id !== uRoleId)
+                  .map((r) => (
+                    <label key={r.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-xs text-slate-700 hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={uExtra.has(r.id)}
+                        onChange={(e) => {
+                          const next = new Set(uExtra);
+                          if (e.target.checked) next.add(r.id);
+                          else next.delete(r.id);
+                          setUExtra(next);
+                        }}
+                      />
+                      {roleName(r)}
+                    </label>
+                  ))}
+              </div>
+            </Field>
+          )}
           <div className="flex justify-end gap-2">
             <Btn onClick={() => setUOpen(false)}>{t('common.cancel')}</Btn>
             <Btn type="submit" variant="primary" busy={busy('user')} disabled={busy()}>
@@ -927,187 +888,30 @@ export default function AdminPage() {
               <p className="mb-2 text-xs text-slate-500">
                 {t('adm.role.gridHint')} {t('adm.role.grid.viewHint')}
               </p>
-              <div className="max-h-[55vh] space-y-4 overflow-y-auto rounded-lg border border-slate-200 p-3 [scrollbar-width:thin]">
-                {gridGroups.map(({ group, rows }) => {
-                  const groupName = ar ? group.labelAr : group.labelEn;
-                  const groupKeys = rows
-                    .filter((r) => !r.fixed)
-                    .flatMap((r) => [
-                      ...GRID_COLUMNS.map((c) => r.cells[c]?.key).filter((k): k is string => !!k),
-                      ...r.specials.map((p) => p.key),
-                    ]);
-                  return (
-                    <div key={group.key}>
-                      {groupKeys.length > 0 ? (
-                        <label className="mb-1.5 flex items-center gap-2 text-xs font-bold text-slate-500">
-                          <input
-                            type="checkbox"
-                            checked={groupKeys.every((k) => rPerms.has(k))}
-                            onChange={(e) => {
-                              const next = new Set(rPerms);
-                              groupKeys.forEach((k) => (e.target.checked ? next.add(k) : next.delete(k)));
-                              setPerms(next);
-                            }}
-                          />
-                          {groupName}
-                        </label>
-                      ) : (
-                        <div className="mb-1.5 text-xs font-bold text-slate-500">{groupName}</div>
-                      )}
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="text-slate-600">
-                            <th scope="col" className="py-1 text-start font-semibold">{t('adm.role.grid.screen')}</th>
-                            {GRID_COLUMNS.map((c) => (
-                              <th key={c} scope="col" className="w-20 py-1 text-center font-semibold">
-                                {t(`adm.role.grid.${c}`)}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        {rows.map((row) => {
-                          const name = ar ? row.screen.labelAr : row.screen.labelEn;
-                          return (
-                            <tbody key={row.screen.href} className="border-t border-slate-100">
-                              <tr className="hover:bg-slate-50">
-                                <th scope="row" className="py-1.5 text-start font-normal text-slate-700">{name}</th>
-                                {GRID_COLUMNS.map((c) => {
-                                  if (c === 'view' && row.fixed) {
-                                    return (
-                                      <td key={c} className="py-1.5 text-center text-slate-500">
-                                        {t('adm.role.grid.everyone')}
-                                      </td>
-                                    );
-                                  }
-                                  const p = row.cells[c];
-                                  const off = !!p && c !== 'view' && cellDisabled(row, p.key);
-                                  return (
-                                    <td key={c} className="py-1.5 text-center">
-                                      {p ? (
-                                        <input
-                                          type="checkbox"
-                                          aria-label={`${name} — ${t(`adm.role.grid.${c}`)}`}
-                                          title={off ? t('adm.role.grid.needsView') : ar ? p.labelAr : p.labelEn}
-                                          checked={rPerms.has(p.key)}
-                                          disabled={off}
-                                          onChange={(e) => setPerm(p.key, e.target.checked, row)}
-                                        />
-                                      ) : null}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                              {row.specials.length > 0 && (
-                                <tr>
-                                  <td colSpan={GRID_COLUMNS.length + 1} className="pb-1.5 ps-4">
-                                    <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                      {row.specials.map((p) => {
-                                        const off = cellDisabled(row, p.key);
-                                        return (
-                                          <label
-                                            key={p.key}
-                                            className={`flex items-center gap-1.5 ${off ? 'text-slate-400' : 'text-slate-600'}`}
-                                            title={off ? t('adm.role.grid.needsView') : undefined}
-                                          >
-                                            <input
-                                              type="checkbox"
-                                              checked={rPerms.has(p.key)}
-                                              disabled={off}
-                                              onChange={(e) => setPerm(p.key, e.target.checked, row)}
-                                            />
-                                            {ar ? p.labelAr : p.labelEn}
-                                          </label>
-                                        );
-                                      })}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          );
-                        })}
-                      </table>
-                    </div>
-                  );
-                })}
-
-                {specials.length > 0 && (
-                  <div>
-                    <div className="mb-0.5 text-xs font-bold text-slate-500">{t('adm.role.special')}</div>
-                    <p className="mb-1.5 text-xs text-slate-500">{t('adm.role.specialHint')}</p>
-                    <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                      {specials.map((p) => (
-                        <label key={p.key} className="flex items-center gap-2 rounded px-1.5 py-1 text-xs text-slate-700 hover:bg-slate-50">
-                          <input
-                            type="checkbox"
-                            checked={rPerms.has(p.key)}
-                            onChange={(e) => setPerm(p.key, e.target.checked)}
-                          />
-                          {ar ? p.labelAr : p.labelEn}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <PermissionGrid
+                gridGroups={gridGroups}
+                specials={specials}
+                has={(k) => rPerms.has(k)}
+                onToggle={setPerm}
+                onToggleGroup={(keys, on) => {
+                  const next = new Set(rPerms);
+                  keys.forEach((k) => (on ? next.add(k) : next.delete(k)));
+                  setPerms(next);
+                }}
+              />
             </div>
 
             {/* The sidebar as a holder of this draft alone would see it,
                 drawn from the same registry as the real one. */}
-            <aside aria-labelledby="role-preview-title" className="min-w-0">
-              <p id="role-preview-title" className="mb-2 text-sm font-semibold text-slate-700">
-                {t('adm.role.preview.title')}
-              </p>
-              <p className="mb-2 text-xs font-semibold text-brand-700" aria-live="polite" data-testid="role-preview-count">
-                {t('adm.role.preview.count')
-                  .replace('{n}', String(previewCount))
-                  .replace('{total}', String(SCREENS.length))}
-              </p>
-              <div className="max-h-[55vh] space-y-3 overflow-y-auto rounded-lg bg-gradient-to-b from-ink-900 to-ink-950 p-3 [scrollbar-width:thin]">
-                {preview.map(({ group, screens }) => (
-                  <div key={group.key}>
-                    <p className="mb-1 px-1 text-[11px] font-bold text-slate-400">{ar ? group.labelAr : group.labelEn}</p>
-                    <ul className="space-y-0.5" data-testid="role-preview-group">
-                      {screens.map((sc) => (
-                        <li
-                          key={sc.href}
-                          data-href={sc.href}
-                          className="flex items-center gap-2 rounded px-1.5 py-1 text-xs text-slate-300"
-                        >
-                          <Icon name={NAV_ICON.get(sc.href) ?? 'dashboard'} className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                          <span className="truncate">{ar ? sc.labelAr : sc.labelEn}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-1.5 text-[11px] leading-5 text-slate-500">{t('adm.role.preview.hint')}</p>
-            </aside>
+            <SidebarPreview permissions={draft} hint={t('adm.role.preview.hint')} />
           </div>
 
-          {conflicts.length > 0 && (
-            <div role="status" className="rounded-xl border border-warning-200 bg-warning-50/60 p-4 text-sm">
-              <p className="flex items-center gap-2 font-semibold text-warning-900">
-                <Icon name="alert-triangle" className="h-4 w-4 shrink-0" />
-                {t('adm.role.sod.title')}
-              </p>
-              <ul className="mt-2 list-disc space-y-0.5 ps-6 text-warning-900">
-                {conflicts.map((c) => (
-                  <li key={`${c.a}+${c.b}`}>{ar ? c.labelAr : c.labelEn}</li>
-                ))}
-              </ul>
-              <p className="mt-2 text-xs leading-5 text-warning-800">{t('adm.role.sod.hint')}</p>
-              <label className="mt-2 flex items-center gap-2 text-sm font-semibold text-warning-900">
-                <input
-                  type="checkbox"
-                  checked={sodAcked}
-                  onChange={(e) => setRSodAck(e.target.checked ? conflictSig : '')}
-                />
-                {t('adm.role.sod.ack')}
-              </label>
-            </div>
-          )}
+          <SodWarning
+            conflicts={sod.conflicts}
+            acked={sod.acked}
+            onAck={sod.setAcked}
+            hint={t('adm.role.sod.hint')}
+          />
 
           {rSeatErr && (
             <p role="alert" className="rounded-xl border border-danger-200 bg-danger-50/50 p-4 text-sm font-medium text-danger-700">
@@ -1121,13 +925,29 @@ export default function AdminPage() {
               type="submit"
               variant="primary"
               busy={busy('role')}
-              disabled={busy() || rPerms.size === 0 || (conflicts.length > 0 && !sodAcked)}
+              disabled={busy() || rPerms.size === 0 || (sod.conflicts.length > 0 && !sod.acked)}
             >
               {rEdit ? t('common.save') : t('common.create')}
             </Btn>
           </div>
         </form>
       </Modal>
+
+      {/* per-user permission overrides; keyed so each opening starts from the stored set */}
+      {ovrUser && (
+        <UserPermissionsDialog
+          key={ovrUser.id}
+          target={ovrUser}
+          catalog={catalog}
+          onClose={() => setOvrUser(null)}
+          onSaved={(id) => {
+            setOvrUser(null);
+            load();
+            // The signed-in administrator editing their own exceptions sees the effect at once.
+            if (id === me?.id) void refresh();
+          }}
+        />
+      )}
 
       {confirmNode}
     </div>

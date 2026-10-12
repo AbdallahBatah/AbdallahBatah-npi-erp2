@@ -62,6 +62,7 @@ const prismaWith = (over: Record<string, unknown> = {}) => {
     },
     userPermissionOverride: {
       findMany: jest.fn().mockResolvedValue([]),
+      groupBy: jest.fn().mockResolvedValue([]),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       createMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
@@ -126,6 +127,28 @@ describe('AdminService.listUsers', () => {
     expect(u.roles.map((r) => r.id)).toEqual(['role-sales', 'role-cost', 'role-pm']);
     expect(u.role.id).toBe('role-sales');
     expect('extraRoles' in u).toBe(false);
+  });
+
+  it('counts each user’s overrides by effect in one grouped query of the organization; none → zeros', async () => {
+    const prisma = prismaWith();
+    prisma.user.findMany.mockResolvedValue([row({ id: 'u2' }), row({ id: 'u3' }), row({ id: 'u4' })]);
+    prisma.userPermissionOverride.groupBy.mockResolvedValue([
+      { userId: 'u2', effect: 'GRANT', _count: { _all: 2 } },
+      { userId: 'u2', effect: 'DENY', _count: { _all: 1 } },
+      { userId: 'u4', effect: 'DENY', _count: { _all: 3 } },
+    ]);
+    const users = await make(prisma).listUsers(admin());
+    expect(prisma.userPermissionOverride.groupBy).toHaveBeenCalledTimes(1);
+    expect(prisma.userPermissionOverride.groupBy).toHaveBeenCalledWith({
+      by: ['userId', 'effect'],
+      where: { organizationId: 'org1' },
+      _count: { _all: true },
+    });
+    expect(users.map((u) => [u.id, u.overrides])).toEqual([
+      ['u2', { grant: 2, deny: 1 }],
+      ['u3', { grant: 0, deny: 0 }],
+      ['u4', { grant: 0, deny: 3 }],
+    ]);
   });
 });
 
