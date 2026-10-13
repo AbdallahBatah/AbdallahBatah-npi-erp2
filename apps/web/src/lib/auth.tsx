@@ -58,7 +58,7 @@ const REFRESH_MIN_GAP_MS = 2_000;
 function sessionSignature(u: AuthUser): string {
   return JSON.stringify([
     u.id,
-    [...u.permissions].sort().join(','),
+    [...u.permissions].sort((x, y) => x.localeCompare(y, 'en')).join(','),
     u.roleKey,
     u.roleNameAr ?? '',
     u.roleNameEn ?? '',
