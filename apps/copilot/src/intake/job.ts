@@ -230,7 +230,7 @@ export async function startIntake(deps: StartIntakeDeps, caller: IntakeCaller, i
       source: { kind: prepared.source.kind, pages: prepared.pages },
       usage: [result.usage],
     };
-    const resolution = result.values === null ? null : await resolveFlow(deps.npi, input.flow, result.values);
+    const resolution = result.values === null ? null : await resolveFlow(deps.npi, input.flow, result.values, { callerNpiUserId: caller.npiUserId });
     const { model, fields } = buildPreview({
       flow: input.flow,
       assessed: result.assessed,

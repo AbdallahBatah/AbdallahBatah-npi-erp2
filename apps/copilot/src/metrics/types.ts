@@ -33,7 +33,7 @@
 //                                                              target ≤ 30 min
 import type { OnboardingSessionLike } from './onboarding';
 import type { DailyUsageRowView, UsagePeriod, UsageReport } from '../audit/usage-types';
-import type { FlowType } from '../agents/router';
+import type { DocumentFlow } from '../agents/router';
 
 export type AssumptionId = 'a1' | 'a2' | 'a3' | 'a4' | 'a5' | 'a6';
 
@@ -79,7 +79,7 @@ export interface EvalRunLike {
 /** One approved `intake_jobs` row: the time metric of 02 §5.9 row 9 is
  *  `createdAt → approvedAt`. Rows without `approvedAt` are not read. */
 export interface IntakeJobLike {
-  flowType: FlowType;
+  flowType: DocumentFlow;
   createdAt: Date;
   approvedAt: Date;
 }

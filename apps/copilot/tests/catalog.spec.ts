@@ -274,11 +274,12 @@ describe('loadProfilePack', () => {
     expect(() => overlayFileFor('nope')).toThrow();
   });
 
-  it('visibleFlowsOf(epc) returns epc\'s flows in FLOW_TYPES order', () => {
+  it('visibleFlowsOf(epc) returns epc\'s flows in DOCUMENT_FLOWS order', () => {
     const epc = loadProfilePack('epc');
     // epc's acceptedDocTypes are customer_contract, po, grn, vendor_bill, pr
-    // (catalog/profiles/epc.json) — FLOW_TYPES order is customer_contract,
-    // pr, po, grn, vendor_bill (src/agents/router.ts:23).
+    // (catalog/profiles/epc.json) — DOCUMENT_FLOWS order is customer_contract,
+    // pr, po, grn, vendor_bill (src/onboarding/profile.schema.ts); a pack never
+    // names the administrative flow (D-26).
     expect(visibleFlowsOf(epc)).toEqual(['customer_contract', 'pr', 'po', 'grn', 'vendor_bill']);
   });
 

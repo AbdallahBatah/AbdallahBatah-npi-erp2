@@ -1093,6 +1093,7 @@ describe('SOURCES_OF_FLOW', () => {
       po: ['purchaseOrders'],
       grn: ['purchaseOrders'],
       vendor_bill: ['purchaseOrders'],
+      user_permissions: [],
     });
   });
 });

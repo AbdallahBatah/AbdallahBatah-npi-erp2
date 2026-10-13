@@ -401,6 +401,19 @@ describe('loadMetricsInput: what it returns', () => {
     expect(input.intakeJobs.map((j) => j.flowType)).toEqual(['po', 'grn']);
   });
 
+  it('the administrative flow (D-26) has no document and no reference time: its approved jobs are not metric rows', async () => {
+    const approved = new Date('2026-03-08T08:05:00.000Z');
+    const { db } = buildFakeDb({
+      ...FIXTURE,
+      jobs: [
+        ...(FIXTURE.jobs ?? []),
+        { npiOrgId: ORG_A, flowType: 'user_permissions', createdAt: new Date('2026-03-08T08:00:00.000Z'), approvedAt: approved },
+      ],
+    });
+    const input = await loadMetricsInput(db, { npiOrgId: ORG_A }, NOW);
+    expect(input.intakeJobs.map((j) => j.flowType)).toEqual(['po', 'grn']);
+  });
+
   it('returns empty collections, not errors, for an organization with nothing', async () => {
     const { db } = buildFakeDb(FIXTURE);
     const input = await loadMetricsInput(db, { npiOrgId: 'org-empty' }, NOW);

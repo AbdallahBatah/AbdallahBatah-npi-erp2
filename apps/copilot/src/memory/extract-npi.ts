@@ -392,6 +392,8 @@ export const SOURCES_OF_FLOW: Record<FlowType, readonly NpiMemorySource[]> = {
   po: ['purchaseOrders'],
   grn: ['purchaseOrders'],
   vendor_bill: ['purchaseOrders'],
+  // D-26: the permission-override set changes no source the memory reads.
+  user_permissions: [],
 };
 
 // ─── Refresh ─────────────────────────────────────────────────────────────────

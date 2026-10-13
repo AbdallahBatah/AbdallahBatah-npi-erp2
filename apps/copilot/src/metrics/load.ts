@@ -11,7 +11,8 @@
 //   - Read only. No model call, no NPI call, no write, no environment read.
 import { riyadhTrailingPeriod } from '../audit/cost';
 import { loadDailyUsage, loadUsageReport, type UsageDb } from '../queries/usage';
-import type { FlowType } from '../agents/router';
+import type { DocumentFlow, FlowType } from '../agents/router';
+import { DOCUMENT_FLOWS } from '../onboarding/profile.schema';
 import { computeMetrics } from './compute';
 import type { OnboardingMetricsDb } from './onboarding';
 import {
@@ -45,10 +46,10 @@ export const BASELINE_SELECT = { flowType: true, minutes: true, measuredAt: true
 /** The columns of `onboarding_sessions` a6 reads — `OnboardingSessionLike`. */
 const ONBOARDING_SELECT = { npiOrgId: true, startedAt: true, completedAt: true, profileChosen: true } as const;
 
-const FLOW_TYPES: readonly FlowType[] = ['customer_contract', 'pr', 'po', 'grn', 'vendor_bill'];
-
-function isFlowType(value: string): value is FlowType {
-  return (FLOW_TYPES as readonly string[]).includes(value);
+// The metrics cover the five document flows; the administrative flow (D-26) has
+// no document and no manual reference time.
+function isFlowType(value: string): value is DocumentFlow {
+  return (DOCUMENT_FLOWS as readonly string[]).includes(value);
 }
 
 /** Structural subset of the copilot's Prisma client: the real client must

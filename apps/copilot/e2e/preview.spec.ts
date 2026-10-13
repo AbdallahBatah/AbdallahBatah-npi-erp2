@@ -18,7 +18,7 @@
 import type { APIRequestContext, Page, Route } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { t } from '../src/i18n/ar';
-import { FLOW_TYPES } from '../src/onboarding/profile.schema';
+import { DOCUMENT_FLOWS } from '../src/onboarding/profile.schema';
 import type { IntakeView } from '../src/intake/types';
 import { readAdminCredentials } from './fixtures/accounts';
 import { waitForHydration } from './fixtures/hydration';
@@ -439,7 +439,7 @@ test.describe('which kind of document is it (T-26)', () => {
     await expect(page.getByRole('log').getByText(t('flow.unknown'))).toBeVisible();
     await expect(page.getByRole('log').getByText(t('chat.choose_flow_hint'))).toBeVisible();
     const chips = page.getByTestId('flow-chips');
-    for (const flow of FLOW_TYPES) {
+    for (const flow of DOCUMENT_FLOWS) {
       await expect(chips.getByRole('button', { name: t(`flow.${flow}` as const), exact: true })).toBeVisible();
     }
     await expect(chips.getByRole('button')).toHaveCount(5);

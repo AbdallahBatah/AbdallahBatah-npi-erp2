@@ -10,7 +10,7 @@ import { t, type ArKey } from '../src/i18n/ar';
 import { formatNumber } from '../src/i18n/format';
 import { loadProfilePack } from '../src/onboarding/catalog';
 import { APPROVAL_DOCUMENT_LABEL_AR } from '../src/onboarding/plan';
-import { FLOW_TYPES } from '../src/onboarding/profile.schema';
+import { DOCUMENT_FLOWS } from '../src/onboarding/profile.schema';
 import { readAdminCredentials, readSiteEngineerCredentials, type SeededAccount } from './fixtures/accounts';
 import { waitForHydration } from './fixtures/hydration';
 import { disconnectSetupDb } from './fixtures/setup-db';
@@ -210,7 +210,7 @@ test.describe('settings screen (T-19)', () => {
     await expect(page.getByText(t('settings.no_config'))).toBeVisible();
     await expect(page.getByRole('link', { name: t('settings.go_setup') })).toBeVisible();
     await expect(page.getByText(t('settings.baselines'))).toBeVisible();
-    for (const flow of FLOW_TYPES) {
+    for (const flow of DOCUMENT_FLOWS) {
       await expect(page.getByTestId(`settings-baseline-${flow}`)).toBeVisible();
     }
   });

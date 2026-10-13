@@ -5,7 +5,7 @@ import { t, type ArKey } from '@/i18n/ar';
 import { formatDate, formatNumber } from '@/i18n/format';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { FLOW_TYPES } from '@/onboarding/profile.schema';
+import { DOCUMENT_FLOWS } from '@/onboarding/profile.schema';
 import type { FlowType } from '@/agents/router';
 import { BASELINE_MAX_MINUTES, BASELINE_MIN_MINUTES, type SettingsBaseline } from '@/settings/types';
 import type { SaveOutcome } from './SettingsPanel';
@@ -99,14 +99,14 @@ function BaselineRow({ flow, baseline, onSave }: BaselineRowProps) {
 
 /** `settings.baselines`: the manually-measured minutes per chat flow (02 §5.9
  *  "الزمن اليدوي المرجعي"), always rendered — it does not depend on
- *  `firm_config` existing. One row per `FLOW_TYPES`, each its own save unit. */
+ *  `firm_config` existing. One row per `DOCUMENT_FLOWS`, each its own save unit. */
 export function BaselinesCard({ baselines, onSave }: BaselinesCardProps) {
   return (
     <Card title={t('settings.baselines')}>
       <div className="flex flex-col gap-3">
         <p className="text-sm text-slate-500">{t('settings.baselines.hint')}</p>
         <div className="flex flex-col gap-3">
-          {FLOW_TYPES.map((flow) => (
+          {DOCUMENT_FLOWS.map((flow) => (
             <BaselineRow key={flow} flow={flow} baseline={baselines[flow]} onSave={onSave} />
           ))}
         </div>

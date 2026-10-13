@@ -21,12 +21,19 @@
 //   requisition      code exact, digits compared numerically → none
 //   WBS element      code exact → normalized name exact → partial → none
 //                    (read off a project record — NPI has no WBS list)
+//   user             name exact (Arabic or English) or e-mail exact → partial
+//                    (shown for choice) → none; a user is never created (D-26)
+//   permission       label exact → screen exact (one row: matched; several:
+//                    all of them for choice) → English label or key exact →
+//                    partial over label and screen (up to five) → none
 //   item             SKU exact → name trigram similarity ≥ 0.85 → partial
 //                    → «صنف جديد؟»
 // Trigram similarity follows pg_trgm (02 §5.6 names the ≥ 0.85 threshold
 // in those terms): words padded with two leading and one trailing space,
 // similarity = |shared trigrams| / |union|.
 import { normalizeArabic } from '../text/normalize';
+import type { UserPermissionState } from '../intake/types';
+import { NpiError } from '../npi/errors';
 import { readList } from '../npi/responses';
 import { amountTolerance, round2 } from './schemas/common';
 import type { FieldWarning } from './schemas/field';
@@ -405,12 +412,13 @@ function topCandidates<T>(
   entities: readonly T[],
   score: (entity: T) => number,
   min: number,
+  limit: number = MAX_CANDIDATES,
 ): Candidate<T>[] {
   return entities
     .map((entity) => ({ entity, similarity: score(entity) }))
     .filter((c) => c.similarity >= min)
     .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, MAX_CANDIDATES);
+    .slice(0, limit);
 }
 
 function bestNameSimilarity(names: readonly (string | null)[], query: readonly (string | null)[]): number {
@@ -650,4 +658,184 @@ export function billTotalWarnings(
 ): FieldWarning[] {
   const off = (printed: number | null, want: number): boolean => printed !== null && Math.abs(printed - want) > amountTolerance(want);
   return off(values.subtotal, expected.subtotal) || off(values.total, expected.total) ? ['extract.warn.bill_total_mismatch'] : [];
+}
+
+// ─── Users and permissions (D-26) ───────────────────────────────────────────
+
+/** Candidates offered for a user or a permission (more than a party: a
+ *  screen holds up to five permission rows). */
+export const USER_PERMISSION_MAX_CANDIDATES = 5;
+
+export interface UserRef {
+  id: string;
+  nameAr: string;
+  nameEn: string | null;
+  email: string | null;
+  isActive: boolean;
+  roleKey: string | null;
+  roleAr: string | null;
+}
+
+/**
+ * Rows of `GET /admin/departments/directory` (`departments.service.ts`
+ * `directory()`, a bare array of `DIRECTORY_SELECT`,
+ * apps/api/src/modules/admin/departments.service.ts:10-20):
+ *  - id        `id: true,`
+ *  - nameAr    `nameAr: true,`
+ *  - nameEn    `nameEn: true,`
+ *  - email     `email: true,`
+ *  - isActive  `isActive: true,` (an absent flag reads as active, like the chat tool)
+ *  - role      `role: { select: { id: true, key: true, nameAr: true, nameEn: true } }`
+ * A row without an id or a name is skipped. `departmentId` is on the wire and
+ * not read: this flow never groups users by department.
+ */
+export function usersFromDirectory(body: unknown): UserRef[] {
+  const out: UserRef[] = [];
+  for (const row of readList(body)) {
+    if (!isRecord(row)) continue;
+    const id = str(row.id);
+    const nameAr = str(row.nameAr) ?? str(row.nameEn);
+    if (id === null || nameAr === null) continue;
+    const role = isRecord(row.role) ? row.role : {};
+    out.push({
+      id,
+      nameAr,
+      nameEn: str(row.nameEn),
+      email: str(row.email),
+      isActive: row.isActive !== false,
+      roleKey: str(role.key),
+      roleAr: str(role.nameAr),
+    });
+  }
+  return out;
+}
+
+export type UserResolution =
+  | { kind: 'matched'; by: 'name'; user: UserRef }
+  | { kind: 'candidates'; candidates: Candidate<UserRef>[] }
+  | { kind: 'none' };
+
+/**
+ * A written name against the directory: the Arabic or English name exactly
+ * (legal-form words and diacritics aside), or the e-mail exactly, is a match —
+ * unless two users share it, which is a choice; otherwise the closest names
+ * are offered. A user who is not in the directory is `none`; nothing here
+ * suggests creating one.
+ */
+export function resolveUser(name: string | null | undefined, users: readonly UserRef[]): UserResolution {
+  const written = name?.trim() ?? '';
+  if (written.length === 0) return { kind: 'none' };
+  const key = nameKey(written);
+  const email = written.toLowerCase();
+  const exact = users.filter(
+    (u) => (key.length > 0 && [u.nameAr, u.nameEn].some((n) => n !== null && nameKey(n) === key)) || (u.email !== null && u.email.toLowerCase() === email),
+  );
+  if (exact.length === 1) return { kind: 'matched', by: 'name', user: exact[0] };
+  if (exact.length > 1) {
+    return { kind: 'candidates', candidates: exact.slice(0, USER_PERMISSION_MAX_CANDIDATES).map((entity) => ({ entity, similarity: 1 })) };
+  }
+  const candidates = topCandidates(users, (u) => bestNameSimilarity([u.nameAr, u.nameEn], [written]), PARTY_CANDIDATE_MIN, USER_PERMISSION_MAX_CANDIDATES);
+  return candidates.length > 0 ? { kind: 'candidates', candidates } : { kind: 'none' };
+}
+
+export interface PermissionRef {
+  key: string;
+  labelAr: string;
+  labelEn: string | null;
+  screenAr: string | null;
+  groupAr: string | null;
+  action: string | null;
+}
+
+/**
+ * Rows of `GET /admin/permissions`, NPI's `PERMISSION_CATALOG` served as is
+ * (apps/api/src/modules/admin/admin.controller.ts:27-31); every element is a
+ * `PermissionMeta` (packages/shared/src/permissions.ts:70-100): `key`,
+ * `groupAr`, `labelAr`, `labelEn`, `screenAr` and `action`. A row without a
+ * key or an Arabic label is skipped.
+ */
+export function permissionsFromCatalog(body: unknown): PermissionRef[] {
+  const out: PermissionRef[] = [];
+  for (const row of readList(body)) {
+    if (!isRecord(row)) continue;
+    const key = str(row.key);
+    const labelAr = str(row.labelAr);
+    if (key === null || labelAr === null) continue;
+    out.push({ key, labelAr, labelEn: str(row.labelEn), screenAr: str(row.screenAr), groupAr: str(row.groupAr), action: str(row.action) });
+  }
+  return out;
+}
+
+export type PermissionResolution =
+  | { kind: 'matched'; by: 'name' | 'code'; permission: PermissionRef }
+  | { kind: 'candidates'; candidates: Candidate<PermissionRef>[] }
+  | { kind: 'none' };
+
+/** «صلاحية التقارير المالية» is the permission «التقارير المالية»: a leading
+ *  «صلاحية/صلاحيات/صلاحيه» (with or without the article) is not part of the name. */
+const PERMISSION_WORD_RE = /^(?:ال)?صلاحي(?:ه|ات)\s+/;
+
+export function resolvePermission(name: string | null | undefined, catalog: readonly PermissionRef[]): PermissionResolution {
+  const written = normalizeArabic(name ?? '').replace(PERMISSION_WORD_RE, '').trim();
+  if (written.length === 0) return { kind: 'none' };
+  const key = nameKey(written);
+
+  if (key.length > 0) {
+    const byLabel = catalog.find((p) => nameKey(p.labelAr) === key);
+    if (byLabel) return { kind: 'matched', by: 'name', permission: byLabel };
+
+    const byScreen = catalog.filter((p) => p.screenAr !== null && nameKey(p.screenAr) === key);
+    if (byScreen.length === 1) return { kind: 'matched', by: 'name', permission: byScreen[0] };
+    if (byScreen.length > 1) {
+      return { kind: 'candidates', candidates: byScreen.slice(0, USER_PERMISSION_MAX_CANDIDATES).map((entity) => ({ entity, similarity: 1 })) };
+    }
+  }
+
+  // Keys carry dots, which `normalizeArabic` blanks out: compare the text as typed.
+  const latin = (name ?? '').trim().toLowerCase();
+  const byCode = catalog.find((p) => p.key.toLowerCase() === latin || (p.labelEn !== null && p.labelEn.toLowerCase() === latin));
+  if (byCode) return { kind: 'matched', by: 'code', permission: byCode };
+
+  const candidates = topCandidates(
+    catalog,
+    (p) => bestNameSimilarity([p.labelAr, p.screenAr], [written]),
+    PARTY_CANDIDATE_MIN,
+    USER_PERMISSION_MAX_CANDIDATES,
+  );
+  return candidates.length > 0 ? { kind: 'candidates', candidates } : { kind: 'none' };
+}
+
+/**
+ * `GET /admin/users/:id/permissions` (`AdminService.getUserPermissions`,
+ * apps/api/src/modules/admin/admin.service.ts:332-362) answers
+ * `{ roles, overrides, effective }`:
+ *  - roles      `found.roles.map((r) => ({ id, key, nameAr, nameEn, permissions }))`,
+ *               primary role first (the method's own JSDoc);
+ *  - overrides  `{ permission, effect, reason, createdAt, createdBy }` sorted by
+ *               permission; `effect` is `GRANT` | `DENY` (admin/dto.ts:82-86);
+ *  - effective  the union of the roles' keys and the GRANTs, minus the DENYs
+ *               (packages/shared/src/effective-permissions.ts:40-52).
+ * An override with another effect is skipped; `createdAt`/`createdBy` are not
+ * read (the PUT replaces the set and NPI rewrites the author).
+ */
+export function userPermissionStateFrom(body: unknown): UserPermissionState {
+  if (!isRecord(body) || !Array.isArray(body.roles) || !Array.isArray(body.overrides) || !Array.isArray(body.effective)) {
+    throw new NpiError({ status: 0, kind: 'unexpected', npiMessage: null, devDetail: 'userPermissionStateFrom: body is not { roles, overrides, effective }' });
+  }
+  const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
+  const roles = body.roles.filter(isRecord);
+  const rolePermissions = [...new Set(roles.flatMap((r) => strings(r.permissions)))].sort();
+  const overrides: UserPermissionState['overrides'] = [];
+  for (const o of body.overrides) {
+    if (!isRecord(o)) continue;
+    const permission = str(o.permission);
+    if (permission === null || (o.effect !== 'GRANT' && o.effect !== 'DENY')) continue;
+    overrides.push({ permission, effect: o.effect, reason: str(o.reason) });
+  }
+  return {
+    roleAr: roles.length > 0 ? str(roles[0].nameAr) : null,
+    rolePermissions,
+    overrides: overrides.sort((a, b) => (a.permission < b.permission ? -1 : a.permission > b.permission ? 1 : 0)),
+    effective: strings(body.effective).sort(),
+  };
 }

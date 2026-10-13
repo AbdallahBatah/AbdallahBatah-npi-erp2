@@ -1,5 +1,7 @@
 // Message router (T-10): decides, for one user message, whether the HR
-// guard refuses it, which of the five intake flows it belongs to, whether
+// guard refuses it, which of the intake flows it belongs to (the five
+// document flows, or the one administrative flow `user_permissions` of
+// D-26), whether
 // it should fall back to the economy classifier, or whether it is a plain
 // read-only chat turn. See spec/madar/02-TECH-SPEC.md §6 and
 // spec/madar/06-ACCEPTANCE-TESTS.md §3 for the behaviour this implements.
@@ -9,8 +11,12 @@
 //      is never called).
 //   2. A forced flow (the user pressed a chip).
 //   3. Non-entry intents -> chat: never-execute requests (approve, reject,
-//      return, delete, cancel) always; questions and status lookups only
-//      when there is no attachment.
+//      return, delete, cancel) always — except a permission change, where
+//      «احذف صلاحية…» is the request itself; questions and status lookups
+//      only when there is no attachment.
+//   3-bis. Without an attachment, a permission noun with a grant or revoke
+//      verb is the administrative flow `user_permissions` (D-26). It wins
+//      over a document phrase inside the permission's name.
 //   4. Keyword rules (`matchFlowByRules`), on normalized text.
 //   5. Classifier fallback, only when a classifier was injected AND
 //      (there is an attachment OR the rules were ambiguous).
@@ -20,8 +26,12 @@ import { normalizeArabic } from '../text/normalize';
 import { hasAnyPhrase, indicesOfPhrase, indicesOfWords, tokenize } from '../text/tokens';
 import { isHrEvaluationRequest } from './hr-guard';
 
-export type FlowType = 'customer_contract' | 'pr' | 'po' | 'grn' | 'vendor_bill';
-export type ClassifierVerdict = FlowType | 'chat' | 'unknown';
+/** The five flows that turn a document or a sentence about a document into an NPI record. */
+export type DocumentFlow = 'customer_contract' | 'pr' | 'po' | 'grn' | 'vendor_bill';
+/** D-26 adds one administrative flow: a sentence, no document, never offered as a chip. */
+export type FlowType = DocumentFlow | 'user_permissions';
+/** The economy classifier never names the administrative flow. */
+export type ClassifierVerdict = DocumentFlow | 'chat' | 'unknown';
 
 export type Route =
   | { kind: 'hr_refusal' }
@@ -97,6 +107,39 @@ const REQUEST_CUES = normalizeList([
   'سوّ', 'سو', 'سوي', 'أنشئ', 'اعمل', 'حوّل', 'أدخل', 'سجّل',
 ]);
 
+// ─── Step 3-bis: the administrative flow (D-26) ─────────────────────────────
+
+// «صلاحياتي» style pronoun suffixes are not peeled by `tokenIsWord`, so the
+// suffixed forms are listed; the article and the و/ب prefixes are peeled.
+const PERMISSION_NOUNS = normalizeList([
+  'صلاحية', 'صلاحيات', 'الصلاحية', 'الصلاحيات', 'صلاحيته', 'صلاحياته', 'صلاحيتها', 'صلاحياتها', 'صلاحيه',
+]);
+const REVOKE_VERBS = normalizeList([
+  'شيل', 'شيلي', 'شل', 'اسحب', 'اسحبي', 'احجب', 'احجبي', 'امنع', 'أوقف', 'وقف', 'عطّل', 'عطل', 'ألغِ', 'الغي',
+  'احذف', 'انزع', 'اقطع', 'اقفل',
+  // With the pronoun of the permission: «صلاحية التقارير شيلها منه».
+  'شيله', 'شيلها', 'اسحبه', 'اسحبها', 'احجبه', 'احجبها', 'امنعه', 'امنعها', 'الغيه', 'الغيها', 'احذفه', 'احذفها',
+  // Polite requests use the imperfect: «ممكن تشيل صلاحية…؟», «أبي أشيل صلاحية…».
+  'تشيل', 'تسحب', 'تحجب', 'تمنع', 'توقف', 'تعطل', 'تلغي', 'تحذف', 'تنزع', 'اشيل', 'نشيل',
+]);
+const GRANT_VERBS = normalizeList([
+  'أعطِ', 'اعطي', 'اعطه', 'اعطيه', 'عطه', 'عطيه', 'امنح', 'أضف', 'اضف', 'ضيف', 'فعّل', 'فعل', 'رجّع', 'رجع', 'افتح',
+  'خوّل', 'خول',
+  'تعطي', 'تمنح', 'تضيف', 'تفعل', 'ترجع', 'تفتح', 'تخول',
+]);
+
+/**
+ * True when the text holds a permission noun and a grant or revoke verb,
+ * anywhere and in any order: «شيل صلاحية التقارير المالية من أحمد». Whether it
+ * is a question is decided by the caller (a question about permissions is a
+ * chat turn answered by a read tool).
+ */
+export function isPermissionChangeRequest(text: string): boolean {
+  const tokens = tokenize(normalizeArabic(text));
+  if (indicesOfWords(tokens, PERMISSION_NOUNS).length === 0) return false;
+  return indicesOfWords(tokens, REVOKE_VERBS).length > 0 || indicesOfWords(tokens, GRANT_VERBS).length > 0;
+}
+
 function isQuestionOrLookup(rawText: string, tokens: readonly string[]): boolean {
   if (hasAnyPhrase(tokens, HANDOVER_PHRASES)) return true;
   if (indicesOfWords(tokens, INTERROGATIVE_WORDS).length > 0) return true;
@@ -145,9 +188,9 @@ function needVerbFollowedByNumber(tokens: readonly string[]): boolean {
   return false;
 }
 
-function matchedFlowsByRules(text: string): Set<FlowType> {
+function matchedFlowsByRules(text: string): Set<DocumentFlow> {
   const tokens = tokenize(normalizeArabic(text));
-  const matched = new Set<FlowType>();
+  const matched = new Set<DocumentFlow>();
   if (hasAnyPhrase(tokens, HANDOVER_PHRASES)) return matched;
 
   if (hasAnyPhrase(tokens, VENDOR_BILL_PHRASES)) matched.add('vendor_bill');
@@ -176,7 +219,7 @@ function matchedFlowsByRules(text: string): Set<FlowType> {
  * two or more flows matched (ambiguous — the caller falls back to the
  * classifier, see `route`).
  */
-export function matchFlowByRules(text: string): FlowType | null {
+export function matchFlowByRules(text: string): DocumentFlow | null {
   const matched = matchedFlowsByRules(text);
   return matched.size === 1 ? [...matched][0] : null;
 }
@@ -205,11 +248,19 @@ export async function route(input: RouteInput, deps?: RouteDeps): Promise<Route>
   //    attachment (a caption with a question mark does not turn an attached
   //    document into a chat).
   const tokens = tokenize(normalizeArabic(input.text));
-  if (isNeverExecuteRequest(tokens)) {
+  if (isNeverExecuteRequest(tokens) && !isPermissionChangeRequest(input.text)) {
     return { kind: 'chat' };
   }
   if (!input.hasAttachment && isQuestionOrLookup(input.text, tokens)) {
     return { kind: 'chat' };
+  }
+
+  // 3-bis. The administrative flow (D-26): a permission change typed as a
+  //        sentence. Before the document rules, so a document phrase inside
+  //        the permission's name («صلاحية طلب الشراء») does not turn it into
+  //        a requisition; never with an attachment.
+  if (!input.hasAttachment && isPermissionChangeRequest(input.text)) {
+    return applyVisibility('user_permissions', 'rules', input.visibleFlows);
   }
 
   // 4. Rules.

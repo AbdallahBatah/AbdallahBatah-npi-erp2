@@ -24,7 +24,7 @@ import type { ModelResponse, RedactedBlock, RedactedMessage, RedactedRequest } f
 import { extractFactsFromMessage } from '../memory/extract-chat';
 import { markUsed, retrieveFacts } from '../memory/retrieve';
 import { NpiError } from '../npi/errors';
-import { FLOW_REQUIRED_PERMISSION, FLOW_TYPES } from '../onboarding/profile.schema';
+import { DOCUMENT_FLOWS, FLOW_REQUIRED_PERMISSION } from '../onboarding/profile.schema';
 import type { StartIntakeInput, StartIntakeOutcome } from '../intake/job';
 import {
   Pseudonymizer,
@@ -123,6 +123,7 @@ const FLOW_LABEL_KEYS = {
   po: 'flow.po',
   grn: 'flow.grn',
   vendor_bill: 'flow.vendor_bill',
+  user_permissions: 'flow.user_permissions',
 } as const;
 
 async function openConversation(deps: TurnDeps, user: TurnUser, input: TurnInput, text: string): Promise<string> {
@@ -416,7 +417,9 @@ async function startFlow(
 ): Promise<ChatOutcome> {
   const flowAr = t(FLOW_LABEL_KEYS[flow]);
   if (!user.permissions.includes(FLOW_REQUIRED_PERMISSION[flow])) {
-    return { kind: 'error', textAr: t('intake.forbidden', { flow: flowAr }), badges: [flowAr], memoryNotes: [] };
+    // D-26: the administrative flow has its own sentence (it is not a thing created).
+    const textAr = flow === 'user_permissions' ? t('intake.forbidden.user_permissions') : t('intake.forbidden', { flow: flowAr });
+    return { kind: 'error', textAr, badges: [flowAr], memoryNotes: [] };
   }
   const started = await deps.intake.start(
     { npiOrgId: user.npiOrgId, npiUserId: user.npiUserId },
@@ -442,7 +445,7 @@ export async function runTurn(deps: TurnDeps, user: TurnUser, input: TurnInput):
   const documentId = input.documentId;
   if (text.length === 0 && !documentId) throw new TurnInputError('empty');
   if (text.length > MAX_MESSAGE_LENGTH) throw new TurnInputError('too_long');
-  if (input.forcedFlow !== undefined && !(FLOW_TYPES as readonly string[]).includes(input.forcedFlow)) {
+  if (input.forcedFlow !== undefined && !(DOCUMENT_FLOWS as readonly string[]).includes(input.forcedFlow)) {
     throw new TurnInputError('bad_flow');
   }
 

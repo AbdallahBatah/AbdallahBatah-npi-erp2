@@ -5,7 +5,8 @@
 // `./types`; a6 is `./onboarding`'s `computeOnboardingMetric`, reused as is.
 import { dayKeyOf, riyadhDay } from '../audit/cost';
 import type { DailyUsageRowView, UsagePeriod, UsageReport } from '../audit/usage-types';
-import type { FlowType } from '../agents/router';
+import type { DocumentFlow } from '../agents/router';
+import { DOCUMENT_FLOWS } from '../onboarding/profile.schema';
 import { t, type ArKey } from '../i18n/ar';
 import { formatNumber, formatUsdMicro } from '../i18n/format';
 import { computeOnboardingMetric, type OnboardingSessionLike } from './onboarding';
@@ -31,8 +32,8 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** The FlowType union order (src/agents/router.ts). */
-const FLOWS: readonly FlowType[] = ['customer_contract', 'pr', 'po', 'grn', 'vendor_bill'];
+/** The document flows, in `DocumentFlow` order (src/agents/router.ts). */
+const FLOWS: readonly DocumentFlow[] = DOCUMENT_FLOWS;
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -371,7 +372,7 @@ export function computePiiEffectiveness(runs: EvalRunLike[], now: Date): MetricC
 // ─── a5 · the chat entry ────────────────────────────────────────────────────
 
 interface FlowFields {
-  flow: FlowType;
+  flow: DocumentFlow;
   correct: number;
   total: number;
   run: EvalRunLike;
@@ -379,7 +380,7 @@ interface FlowFields {
 
 /** Σ correct / Σ total over the `docs` of the flow's latest extract run; `null`
  *  when there is no run or no readable document. */
-function fieldsOfFlow(runs: EvalRunLike[], flow: FlowType): FlowFields | null {
+function fieldsOfFlow(runs: EvalRunLike[], flow: DocumentFlow): FlowFields | null {
   const run = latestRunOfKind(runs, `extract:${flow}`);
   if (run === null || !isRecord(run.detailsJson) || !Array.isArray(run.detailsJson.docs)) return null;
   let correct = 0;
@@ -395,14 +396,14 @@ function fieldsOfFlow(runs: EvalRunLike[], flow: FlowType): FlowFields | null {
 }
 
 interface FlowTime {
-  flow: FlowType;
+  flow: DocumentFlow;
   medianMinutes: number;
   baselineMinutes: number;
   jobs: number;
 }
 
 /** The flow's latest valid baseline (minutes > 0), by `measuredAt`. */
-function baselineOfFlow(baselines: BaselineLike[], flow: FlowType): number | null {
+function baselineOfFlow(baselines: BaselineLike[], flow: DocumentFlow): number | null {
   let best: BaselineLike | null = null;
   for (const b of baselines) {
     if (b.flowType !== flow || !isFiniteNumber(b.minutes) || b.minutes <= 0) continue;
@@ -411,7 +412,7 @@ function baselineOfFlow(baselines: BaselineLike[], flow: FlowType): number | nul
   return best === null ? null : best.minutes;
 }
 
-function timeOfFlow(jobs: IntakeJobLike[], baselines: BaselineLike[], flow: FlowType): FlowTime | null {
+function timeOfFlow(jobs: IntakeJobLike[], baselines: BaselineLike[], flow: DocumentFlow): FlowTime | null {
   const baselineMinutes = baselineOfFlow(baselines, flow);
   if (baselineMinutes === null) return null;
   const durations = jobs
@@ -422,7 +423,7 @@ function timeOfFlow(jobs: IntakeJobLike[], baselines: BaselineLike[], flow: Flow
   return { flow, medianMinutes: median(durations), baselineMinutes, jobs: durations.length };
 }
 
-function flowLabel(flow: FlowType): string {
+function flowLabel(flow: DocumentFlow): string {
   return t(`flow.${flow}` as ArKey);
 }
 

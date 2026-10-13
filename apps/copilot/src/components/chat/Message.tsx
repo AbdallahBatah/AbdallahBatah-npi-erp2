@@ -4,7 +4,7 @@ import { MemoryNote } from '@/components/MemoryNote';
 import { IntakePanel } from '@/components/intake/IntakePanel';
 import { Button } from '@/components/ui/Button';
 import { t, type ArKey } from '@/i18n/ar';
-import { FLOW_TYPES } from '@/onboarding/profile.schema';
+import { DOCUMENT_FLOWS } from '@/onboarding/profile.schema';
 import type { FlowType, IntakeView } from '@/intake/types';
 import type { ChatMessage } from './api';
 
@@ -63,7 +63,7 @@ function MessageView({ message, onChooseFlow, chipsDisabled = false, intakeView 
         </div>
         {showChips ? (
           <div data-testid="flow-chips" className="flex flex-wrap gap-2">
-            {FLOW_TYPES.map((flow) => (
+            {DOCUMENT_FLOWS.map((flow) => (
               <Button
                 key={flow}
                 type="button"

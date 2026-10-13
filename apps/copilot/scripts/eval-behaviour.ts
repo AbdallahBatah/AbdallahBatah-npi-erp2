@@ -1,5 +1,6 @@
 // `npm run eval:behaviour` — the twenty behaviour scenarios of spec/madar/06 §3
-// (T-37, 07 G-M4-5: ≥ 18/20), run through the copilot's own turn runner with
+// (T-37, 07 G-M4-5: ≥ 18/20) plus the extended scenarios (id > 20) of D-26
+// (T-48b: the permission flow and its read tool), run through the copilot's own turn runner with
 // the real model, the real copilot database and the local NPI api, as the
 // seeded demo users. No model judges anything: every scenario passes or fails
 // on a deterministic check of what the product did — the reply kind, the
@@ -26,7 +27,11 @@
 // second customer whose name shares «النخيل» with the seeded one for #17.
 // Each is reused when it already exists. Nothing is deleted.
 //
-// Score = passed / 20, gate 18. One report under `test-results/behaviour/`
+// Score = passed / 20, gate 18 — over the twenty only. The extended scenarios
+// (#21..) run after them and are reported on their own line («extended x/y»,
+// also under `extended` in the report and in the `eval_runs` row); they are
+// not part of the gate. #22 builds the permission card and never approves it,
+// so nothing is written to NPI. One report under `test-results/behaviour/`
 // and one `eval_runs` row (`kind: 'behaviour'`). Needs `ANTHROPIC_API_KEY`,
 // `COPILOT_DATABASE_URL` and `COPILOT_SESSION_KEY` in the root `.env` (dotenv
 // is applied by the npm script) and NPI on `NPI_API_BASE`
@@ -53,6 +58,8 @@ import { readAdminCredentials, readSeededAccount, readSiteEngineerCredentials } 
 import type { FlowType } from '../src/agents/router';
 
 const GATE = 18;
+/** Scenarios with an id above this are the extended set (D-26); they never count towards the gate. */
+const GATED_MAX_ID = 20;
 const EVAL_DIR = path.join(process.cwd(), 'eval', 'extract');
 const NPI_BASE = process.env.NPI_API_BASE ?? 'http://localhost:4000/api';
 const DEAD_NPI_BASE = 'http://127.0.0.1:9/api';
@@ -286,12 +293,21 @@ interface Fixtures {
   pendingPr: { id: string; code: string };
   contract: { id: string; code: string };
   project: string;
+  /** Arabic names of the seeded engineer and admin, for the D-26 sentences. */
+  engineerNameAr: string;
+  adminNameAr: string;
 }
 
 type Check = (actor: Actor, s: Scenario, fx: Fixtures) => Promise<{ pass: boolean; detailAr: string; reply: TurnReply | null }>;
 
 function fill(text: string, fx: Fixtures): string {
-  return text.replace('{project}', fx.project).replace('{approvedPr}', fx.approvedPr.code).replace('{pendingPr}', fx.pendingPr.code).replace('{contract}', fx.contract.code);
+  return text
+    .replace('{project}', fx.project)
+    .replace('{approvedPr}', fx.approvedPr.code)
+    .replace('{pendingPr}', fx.pendingPr.code)
+    .replace('{contract}', fx.contract.code)
+    .replace('{engineerNameAr}', fx.engineerNameAr)
+    .replace('{adminNameAr}', fx.adminNameAr);
 }
 
 const checks: Record<number, Check> = {
@@ -463,13 +479,51 @@ const checks: Record<number, Check> = {
     const capRows = await auditCount({ conversationId: reply.conversationId, event: 'cap_reached' });
     return { pass: reply.kind === 'error' && reply.textAr === t('usage.cap.reached') && capRows > 0, detailAr: `${reply.kind}؛ النص = رسالة الحد: ${reply.textAr === t('usage.cap.reached') ? 'نعم' : 'لا'}؛ صفوف cap_reached ${capRows}`, reply };
   },
+  // ── Extended (D-26, T-48b) ──
+  21: async (actor, s, fx) => {
+    const reply = await turn(actor, { text: fill(s.inputAr as string, fx) });
+    return { pass: reply.kind === 'answer' && reply.badges.includes('الصلاحيات'), detailAr: `${reply.kind}؛ الشارات: ${reply.badges.join('، ') || '—'}`, reply };
+  },
+  22: async (actor, s, fx) => {
+    const reply = await turn(actor, { text: fill(s.inputAr as string, fx) });
+    if (reply.kind !== 'intake' || !reply.intakeJobId) return { pass: false, detailAr: `الرد ${reply.kind} لا بطاقة`, reply };
+    const { view, stored } = await jobOf(actor, reply.intakeJobId);
+    const user = stored?.resolution?.user;
+    const permission = stored?.resolution?.lines[0]?.permission;
+    const userOk = user?.kind === 'matched' && user.labelAr === fx.engineerNameAr;
+    const permissionOk = permission?.kind === 'matched' && permission.id === 'finance.report.read';
+    const canApprove = view.preview?.canApprove === true;
+    // Nothing is approved here: the card is cancelled, so NPI is never written.
+    await applyIntakeAction(buildEditDeps({ npiToken: actor.token, user: actor.user }), caller(actor), { id: view.id, action: 'cancel' });
+    return {
+      pass: view.flow === 'user_permissions' && userOk && permissionOk && canApprove,
+      detailAr: `بطاقة ${view.flow}؛ المستخدم: ${pickKind(user)}${userOk ? '' : ' (غير مطابق للمهندس)'}؛ الصلاحية: ${pickKind(permission)}؛ يمكن الاعتماد: ${canApprove ? 'نعم' : 'لا'}${canApprove ? '' : ` (${(view.preview?.blockersAr ?? []).join('؛ ')})`}`,
+      reply,
+    };
+  },
+  23: async (actor, s, fx) => {
+    const reply = await turn(actor, { text: fill(s.inputAr as string, fx) });
+    return { pass: reply.kind === 'answer' && reply.badges.includes('العقود'), detailAr: `${reply.kind}؛ الشارات: ${reply.badges.join('، ') || '—'}`, reply };
+  },
+  24: async (actor, s, fx) => {
+    const reply = await turn(actor, { text: fill(s.inputAr as string, fx) });
+    const jobs = await db.intakeJob.count({ where: { conversationId: reply.conversationId } });
+    return {
+      pass: reply.kind === 'error' && reply.textAr === t('intake.forbidden.user_permissions') && jobs === 0,
+      detailAr: `${reply.kind}؛ النص = رسالة المنع: ${reply.textAr === t('intake.forbidden.user_permissions') ? 'نعم' : 'لا'}؛ مهام إدخال للمحادثة ${jobs}`,
+      reply,
+    };
+  },
 };
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const scenarios = JSON.parse(readFileSync(path.join(process.cwd(), 'eval', 'behaviour.json'), 'utf8')) as Scenario[];
-  if (scenarios.length !== 20) throw new Error(`eval/behaviour.json holds ${scenarios.length} scenarios, expected 20`);
+  const all = JSON.parse(readFileSync(path.join(process.cwd(), 'eval', 'behaviour.json'), 'utf8')) as Scenario[];
+  // The gated twenty (ids 1..20) and the extended set (id > 20, D-26).
+  const scenarios = all.filter((s) => s.id <= GATED_MAX_ID);
+  if (scenarios.length !== 20) throw new Error(`eval/behaviour.json holds ${scenarios.length} scenarios with id <= ${GATED_MAX_ID}, expected 20`);
+  const extendedScenarios = all.filter((s) => s.id > GATED_MAX_ID);
   const only = new Set(process.argv.slice(2).filter((a) => /^\d+$/.test(a)).map(Number));
   const startedAt = new Date();
 
@@ -481,12 +535,14 @@ async function main(): Promise<void> {
     pendingPr: await pendingRequisition(actors.site_engineer),
     contract: contracts[0],
     project: await firstProjectName(actors.admin),
+    engineerNameAr: readSiteEngineerCredentials().nameAr,
+    adminNameAr: readAdminCredentials().nameAr,
   };
   const nakheel = await ensureSecondNakheel(actors.admin);
   console.log(`== تقييم السلوك — الحالة المسبقة: طلب معتمد ${fx.approvedPr.code}، طلب بانتظار الاعتماد ${fx.pendingPr.code}، عقد ${fx.contract.code}، مشروع «${fx.project}»، عملاء النخيل ${nakheel} ==`);
 
   const outcomes: Outcome[] = [];
-  for (const s of scenarios) {
+  for (const s of [...scenarios, ...extendedScenarios]) {
     if (only.size > 0 && !only.has(s.id)) continue;
     const t0 = Date.now();
     let pass = false;
@@ -505,15 +561,20 @@ async function main(): Promise<void> {
     console.log(`  ${pass ? '✓' : '✗'} ${s.id}. ${s.titleAr} — ${detailAr} (${(latencyMs / 1000).toFixed(1)} ث)`);
   }
 
-  const passed = outcomes.filter((o) => o.pass).length;
-  const total = only.size > 0 ? only.size : scenarios.length;
+  // The gate is computed over the twenty only; the extended set has its own line.
+  const gatedOutcomes = outcomes.filter((o) => o.id <= GATED_MAX_ID);
+  const extendedOutcomes = outcomes.filter((o) => o.id > GATED_MAX_ID);
+  const passed = gatedOutcomes.filter((o) => o.pass).length;
+  const total = only.size > 0 ? gatedOutcomes.length : scenarios.length;
   const ok = only.size === 0 && passed >= GATE;
+  const extended = { passed: extendedOutcomes.filter((o) => o.pass).length, total: extendedOutcomes.length, outcomes: extendedOutcomes };
   console.log(`  النتيجة: ${passed}/${total} (الحد ${GATE}/20) — ${ok ? 'نجح' : only.size > 0 ? 'تشغيل جزئي' : 'لم ينجح'}`);
+  if (extended.total > 0) console.log(`  extended ${extended.passed}/${extended.total}`);
 
   const outDir = path.join(process.cwd(), 'test-results', 'behaviour');
   mkdirSync(outDir, { recursive: true });
   const reportPath = path.join(outDir, `${startedAt.toISOString().replaceAll(/[:.]/g, '-')}.json`);
-  writeFileSync(reportPath, JSON.stringify({ startedAt, gate: GATE, passed, total, ok, fixtures: fx, outcomes }, null, 2));
+  writeFileSync(reportPath, JSON.stringify({ startedAt, gate: GATE, passed, total, ok, fixtures: fx, outcomes: gatedOutcomes, extended }, null, 2));
   console.log(`  التقرير: ${reportPath}`);
 
   if (only.size === 0) {
@@ -524,7 +585,18 @@ async function main(): Promise<void> {
         finishedAt: new Date(),
         score: passed / scenarios.length,
         passed: ok,
-        detailsJson: { gate: GATE, passed, total: scenarios.length, reportPath, outcomes: outcomes.map((o) => ({ id: o.id, pass: o.pass, detailAr: o.detailAr, replyKind: o.replyKind, latencyMs: o.latencyMs })) },
+        detailsJson: {
+          gate: GATE,
+          passed,
+          total: scenarios.length,
+          reportPath,
+          outcomes: gatedOutcomes.map((o) => ({ id: o.id, pass: o.pass, detailAr: o.detailAr, replyKind: o.replyKind, latencyMs: o.latencyMs })),
+          extended: {
+            passed: extended.passed,
+            total: extended.total,
+            outcomes: extendedOutcomes.map((o) => ({ id: o.id, pass: o.pass, detailAr: o.detailAr, replyKind: o.replyKind, latencyMs: o.latencyMs })),
+          },
+        },
       },
     });
   }

@@ -9,6 +9,7 @@
 import type { FlowType } from '../agents/router';
 import { flattenFields } from '../extract/run';
 import { withWarning } from '../extract/schemas/common';
+import type { UserPermissionsValues } from '../extract/schemas/user_permissions';
 import type { AssessedField, FieldWarning } from '../extract/schemas/field';
 import { ar, t, type ArKey } from '../i18n/ar';
 import { formatNumber } from '../i18n/format';
@@ -21,6 +22,7 @@ import {
   LINE_GROUP,
   SECTIONS,
 } from './labels';
+import { changeLineAr, noopReasonAr, permissionPlanFor } from './permission-plan';
 import { resolutionBlockers } from './resolution';
 import type {
   EntityPick,
@@ -197,9 +199,11 @@ function choiceFor(spec: ChoiceSpec, choices: Record<string, string>): PreviewCh
   return null;
 }
 
-function buildChoices(values: unknown, resolution: FlowResolution | null, choices: Record<string, string>): PreviewChoice[] {
+function buildChoices(flow: FlowType, values: unknown, resolution: FlowResolution | null, choices: Record<string, string>): PreviewChoice[] {
   if (resolution === null) return [];
   const specs: ChoiceSpec[] = [
+    // D-26: a user is chosen among the directory's candidates, never created.
+    { target: 'user', pick: resolution.user, allowNew: false, chooseKey: 'preview.user_choose' },
     { target: 'customer', pick: resolution.customer, allowNew: true, matchedKey: 'preview.customer_match', chooseKey: 'preview.customer_choose' },
     { target: 'vendor', pick: resolution.vendor, allowNew: true, matchedKey: 'preview.vendor_match', chooseKey: 'preview.vendor_choose' },
     { target: 'project', pick: resolution.project, allowNew: false, chooseKey: 'preview.project_choose' },
@@ -207,7 +211,18 @@ function buildChoices(values: unknown, resolution: FlowResolution | null, choice
     { target: 'goodsReceipt', pick: resolution.goodsReceipt, allowNew: false, chooseKey: 'preview.grn_choose' },
   ];
   const lines = (values as { lines?: { itemName: string }[] } | null)?.lines ?? [];
+  const permissionNames = flow === 'user_permissions' ? ((values as UserPermissionsValues | null)?.permissions ?? []) : [];
   resolution.lines.forEach((line, i) => {
+    if (flow === 'user_permissions') {
+      specs.push({
+        target: `permissions.${i}.key`,
+        pick: line.permission,
+        allowNew: false,
+        chooseKey: 'preview.permission_choose',
+        chooseVars: { name: permissionNames[i]?.name ?? String(i + 1) },
+      });
+      return;
+    }
     const name = lines[i]?.itemName ?? String(i + 1);
     specs.push(
       { target: `lines.${i}.item`, pick: line.item, allowNew: false, chooseKey: 'preview.item_choose', chooseVars: { name } },
@@ -297,6 +312,14 @@ export function previewSteps(
       labels.push(t('preview.step.grn_inspect_manual'));
       break;
     }
+    case 'user_permissions': {
+      const v = values as UserPermissionsValues;
+      const user = chosenLabel(resolution?.user, choices.user);
+      const plan = permissionPlanFor(v, resolution, choices);
+      const changed = plan === null ? 0 : plan.changes.filter((c) => !c.noop).length;
+      labels.push(t('preview.step.permissions_set', { name: user ?? v.userName, n: changed }));
+      break;
+    }
     case 'vendor_bill': {
       const v = values as { invoiceNumber: string | null };
       const grn = chosenLabel(resolution?.goodsReceipt, choices.goodsReceipt);
@@ -345,7 +368,7 @@ export function buildPreview(input: BuildPreviewInput): { model: PreviewModel; f
 
   const sections = sectionsOf(flow, fields);
   const lines = linesOf(flow, fields);
-  const choices = buildChoices(values, resolution, input.choices);
+  const choices = buildChoices(flow, values, resolution, input.choices);
   const notesAr = [...new Set(resolution?.notesAr ?? [])];
   const steps = previewSteps(flow, values, resolution, input.choices, input.hasDocument);
 
@@ -364,8 +387,24 @@ export function buildPreview(input: BuildPreviewInput): { model: PreviewModel; f
   }
   if (choices.some((c) => c.chosen === null)) blockersAr.push(t('preview.block.choice'));
   if (resolution !== null) {
-    const context = values === null ? {} : (values as { purchaseOrderCode?: string | null; lines?: { itemName: string }[] });
+    const context =
+      values === null
+        ? {}
+        : flow === 'user_permissions'
+          ? { userName: (values as UserPermissionsValues).userName, permissions: (values as UserPermissionsValues).permissions, choices: input.choices }
+          : (values as { purchaseOrderCode?: string | null; lines?: { itemName: string }[] });
     for (const reason of resolutionBlockers(resolution, context)) blockersAr.push(t('preview.block.resolution', { reason }));
+  }
+  // D-26: the before/after of each permission, and a stop for a request that
+  // changes nothing («يملكها أصلاً»), instead of a write that does nothing.
+  if (flow === 'user_permissions' && values !== null) {
+    const plan = permissionPlanFor(values as UserPermissionsValues, resolution, input.choices);
+    if (plan !== null) {
+      for (const change of plan.changes) {
+        if (change.noop) blockersAr.push(t('preview.block.resolution', { reason: noopReasonAr(change) }));
+        else notesAr.push(changeLineAr(change));
+      }
+    }
   }
   // D-T27-5: NPI needs an `itemId` on a requisition or order line, and the
   // copilot cannot create a catalogue item (category and unit are not in the

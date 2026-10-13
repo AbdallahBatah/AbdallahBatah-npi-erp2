@@ -33,7 +33,7 @@ export function fieldLabelKey(path: string): ArKey {
   return key as ArKey;
 }
 
-export const ENUM_PATHS: ReadonlySet<string> = new Set(['contractType', 'customer.customerType', 'vendor.vendorType', 'milestones.triggerType']);
+export const ENUM_PATHS: ReadonlySet<string> = new Set(['contractType', 'customer.customerType', 'vendor.vendorType', 'milestones.triggerType', 'action']);
 
 export const AMOUNT_PATHS: ReadonlySet<string> = new Set([
   'totalValue',
@@ -90,6 +90,7 @@ export const REQUIRED_PATHS: Record<FlowType, string[]> = {
   grn: ['purchaseOrderCode', 'lines.*.itemName', 'lines.*.qty'],
   // The goods receipt is found by the resolution (a hard blocker otherwise).
   vendor_bill: [],
+  user_permissions: ['userName', 'action', 'permissions.*.name'],
 };
 
 export function isRequired(flow: FlowType, path: string): boolean {
@@ -151,15 +152,17 @@ export const SECTIONS: Record<FlowType, SectionSpec[]> = {
     },
     { key: 'totals', titleKey: 'preview.section.totals', paths: ['subtotal', 'vatAmount', 'total'] },
   ],
+  user_permissions: [{ key: 'change', titleKey: 'preview.section.permission_change', paths: ['userName', 'action', 'reason'] }],
 };
 
 /** The array of the assessed tree that holds the repeating rows. */
-export const LINE_ARRAY: Record<FlowType, 'milestones' | 'lines'> = {
+export const LINE_ARRAY: Record<FlowType, 'milestones' | 'lines' | 'permissions'> = {
   customer_contract: 'milestones',
   pr: 'lines',
   po: 'lines',
   grn: 'lines',
   vendor_bill: 'lines',
+  user_permissions: 'permissions',
 };
 
 /** Heading of the rows group and the title of each row (`{n}` is 1-based). */
@@ -169,4 +172,5 @@ export const LINE_GROUP: Record<FlowType, { titleKey: ArKey; rowKey: ArKey }> = 
   po: { titleKey: 'preview.lines.items', rowKey: 'preview.line_title' },
   grn: { titleKey: 'preview.lines.received', rowKey: 'preview.line_title' },
   vendor_bill: { titleKey: 'preview.lines.items', rowKey: 'preview.line_title' },
+  user_permissions: { titleKey: 'preview.lines.permissions', rowKey: 'preview.permission_title' },
 };

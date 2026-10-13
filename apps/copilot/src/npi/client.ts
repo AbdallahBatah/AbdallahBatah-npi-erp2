@@ -7,7 +7,11 @@
 // FORBIDDEN BY DESIGN — this file must never grow a call that decides an
 // approval request, or approves, rejects, or returns a workflow document, or
 // issues any DELETE request, or creates/updates/deactivates a user or resets
-// a password. Approving and rejecting happen only in NPI's own inbox UI; the
+// a password. The one user-level write is the permission-override set
+// (`PUT` on a user's permissions, D-26 2026-10-13): it replaces the user's
+// per-user exceptions as a whole, only after the administrator's own «اعتمد»
+// on the preview card; it never touches the user record, the role or the
+// password. Approving and rejecting happen only in NPI's own inbox UI; the
 // copilot has no delete tools. `submitRequisition` below hard-codes its
 // action code and does not accept an arbitrary action string, on purpose.
 // Likewise no call to NPI's approve, decide, match or send endpoints: those are
@@ -341,6 +345,19 @@ export function createNpiClient(options: CreateNpiClientOptions) {
       return request(ctx, 'POST', `/attachments/${entityType}/${encodeURIComponent(entityId)}`, { form });
     },
 
+    // ── user permissions (D-26, T-48b) ───────────────────────────────────────
+
+    /**
+     * `PUT /admin/users/:id/permissions` — REPLACES the user's whole set of
+     * per-user permission overrides (`[]` clears it); needs `admin.user.manage`
+     * (apps/api/src/modules/admin/admin.controller.ts:72-80). NPI keeps the
+     * "last administrator" rule (400) and writes the audit row. The caller is
+     * the executor, after the preview card was approved.
+     */
+    setUserPermissions(id: string, dto: SetUserPermissionsDto) {
+      return request(ctx, 'PUT', `/admin/users/${encodeURIComponent(id)}/permissions`, { body: dto });
+    },
+
     // ── admin configuration (onboarding apply only — see the file-top note) ──
 
     /** `POST /admin/departments` — needs `admin.department.manage`. */
@@ -387,5 +404,21 @@ export function createNpiClient(options: CreateNpiClientOptions) {
 export type CreateItemDto = Omit<components['schemas']['CreateItemDto'], 'itemCategory'> & {
   itemCategory: 'MODULE' | 'INVERTER' | 'MOUNTING' | 'CABLE' | 'BOS' | 'SPARE' | 'SERVICE';
 };
+
+/**
+ * The permission-override DTOs as NPI validates them
+ * (apps/api/src/modules/admin/dto.ts:82-105). The generated `src/npi/types.ts`
+ * predates the permission model (P1-3) and lacks them.
+ */
+export interface PermissionOverrideDto {
+  permission: string;
+  effect: 'GRANT' | 'DENY';
+  /** Optional, at most 500 characters; blank counts as none. */
+  reason?: string | null;
+}
+
+export interface SetUserPermissionsDto {
+  overrides: PermissionOverrideDto[];
+}
 
 export type NpiClient = ReturnType<typeof createNpiClient>;

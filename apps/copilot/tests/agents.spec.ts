@@ -320,6 +320,52 @@ describe('runTurn — intake flows', () => {
     expect(intakeStart).not.toHaveBeenCalled();
   });
 
+  // D-26 (T-48b): the administrative flow asks for `admin.user.manage`.
+  describe('the administrative flow user_permissions', () => {
+    const SENTENCE = 'شيل صلاحية التقارير المالية من أحمد';
+
+    it('without admin.user.manage: its own Arabic refusal, no intake, no model call', async () => {
+      const { deps, llm, intakeStart, messages } = setup(() => answer('x'));
+      const reply = await runTurn(deps, USER, { text: SENTENCE });
+
+      expect(reply.kind).toBe('error');
+      expect(reply.textAr).toBe(t('intake.forbidden.user_permissions'));
+      expect(reply.badges).toEqual([t('flow.user_permissions')]);
+      expect(reply.intakeJobId).toBeUndefined();
+      expect(intakeStart).not.toHaveBeenCalled();
+      expect(llm.complete).not.toHaveBeenCalled();
+      expect(messages[1]).toMatchObject({ kind: 'error', contentAr: reply.textAr });
+    });
+
+    it('with admin.user.manage: the intake starts with flow user_permissions and the turn calls no model', async () => {
+      const { deps, llm, intakeStart } = setup(() => answer('x'));
+      const reply = await runTurn(deps, { ...USER, permissions: ['admin.user.manage'] }, { text: SENTENCE });
+
+      expect(llm.complete).not.toHaveBeenCalled();
+      expect(intakeStart).toHaveBeenCalledWith(
+        expect.objectContaining(CALLER),
+        expect.objectContaining({ flow: 'user_permissions', text: SENTENCE, documentId: null, conversationId: reply.conversationId }),
+      );
+      expect(reply).toMatchObject({ kind: 'intake', intakeJobId: 'job-1', badges: [t('flow.user_permissions')] });
+    });
+
+    it('a question about permissions stays a chat turn', async () => {
+      const { deps, intakeStart, llm } = setup(() => answer('صلاحياته كذا'));
+      const reply = await runTurn(deps, { ...USER, permissions: ['admin.user.manage'] }, { text: 'ما هي صلاحيات أحمد؟' });
+      expect(intakeStart).not.toHaveBeenCalled();
+      expect(llm.complete).toHaveBeenCalled();
+      expect(reply.kind).toBe('answer');
+    });
+
+    it('is not a chip: a forced administrative flow is refused as a bad flow', async () => {
+      const { deps, intakeStart } = setup(() => answer('x'));
+      await expect(
+        runTurn(deps, { ...USER, permissions: ['admin.user.manage'] }, { text: SENTENCE, forcedFlow: 'user_permissions' }),
+      ).rejects.toMatchObject({ reason: 'bad_flow' });
+      expect(intakeStart).not.toHaveBeenCalled();
+    });
+  });
+
   it('an attachment with no text asks which kind of document it is, and remembers the document', async () => {
     const { deps, llm, intakeStart, messages, documents } = setup(() => answer('x'));
     documents.push(DOC);

@@ -16,7 +16,7 @@ import { loadProfilePack } from '../onboarding/catalog';
 import { SNAPSHOT_READ_PERMISSION, type NpiApiGap } from '../onboarding/gaps';
 import { APPROVAL_DOCUMENT_LABEL_AR } from '../onboarding/plan';
 import {
-  FLOW_TYPES,
+  DOCUMENT_FLOWS,
   MODULE_KEYS,
   PROFILE_KEYS,
   TERM_KEYS,
@@ -132,7 +132,7 @@ const RerunStepSchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.lit
 
 const SettingsActionBodySchema = z.union([
   z.object({ action: z.literal('visible_modules'), modules: z.array(z.enum(MODULE_KEYS)).min(1) }),
-  z.object({ action: z.literal('baseline'), flow: z.enum(FLOW_TYPES), minutes: z.number().int() }),
+  z.object({ action: z.literal('baseline'), flow: z.enum(DOCUMENT_FLOWS), minutes: z.number().int() }),
   z.object({ action: z.literal('rerun'), step: RerunStepSchema }),
 ]);
 
@@ -141,7 +141,7 @@ const SettingsActionBodySchema = z.union([
 const SettingsDocTypeRowSchema = z.object({
   key: z.string(),
   labelAr: z.string(),
-  flow: z.enum(FLOW_TYPES).nullable(),
+  flow: z.enum(DOCUMENT_FLOWS).nullable(),
 });
 
 const NpiApiGapRowSchema = z.discriminatedUnion('kind', [
@@ -335,10 +335,10 @@ async function buildPositions(
 
 async function buildBaselines(deps: SettingsDeps, caller: SetupCaller): Promise<SettingsView['baselines']> {
   const rows = await deps.db.manualBaseline.findMany({ where: { npiOrgId: caller.npiOrgId } });
-  const baselines = Object.fromEntries(FLOW_TYPES.map((flow) => [flow, null])) as SettingsView['baselines'];
+  const baselines = Object.fromEntries(DOCUMENT_FLOWS.map((flow) => [flow, null])) as SettingsView['baselines'];
   for (const row of rows) {
-    if (!(FLOW_TYPES as readonly string[]).includes(row.flowType)) continue;
-    baselines[row.flowType as (typeof FLOW_TYPES)[number]] = { minutes: row.minutes, measuredAt: row.measuredAt.toISOString() };
+    if (!(DOCUMENT_FLOWS as readonly string[]).includes(row.flowType)) continue;
+    baselines[row.flowType as (typeof DOCUMENT_FLOWS)[number]] = { minutes: row.minutes, measuredAt: row.measuredAt.toISOString() };
   }
   return baselines;
 }

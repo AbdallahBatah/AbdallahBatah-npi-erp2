@@ -1,4 +1,4 @@
-import { route, matchFlowByRules, type ClassifierVerdict, type FlowType } from '../src/agents/router';
+import { route, matchFlowByRules, isPermissionChangeRequest, type ClassifierVerdict, type FlowType } from '../src/agents/router';
 
 // spec/madar/02-TECH-SPEC.md §6 and spec/madar/06-ACCEPTANCE-TESTS.md §3.
 // Order under test: HR guard -> forced flow -> non-entry intents (chat,
@@ -249,4 +249,90 @@ describe('route — never-execute words open the request', () => {
       await expect(route({ text, hasAttachment: false })).resolves.toEqual({ kind: 'chat' });
     },
   );
+});
+
+// D-26 (T-48b): the administrative flow. A permission noun with a grant or
+// revoke verb, without an attachment, is `user_permissions`; a question about
+// permissions stays chat (a read tool answers it).
+describe('route — the administrative flow', () => {
+  const FLOW = { kind: 'flow', flow: 'user_permissions', by: 'rules' } as const;
+
+  it.each([
+    ['شيل صلاحية التقارير المالية من أحمد'],
+    ['اسحب صلاحية الفواتير من سارة القحطاني'],
+    ['احجب صلاحية عرض العقود عن خالد'],
+    ['أعطِ أحمد صلاحية التقارير المالية'],
+    ['امنح سارة صلاحية اعتماد المشتريات'],
+    ['أضف صلاحية الأصناف لخالد'],
+    ['احذف صلاحية التقارير المالية من أحمد'],
+    ['الغي صلاحيات أحمد المالية'],
+    ['وصلاحياته المالية شيلها منه'],
+    ['ممكن تشيل صلاحية التقارير من أحمد؟'],
+    ['لو سمحت فعّل صلاحية الفواتير لسارة'],
+    ['رجّع صلاحية الفواتير لأحمد'],
+  ])('a permission change is the administrative flow: %s', async (text) => {
+    await expect(route({ text, hasAttachment: false })).resolves.toEqual(FLOW);
+  });
+
+  it('wins over a document phrase inside the permission’s name', async () => {
+    await expect(route({ text: 'شيل صلاحية طلب الشراء من أحمد', hasAttachment: false })).resolves.toEqual(FLOW);
+    await expect(route({ text: 'اسحب صلاحية عرض العقود من أحمد', hasAttachment: false })).resolves.toEqual(FLOW);
+  });
+
+  it.each([['ما هي صلاحيات أحمد؟'], ['هل أقدر أشيل صلاحية التقارير من أحمد؟'], ['كم صلاحية عند سارة؟'], ['احذف العقد'], ['اعتمد الطلب']])(
+    'a question or a document deletion is chat: %s',
+    async (text) => {
+      await expect(route({ text, hasAttachment: false })).resolves.toEqual({ kind: 'chat' });
+    },
+  );
+
+  it('never fires with an attachment: the rules and the classifier decide as for any document', async () => {
+    const text = 'شيل صلاحية التقارير المالية من أحمد';
+    await expect(route({ text, hasAttachment: true })).resolves.toEqual({ kind: 'choose_flow' });
+    const classify = jest.fn(async (): Promise<ClassifierVerdict> => 'pr');
+    await expect(route({ text, hasAttachment: true }, { classify })).resolves.toEqual({ kind: 'flow', flow: 'pr', by: 'classifier' });
+  });
+
+  it('is unavailable when the flow is not among the visible flows', async () => {
+    await expect(
+      route({ text: 'شيل صلاحية التقارير من أحمد', hasAttachment: false, visibleFlows: ['pr', 'po'] }),
+    ).resolves.toEqual({ kind: 'flow_unavailable', flow: 'user_permissions' });
+  });
+
+  it('the classifier is never called for a sentence the rule decided', async () => {
+    const classify = jest.fn(async (): Promise<ClassifierVerdict> => 'chat');
+    await expect(route({ text: 'شيل صلاحية طلب الشراء من أحمد', hasAttachment: false }, { classify })).resolves.toEqual(FLOW);
+    expect(classify).not.toHaveBeenCalled();
+  });
+
+  it('the HR guard still comes first', async () => {
+    await expect(route({ text: 'قيّم أداء أحمد وشيل صلاحية التقارير منه', hasAttachment: false })).resolves.toEqual({ kind: 'hr_refusal' });
+  });
+
+  it('a forced document flow is untouched', async () => {
+    await expect(route({ text: 'شيل صلاحية التقارير من أحمد', hasAttachment: true, forcedFlow: 'customer_contract' })).resolves.toEqual({
+      kind: 'flow',
+      flow: 'customer_contract',
+      by: 'rules',
+    });
+  });
+
+  it('matchFlowByRules still returns document flows only', () => {
+    expect(matchFlowByRules('شيل صلاحية التقارير المالية من أحمد')).toBeNull();
+  });
+
+  describe('isPermissionChangeRequest', () => {
+    it.each([
+      ['شيل صلاحية التقارير من أحمد', true],
+      ['صلاحية التقارير المالية شيلها', true],
+      ['أعطه صلاحيات المشتريات', true],
+      ['بصلاحية جديدة وأضف أحمد', true],
+      ['شيل التقارير من أحمد', false],
+      ['صلاحيات أحمد', false],
+      ['أبغى طلب شراء', false],
+      ['', false],
+    ])('%j -> %s', (text, expected) => {
+      expect(isPermissionChangeRequest(text)).toBe(expected);
+    });
+  });
 });

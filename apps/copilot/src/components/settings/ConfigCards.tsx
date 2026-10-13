@@ -53,7 +53,8 @@ export function DocTypesCard({ config, onRerun }: ConfigCardProps) {
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-2">
           {config.acceptedDocTypes.map((docType) => {
-            const hiddenModule = docType.flow !== null && !visible.has(FLOW_REQUIRED_MODULE[docType.flow]);
+            const requiredModule = docType.flow === null ? null : FLOW_REQUIRED_MODULE[docType.flow];
+            const hiddenModule = requiredModule !== null && !visible.has(requiredModule);
             return (
               <div
                 key={docType.key}

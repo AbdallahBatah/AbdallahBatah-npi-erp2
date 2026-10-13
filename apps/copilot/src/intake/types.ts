@@ -54,6 +54,9 @@ export interface LineResolution {
   item?: EntityPick;
   poLine?: EntityPick;
   wbs?: EntityPick;
+  /** user_permissions: the NPI permission a written name refers to (the pick
+   *  id is the permission key). */
+  permission?: EntityPick;
   /** The item's `unitCost` from NPI (a PR line's estimated price). */
   unitCost?: number | null;
   /** Warnings the resolution adds to this line's fields (`over_receipt` on
@@ -61,8 +64,28 @@ export interface LineResolution {
   warnings: { field: string; warning: FieldWarning }[];
 }
 
+/** What NPI holds about one user's permissions (`GET /admin/users/:id/permissions`),
+ *  as the before/after computation needs it (D-26). */
+export interface UserPermissionState {
+  /** Arabic name of the user's primary role, null when NPI sent none. */
+  roleAr: string | null;
+  /** Union of the keys of the user's roles. */
+  rolePermissions: string[];
+  /** The user's current overrides; a DENY always wins. */
+  overrides: { permission: string; effect: 'GRANT' | 'DENY'; reason: string | null }[];
+  /** The effective set NPI enforces. */
+  effective: string[];
+}
+
 export interface FlowResolution {
   flow: FlowType;
+  /** user_permissions: the user whose overrides change. Never created. */
+  user?: EntityPick;
+  /** user_permissions: NPI's state by user id, for the matched user or for
+   *  each candidate; an id is absent when its read was refused. */
+  current?: Record<string, UserPermissionState>;
+  /** user_permissions: permission key → Arabic label, for the notes and steps. */
+  permissionLabels?: Record<string, string>;
   customer?: EntityPick;
   vendor?: EntityPick;
   project?: EntityPick;
@@ -186,7 +209,8 @@ export type CreatedEntityKind =
   | 'purchase_order'
   | 'goods_receipt'
   | 'vendor_bill'
-  | 'attachment';
+  | 'attachment'
+  | 'user_permissions';
 
 /** One NPI record the execution created (`intake_jobs.npiEntityRefs` holds
  *  the list, in creation order). `npiPath` is a path on NPI's web app (e.g.
