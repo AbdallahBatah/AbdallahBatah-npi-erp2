@@ -13,9 +13,11 @@
 // Money: NPI serializes Decimal columns as strings. They are passed through
 // as strings and never parsed into a JavaScript number.
 import { z } from 'zod';
+import { riyadhDayKey } from '../../audit/cost';
 import type { ToolDef } from '../../llm/provider';
 import { searchFacts, type FactSearchDb } from '../../memory/fts';
 import type { NpiClient } from '../../npi/client';
+import { NpiError } from '../../npi/errors';
 import { readList } from '../../npi/responses';
 import { normalizeArabic } from '../../text/normalize';
 
@@ -28,12 +30,21 @@ export interface ToolContext {
     | 'listPurchaseOrders'
     | 'getPurchaseOrder'
     | 'listItems'
+    | 'listContracts'
+    | 'getContract'
+    | 'financeSummary'
+    | 'crmDashboard'
+    | 'permissionCatalog'
+    | 'getUserPermissions'
+    | 'listDepartmentDirectory'
   >;
   db: FactSearchDb;
   npiOrgId: string;
   positionId: string | null;
   /** The caller's NPI permissions: memory facts are filtered by them (D-17). */
   permissions: readonly string[];
+  /** The clock, injectable for tests; defaults to the real one. */
+  now?: () => Date;
 }
 
 export interface MemoryNote {
@@ -333,6 +344,254 @@ const searchItems: ReadTool = {
   },
 };
 
+// ─── get_contract (D-26, T-48a) ─────────────────────────────────────────────
+
+const getContractInput = z.object({ query: z.string().trim().max(120).optional() });
+
+/** The `YYYY-MM-DD` part of an ISO timestamp from NPI, or null. */
+function dateOnly(value: unknown): string | null {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+}
+
+/**
+ * Fields: `list` in apps/api/src/modules/commercial/contracts.service.ts:25
+ * (Contract row + `customer { id, code, nameAr, nameEn }` + `_count.milestones`)
+ * and `get` at :36 (+ `milestones` by sequence). NPI has no search parameter
+ * on the list, so the filter runs here, like `list_projects`.
+ */
+const getContract: ReadTool = {
+  badgeAr: 'العقود',
+  sensitiveFields: { customerNameAr: 'عميل' },
+  def: {
+    name: 'get_contract',
+    description:
+      "Find contracts in NPI by contract code or by customer. Returns up to 10 contracts with code, customer, type, status, start and end dates, currency, total value and the number of milestones; when exactly one contract matches, it also returns that contract's milestones (sequence, description, amount, due date, status) with an `overdue` flag. NPI has no «overdue contract» status: overdue applies only to a milestone whose due date is before today and whose status is still PENDING, so speak of «دفعات متأخرة», never «عقد متأخر», and never count anything that is not in this result.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            "Optional contract code (e.g. CON-00003) or part of the customer's name or code. Omit it to list contracts.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  async run(input, ctx) {
+    const { query } = parse(getContractInput, input ?? {});
+    const needle = query ? normalizeArabic(query) : '';
+    const all = rows(await ctx.npi.listContracts());
+    const matched = needle
+      ? all.filter((c) => {
+          const customer = isRecord(c.customer) ? c.customer : {};
+          return [c.code, customer.code, customer.nameAr, customer.nameEn].some(
+            (field) => typeof field === 'string' && normalizeArabic(field).includes(needle),
+          );
+        })
+      : all;
+
+    const contracts = matched.slice(0, MAX_ROWS).map((c) => {
+      const customer = isRecord(c.customer) ? c.customer : {};
+      const counted = isRecord(c._count) ? c._count : {};
+      return {
+        code: str(c.code),
+        customerNameAr: str(customer.nameAr),
+        customerCode: str(customer.code),
+        contractType: str(c.contractType),
+        status: str(c.status),
+        startDate: dateOnly(c.startDate),
+        endDate: dateOnly(c.endDate),
+        currency: str(c.currency),
+        totalValue: amount(c.totalValue),
+        milestoneCount: typeof counted.milestones === 'number' ? counted.milestones : null,
+      };
+    });
+
+    const result: { count: number; contracts: typeof contracts; milestones?: unknown[] } = {
+      count: matched.length,
+      contracts,
+    };
+
+    const only = matched.length === 1 ? str(matched[0].id) : null;
+    if (only) {
+      const full = await ctx.npi.getContract(only);
+      const today = riyadhDayKey((ctx.now ?? (() => new Date()))());
+      const list = isRecord(full) && Array.isArray(full.milestones) ? full.milestones.filter(isRecord) : [];
+      result.milestones = list.map((m) => {
+        const status = str(m.status);
+        const dueDate = dateOnly(m.dueDate);
+        return {
+          sequence: typeof m.sequence === 'number' ? m.sequence : null,
+          descriptionAr: str(m.descriptionAr),
+          triggerType: str(m.triggerType),
+          amount: amount(m.amount),
+          dueDate,
+          status,
+          overdue: status === 'PENDING' && dueDate !== null && dueDate < today,
+        };
+      });
+    }
+    return { result };
+  },
+};
+
+// ─── finance_summary (D-26, T-48a) ──────────────────────────────────────────
+
+/** One half of the summary: NPI's own refusal is reported, anything else is a real failure. */
+async function half<T extends object>(read: () => Promise<unknown>, shape: (body: Record<string, unknown>) => T) {
+  try {
+    const body = await read();
+    return { ok: true as const, ...shape(isRecord(body) ? body : {}) };
+  } catch (err) {
+    if (err instanceof NpiError) return { ok: false as const, messageAr: err.messageAr };
+    throw err;
+  }
+}
+
+/**
+ * Fields: `summary` in apps/api/src/modules/finance/invoices.service.ts:803
+ * (plain numbers, already rounded by NPI) and the `dashboard` route of
+ * apps/api/src/modules/reference/reference.controller.ts:121. Numbers are
+ * turned into text and never computed on.
+ */
+const financeSummary: ReadTool = {
+  badgeAr: 'الملخص المالي',
+  def: {
+    name: 'finance_summary',
+    description:
+      "Invoice and receivables summary from NPI's finance screen (issued invoice count, accounts receivable, output VAT, retention held) together with the CRM dashboard counters (open leads, open opportunities, total and active contracts, pipeline value). Each half is read with the user's own permission: a refused half comes back as ok=false with the reason and the other half is still returned. Amounts are exact text; repeat them verbatim.",
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  async run(_input, ctx) {
+    const finance = await half(
+      () => ctx.npi.financeSummary(),
+      (b) => ({
+        issuedInvoices: amount(b.issuedInvoices),
+        accountsReceivable: amount(b.accountsReceivable),
+        vatOutput: amount(b.vatOutput),
+        retentionHeld: amount(b.retentionHeld),
+      }),
+    );
+    const crm = await half(
+      () => ctx.npi.crmDashboard(),
+      (b) => ({
+        openLeads: amount(b.openLeads),
+        openOpportunities: amount(b.openOpportunities),
+        totalContracts: amount(b.totalContracts),
+        activeContracts: amount(b.activeContracts),
+        pipelineValue: amount(b.pipelineValue),
+      }),
+    );
+    return { result: { finance, crm } };
+  },
+};
+
+// ─── get_user_permissions (D-26, T-48a) ─────────────────────────────────────
+
+const getUserPermissionsInput = z.object({ query: z.string().trim().min(1).max(120) });
+
+/**
+ * The user is found in the people directory
+ * (apps/api/src/modules/admin/departments.service.ts:10 `DIRECTORY_SELECT`),
+ * then read in full from `getUserPermissions`
+ * (apps/api/src/modules/admin/admin.service.ts:332). The Arabic labels come
+ * from NPI's own catalog at run time; the copilot carries no copy.
+ */
+const getUserPermissions: ReadTool = {
+  badgeAr: 'الصلاحيات',
+  sensitiveFields: { nameAr: 'موظف', email: 'بريد' },
+  def: {
+    name: 'get_user_permissions',
+    description:
+      "Look a user up by name or e-mail in NPI's people directory and return their role, their effective permissions with Arabic labels, and their permission overrides (grant or deny, with the reason). When several users match, it returns the candidates (name, role, active) so you can ask which one is meant. It needs the administrator's permissions; a refusal from NPI is final.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: "The user's name (Arabic or English) or e-mail, as the user wrote it." },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+  },
+  async run(input, ctx) {
+    const { query } = parse(getUserPermissionsInput, input);
+    const needle = normalizeArabic(query);
+    const people = rows(await ctx.npi.listDepartmentDirectory());
+    const normalized = (value: unknown) => (typeof value === 'string' ? normalizeArabic(value) : '');
+
+    let matched = people.filter((p) =>
+      [p.nameAr, p.nameEn, p.email].some((field) => normalized(field).includes(needle)),
+    );
+    // An exact name or e-mail wins over a longer name that merely contains it.
+    const exact = matched.filter((p) => [p.nameAr, p.email].some((field) => normalized(field) === needle));
+    if (exact.length > 0) matched = exact;
+
+    const roleOf = (p: Record<string, unknown>) => (isRecord(p.role) ? p.role : {});
+    if (matched.length === 0) return { result: { found: false } };
+
+    const id = matched.length === 1 ? str(matched[0].id) : null;
+    if (!id) {
+      return {
+        result: {
+          found: false,
+          candidates: matched.slice(0, MAX_ROWS).map((p) => ({
+            nameAr: str(p.nameAr),
+            email: str(p.email),
+            roleAr: str(roleOf(p).nameAr),
+            isActive: p.isActive !== false,
+          })),
+        },
+      };
+    }
+
+    const person = matched[0];
+    const detail = await ctx.npi.getUserPermissions(id);
+    const labels = new Map<string, string>();
+    try {
+      for (const entry of rows(await ctx.npi.permissionCatalog())) {
+        const key = str(entry.key);
+        const label = str(entry.labelAr);
+        if (key && label) labels.set(key, label);
+      }
+    } catch (err) {
+      // A catalog NPI refuses only costs the Arabic labels.
+      if (!(err instanceof NpiError)) throw err;
+    }
+    const labelOf = (key: string) => labels.get(key) ?? null;
+
+    const body = isRecord(detail) ? detail : {};
+    const effective = (Array.isArray(body.effective) ? body.effective : [])
+      .filter((k): k is string => typeof k === 'string')
+      .sort()
+      .map((key) => ({ key, labelAr: labelOf(key) }));
+    const overrides = (Array.isArray(body.overrides) ? body.overrides.filter(isRecord) : []).flatMap((o) => {
+      const key = str(o.permission);
+      return key ? [{ key, labelAr: labelOf(key), effect: str(o.effect), reason: str(o.reason) }] : [];
+    });
+    const fromRoles = (Array.isArray(body.roles) ? body.roles.filter(isRecord) : []).map((r) => ({
+      roleAr: str(r.nameAr),
+      count: Array.isArray(r.permissions) ? r.permissions.length : 0,
+    }));
+
+    return {
+      result: {
+        found: true,
+        user: {
+          nameAr: str(person.nameAr),
+          email: str(person.email),
+          roleAr: str(roleOf(person).nameAr),
+          roleKey: str(roleOf(person).key),
+          isActive: person.isActive !== false,
+        },
+        effective,
+        overrides,
+        fromRoles,
+      },
+    };
+  },
+};
+
 // ─── memory_search ──────────────────────────────────────────────────────────
 
 const memorySearchInput = z.object({ query: z.string().trim().min(1).max(200) });
@@ -381,6 +640,9 @@ export const READ_TOOLS: readonly ReadTool[] = [
   getPo,
   searchItems,
   memorySearch,
+  getContract,
+  financeSummary,
+  getUserPermissions,
 ];
 
 export function findReadTool(name: string): ReadTool | undefined {

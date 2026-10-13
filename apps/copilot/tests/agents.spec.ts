@@ -154,6 +154,13 @@ function createFakeNpi(overrides: Partial<Record<keyof TurnDeps['npi'], jest.Moc
     listPurchaseOrders: jest.fn(async () => []),
     getPurchaseOrder: jest.fn(async () => ({})),
     listItems: jest.fn(async () => []),
+    listContracts: jest.fn(async () => []),
+    getContract: jest.fn(async () => ({})),
+    financeSummary: jest.fn(async () => ({})),
+    crmDashboard: jest.fn(async () => ({})),
+    permissionCatalog: jest.fn(async () => []),
+    getUserPermissions: jest.fn(async () => ({})),
+    listDepartmentDirectory: jest.fn(async () => []),
     ...overrides,
   };
 }
@@ -449,11 +456,21 @@ describe('runTurn — chat', () => {
     expect(reply.badges).toEqual(['العملاء']);
   });
 
-  it('offers the six read tools and nothing else', async () => {
+  it('offers the nine read tools and nothing else', async () => {
     const { deps, llm } = setup(() => answer('تم'));
     await runTurn(deps, USER, { text: 'مرحبا، كيف الحال' });
     expect(llm.requests[0].tools?.map((tool) => tool.name).sort()).toEqual(
-      ['get_customer', 'get_po', 'list_open_tasks', 'list_projects', 'memory_search', 'search_items'].sort(),
+      [
+        'finance_summary',
+        'get_contract',
+        'get_customer',
+        'get_po',
+        'get_user_permissions',
+        'list_open_tasks',
+        'list_projects',
+        'memory_search',
+        'search_items',
+      ].sort(),
     );
     expect(llm.requests[0].tier).toBe('economy');
     expect(llm.requests[0].purpose).toBe('chat');

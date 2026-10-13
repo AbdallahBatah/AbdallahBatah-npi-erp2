@@ -243,6 +243,34 @@ export function createNpiClient(options: CreateNpiClientOptions) {
       return request(ctx, 'GET', '/approvals/rules');
     },
 
+    // D-26 (T-48a): reads behind the get_contract, finance_summary and
+    // get_user_permissions chat tools. `listContracts` (above) is the sixth.
+
+    /** `GET /contracts/:id` — a contract with its milestones; needs `commercial.contract.read`. */
+    getContract(id: string) {
+      return request(ctx, 'GET', `/contracts/${encodeURIComponent(id)}`);
+    },
+
+    /** `GET /finance/summary` — issued invoices, receivables, output VAT, retention; needs `finance.invoice.read`. */
+    financeSummary() {
+      return request(ctx, 'GET', '/finance/summary');
+    },
+
+    /** `GET /reference/dashboard` — CRM counters and pipeline value; needs `crm.lead.read`. */
+    crmDashboard() {
+      return request(ctx, 'GET', '/reference/dashboard');
+    },
+
+    /** `GET /admin/permissions` — the permission catalog with Arabic labels; needs `admin.user.manage`. */
+    permissionCatalog() {
+      return request(ctx, 'GET', '/admin/permissions');
+    },
+
+    /** One user's roles, overrides and effective permissions; needs `admin.user.manage`. */
+    getUserPermissions(id: string) {
+      return request(ctx, 'GET', `/admin/users/${encodeURIComponent(id)}/permissions`);
+    },
+
     // ── writes (creation only — see the file-top note on what is deliberately
     //    missing from this client) ───────────────────────────────────────────
 
