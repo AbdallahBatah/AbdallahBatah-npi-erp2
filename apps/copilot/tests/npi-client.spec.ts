@@ -282,6 +282,41 @@ describe('createNpiClient — the writes execution adds (T-27)', () => {
   });
 });
 
+describe('createNpiClient — the pick lists intake matches against (ADR-02 §3-3)', () => {
+  it.each([
+    ['lookupItems', 'http://api.test/api/reference/lookups/items'],
+    ['lookupProjects', 'http://api.test/api/reference/lookups/projects'],
+  ] as const)('%s GETs %s with the Bearer token and no body, and returns the bare array', async (method, url) => {
+    const rows = [{ id: 'x-1', code: 'X-00001', nameAr: 'س' }];
+    const fetchImpl = jest.fn(async () => fakeResponse(200, rows));
+    const client = createNpiClient({ baseUrl: 'http://api.test/api', token: 'tkn-123', fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const result = await client[method]();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [calledUrl, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(calledUrl).toBe(url);
+    expect(init.method).toBe('GET');
+    expect(init.body).toBeUndefined();
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tkn-123');
+    expect(result).toEqual(rows);
+  });
+
+  it.each(['lookupItems', 'lookupProjects'] as const)('%s: a caller with no key of the list gets a forbidden NpiError, never retried', async (method) => {
+    const fetchImpl = jest.fn(async () => fakeResponse(403, { statusCode: 403, message: 'Forbidden resource' }));
+    const client = createNpiClient({ baseUrl: 'http://api.test/api', token: 't', fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const error = await client[method]().then(
+      () => null,
+      (err: unknown) => err,
+    );
+
+    expect(error).toBeInstanceOf(NpiError);
+    expect(error).toMatchObject({ kind: 'forbidden', status: 403 });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('client.ts guard — approvals and deletes must never appear', () => {
   it('contains none of the forbidden action/endpoint markers', () => {
     const src = readFileSync(path.join(__dirname, '..', 'src', 'npi', 'client.ts'), 'utf8');
@@ -386,5 +421,57 @@ describe('responses.ts — readRequisitionLines (GET /requisitions/{id})', () =>
     }
     expect(caught).toBeInstanceOf(NpiError);
     expect((caught as NpiError).kind).toBe('unexpected');
+  });
+});
+
+describe('createNpiClient — setUserPermissions (D-26, T-48b)', () => {
+  const dto = {
+    overrides: [
+      { permission: 'finance.report.read', effect: 'DENY' as const, reason: 'انتقل إلى قسم آخر' },
+      { permission: 'scm.requisition.read', effect: 'GRANT' as const },
+    ],
+  };
+
+  function recording(status = 200, body: unknown = { roles: [], overrides: [], effective: [] }) {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetchImpl = jest.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init: init ?? {} });
+      return fakeResponse(status, body);
+    }) as unknown as typeof fetch;
+    return { client: createNpiClient({ baseUrl: 'http://api.test/api', token: 'tkn-123', fetchImpl }), calls, fetchImpl };
+  }
+
+  it('PUTs the body as given to /admin/users/<id>/permissions with the Bearer token', async () => {
+    const { client, calls } = recording();
+    await client.setUserPermissions('usr 1/ä', dto);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe(`http://api.test/api/admin/users/${encodeURIComponent('usr 1/ä')}/permissions`);
+    expect(calls[0].init.method).toBe('PUT');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual(dto);
+    const headers = calls[0].init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer tkn-123');
+    expect(headers['Content-Type']).toBe('application/json');
+  });
+
+  it('an empty list is sent as is (it clears the exceptions)', async () => {
+    const { client, calls } = recording();
+    await client.setUserPermissions('usr-1', { overrides: [] });
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ overrides: [] });
+  });
+
+  it('maps a 400 (the last administrator) to a validation NpiError carrying NPI’s message, and never retries', async () => {
+    const { client, fetchImpl } = recording(400, { statusCode: 400, message: 'Cannot remove the last active administrator' });
+    await expect(client.setUserPermissions('usr-1', dto)).rejects.toMatchObject({
+      kind: 'validation',
+      status: 400,
+      npiMessage: 'Cannot remove the last active administrator',
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps a 403 to forbidden', async () => {
+    const { client } = recording(403, { statusCode: 403, message: 'Insufficient permissions' });
+    await expect(client.setUserPermissions('usr-1', dto)).rejects.toMatchObject({ kind: 'forbidden' });
   });
 });

@@ -1,8 +1,10 @@
 /**
  * Seed the NPI Solar ERP with a working tenant so the W1 slice is usable
  * immediately after `npm run db:seed`:
- *   • one organization (NPI), two roles (admin, sales)
- *   • an admin login and a sales login
+ *   • one organization (NPI) and nine roles: admin (every key), sales, and
+ *     the company's seven roles from ROLE_PRESETS (P1-13)
+ *   • one login per role, and the five approval rules of
+ *     PROPOSED_APPROVAL_RULES
  *   • numbering sequences, a catalogue of solar items, a pricing scheme
  *   • one demo customer + one demo lead to click through the pipeline
  *
@@ -10,23 +12,30 @@
  */
 import { PrismaClient, CustomerType, ItemCategory, LeadSource, LeadStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+// The company's seven roles and five approval rules (ADR-02 §3-4). Resolved
+// through the workspace link node_modules/@npi/shared -> packages/shared/dist,
+// the same way the API loads it, locally and in the api image the demo-reset
+// job runs this file in. Run `npm run build -w @npi/shared` after editing them.
+import { PROPOSED_APPROVAL_RULES, ROLE_PRESETS } from '@npi/shared';
 
 const prisma = new PrismaClient();
 
 // Full permission surface for the current slice. Kept in sync with
 // packages/shared/src/permissions.ts (the API imports it from there).
 const ALL_PERMISSIONS = [
-  'crm.customer.read', 'crm.customer.write', 'crm.customer.merge',
+  'crm.customer.read', 'crm.customer.write', 'crm.customer.merge', 'crm.task.read',
   'crm.lead.read', 'crm.lead.write',
   'crm.opportunity.read', 'crm.opportunity.write',
   'commercial.item.read', 'commercial.item.write',
   'commercial.proposal.read', 'commercial.proposal.write', 'commercial.proposal.approve',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.report.read', 'finance.statement.read',
   'finance.costs.view',
   'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
   'projects.project.read', 'projects.project.write', 'projects.project.approve',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
+  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve',
+  'scm.requisition.read', 'scm.requisition.write',
   'assets.serialunit.read',
   'fsm.workorder.read', 'fsm.workorder.write',
   'admin.org.manage', 'admin.user.manage', 'admin.audit.read', 'admin.approval.manage',
@@ -34,66 +43,21 @@ const ALL_PERMISSIONS = [
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
+// P1-6 (migration 0030_split_view_permissions): the sales array holds
+// crm.task.read with crm.customer.read, and finance.report.read with
+// finance.statement.read beside finance.ledger.read — the view keys split off
+// for /tasks, /finance and /statements. The company's seven roles are not
+// written here: they are ROLE_PRESETS (packages/shared/src/presets.ts).
 const SALES_PERMISSIONS = [
-  'crm.customer.read', 'crm.customer.write',
+  'crm.customer.read', 'crm.customer.write', 'crm.task.read',
   'crm.lead.read', 'crm.lead.write',
   'crm.opportunity.read', 'crm.opportunity.write',
   'commercial.item.read',
   'commercial.proposal.read', 'commercial.proposal.write',
   'commercial.contract.read', 'commercial.contract.write',
   'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
+  'finance.report.read', 'finance.statement.read',
   'finance.costs.view',
-  'platform.attachment.read', 'platform.attachment.write',
-];
-
-// المحاسب: كل المال + قراءة سياقه (عقود/عملاء/مشتريات لفواتير الموردين)
-const ACCOUNTANT_PERMISSIONS = [
-  'finance.invoice.read', 'finance.invoice.write', 'finance.ledger.read',
-  'finance.payment.read', 'finance.payment.write', 'finance.period.manage',
-  'finance.costs.view',
-  'crm.customer.read',
-  'commercial.contract.read', 'commercial.proposal.read', 'commercial.item.read',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
-  'platform.attachment.read', 'platform.attachment.write',
-];
-
-// مدير المشاريع: التنفيذ والتوريد كاملاً + قراءة العقود والتشغيل والفوترة
-const PM_PERMISSIONS = [
-  'projects.project.read', 'projects.project.write', 'projects.project.approve',
-  'finance.costs.view',
-  'scm.procurement.read', 'scm.procurement.write', 'scm.procurement.approve', 'scm.requisition.write',
-  'assets.serialunit.read',
-  'commercial.contract.read', 'commercial.item.read',
-  'crm.customer.read',
-  'fsm.workorder.read',
-  'finance.invoice.read',
-  'platform.attachment.read', 'platform.attachment.write',
-];
-
-// الإدارة العليا: كل مفاتيح العرض + كل مفاتيح الاعتماد + التكاليف والهوامش
-// + سجل التدقيق + ضبط مصفوفة الاعتماد. لا مفاتيح كتابة ولا إدارة نظام.
-const EXECUTIVE_PERMISSIONS = [
-  ...new Set([
-    ...ALL_PERMISSIONS.filter((k) => k.endsWith('.read') || k.endsWith('.approve')),
-    'finance.costs.view',
-    'admin.audit.read',
-    'admin.approval.manage',
-    // Step 2: merging duplicate customers is an executive / administrator act.
-    'crm.customer.merge',
-  ]),
-];
-
-// مهندس الموقع (ميداني): أوامر العمل والأصول والمخزون — بلا مال ولا عقود،
-// بلا تكاليف (finance.costs.view) وبلا اعتماد.
-const SITE_ENGINEER_PERMISSIONS = [
-  'fsm.workorder.read', 'fsm.workorder.write',
-  'assets.serialunit.read',
-  // M4: the exact case the requisition/procurement split exists for — a site
-  // engineer may ask the company to buy a cable, and must not be able to
-  // approve the purchase order that buys it.
-  'scm.procurement.read', 'scm.requisition.write',
-  'commercial.item.read',
-  'projects.project.read',
   'platform.attachment.read', 'platform.attachment.write',
 ];
 
@@ -138,26 +102,37 @@ async function main() {
     },
   });
 
-  const roleDefs = [
-    { key: 'accountant', nameAr: 'محاسب', nameEn: 'Accountant', permissions: ACCOUNTANT_PERMISSIONS },
-    { key: 'pm', nameAr: 'مدير مشاريع', nameEn: 'Project Manager', permissions: PM_PERMISSIONS },
-    { key: 'site_engineer', nameAr: 'مهندس موقع', nameEn: 'Site Engineer', permissions: SITE_ENGINEER_PERMISSIONS },
-    { key: 'executive', nameAr: 'الإدارة العليا', nameEn: 'Executive management', permissions: EXECUTIVE_PERMISSIONS },
-  ];
+  // P1-13 (owner decision 2026-10-12): the company's seven roles are the
+  // seed's default, taken from ROLE_PRESETS as they are (key, names, keys), so
+  // a fresh tenant — and the demo server after its nightly reset — starts with
+  // them and /admin/presets reads every card «مطابق». The upsert also brings a
+  // role of an older seed to its preset (names and keys) when the seed is
+  // re-run on an existing database; nothing re-runs it on a live tenant (the
+  // api image runs `prisma migrate deploy` on boot, never the seed), where the
+  // owner applies a preset from /admin/presets through the role service's
+  // guards instead.
   const extraRoles: Record<string, string> = {};
-  for (const rd of roleDefs) {
+  for (const preset of ROLE_PRESETS) {
+    const names = { nameAr: preset.nameAr, nameEn: preset.nameEn };
+    const permissions = [...preset.permissions];
     const r = await prisma.role.upsert({
-      where: { organizationId_key: { organizationId: org.id, key: rd.key } },
-      update: { permissions: rd.permissions },
-      create: { organizationId: org.id, key: rd.key, nameAr: rd.nameAr, nameEn: rd.nameEn, permissions: rd.permissions },
+      where: { organizationId_key: { organizationId: org.id, key: preset.key } },
+      update: { ...names, permissions },
+      create: { organizationId: org.id, key: preset.key, ...names, permissions },
     });
-    extraRoles[rd.key] = r.id;
+    extraRoles[preset.key] = r.id;
   }
+  // One login per role. The last three (P1-13) hold the roles the presets
+  // added. The Madar e2e fixtures (apps/copilot/e2e/fixtures/accounts.ts) read
+  // these entries by regex: keep each on one line, in this shape.
   const userDefs = [
     { email: 'accountant@npi.sa', pass: 'Acc@12345', nameAr: 'أمين الحسابات', nameEn: 'Chief Accountant', role: 'accountant' },
     { email: 'pm@npi.sa', pass: 'Pm@123456', nameAr: 'مدير المشاريع', nameEn: 'Projects Manager', role: 'pm' },
     { email: 'engineer@npi.sa', pass: 'Eng@12345', nameAr: 'مهندس الموقع', nameEn: 'Site Engineer', role: 'site_engineer' },
     { email: 'ceo@npi.sa', pass: 'Ceo@12345', nameAr: 'الرئيس التنفيذي', nameEn: 'Chief Executive', role: 'executive' },
+    { email: 'finance@npi.sa', pass: 'Fin@12345', nameAr: 'مدير الإدارة المالية', nameEn: 'Finance Manager', role: 'finance_manager' },
+    { email: 'tech@npi.sa', pass: 'Tech@12345', nameAr: 'مهندس المكتب الفني', nameEn: 'Technical Office Engineer', role: 'technical_office' },
+    { email: 'store@npi.sa', pass: 'Store@12345', nameAr: 'أمين المستودع', nameEn: 'Warehouse Keeper', role: 'warehouse_keeper' },
   ];
   for (const ud of userDefs) {
     await prisma.user.upsert({
@@ -669,50 +644,39 @@ async function main() {
 
   // ── Package و: a starting approval matrix ─────────────────────────────────
   // Seeded so a fresh tenant has a working delegation of authority rather than
-  // the pre-matrix state where one permission approved any amount. Deliberately
-  // one band per document type with an open ceiling: everything below the
-  // threshold keeps the old single-permission behaviour, which is what a small
-  // customer wants on day one. Only created when absent — an organization that
-  // has tuned its own bands must never have them overwritten by a re-seed.
-  const matrixDefaults: Array<{
-    documentType: 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PROGRESS_CLAIM' | 'CHANGE_ORDER' | 'PROPOSAL';
-    minAmount: number;
-    chain: string[];
-  }> = [
-    // The requisition band sits lower than the PO band on purpose: the point of
-    // the requisition is to catch a spend before anyone commits to it, and a
-    // threshold as high as the PO's would let most requests through unseen.
-    { documentType: 'PURCHASE_REQUISITION', minAmount: 10_000, chain: ['pm'] },
-    { documentType: 'PURCHASE_ORDER', minAmount: 100_000, chain: ['pm', 'accountant'] },
-    { documentType: 'PROGRESS_CLAIM', minAmount: 250_000, chain: ['pm', 'accountant'] },
-    { documentType: 'CHANGE_ORDER', minAmount: 100_000, chain: ['pm', 'admin'] },
-    // CRM Step 4 (decision CRM-S4-a): EVERY proposal, from 0 SAR up, is signed by the
-    // executive — the band's floor is the financial limit and is edited from
-    // Admin > Approval matrix, not in code.
-    { documentType: 'PROPOSAL', minAmount: 0, chain: ['executive'] },
-  ];
+  // the pre-matrix state where one permission approved any amount. P1-13 (owner
+  // decision 2026-10-12): the five rules of PROPOSED_APPROVAL_RULES, one active
+  // rule per document type, each from 0 SAR with an open ceiling (so the
+  // matrix's overlap guard has nothing to compare), and every requisition,
+  // order, claim, change order and proposal is signed by its chain:
+  //   requisition: pm · order: executive · claim: pm, then executive ·
+  //   change order: executive · proposal: executive (CRM-S4-a, as before).
+  // Floors and chains are edited from Admin > Approval matrix, not in code.
+  // Only created when absent — an organization that has tuned its own bands
+  // must never have them overwritten by a re-seed (the nightly demo reset
+  // drops the database first, so it always starts from these five).
   const roleIdByKey: Record<string, string> = {
     admin: adminRole.id,
     sales: salesRole.id,
     ...extraRoles,
   };
 
-  for (const d of matrixDefaults) {
+  for (const rule of PROPOSED_APPROVAL_RULES) {
     const exists = await prisma.approvalRule.findFirst({
-      where: { organizationId: org.id, documentType: d.documentType },
+      where: { organizationId: org.id, documentType: rule.documentType },
     });
     if (exists) continue;
     await prisma.approvalRule.create({
       data: {
         organizationId: org.id,
-        documentType: d.documentType,
-        minAmount: d.minAmount,
+        documentType: rule.documentType,
+        minAmount: rule.minAmount,
         maxAmount: null,
         // M4: 48 hours before the chain is escalated. Escalation notifies —
         // it never signs. See ApprovalEscalationScheduler.
         escalationHours: 48,
         steps: {
-          create: d.chain.map((key, i) => ({ sequence: i + 1, roleId: roleIdByKey[key] })),
+          create: rule.steps.map((key, i) => ({ sequence: i + 1, roleId: roleIdByKey[key] })),
         },
       },
     });

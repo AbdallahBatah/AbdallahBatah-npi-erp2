@@ -104,6 +104,7 @@ export const ar = {
   'extract.incomplete.vendor_bill': 'لم أجد بنوداً ولا إجمالياً في الفاتورة. أرفق صورة أوضح أو اكتب رقم الفاتورة وأمر الشراء',
   'extract.incomplete.pr': 'لم أجد صنفاً وكمية في الطلب. اكتب مثلاً: 40 لوح 550 واط للمشروع PRJ-00012',
   'extract.incomplete.po': 'لم أجد بنوداً في عرض السعر ولا رقم طلب شراء. أرفق عرض المورد أو اكتب رقم الطلب',
+  'extract.incomplete.user_permissions': 'لم أفهم المستخدم أو الصلاحية. اكتب مثلاً: شيل صلاحية التقارير المالية من أحمد',
   'extract.failed.empty_input': 'لا يوجد نص أو مستند لقراءته.',
 
   'flow.customer_contract': 'عميل وعقد',
@@ -111,6 +112,8 @@ export const ar = {
   'flow.po': 'أمر شراء',
   'flow.grn': 'استلام بضاعة',
   'flow.vendor_bill': 'فاتورة مورد',
+  // D-26 (T-48b): the administrative flow.
+  'flow.user_permissions': 'تعديل صلاحيات مستخدم',
   'flow.unknown': 'لم أحدد نوع المستند — اختر:',
 
   'preview.title': 'هذا ما سأُدخله في NPI',
@@ -525,6 +528,7 @@ export const ar = {
   // ── T-26 additions (preview/execution cards, intake jobs, chat wiring) ──
   // Intake (chat → job)
   'intake.forbidden': 'لا تملك صلاحية إنشاء {flow}.',
+  'intake.forbidden.user_permissions': 'تعديل الصلاحيات يحتاج صلاحية إدارة المستخدمين في NPI، وليست لديك.',
   'intake.consent_required': 'يلزم اعتماد إرسال المستند قبل قراءته.',
   'intake.reading_text': 'أقرأ طلبك…',
   'intake.not_found': 'لم أجد هذه المعاينة.',
@@ -567,11 +571,14 @@ export const ar = {
   'preview.section.totals': 'المجاميع',
   'preview.section.delivery': 'التسليم',
   'preview.section.invoice': 'الفاتورة',
+  'preview.section.permission_change': 'التغيير',
   'preview.lines.milestones': 'الدفعات',
   'preview.lines.items': 'البنود',
   'preview.lines.received': 'البنود المستلَمة',
+  'preview.lines.permissions': 'الصلاحيات',
   'preview.line_title': 'البند {n}',
   'preview.milestone_title': 'الدفعة {n}',
+  'preview.permission_title': 'الصلاحية {n}',
 
   // Preview card — field labels (`preview.f.<path without line indexes>`)
   'preview.f.customer.nameAr': 'اسم العميل',
@@ -636,6 +643,10 @@ export const ar = {
   'preview.f.invoiceDate': 'تاريخ الفاتورة',
   'preview.f.dueDate': 'تاريخ الاستحقاق',
   'preview.f.goodsReceiptCode': 'رقم سند الاستلام',
+  'preview.f.userName': 'المستخدم',
+  'preview.f.action': 'نوع التغيير',
+  'preview.f.reason': 'السبب',
+  'preview.f.permissions.name': 'الصلاحية كما كُتبت',
 
   // Preview card — enum values in Arabic (the wire values are NPI's codes)
   'preview.enum.EPC': 'تصميم وتوريد وتركيب',
@@ -653,6 +664,8 @@ export const ar = {
   'preview.enum.DATE': 'بتاريخ',
   'preview.enum.PROGRESS': 'بنسبة الإنجاز',
   'preview.enum.EVENT': 'عند حدث',
+  'preview.enum.grant': 'منح',
+  'preview.enum.revoke': 'سحب',
 
   // Preview card — resolution prompts and notes
   'preview.customer_choose': 'أي عميل تقصد؟',
@@ -679,11 +692,34 @@ export const ar = {
   'preview.list.customers': 'قائمة العملاء',
   'preview.list.vendors': 'قائمة المورّدين',
   'preview.list.projects': 'قائمة المشاريع',
+  'preview.list.project_wbs': 'بنود العمل في المشروع',
   'preview.list.departments': 'قائمة الأقسام',
   'preview.list.items': 'قائمة الأصناف',
   'preview.list.requisitions': 'قائمة طلبات الشراء',
   'preview.list.purchase_orders': 'قائمة أوامر الشراء',
   'preview.list.purchase_order_detail': 'تفاصيل أمر الشراء',
+  'preview.list.directory': 'دليل الموظفين',
+  'preview.list.permission_catalog': 'كتالوج الصلاحيات',
+  'preview.list.user_permissions': 'صلاحيات المستخدم',
+
+  // Preview card — the administrative flow (D-26, T-48b)
+  'preview.user_match': 'المستخدم المطابق: {name}',
+  'preview.user_choose': 'أيّ مستخدم تقصد؟',
+  'preview.user_none': 'لم أجد المستخدم «{name}» في دليل NPI',
+  'preview.user_inactive': 'المستخدم {name} غير نشط في NPI',
+  'preview.user_self': 'هذا حسابك أنت؛ التغيير يسري عليك',
+  'preview.user_permissions_unreadable': 'تعذر قراءة صلاحيات المستخدم',
+  'preview.permission_choose': 'أيّ صلاحية تقصد بـ«{name}»؟',
+  'preview.permission_none': 'لم أجد صلاحية باسم «{name}» في كتالوج NPI',
+  'preview.permission_required': 'لم تُحدَّد الصلاحية «{name}»',
+  'preview.permission_noop': 'لا تغيير: «{label}» {state} أصلاً',
+  'preview.permission_state.held': 'ممنوحة',
+  'preview.permission_state.not_held': 'غير ممنوحة',
+  'preview.permission_change': '{label}: {before} ← {after}',
+  'preview.permission_via_role': 'ممنوحة عبر الدور «{role}»',
+  'preview.permission_via_grant': 'ممنوحة باستثناء',
+  'preview.permission_denied': 'محجوبة باستثناء',
+  'preview.permission_absent': 'غير ممنوحة',
 
   // Preview card — why «اعتمد» is disabled
   'preview.block.incomplete': 'البيانات الأساسية ناقصة',
@@ -709,6 +745,7 @@ export const ar = {
   'preview.step.bill_create': 'تسجيل فاتورة المورّد {ref} على سند الاستلام {code}',
   'preview.step.bill_match_npi': 'المطابقة الثلاثية تجري في NPI',
   'preview.step.attach': 'إرفاق المستند بالسجل المُنشأ',
+  'preview.step.permissions_set': 'تحديث استثناءات صلاحيات {name} ({n} من التغييرات)',
 
   // Execution card
   'exec.title': 'التنفيذ في NPI',
@@ -731,6 +768,8 @@ export const ar = {
   'exec.kind.goods_receipt': 'سند الاستلام',
   'exec.kind.vendor_bill': 'فاتورة المورّد',
   'exec.kind.attachment': 'المرفق',
+  'exec.kind.user_permissions': 'صلاحيات المستخدم',
+  'exec.kind.user': 'المستخدم',
   'exec.error.unexpected': 'تعذر إتمام الخطوة لخطأ غير متوقع في مَدار؛ لم يُعَد إرسال أي كتابة.',
   'exec.error.plan': 'تعذر بناء خطوات التنفيذ: {reason}',
   'exec.reason.entity_undecided': 'لم يُحدَّد {entity}',

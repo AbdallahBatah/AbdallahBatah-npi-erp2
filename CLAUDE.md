@@ -6,12 +6,15 @@ NOTION_PROJECT_NAME: NPI ERP — التحويل إلى وورك فلو متكا�
 Modular-monolith ERP for a Saudi solar company (`apps/api` NestJS + Prisma on PostgreSQL, `apps/web` Next.js,
 `packages/*` shared). Since 2026-09 the active work is **Madar**, a conversational copilot layer in `apps/copilot`
 built from the binding package in `spec/madar/00..11`, on branch `feat/copilot`. CRM phase 1 lives in the
-`feature/crm-phase-1` branch (worktree `C:\dev\npi-erp-crm`).
+`feature/crm-phase-1` branch (worktree `C:\dev\npi-erp-crm`). Since 2026-10-12 a second workstream runs on the NPI core
+itself: the owner's change requests (seven packages), on branch `feat/owner-changes-p1`, task codes `P<package>-<n>`.
 
 ## Where the truth is (read in this order, nothing else by default)
 1. `PROGRESS.md` — live Madar state: task table, open decisions, deviations, pending live checks, owner summary (M4+).
 2. `spec/madar/08-CLAUDE-CODE-KICKOFF.md` §E — binding rules; then only the `spec/madar` files the task names.
 3. `docs/COPILOT_*_AR.md` — live Arabic reports for the owner.
+   For the owner-changes workstream: `docs/owner-changes-2026-10/GAP_AR.md` §8 (packages) and §9 (his decisions), the
+   `ADR-*` files beside it, and the «Owner changes 2026-10» section of `PROGRESS.md`; grep `evidence/`, never open whole.
 4. Notion (project page above) — next step and open tasks; update at session end per `~/.claude/CLAUDE.md`.
 
 ## Do NOT read unless the task explicitly asks (archived, token-heavy, superseded)

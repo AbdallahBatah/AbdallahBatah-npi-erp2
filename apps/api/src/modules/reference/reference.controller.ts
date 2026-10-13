@@ -2,11 +2,13 @@ import { Controller, Get } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CurrentUser,
+  RequireAnyPermission,
   RequirePermissions,
   SkipPermissions,
 } from '../../common/decorators';
 import type { AuthUser } from '../../common/auth-user';
-import { PERMISSIONS } from '@npi/shared';
+import { LOOKUP_ACCESS, PERMISSIONS } from '@npi/shared';
+import { ReferenceLookupsService } from './reference-lookups.service';
 import {
   CUSTOMER_TYPES,
   CUSTOMER_ENTITY_KINDS,
@@ -49,11 +51,16 @@ import {
 
 /**
  * Read-only reference data for populating web dropdowns: bilingual enum option
- * lists (from @npi/shared) plus tenant-scoped pricing schemes.
+ * lists (from @npi/shared), tenant-scoped pricing schemes, and the pick lists
+ * (items, projects, customers, vendors, locations) that any one of several
+ * working keys earns.
  */
 @Controller('reference')
 export class ReferenceController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly lookups: ReferenceLookupsService,
+  ) {}
 
   /** Static bilingual labels needed by every page — permission-free by design. */
   @SkipPermissions()
@@ -137,5 +144,40 @@ export class ReferenceController {
       activeContracts,
       pipelineValue: pipeline._sum.estimatedValue ?? 0,
     };
+  }
+
+  // ── Pick lists (ADR-02 §3-3) ──
+  // A form's dropdown, names only, apart from the screen that owns the records:
+  // any one key of the list's LOOKUP_ACCESS row is enough. The web pages ask
+  // only when canUseLookup says so, and disable the field otherwise.
+
+  @RequireAnyPermission(...LOOKUP_ACCESS.items)
+  @Get('lookups/items')
+  lookupItems(@CurrentUser() user: AuthUser) {
+    return this.lookups.items(user.organizationId);
+  }
+
+  @RequireAnyPermission(...LOOKUP_ACCESS.projects)
+  @Get('lookups/projects')
+  lookupProjects(@CurrentUser() user: AuthUser) {
+    return this.lookups.projects(user.organizationId);
+  }
+
+  @RequireAnyPermission(...LOOKUP_ACCESS.customers)
+  @Get('lookups/customers')
+  lookupCustomers(@CurrentUser() user: AuthUser) {
+    return this.lookups.customers(user.organizationId);
+  }
+
+  @RequireAnyPermission(...LOOKUP_ACCESS.vendors)
+  @Get('lookups/vendors')
+  lookupVendors(@CurrentUser() user: AuthUser) {
+    return this.lookups.vendors(user.organizationId);
+  }
+
+  @RequireAnyPermission(...LOOKUP_ACCESS.locations)
+  @Get('lookups/locations')
+  lookupLocations(@CurrentUser() user: AuthUser) {
+    return this.lookups.locations(user.organizationId);
   }
 }

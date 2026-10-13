@@ -14,6 +14,7 @@ import { PERMISSIONS_KEY } from '../../common/decorators';
 import { FollowUpTasksService } from './follow-up-tasks.service';
 import { FollowUpTasksController } from './follow-up-tasks.controller';
 import type { AuthUser } from '../../common/auth-user';
+import { holdsEffectively } from '../../common/permission-predicates';
 
 const NOW = new Date('2026-10-08T10:00:00.000Z');
 
@@ -558,12 +559,18 @@ describe('FollowUpTasksService.list / get', () => {
 });
 
 describe('FollowUpTasksService.assignees — who a task may be given to', () => {
-  it('asks Prisma for the active users of the caller’s organization only, ordered by Arabic name', async () => {
+  it('asks Prisma for the active users of the caller’s organization who hold crm.task.read, ordered by Arabic name', async () => {
     const { svc, prisma } = setup(makeTx());
     prisma.user.findMany.mockResolvedValue([{ id: 'u2', nameAr: 'أحمد', nameEn: 'Ahmad' }]);
     await svc.assignees(USER);
     const args = prisma.user.findMany.mock.calls[0][0];
-    expect(args.where).toEqual({ organizationId: 'org1', isActive: true });
+    // P1-6 (ADR-02 §5): only someone who can open /tasks may be given a task; P1-7: the key
+    // held effectively — the primary role, an extra one or a GRANT, and not DENIED.
+    expect(args.where).toEqual({
+      organizationId: 'org1',
+      isActive: true,
+      AND: [holdsEffectively(PERMISSIONS.TASK_READ)],
+    });
     expect(args.orderBy).toEqual({ nameAr: 'asc' });
   });
 
@@ -590,13 +597,24 @@ describe('FollowUpTasksService.mySummary — the dashboard card', () => {
   });
 });
 
-describe('FollowUpTasksController — the keys of the two new reads', () => {
+describe('FollowUpTasksController — the keys of the reads', () => {
   const keyOf = (method: string): string[] =>
     Reflect.getMetadata(PERMISSIONS_KEY, (FollowUpTasksController.prototype as unknown as Record<string, object>)[method]);
 
-  it('assignees needs the write key (it only feeds the assign-to picker), summary the read key', () => {
+  it('assignees needs the write key (it only feeds the assign-to picker), summary the tasks key', () => {
     expect(keyOf('assignees')).toEqual([PERMISSIONS.CUSTOMER_WRITE]);
-    expect(keyOf('summary')).toEqual([PERMISSIONS.CUSTOMER_READ]);
+    expect(keyOf('summary')).toEqual([PERMISSIONS.TASK_READ]);
+  });
+
+  it('list and get need the key of the /tasks screen, not the customers key (P1-6)', () => {
+    expect(keyOf('list')).toEqual([PERMISSIONS.TASK_READ]);
+    expect(keyOf('get')).toEqual([PERMISSIONS.TASK_READ]);
+  });
+
+  it('every write stays on the customer write key (no task write key in this package)', () => {
+    for (const m of ['create', 'update', 'complete', 'cancel']) {
+      expect(keyOf(m)).toEqual([PERMISSIONS.CUSTOMER_WRITE]);
+    }
   });
 
   it('the static routes are declared before :id so the parameter cannot swallow them', () => {

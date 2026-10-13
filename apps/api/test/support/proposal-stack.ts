@@ -9,6 +9,7 @@ import { NumberingService } from '../../src/common/numbering.service';
 import { AuditService } from '../../src/common/audit.service';
 import { NotificationService } from '../../src/common/notification.service';
 import { DelegationService } from '../../src/common/delegation.service';
+import { EffectivePermissionsService } from '../../src/common/effective-permissions.service';
 import { ApprovalService } from '../../src/common/approval.service';
 import { OrgSettingsService } from '../../src/common/org-settings.service';
 import { OutboxService } from '../../src/common/workflow/outbox.service';
@@ -25,7 +26,7 @@ export function buildProposalStack(prisma: PrismaService) {
   const audit = new AuditService(prisma);
   const notifications = new NotificationService(prisma);
   const delegations = new DelegationService(prisma);
-  const approvals = new ApprovalService(prisma, audit, notifications, delegations);
+  const approvals = new ApprovalService(prisma, audit, notifications, delegations, new EffectivePermissionsService(prisma));
   const outbox = new OutboxService(prisma);
   const engine = new WorkflowEngine(prisma, audit, outbox);
   const settings = new OrgSettingsService(prisma, audit);

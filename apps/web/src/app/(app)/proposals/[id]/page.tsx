@@ -11,6 +11,7 @@ import { useValidate } from '@/lib/useValidate';
 import { useDraft } from '@/lib/useDraft';
 import { translateError } from '@/lib/errors';
 import { useEnums } from '@/lib/useEnums';
+import { useLookup } from '@/lib/lookups';
 import { formatDateTime, formatDay, formatMoney } from '@/lib/format';
 import { PageHeader, StatusBadge, Modal, Field, LoadError, useConfirm, Btn, PageSkeleton } from '@/components/ui';
 import { ApprovalChain, type ApprovalRequestView } from '@/components/approvals';
@@ -132,7 +133,10 @@ export default function ProposalDetailPage() {
   const id = params.id;
 
   const [proposal, setProposal] = useState<Proposal | null>(null);
-  const [items, setItems] = useState<Item[]>([]);
+  // The bill of materials' item list, earned by commercial.proposal.write
+  // itself (ADR-02 §3-3); only the form uses it, so only a writer asks.
+  const itemList = useLookup<Item>('items', { enabled: canWrite });
+  const items = itemList.rows;
   const [schemes, setSchemes] = useState<Scheme[]>([]);
   const [form, setForm] = useState<FormState>(null);
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
@@ -159,7 +163,6 @@ export default function ProposalDetailPage() {
 
   useEffect(() => {
     load();
-    api.get<Item[]>('/items').then(setItems).catch(() => {});
     if (showCosts) api.get<Scheme[]>('/reference/pricing-schemes').then(setSchemes).catch(() => {});
   }, [load, showCosts]);
 
@@ -835,6 +838,9 @@ export default function ProposalDetailPage() {
 
           <label className="label">{t('proposals.bom')}</label>
           {showCosts && <p className="mb-2 text-xs text-slate-500">{t('proposals.marginHint')}</p>}
+          {itemList.state === 'unavailable' && (
+            <p className="mb-2 text-xs text-slate-500">{t('lookup.unavailable')}</p>
+          )}
           {validation.errorOf('lines') && (
             <p role="alert" className="mb-2 text-xs font-medium text-danger-600">
               {validation.errorOf('lines')}
@@ -851,6 +857,7 @@ export default function ProposalDetailPage() {
                       className="input min-w-[12rem] flex-1"
                       value={l.itemId}
                       onChange={(e) => onItemChange(i, e.target.value)}
+                      disabled={itemList.state === 'unavailable'}
                     >
                       <option value="">—</option>
                       {items.map((it) => (

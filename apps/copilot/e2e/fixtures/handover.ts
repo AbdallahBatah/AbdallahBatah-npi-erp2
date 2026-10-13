@@ -18,7 +18,8 @@ import type { APIRequestContext } from '@playwright/test';
 import { PrismaClient } from '../../src/generated/prisma';
 import { saveFact } from '../../src/memory/store';
 import { createNpiClient } from '../../src/npi/client';
-import { readItems, readRoles } from '../../src/npi/admin';
+import { itemsFromNpi } from '../../src/extract/resolve';
+import { readRoles } from '../../src/npi/admin';
 import { readEntityRef, readMe } from '../../src/npi/responses';
 import { Pseudonymizer } from '../../src/privacy/pseudonymizer';
 import { reassignPosition } from '../../src/positions/reassign';
@@ -331,14 +332,17 @@ export async function seedPositionMemory(orgId: string, positionId: string): Pro
 
 /**
  * As the seeded engineer, through the copilot's own NPI client: a requisition
- * of 40 x MOD-550 at 320 (12,800 SAR, above the seeded 10,000 floor, so NPI
- * parks it on the `pm` role), submitted, then read back as `PENDING_APPROVAL`.
+ * of 40 x MOD-550 at 320 (12,800 SAR; the seeded PURCHASE_REQUISITION rule
+ * runs from 0 SAR since NPI's P1-13, so NPI parks it on the `pm` role),
+ * submitted, then read back as `PENDING_APPROVAL`. The item comes from the
+ * pick list (`lookupItems`), as in the intake: the engineer's role holds no
+ * `commercial.item.read` since P1-13.
  */
 export async function pendingRequisitionForPm(request: APIRequestContext): Promise<{ id: string; code: string }> {
   const { token } = await npiLogin(request, readSiteEngineerCredentials());
   const npi = createNpiClient({ token, baseUrl: API_BASE });
 
-  const item = readItems(await npi.listItems()).find((i) => i.sku === 'MOD-550');
+  const item = itemsFromNpi(await npi.lookupItems()).find((i) => i.sku === 'MOD-550');
   if (item === undefined) throw new Error('pendingRequisitionForPm: the seeded item MOD-550 is not in NPI');
 
   const ref = readEntityRef(

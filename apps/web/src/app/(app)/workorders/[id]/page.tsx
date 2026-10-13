@@ -8,6 +8,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
+import { useLookup } from '@/lib/lookups';
 import { formatMoney, formatDate } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, useConfirm, Tabs, Can, Btn, PageSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -91,8 +92,13 @@ export default function WorkOrderDetailPage() {
     window.history.replaceState(null, '', `#${k}`);
   };
   const [techs, setTechs] = useState<Tech[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
-  const [locations, setLocations] = useState<Loc[]>([]);
+  // The add-part dialog's lists, earned by fsm.workorder.write itself (ADR-02
+  // §3-3), each its own request: a technician without the item catalogue or
+  // the procurement screen no longer gets an error card on the work order.
+  const itemList = useLookup<Item>('items');
+  const locationList = useLookup<Loc>('locations');
+  const items = itemList.rows;
+  const locations = locationList.rows;
   const [loadErr, setLoadErr] = useState('');
   const { act, busy } = useAct();
   const { confirm, confirmNode } = useConfirm();
@@ -112,8 +118,6 @@ export default function WorkOrderDetailPage() {
     const fail = (e: unknown) => setLoadErr(translateError(e, locale));
     api.get<Wo>(`/fsm/work-orders/${id}`).then(setWo).catch(fail);
     api.get<Tech[]>('/fsm/technicians').then(setTechs).catch(fail);
-    api.get<Item[]>('/items').then(setItems).catch(fail);
-    api.get<Loc[]>('/procurement/locations').then(setLocations).catch(fail);
   }, [id, locale]);
   useEffect(load, [load]);
 
@@ -421,8 +425,8 @@ export default function WorkOrderDetailPage() {
       {/* Add part modal */}
       <Modal open={pOpen} title={t('wo.addPart')} onClose={() => setPOpen(false)}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label={t('po.item')}>
-            <select className="input" value={pItemId} onChange={(e) => setPItemId(e.target.value)}>
+          <Field label={t('po.item')} hint={itemList.state === 'unavailable' ? t('lookup.unavailable') : undefined}>
+            <select className="input" value={pItemId} onChange={(e) => setPItemId(e.target.value)} disabled={itemList.state === 'unavailable'}>
               <option value="">—</option>
               {items.filter((i) => !i.isSerialised).map((i) => (
                 <option key={i.id} value={i.id}>{i.sku} · {pick(i, 'name')}</option>
@@ -432,8 +436,8 @@ export default function WorkOrderDetailPage() {
           <Field label={t('po.qty')}>
             <input type="number" min={0.001} className="input" value={pQty} onChange={(e) => setPQty(Number(e.target.value))} />
           </Field>
-          <Field label={t('stk.from')}>
-            <select className="input" value={pLoc} onChange={(e) => setPLoc(e.target.value)}>
+          <Field label={t('stk.from')} hint={locationList.state === 'unavailable' ? t('lookup.unavailable') : undefined}>
+            <select className="input" value={pLoc} onChange={(e) => setPLoc(e.target.value)} disabled={locationList.state === 'unavailable'}>
               <option value="">—</option>
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>{l.code} · {pick(l, 'name')}</option>

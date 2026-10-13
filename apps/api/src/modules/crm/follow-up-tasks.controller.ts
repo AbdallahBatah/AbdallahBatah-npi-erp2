@@ -7,9 +7,11 @@ import { PERMISSIONS } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 
 /**
- * Follow-up tasks. Customer-read to see them, customer-write to create, edit, complete,
- * cancel or re-assign — and the tasks are the TEAM's: anyone with the write key acts on
- * any task of the organization (the audit trail names who). No new keys (CRM Step 5).
+ * Follow-up tasks. Their own view key to see them (crm.task.read, split off crm.customer.read
+ * in P1-6: the /tasks screen has one key of its own, ADR-02 §3-2), customer-write to create,
+ * edit, complete, cancel or re-assign — and the tasks are the TEAM's: anyone with the write
+ * key acts on any task of the organization (the audit trail names who). No write key of
+ * their own (CRM Step 5).
  */
 @Controller('tasks')
 @UseGuards(PermissionsGuard)
@@ -21,7 +23,7 @@ export class FollowUpTasksController {
    * Defaults: open tasks, any due date.
    */
   @Get()
-  @RequirePermissions(PERMISSIONS.CUSTOMER_READ)
+  @RequirePermissions(PERMISSIONS.TASK_READ)
   list(
     @CurrentUser() user: AuthUser,
     @Query('mine') mine?: string,
@@ -56,13 +58,13 @@ export class FollowUpTasksController {
 
   /** The caller's own open tasks due today / already late — the dashboard card. */
   @Get('summary')
-  @RequirePermissions(PERMISSIONS.CUSTOMER_READ)
+  @RequirePermissions(PERMISSIONS.TASK_READ)
   summary(@CurrentUser() user: AuthUser) {
     return this.tasks.mySummary(user);
   }
 
   @Get(':id')
-  @RequirePermissions(PERMISSIONS.CUSTOMER_READ)
+  @RequirePermissions(PERMISSIONS.TASK_READ)
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.tasks.get(user, id);
   }

@@ -257,16 +257,17 @@ describe('who may do what — the keys of the existing customer module', () => {
   const keyOf = (cls: { prototype: object }, method: string): string[] =>
     Reflect.getMetadata(PERMISSIONS_KEY, (cls.prototype as Record<string, object>)[method]);
 
-  it('every write needs crm.customer.write, every read crm.customer.read — and no new key exists', () => {
+  it('every write needs crm.customer.write; the log is read with crm.customer.read, the tasks with crm.task.read (P1-6)', () => {
     for (const m of ['create', 'update']) expect(keyOf(ActivitiesController, m)).toEqual([PERMISSIONS.CUSTOMER_WRITE]);
     expect(keyOf(ActivitiesController, 'list')).toEqual([PERMISSIONS.CUSTOMER_READ]);
     for (const m of ['create', 'update', 'complete', 'cancel']) expect(keyOf(FollowUpTasksController, m)).toEqual([PERMISSIONS.CUSTOMER_WRITE]);
-    for (const m of ['list', 'get', 'summary']) expect(keyOf(FollowUpTasksController, m)).toEqual([PERMISSIONS.CUSTOMER_READ]);
+    for (const m of ['list', 'get', 'summary']) expect(keyOf(FollowUpTasksController, m)).toEqual([PERMISSIONS.TASK_READ]);
     expect(keyOf(FollowUpTasksController, 'assignees')).toEqual([PERMISSIONS.CUSTOMER_WRITE]);
   });
 
-  it('the executive (read only) holds the read key but not the write key, so POST /activities answers 403 at the guard', () => {
+  it('the executive (read only) holds the read keys but not the write key, so POST /activities answers 403 at the guard', () => {
     expect(CEO.permissions).toContain(PERMISSIONS.CUSTOMER_READ);
+    expect(CEO.permissions).toContain(PERMISSIONS.TASK_READ);
     expect(CEO.permissions).not.toContain(PERMISSIONS.CUSTOMER_WRITE);
   });
 });
@@ -308,8 +309,14 @@ describe('Step 5-b — the assignee list and the dashboard summary', () => {
     const rows = (await tasks.assignees(SALES)) as Array<{ nameAr: string }>;
     expect(rows.length).toBeGreaterThan(1);
     // Postgres collation may differ from a code-point sort, so compare with the database's own order.
+    // P1-6: only holders of crm.task.read (primary or extra role) are offered.
+    const holds = { permissions: { has: PERMISSIONS.TASK_READ } };
     const dbOrder = await prisma.user.findMany({
-      where: { organizationId: SALES.organizationId, isActive: true },
+      where: {
+        organizationId: SALES.organizationId,
+        isActive: true,
+        OR: [{ role: holds }, { extraRoles: { some: { role: holds } } }],
+      },
       orderBy: { nameAr: 'asc' },
       select: { nameAr: true },
     });
@@ -318,7 +325,7 @@ describe('Step 5-b — the assignee list and the dashboard summary', () => {
 
   it('the read-only executive does not hold the key of the assignee list (403 at the guard) but does hold the summary key', () => {
     expect(CEO.permissions).not.toContain(PERMISSIONS.CUSTOMER_WRITE);
-    expect(CEO.permissions).toContain(PERMISSIONS.CUSTOMER_READ);
+    expect(CEO.permissions).toContain(PERMISSIONS.TASK_READ);
   });
 
   it('mySummary counts the caller’s open tasks due today, then overdue once the day has passed', async () => {

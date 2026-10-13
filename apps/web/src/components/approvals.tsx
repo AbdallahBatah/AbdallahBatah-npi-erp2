@@ -47,7 +47,7 @@ export interface ApprovalRequestView {
   steps: ApprovalStepView[];
   /** Inbox rows only — see ApprovalService.inbox for why blocked rows stay. */
   canDecide?: boolean;
-  blockedReason?: 'RAISED_BY_YOU' | 'ALREADY_SIGNED';
+  blockedReason?: 'RAISED_BY_YOU' | 'ALREADY_SIGNED' | 'NO_PERMISSION';
 }
 
 export const DOC_LABEL: Record<ApprovalDocType, { ar: string; en: string }> = {
@@ -217,7 +217,9 @@ export function ApprovalInbox({ onDecided }: { onDecided?: () => void }) {
                       <div className="text-end text-xs leading-5 text-warning-700">
                         {r.blockedReason === 'ALREADY_SIGNED'
                           ? t('apr.blocked.alreadySigned')
-                          : t('apr.blocked.raisedByYou')}
+                          : r.blockedReason === 'NO_PERMISSION'
+                            ? t('apr.blocked.noPermission')
+                            : t('apr.blocked.raisedByYou')}
                       </div>
                     ) : (
                       <div className="flex justify-end gap-1.5">

@@ -9,6 +9,7 @@ import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums } from '@/lib/useEnums';
+import { useLookup } from '@/lib/lookups';
 import { formatDate, formatMoney } from '@/lib/format';
 import { PageHeader, StatusBadge, Modal, Field, EmptyRow, LoadError, Can, Btn, TableSkeleton } from '@/components/ui';
 import { OppTypeBadge, daysSince } from '@/components/opportunity-bits';
@@ -37,7 +38,11 @@ export default function OpportunitiesPage() {
   const enums = useEnums();
   const router = useRouter();
   const [opps, setOpps] = useState<Opportunity[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  // The create form's customer list, its own request (ADR-02 §3-3): earned by
+  // crm.opportunity.write as well as crm.customer.read, and never able to take
+  // the opportunity list down with it.
+  const customerList = useLookup<Customer>('customers');
+  const customers = customerList.rows;
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState('');
   const [open, setOpen] = useState(false);
@@ -51,11 +56,9 @@ export default function OpportunitiesPage() {
   const load = useCallback(() => {
     setLoading(true);
     setLoadErr('');
-    Promise.all([api.get<Opportunity[]>('/opportunities'), api.get<Customer[]>('/customers')])
-      .then(([o, c]) => {
-        setOpps(o);
-        setCustomers(c);
-      })
+    api
+      .get<Opportunity[]>('/opportunities')
+      .then(setOpps)
       .catch((e) => setLoadErr(translateError(e, locale)))
       .finally(() => setLoading(false));
   }, [locale]);
@@ -258,8 +261,17 @@ export default function OpportunitiesPage() {
           <Field label={t('opps.name')}>
             <input name="name" className="input" required />
           </Field>
-          <Field label={t('opps.customer')}>
-            <select name="customerId" className="input" required defaultValue="">
+          <Field
+            label={t('opps.customer')}
+            hint={customerList.state === 'unavailable' ? t('lookup.unavailable') : undefined}
+          >
+            <select
+              name="customerId"
+              className="input"
+              required
+              defaultValue=""
+              disabled={customerList.state === 'unavailable'}
+            >
               <option value="" disabled>
                 —
               </option>
@@ -269,7 +281,7 @@ export default function OpportunitiesPage() {
                 </option>
               ))}
             </select>
-            {customers.length === 0 && (
+            {customerList.state === 'ready' && customers.length === 0 && (
               <p className="mt-1 text-xs text-warning-700">
                 {locale === 'ar' ? 'لا يوجد عملاء بعد — ' : 'No customers yet — '}
                 <a href="/customers" className="underline">
@@ -332,7 +344,12 @@ export default function OpportunitiesPage() {
 
           <div className="flex justify-end gap-2 sm:col-span-2">
             <Btn onClick={() => setOpen(false)}>{t('common.cancel')}</Btn>
-            <Btn type="submit" variant="primary" busy={busy('create')} disabled={busy()}>
+            <Btn
+              type="submit"
+              variant="primary"
+              busy={busy('create')}
+              disabled={busy() || customerList.state === 'unavailable'}
+            >
               {t('common.create')}
             </Btn>
           </div>

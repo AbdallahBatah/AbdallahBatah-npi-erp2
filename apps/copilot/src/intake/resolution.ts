@@ -3,6 +3,21 @@
 // `src/extract/resolve.ts`, and returns the `FlowResolution` the preview card
 // is built from. Reads only — nothing here writes to NPI.
 //
+// Items and projects are matched against NPI's pick lists
+// (`GET /reference/lookups/{items,projects}`, ADR-02 §3-3), which a form's
+// working key opens without the owning screen: an engineer who may raise a
+// requisition matches its items without `commercial.item.read`. Customers
+// and vendors stay on their full lists, because BR-09 matches a party by its
+// VAT number first and the pick lists carry names only; a project's WBS
+// elements stay on the project record (`GET /projects/:id`).
+//
+// The administrative flow `user_permissions` (D-26) reads the people directory
+// (`GET /admin/departments/directory`), NPI's permission catalog
+// (`GET /admin/permissions`) and the matched user's permissions
+// (`GET /admin/users/:id/permissions`) - reads only; the one write is the
+// execution's `setUserPermissions`. A user is never created, so there is no
+// "new" pick for it.
+//
 // A list NPI refuses or cannot serve (a site engineer cannot read the
 // department directory, for one) never fails the job: the pick becomes
 // `unreadable`, a note says so once, and the value stays as the document
@@ -18,6 +33,7 @@ import {
   goodsReceiptBlockers,
   itemsFromNpi,
   partiesFromNpi,
+  permissionsFromCatalog,
   projectsFromNpi,
   purchaseOrderDetailFromNpi,
   purchaseOrderReceivable,
@@ -28,12 +44,16 @@ import {
   resolveDepartment,
   resolveGoodsReceipt,
   resolveItem,
+  resolvePermission,
   resolvePoLine,
   resolveProject,
   resolvePurchaseOrder,
   resolveRequisition,
+  resolveUser,
   resolveVendor,
   resolveWbs,
+  userPermissionStateFrom,
+  usersFromDirectory,
   wbsFromProject,
   type PurchaseOrderDetail,
   type WbsRef,
@@ -42,25 +62,41 @@ import type { CustomerContractValues } from '../extract/schemas/customer_contrac
 import type { GrnValues } from '../extract/schemas/grn';
 import type { PoValues, VendorValues } from '../extract/schemas/po';
 import type { PrValues } from '../extract/schemas/pr';
+import type { UserPermissionsValues } from '../extract/schemas/user_permissions';
 import type { VendorBillValues } from '../extract/schemas/vendor_bill';
 import { formatAmount } from './labels';
-import type { EntityPick, FlowResolution, LineResolution } from './types';
+import type { EntityPick, FlowResolution, LineResolution, UserPermissionState } from './types';
 
 export type ResolutionNpi = Pick<
   NpiClient,
   | 'listCustomers'
   | 'listVendors'
-  | 'listProjects'
+  | 'lookupProjects'
   | 'getProject'
   | 'listDepartments'
   | 'listRequisitions'
   | 'listPurchaseOrders'
   | 'getPurchaseOrder'
-  | 'listItems'
+  | 'lookupItems'
+  | 'listDepartmentDirectory'
+  | 'permissionCatalog'
+  | 'getUserPermissions'
 >;
 
 type Unreadable = Extract<EntityPick, { kind: 'unreadable' }>;
-type ListName = 'customers' | 'vendors' | 'projects' | 'departments' | 'items' | 'requisitions' | 'purchase_orders' | 'purchase_order_detail';
+type ListName =
+  | 'customers'
+  | 'vendors'
+  | 'projects'
+  | 'project_wbs'
+  | 'departments'
+  | 'items'
+  | 'requisitions'
+  | 'purchase_orders'
+  | 'purchase_order_detail'
+  | 'directory'
+  | 'permission_catalog'
+  | 'user_permissions';
 
 interface Ctx {
   npi: ResolutionNpi;
@@ -124,7 +160,7 @@ const pickVendor = (ctx: Ctx, v: VendorValues) => pickParty(ctx, 'vendors', v, {
 
 async function pickProject(ctx: Ctx, query: { code: string | null; name: string | null }): Promise<EntityPick | undefined> {
   if (query.code === null && query.name === null) return undefined;
-  const read = await readOnce(ctx, 'projects', () => ctx.npi.listProjects(), projectsFromNpi);
+  const read = await readOnce(ctx, 'projects', () => ctx.npi.lookupProjects(), projectsFromNpi);
   if (!read.ok) return read.pick;
   const found = resolveProject(query, read.value);
   if (found.kind === 'matched') {
@@ -171,10 +207,12 @@ async function pickRequisition(ctx: Ctx, code: string | null): Promise<EntityPic
 }
 
 /** The WBS elements of the matched project (NPI has no WBS list). `null`
- *  when there is no matched project or its record cannot be read. */
+ *  when there is no matched project or its record cannot be read. The record
+ *  has its own note: the pick list that matched the project is open to more
+ *  keys than the record itself (`projects.project.read`). */
 async function projectWbs(ctx: Ctx, project: EntityPick | undefined): Promise<WbsRef[] | null> {
   if (project?.kind !== 'matched') return null;
-  const read = await readOnce(ctx, 'projects', () => ctx.npi.getProject(project.id), wbsFromProject);
+  const read = await readOnce(ctx, 'project_wbs', () => ctx.npi.getProject(project.id), wbsFromProject);
   return read.ok ? read.value : null;
 }
 
@@ -189,7 +227,7 @@ interface ItemLine {
 
 async function resolveItemLines(ctx: Ctx, lines: ItemLine[], project: EntityPick | undefined): Promise<LineResolution[]> {
   if (lines.length === 0) return [];
-  const items = await readOnce(ctx, 'items', () => ctx.npi.listItems(), itemsFromNpi);
+  const items = await readOnce(ctx, 'items', () => ctx.npi.lookupItems(), itemsFromNpi);
   const wbs = lines.some((l) => l.wbsCode !== null || l.wbsName !== null) ? await projectWbs(ctx, project) : null;
 
   return lines.map((line): LineResolution => {
@@ -377,12 +415,82 @@ async function resolveBill(ctx: Ctx, values: VendorBillValues): Promise<FlowReso
   return { flow: 'vendor_bill', vendor, purchaseOrder, goodsReceipt, lines: [], expectedBillAmounts: expected, warnings, notesAr: ctx.notes };
 }
 
+// --- The administrative flow: a user and the permissions to change (D-26) ---
+
+const userLabel = (u: { nameAr: string; roleAr: string | null }): string => (u.roleAr ? `${u.nameAr} — ${u.roleAr}` : u.nameAr);
+
+async function pickUser(ctx: Ctx, name: string, callerId: string | undefined): Promise<{ pick: EntityPick; ids: string[] }> {
+  const read = await readOnce(ctx, 'directory', () => ctx.npi.listDepartmentDirectory(), usersFromDirectory);
+  if (!read.ok) return { pick: read.pick, ids: [] };
+  const found = resolveUser(name, read.value);
+  if (found.kind === 'matched') {
+    const labelAr = found.user.nameAr;
+    ctx.notes.push(t('preview.user_match', { name: labelAr }));
+    if (!found.user.isActive) ctx.notes.push(t('preview.user_inactive', { name: labelAr }));
+    if (callerId !== undefined && found.user.id === callerId) ctx.notes.push(t('preview.user_self'));
+    return { pick: { kind: 'matched', id: found.user.id, labelAr, by: found.by }, ids: [found.user.id] };
+  }
+  if (found.kind === 'candidates') {
+    return {
+      pick: {
+        kind: 'candidates',
+        candidates: found.candidates.map((c) => ({ id: c.entity.id, labelAr: userLabel(c.entity), similarity: c.similarity })),
+      },
+      ids: found.candidates.map((c) => c.entity.id),
+    };
+  }
+  ctx.notes.push(t('preview.user_none', { name }));
+  return { pick: { kind: 'none' }, ids: [] };
+}
+
+async function resolveUserPermissions(ctx: Ctx, values: UserPermissionsValues, callerId: string | undefined): Promise<FlowResolution> {
+  const { pick: user, ids } = await pickUser(ctx, values.userName, callerId);
+
+  const catalog = await readOnce(ctx, 'permission_catalog', () => ctx.npi.permissionCatalog(), permissionsFromCatalog);
+  const lines = values.permissions.map((entry): LineResolution => {
+    const out: LineResolution = { warnings: [] };
+    if (!catalog.ok) {
+      out.permission = catalog.pick;
+      return out;
+    }
+    const found = resolvePermission(entry.name, catalog.value);
+    if (found.kind === 'matched') {
+      out.permission = { kind: 'matched', id: found.permission.key, labelAr: found.permission.labelAr, by: found.by };
+    } else if (found.kind === 'candidates') {
+      out.permission = {
+        kind: 'candidates',
+        candidates: found.candidates.map((c) => ({ id: c.entity.key, labelAr: c.entity.labelAr, similarity: c.similarity })),
+      };
+    } else {
+      out.permission = { kind: 'none' };
+      ctx.notes.push(t('preview.permission_none', { name: entry.name }));
+    }
+    return out;
+  });
+
+  const current: Record<string, UserPermissionState> = {};
+  for (const id of ids) {
+    const read = await readOnce(ctx, 'user_permissions', () => ctx.npi.getUserPermissions(id), userPermissionStateFrom);
+    if (read.ok) current[id] = read.value;
+  }
+
+  const permissionLabels = catalog.ok ? Object.fromEntries(catalog.value.map((p) => [p.key, p.labelAr])) : undefined;
+  return { flow: 'user_permissions', user, current, permissionLabels, lines, warnings: [], notesAr: ctx.notes };
+}
+
 /**
  * Reads what NPI knows about the names in `values` (the flow's `*Values`) and
  * decides, per BR-09, what is matched, what is a choice and what is new.
  * `notesAr` is deduplicated. Throws only for a bug (a non-`NpiError`).
+ * `opts.callerNpiUserId` lets the administrative flow say when the target is
+ * the caller's own account.
  */
-export async function resolveFlow(npi: ResolutionNpi, flow: FlowType, values: unknown): Promise<FlowResolution> {
+export async function resolveFlow(
+  npi: ResolutionNpi,
+  flow: FlowType,
+  values: unknown,
+  opts: { callerNpiUserId?: string } = {},
+): Promise<FlowResolution> {
   const ctx: Ctx = { npi, notes: [], unreadable: new Map() };
   let resolution: FlowResolution;
   switch (flow) {
@@ -400,6 +508,9 @@ export async function resolveFlow(npi: ResolutionNpi, flow: FlowType, values: un
       break;
     case 'vendor_bill':
       resolution = await resolveBill(ctx, values as VendorBillValues);
+      break;
+    case 'user_permissions':
+      resolution = await resolveUserPermissions(ctx, values as UserPermissionsValues, opts.callerNpiUserId);
       break;
   }
   resolution.notesAr = [...new Set(resolution.notesAr)];
@@ -434,6 +545,11 @@ export function pickedId(pick: EntityPick | undefined, chosen: string | undefine
 export interface BlockerContext {
   purchaseOrderCode?: string | null;
   lines?: { itemName: string }[];
+  /** user_permissions: the written user name, and the written permission names. */
+  userName?: string;
+  permissions?: { name: string }[];
+  /** The user's `choose` decisions by target. */
+  choices?: Record<string, string>;
 }
 
 /**
@@ -442,7 +558,9 @@ export interface BlockerContext {
  * again without any NPI read):
  *  - grn: no purchase order (or one NPI would not serve), or a line with no
  *    matching line on it;
- *  - vendor_bill: no accepted, unbilled goods receipt to bill.
+ *  - vendor_bill: no accepted, unbilled goods receipt to bill;
+ *  - user_permissions: a user or a permission NPI does not know (or would not
+ *    serve), or a user whose permissions could not be read.
  * `context` supplies the words for the message (the PO code, the line's item
  * name); without it a generic form is used.
  */
@@ -464,5 +582,28 @@ export function resolutionBlockers(r: FlowResolution, context: BlockerContext = 
     const grn = r.goodsReceipt;
     if (grn === undefined || grn.kind === 'none' || grn.kind === 'unreadable') out.push(t('preview.grn_required'));
   }
+  if (r.flow === 'user_permissions') out.push(...userPermissionsBlockers(r, context));
+  return out;
+}
+
+function userPermissionsBlockers(r: FlowResolution, context: BlockerContext): string[] {
+  const out: string[] = [];
+  const choices = context.choices ?? {};
+  const user = r.user;
+  if (user === undefined || user.kind === 'none') {
+    out.push(t('preview.user_none', { name: context.userName ?? '' }));
+  } else if (user.kind === 'unreadable') {
+    out.push(user.messageAr);
+  } else {
+    // A user still to be chosen is covered by the choice blocker.
+    const id = pickedId(user, choices.user);
+    if (id !== null && r.current?.[id] === undefined) out.push(t('preview.user_permissions_unreadable'));
+  }
+  r.lines.forEach((line, index) => {
+    const pick = line.permission;
+    const name = context.permissions?.[index]?.name ?? String(index + 1);
+    if (pick === undefined || pick.kind === 'none') out.push(t('preview.permission_none', { name }));
+    else if (pick.kind === 'unreadable') out.push(pick.messageAr);
+  });
   return out;
 }

@@ -12,12 +12,14 @@ import type { CreateVendorDto, PoValues } from '../extract/schemas/po';
 import type { CreateRequisitionDto } from '../extract/schemas/pr';
 import type { CreateBillDto } from '../extract/schemas/vendor_bill';
 import { t } from '../i18n/ar';
+import type { PermissionOverrideDto } from '../npi/client';
 import { previewSteps } from '../intake/preview';
 import type { FlowResolution, FlowType } from '../intake/types';
 import { planCustomerContract } from './flows/customer_contract';
 import { planGrn } from './flows/grn';
 import { planPo } from './flows/po';
 import { planPr } from './flows/pr';
+import { planUserPermissions } from './flows/user_permissions';
 import { planVendorBill } from './flows/vendor_bill';
 
 /** What a step needs from an earlier one: an NPI id already known, or the id
@@ -51,7 +53,8 @@ export type PlannedStepBody =
       currency: string | null;
     }
   | { kind: 'grn_create'; purchaseOrderId: string; dto: ReceiveDto }
-  | { kind: 'bill_create'; purchaseOrderId: string | null; dto: CreateBillDto };
+  | { kind: 'bill_create'; purchaseOrderId: string | null; dto: CreateBillDto }
+  | { kind: 'permissions_set'; userId: string; userLabelAr: string; overrides: PermissionOverrideDto[] };
 
 export type PlannedStep = { n: number; labelAr: string } & PlannedStepBody;
 
@@ -121,6 +124,9 @@ export function buildPlan(input: PlanInput): ExecutionPlan {
         break;
       case 'vendor_bill':
         steps = planVendorBill(input, labels);
+        break;
+      case 'user_permissions':
+        steps = planUserPermissions(input, labels);
         break;
     }
   } catch (err) {

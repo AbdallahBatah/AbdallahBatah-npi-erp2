@@ -294,6 +294,8 @@ model Organization {
   // CRM Phase 1 (Step 5)
   activities          Activity[]
   followUpTasks       FollowUpTask[]
+  // ADR-02 (P1-7): per-user exceptions to the roles.
+  userPermissionOverrides UserPermissionOverride[]
 
   @@index([parentOrganizationId])
 }
@@ -365,6 +367,8 @@ model User {
   assignedFollowUpTasks  FollowUpTask[] @relation("TaskAssignee")
   followUpTasksCreated   FollowUpTask[] @relation("TaskCreator")
   followUpTasksCompleted FollowUpTask[] @relation("TaskCompleter")
+  // ADR-02 (P1-7): GRANT / DENY exceptions on top of the roles.
+  permissionOverrides    UserPermissionOverride[]
 
   @@index([organizationId])
   @@index([organizationId, departmentId])
@@ -382,6 +386,36 @@ model UserRole {
 
   @@unique([userId, roleId])
   @@index([roleId])
+}
+
+/// ADR-02 (P1-7): whether a per-user exception adds a key or takes it away.
+enum PermissionEffect {
+  GRANT
+  DENY
+}
+
+/// ADR-02 (P1-7): a per-user exception to the roles. A user's effective
+/// permissions are (union of the primary and extra roles' keys ∪ GRANT) − DENY,
+/// computed by `effectivePermissions` in @npi/shared and nowhere else. One row
+/// per (user, key): a key is either granted or denied, never both. The set is
+/// replaced as a whole by PUT /admin/users/:id/permissions, audited in the same
+/// transaction.
+model UserPermissionOverride {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission     String
+  effect         PermissionEffect
+  reason         String?
+  // The administrator who saved it. No relation, like AuditLog.actorId: the
+  // row keeps saying who even after that account is gone.
+  createdById    String?
+  createdAt      DateTime         @default(now())
+
+  @@unique([userId, permission])
+  @@index([organizationId, permission, effect])
 }
 
 model NumberingSequence {

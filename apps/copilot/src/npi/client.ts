@@ -7,7 +7,11 @@
 // FORBIDDEN BY DESIGN — this file must never grow a call that decides an
 // approval request, or approves, rejects, or returns a workflow document, or
 // issues any DELETE request, or creates/updates/deactivates a user or resets
-// a password. Approving and rejecting happen only in NPI's own inbox UI; the
+// a password. The one user-level write is the permission-override set
+// (`PUT` on a user's permissions, D-26 2026-10-13): it replaces the user's
+// per-user exceptions as a whole, only after the administrator's own «اعتمد»
+// on the preview card; it never touches the user record, the role or the
+// password. Approving and rejecting happen only in NPI's own inbox UI; the
 // copilot has no delete tools. `submitRequisition` below hard-codes its
 // action code and does not accept an arbitrary action string, on purpose.
 // Likewise no call to NPI's approve, decide, match or send endpoints: those are
@@ -157,6 +161,31 @@ export function createNpiClient(options: CreateNpiClientOptions) {
       return request(ctx, 'GET', '/procurement/vendors');
     },
 
+    // Pick lists (ADR-02 §3-3): names only, for matching the names a document
+    // gives. Each is open to a holder of ANY key in its row of NPI's
+    // `LOOKUP_ACCESS` (packages/shared/src/lookups.ts) — the owning screen's
+    // read key, or the working key of a form that needs the list — so a 403
+    // here means the user may neither open that screen nor fill such a form.
+
+    /**
+     * `GET /reference/lookups/items` — a bare array of `{ id, sku, nameAr,
+     * nameEn, uom, isSerialised, unitCost }`, `unitCost` nulled by NPI for a
+     * caller without `finance.costs.view` (as on `GET /items`). A
+     * requisition writer reads it without `commercial.item.read`.
+     */
+    lookupItems() {
+      return request(ctx, 'GET', '/reference/lookups/items');
+    },
+
+    /**
+     * `GET /reference/lookups/projects` — a bare array of `{ id, code, nameAr,
+     * nameEn }`, for `projects.project.read` or `scm.procurement.write`. No
+     * WBS elements: those stay on `getProject`, behind the projects screen.
+     */
+    lookupProjects() {
+      return request(ctx, 'GET', '/reference/lookups/projects');
+    },
+
     listContracts() {
       return request(ctx, 'GET', '/contracts');
     },
@@ -216,6 +245,34 @@ export function createNpiClient(options: CreateNpiClientOptions) {
 
     listApprovalRules() {
       return request(ctx, 'GET', '/approvals/rules');
+    },
+
+    // D-26 (T-48a): reads behind the get_contract, finance_summary and
+    // get_user_permissions chat tools. `listContracts` (above) is the sixth.
+
+    /** `GET /contracts/:id` — a contract with its milestones; needs `commercial.contract.read`. */
+    getContract(id: string) {
+      return request(ctx, 'GET', `/contracts/${encodeURIComponent(id)}`);
+    },
+
+    /** `GET /finance/summary` — issued invoices, receivables, output VAT, retention; needs `finance.invoice.read`. */
+    financeSummary() {
+      return request(ctx, 'GET', '/finance/summary');
+    },
+
+    /** `GET /reference/dashboard` — CRM counters and pipeline value; needs `crm.lead.read`. */
+    crmDashboard() {
+      return request(ctx, 'GET', '/reference/dashboard');
+    },
+
+    /** `GET /admin/permissions` — the permission catalog with Arabic labels; needs `admin.user.manage`. */
+    permissionCatalog() {
+      return request(ctx, 'GET', '/admin/permissions');
+    },
+
+    /** One user's roles, overrides and effective permissions; needs `admin.user.manage`. */
+    getUserPermissions(id: string) {
+      return request(ctx, 'GET', `/admin/users/${encodeURIComponent(id)}/permissions`);
     },
 
     // ── writes (creation only — see the file-top note on what is deliberately
@@ -288,6 +345,19 @@ export function createNpiClient(options: CreateNpiClientOptions) {
       return request(ctx, 'POST', `/attachments/${entityType}/${encodeURIComponent(entityId)}`, { form });
     },
 
+    // ── user permissions (D-26, T-48b) ───────────────────────────────────────
+
+    /**
+     * `PUT /admin/users/:id/permissions` — REPLACES the user's whole set of
+     * per-user permission overrides (`[]` clears it); needs `admin.user.manage`
+     * (apps/api/src/modules/admin/admin.controller.ts:72-80). NPI keeps the
+     * "last administrator" rule (400) and writes the audit row. The caller is
+     * the executor, after the preview card was approved.
+     */
+    setUserPermissions(id: string, dto: SetUserPermissionsDto) {
+      return request(ctx, 'PUT', `/admin/users/${encodeURIComponent(id)}/permissions`, { body: dto });
+    },
+
     // ── admin configuration (onboarding apply only — see the file-top note) ──
 
     /** `POST /admin/departments` — needs `admin.department.manage`. */
@@ -334,5 +404,21 @@ export function createNpiClient(options: CreateNpiClientOptions) {
 export type CreateItemDto = Omit<components['schemas']['CreateItemDto'], 'itemCategory'> & {
   itemCategory: 'MODULE' | 'INVERTER' | 'MOUNTING' | 'CABLE' | 'BOS' | 'SPARE' | 'SERVICE';
 };
+
+/**
+ * The permission-override DTOs as NPI validates them
+ * (apps/api/src/modules/admin/dto.ts:82-105). The generated `src/npi/types.ts`
+ * predates the permission model (P1-3) and lacks them.
+ */
+export interface PermissionOverrideDto {
+  permission: string;
+  effect: 'GRANT' | 'DENY';
+  /** Optional, at most 500 characters; blank counts as none. */
+  reason?: string | null;
+}
+
+export interface SetUserPermissionsDto {
+  overrides: PermissionOverrideDto[];
+}
 
 export type NpiClient = ReturnType<typeof createNpiClient>;

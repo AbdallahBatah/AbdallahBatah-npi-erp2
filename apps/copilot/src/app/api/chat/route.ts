@@ -16,7 +16,7 @@ import { loadConversationHistory } from '@/chat/history';
 import { getDb } from '@/db';
 import { t } from '@/i18n/ar';
 import { NpiError } from '@/npi/errors';
-import { FLOW_TYPES } from '@/onboarding/profile.schema';
+import { DOCUMENT_FLOWS } from '@/onboarding/profile.schema';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (documentId !== undefined && (typeof documentId !== 'string' || documentId.length === 0 || documentId.length > 64)) {
     return json({ error: 'bad_request' }, 400);
   }
-  if (forcedFlow !== undefined && (typeof forcedFlow !== 'string' || !(FLOW_TYPES as readonly string[]).includes(forcedFlow))) {
+  if (forcedFlow !== undefined && (typeof forcedFlow !== 'string' || !(DOCUMENT_FLOWS as readonly string[]).includes(forcedFlow))) {
     return json({ error: 'bad_request' }, 400);
   }
   // Text may be left out only when a document is attached.

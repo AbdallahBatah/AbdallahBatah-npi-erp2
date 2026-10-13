@@ -5,7 +5,8 @@
 import { loadPrompt } from '../prompts/load';
 
 /** The five NPI roles this package ships a dedicated persona for. Any other
- *  `roleKey` — including one NPI adds later — falls back to `default.md`.
+ *  `roleKey` — including one NPI adds later — falls back to `default.md`,
+ *  unless `BORROWED_PERSONAS` below lends it one of the five.
  *  Role keys come from NPI data, so they are never used to build a path
  *  beyond this fixed, known set. */
 export const KNOWN_ROLE_KEYS = ['admin', 'sales', 'pm', 'accountant', 'site_engineer'] as const;
@@ -17,13 +18,32 @@ function isKnownRoleKey(roleKey: string): roleKey is KnownRoleKey {
 }
 
 /**
+ * Role keys of NPI's company role presets (ADR-02 §3-4) that have no persona
+ * file of their own and speak with the closest of the five rather than with
+ * `default.md`:
+ *  - `finance_manager` «الإدارة المالية» records vendor bills against their
+ *    purchase order and receipt — the accountant's persona;
+ *  - `warehouse_keeper` «أمين المستودع» receives goods, serial numbers and
+ *    quantity differences included — the site engineer's persona.
+ * `technical_office` «المكتب الفني» (proposals, items, purchase orders, no
+ * requisitions) fits none of the five and stays on `default.md`, as does
+ * `executive`. The borrowed texts name no role title: the position line
+ * above the persona carries NPI's own role name.
+ */
+export const BORROWED_PERSONAS: ReadonlyMap<string, KnownRoleKey> = new Map<string, KnownRoleKey>([
+  ['finance_manager', 'accountant'],
+  ['warehouse_keeper', 'site_engineer'],
+]);
+
+/**
  * The persona file for `roleKey`, relative to the prompts root. Never builds
  * a path out of an unrecognized `roleKey` — an unknown or hostile value
- * (e.g. one that isn't in `KNOWN_ROLE_KEYS`) always resolves to
- * `positions/default.md`.
+ * (one that is neither in `KNOWN_ROLE_KEYS` nor in `BORROWED_PERSONAS`)
+ * always resolves to `positions/default.md`.
  */
 export function personaFileFor(roleKey: string): string {
-  return isKnownRoleKey(roleKey) ? `positions/${roleKey}.md` : 'positions/default.md';
+  const persona = isKnownRoleKey(roleKey) ? roleKey : BORROWED_PERSONAS.get(roleKey);
+  return persona === undefined ? 'positions/default.md' : `positions/${persona}.md`;
 }
 
 /** Loads (and caches, via `loadPrompt`) the persona text for `roleKey`. */

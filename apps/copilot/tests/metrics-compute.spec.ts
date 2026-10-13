@@ -28,7 +28,7 @@ import {
   type IntakeJobLike,
   type MetricsInput,
 } from '../src/metrics/types';
-import type { FlowType } from '../src/agents/router';
+import type { DocumentFlow } from '../src/agents/router';
 
 // 2026-10-08 is a Thursday. Riyadh is UTC+3, so 09:00Z is noon there.
 const NOW = new Date('2026-10-08T09:00:00.000Z');
@@ -65,7 +65,7 @@ function run(kind: string, overrides: Partial<EvalRunLike> = {}): EvalRunLike {
   };
 }
 
-function job(flowType: FlowType, minutes: number, overrides: Partial<IntakeJobLike> = {}): IntakeJobLike {
+function job(flowType: DocumentFlow, minutes: number, overrides: Partial<IntakeJobLike> = {}): IntakeJobLike {
   const createdAt = new Date('2026-10-06T08:00:00.000Z');
   return { flowType, createdAt, approvedAt: new Date(createdAt.getTime() + minutes * MINUTE_MS), ...overrides };
 }

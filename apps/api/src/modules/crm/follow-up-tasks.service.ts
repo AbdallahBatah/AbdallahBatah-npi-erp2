@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@npi/db';
 import {
+  PERMISSIONS,
   defaultRemindAt,
   isBeforeToday,
   normalizeValidUntil,
@@ -16,6 +17,7 @@ import {
   OrgSettingsService,
 } from '../../common/org-settings.service';
 import type { AuthUser } from '../../common/auth-user';
+import { holdsEffectively } from '../../common/permission-predicates';
 import { CreateTaskDto, UpdateTaskDto } from './dto';
 import { resolveScope, type CustomerScope } from './crm-scope';
 import { TASK_INCLUDE, withDueState } from './crm-rows';
@@ -125,15 +127,21 @@ export class FollowUpTasksService {
   }
 
   /**
-   * The people a task may be given to: the ACTIVE users of the caller's organization, by
-   * Arabic name, with nothing but the three fields a picker needs (no e-mail, role or
-   * status). The caller is included — the screen drops "me" itself, because "me" is the
+   * The people a task may be given to: the ACTIVE users of the caller's organization who
+   * may open the tasks screen (`crm.task.read` held effectively — through their primary
+   * role, an extra one or a GRANT, and not DENIED; ADR-02 §5), by Arabic name, with
+   * nothing but the three fields a picker needs (no e-mail, role or status). The caller is
+   * included when they hold the key — the screen drops "me" itself, because "me" is the
    * default when nobody is picked. Read behind the write key: only someone who may create
    * a task has a reason to ask.
    */
   assignees(user: AuthUser) {
     return this.prisma.user.findMany({
-      where: { organizationId: user.organizationId, isActive: true },
+      where: {
+        organizationId: user.organizationId,
+        isActive: true,
+        AND: [holdsEffectively(PERMISSIONS.TASK_READ)],
+      },
       select: { id: true, nameAr: true, nameEn: true },
       orderBy: { nameAr: 'asc' },
     });

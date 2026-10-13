@@ -4,23 +4,34 @@ import type { Prisma } from '@npi/db';
 import bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit.service';
+import {
+  EFFECTIVE_PERMISSIONS_INCLUDE,
+  resolveEffectivePermissions,
+} from '../../common/effective-permissions.service';
 import { ChangePasswordDto, LoginDto } from './dto';
 
-/** The user plus everything needed to describe all of their roles. */
+/**
+ * The user plus everything their effective permissions are made of — the
+ * loader's own include, read here in the same query as the organization and
+ * the password hash rather than in a second one.
+ */
 const USER_INCLUDE = {
-  role: true,
+  ...EFFECTIVE_PERMISSIONS_INCLUDE,
   organization: true,
-  extraRoles: { include: { role: true } },
 } as const;
 
 type UserWithRoles = Prisma.UserGetPayload<{ include: typeof USER_INCLUDE }>;
 
-/** Primary role first, then extras. Permissions are the sorted union. */
+/**
+ * Primary role first, then extras. Permissions are the effective set — the
+ * evaluation JwtStrategy runs on every request, so the web app and Madar read
+ * the same list the guard enforces.
+ */
 function describeRoles(user: UserWithRoles) {
-  const all = [user.role, ...user.extraRoles.map((er) => er.role)];
+  const { roles, permissions } = resolveEffectivePermissions(user);
   return {
-    roles: all.map((r) => ({ id: r.id, key: r.key, nameAr: r.nameAr, nameEn: r.nameEn })),
-    permissions: [...new Set(all.flatMap((r) => r.permissions))].sort((a, b) => a.localeCompare(b, 'en')),
+    roles: roles.map((r) => ({ id: r.id, key: r.key, nameAr: r.nameAr, nameEn: r.nameEn })),
+    permissions,
   };
 }
 

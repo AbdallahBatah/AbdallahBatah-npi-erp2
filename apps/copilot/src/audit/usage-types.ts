@@ -32,6 +32,7 @@ export const USAGE_FLOWS = [
   'po',
   'grn',
   'vendor_bill',
+  'user_permissions',
   'chat',
   'setup',
   'memory',

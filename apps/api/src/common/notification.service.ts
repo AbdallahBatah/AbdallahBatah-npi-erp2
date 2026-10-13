@@ -1,13 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Prisma } from '@npi/db';
+import { holdsEffectively, holdsRole } from './permission-predicates';
 
 interface NotifyInput {
   organizationId: string;
-  /** Recipients = active users whose role holds this permission. */
+  /**
+   * Recipients = active users who hold this permission effectively: through a
+   * role or a GRANT, and not taken away by a DENY (ADR-02).
+   */
   permission: string;
   /**
-   * Narrows the fan-out to a single role. The approval matrix needs it: "the
+   * Narrows the fan-out to the holders of a single role (primary or extra)
+   * who also hold the permission effectively. The approval matrix needs it: "the
    * finance role must sign next" is not the same audience as "everyone who can
    * read invoices", and telling the wrong half of the company to go approve
    * something they cannot approve trains people to ignore the bell.
@@ -115,21 +120,12 @@ export class NotificationService {
         organizationId: input.organizationId,
         isActive: true,
         ...(input.excludeUserId ? { id: { not: input.excludeUserId } } : {}),
-        // Primary role OR an extra role (UserRole) — either may carry the
-        // permission, and either may be the role the notification targets.
-        OR: [
-          {
-            ...(input.roleId ? { roleId: input.roleId } : {}),
-            role: { permissions: { has: input.permission } },
-          },
-          {
-            extraRoles: {
-              some: {
-                ...(input.roleId ? { roleId: input.roleId } : {}),
-                role: { permissions: { has: input.permission } },
-              },
-            },
-          },
+        // Holds the targeted role (primary or extra) when one is named, AND
+        // holds the key effectively — a denied holder hears nothing, a granted
+        // one does.
+        AND: [
+          ...(input.roleId ? [holdsRole(input.roleId)] : []),
+          holdsEffectively(input.permission),
         ],
       },
       select: { id: true },

@@ -27,7 +27,7 @@ export class RequisitionsController {
   constructor(private readonly requisitions: RequisitionsService) {}
 
   @Get()
-  @RequirePermissions(PERMISSIONS.PROCUREMENT_READ)
+  @RequirePermissions(PERMISSIONS.REQUISITION_READ)
   list(
     @CurrentUser() user: AuthUser,
     @Query('status') status?: string,
@@ -42,7 +42,7 @@ export class RequisitionsController {
   }
 
   @Get(':id')
-  @RequirePermissions(PERMISSIONS.PROCUREMENT_READ)
+  @RequirePermissions(PERMISSIONS.REQUISITION_READ)
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.requisitions.get(user, id);
   }

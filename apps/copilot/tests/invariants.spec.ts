@@ -533,7 +533,7 @@ describe('invariant 5: the copilot has no approve, decide or delete call', () =>
     expect(codes).toEqual(['SUBMIT']);
   });
 
-  it('src/execute/run.ts: ExecutionNpi is exactly the eleven creation/submission/read methods', () => {
+  it('src/execute/run.ts: ExecutionNpi is exactly the twelve creation/submission/read methods', () => {
     const text = read(EXECUTE_RUN);
     const m = text.match(/export type ExecutionNpi\s*=\s*Pick<\s*NpiClient,([\s\S]*?)>;/);
     expect(m).not.toBeNull();
@@ -551,6 +551,8 @@ describe('invariant 5: the copilot has no approve, decide or delete call', () =>
         'receiveOnPurchaseOrder',
         'createBill',
         'attachFile',
+        // D-26 (T-48b, 2026-10-13): the permission-override set, the one user-level write.
+        'setUserPermissions',
       ].sort(),
     );
   });

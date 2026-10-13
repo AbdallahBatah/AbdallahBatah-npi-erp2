@@ -9,6 +9,7 @@ import { useValidate } from '@/lib/useValidate';
 import { useDraft } from '@/lib/useDraft';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
+import { useLookup } from '@/lib/lookups';
 import { formatMoney } from '@/lib/format';
 import { PageHeader, StatusBadge, EmptyRow, Modal, Field, LoadError, Can, Btn, TableSkeleton } from '@/components/ui';
 import { Icon } from '@/components/icons';
@@ -53,8 +54,16 @@ export default function ProcurementPage() {
   const enums = useEnums();
   const [vendors, setVendors] = useState<Vendor[] | null>(null);
   const [pos, setPos] = useState<Po[] | null>(null);
-  const [items, setItems] = useState<Item[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  // The dialogs' pick lists, each its own request (ADR-02 §3-3): a buyer's
+  // keys earn them, a reader of this screen (scm.procurement.read alone) gets
+  // the screen without them and without an error card.
+  const itemList = useLookup<Item>('items');
+  const projectList = useLookup<Project>('projects');
+  const locationList = useLookup<Loc>('locations');
+  const items = itemList.rows;
+  const projects = projectList.rows;
+  const locations = locationList.rows;
+  const unavailable = t('lookup.unavailable');
 
   const [vOpen, setVOpen] = useState(false);
   const [vNameAr, setVNameAr] = useState('');
@@ -71,7 +80,6 @@ export default function ProcurementPage() {
   const [pProjectId, setPProjectId] = useState('');
   const [pLines, setPLines] = useState<PoLineDraft[]>([]);
   const [stock, setStock] = useState<StockRow[] | null>(null);
-  const [locations, setLocations] = useState<Loc[]>([]);
   const [tOpen, setTOpen] = useState(false);
   const [tItemId, setTItemId] = useState('');
   const [tFrom, setTFrom] = useState('');
@@ -82,21 +90,16 @@ export default function ProcurementPage() {
 
   const load = useCallback(() => {
     setLoadErr('');
+    // The screen's own data, all under scm.procurement.read.
     Promise.all([
       api.get<Vendor[]>('/procurement/vendors'),
       api.get<Po[]>('/procurement/purchase-orders'),
-      api.get<Item[]>('/items'),
-      api.get<Project[]>('/projects'),
       api.get<StockRow[]>('/procurement/stock'),
-      api.get<Loc[]>('/procurement/locations'),
     ])
-      .then(([v, p, i, pr, st, lo]) => {
+      .then(([v, p, st]) => {
         setVendors(v);
         setPos(p);
-        setItems(i);
-        setProjects(pr);
         setStock(st);
-        setLocations(lo);
       })
       .catch((e) => setLoadErr(translateError(e, locale)));
   }, [locale]);
@@ -365,8 +368,8 @@ export default function ProcurementPage() {
       {/* Transfer modal */}
       <Modal open={tOpen} title={t('stk.transfer')} onClose={() => setTOpen(false)}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label={t('po.item')}>
-            <select className="input" value={tItemId} onChange={(e) => setTItemId(e.target.value)}>
+          <Field label={t('po.item')} hint={itemList.state === 'unavailable' ? unavailable : undefined}>
+            <select className="input" value={tItemId} onChange={(e) => setTItemId(e.target.value)} disabled={itemList.state === 'unavailable'}>
               <option value="">—</option>
               {items.filter((i) => !i.isSerialised).map((i) => (
                 <option key={i.id} value={i.id}>{i.sku} · {pick(i, 'name')}</option>
@@ -376,16 +379,16 @@ export default function ProcurementPage() {
           <Field label={t('stk.qty')}>
             <input type="number" min={0.001} className="input" value={tQty} onChange={(e) => setTQty(Number(e.target.value))} />
           </Field>
-          <Field label={t('stk.from')}>
-            <select className="input" value={tFrom} onChange={(e) => setTFrom(e.target.value)}>
+          <Field label={t('stk.from')} hint={locationList.state === 'unavailable' ? unavailable : undefined}>
+            <select className="input" value={tFrom} onChange={(e) => setTFrom(e.target.value)} disabled={locationList.state === 'unavailable'}>
               <option value="">—</option>
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>{l.code} · {pick(l, 'name')}</option>
               ))}
             </select>
           </Field>
-          <Field label={t('stk.to')}>
-            <select className="input" value={tTo} onChange={(e) => setTTo(e.target.value)}>
+          <Field label={t('stk.to')} hint={locationList.state === 'unavailable' ? unavailable : undefined}>
+            <select className="input" value={tTo} onChange={(e) => setTTo(e.target.value)} disabled={locationList.state === 'unavailable'}>
               <option value="">—</option>
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>{l.code} · {pick(l, 'name')}</option>
@@ -465,8 +468,8 @@ export default function ProcurementPage() {
                 ))}
               </select>
             </Field>
-            <Field label={t('po.project')}>
-              <select className="input" value={pProjectId} onChange={(e) => setPProjectId(e.target.value)}>
+            <Field label={t('po.project')} hint={projectList.state === 'unavailable' ? unavailable : undefined}>
+              <select className="input" value={pProjectId} onChange={(e) => setPProjectId(e.target.value)} disabled={projectList.state === 'unavailable'}>
                 <option value="">—</option>
                 {projects.map((pr) => (
                   <option key={pr.id} value={pr.id}>{pr.code} · {pick(pr, 'name')}</option>
@@ -478,8 +481,11 @@ export default function ProcurementPage() {
           <div>
             <div className="mb-2 flex items-center justify-between">
               <span className="label !mb-0">{t('po.lines')}</span>
-              <Btn sm icon="plus" onClick={addLine}>{t('po.addLine')}</Btn>
+              <Btn sm icon="plus" onClick={addLine} disabled={itemList.state !== 'ready'}>{t('po.addLine')}</Btn>
             </div>
+            {itemList.state === 'unavailable' && (
+              <p className="mb-2 text-xs text-slate-500">{unavailable}</p>
+            )}
             {poValidation.errorOf('pLines') && (
               <p role="alert" className="mb-2 text-xs font-medium text-danger-600">
                 {poValidation.errorOf('pLines')}
@@ -488,7 +494,7 @@ export default function ProcurementPage() {
             <div className="space-y-2">
               {pLines.map((l, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <select className="input flex-1" value={l.itemId} onChange={(e) => setLine(i, { itemId: e.target.value })}>
+                  <select className="input flex-1" value={l.itemId} onChange={(e) => setLine(i, { itemId: e.target.value })} disabled={itemList.state === 'unavailable'}>
                     {items.map((it) => (
                       <option key={it.id} value={it.id}>
                         {it.sku} · {pick(it, 'name')}{it.isSerialised ? ' · S/N' : ''}

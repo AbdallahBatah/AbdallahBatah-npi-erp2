@@ -90,6 +90,14 @@ export default function PoDetailPage() {
     }
   }
 
+  async function send() {
+    if (
+      !(await confirm({ title: t('confirm.sendPoTitle'), message: t('confirm.sendPoMsg') }))
+    )
+      return;
+    if (await act('send', () => api.post(`/procurement/purchase-orders/${id}/send`, {}))) load();
+  }
+
   function openReceive() {
     if (!po) return;
     const d: Record<string, ReceiveDraft> = {};
@@ -143,7 +151,9 @@ export default function PoDetailPage() {
 
   if (loadErr && !po) return <LoadError message={loadErr} onRetry={load} />;
   if (!po) return <PageSkeleton stats={3} />;
-  const receivable = ['APPROVED', 'PARTIALLY_RECEIVED'].includes(po.status);
+  // Same rule as the server's receive(): goods are booked against an order the
+  // vendor was sent, so APPROVED is not receivable until the send step.
+  const receivable = ['SENT', 'PARTIALLY_RECEIVED'].includes(po.status);
 
   return (
     <div>
@@ -158,6 +168,11 @@ export default function PoDetailPage() {
               {po.status === 'DRAFT' && !po.pendingApproval && (
                 <Btn variant="primary" sm icon="check-circle" busy={busy('approve')} disabled={busy()} onClick={approve}>
                   {t('po.approve')}
+                </Btn>
+              )}
+              {po.status === 'APPROVED' && !po.pendingApproval && (
+                <Btn variant="primary" sm icon="upload" busy={busy('send')} disabled={busy()} onClick={send}>
+                  {t('po.send')}
                 </Btn>
               )}
               {receivable && (

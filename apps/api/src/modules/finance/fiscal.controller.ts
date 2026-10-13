@@ -12,7 +12,7 @@ export class FiscalController {
   constructor(private readonly fiscal: FiscalService) {}
 
   @Get('years')
-  @RequirePermissions(PERMISSIONS.LEDGER_READ)
+  @RequirePermissions(PERMISSIONS.STATEMENT_READ)
   years(@CurrentUser() user: AuthUser) {
     return this.fiscal.listYears(user);
   }

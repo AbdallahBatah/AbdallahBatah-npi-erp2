@@ -17,6 +17,7 @@
  * Not part of `npm test` — see jest.integration.config.js.
  */
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { rolePreset } from '@npi/shared';
 import { PrismaService } from '../src/prisma/prisma.service';
 import type { AuthUser } from '../src/common/auth-user';
 import { authUserFor, buildProposalStack } from './support/proposal-stack';
@@ -221,7 +222,8 @@ describe('the full road: cost capture → approval → sent → a new revision �
 
   it('the draft’s page names who will be asked to sign it, offers SUBMIT, and carries the settings the form needs', async () => {
     const got = await proposals.get(SALES, proposalId);
-    expect(got.submitTo).toMatchObject({ nameEn: 'Executive management' });
+    // The seeded executive role carries its preset's name since P1-13 («المدير العام»).
+    expect(got.submitTo).toMatchObject({ nameEn: rolePreset('executive')!.nameEn });
     expect(got.settings).toMatchObject({ validityDays: expect.any(Number), costAgeWarnDays: expect.any(Number) });
     expect(got.actions.map((a: { actionCode: string }) => a.actionCode)).toEqual(['SUBMIT']);
     expect(got.currentRevisionNo).toBe(1);

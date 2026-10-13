@@ -20,7 +20,7 @@ import type {
 } from '@/settings/types';
 import type { FlowType } from '@/agents/router';
 import type { ModuleKey } from '@/onboarding/profile.schema';
-import { FLOW_TYPES } from '@/onboarding/profile.schema';
+import { DOCUMENT_FLOWS } from '@/onboarding/profile.schema';
 import { t } from '@/i18n/ar';
 
 const SETTINGS_API_PATH = '/copilot/api/settings';
@@ -140,7 +140,7 @@ function isSettingsBaseline(value: unknown): value is SettingsBaseline | null {
 
 function isBaselinesRecord(value: unknown): value is Record<FlowType, SettingsBaseline | null> {
   if (!isRecord(value)) return false;
-  return FLOW_TYPES.every((flow) => isSettingsBaseline(value[flow]));
+  return DOCUMENT_FLOWS.every((flow) => isSettingsBaseline(value[flow]));
 }
 
 function isSettingsSync(value: unknown): value is SettingsSync {

@@ -128,9 +128,10 @@ async function rebuild(
   job: IntakeJobRow,
   state: { extraction: StoredExtraction; choices: Record<string, string>; confirmed: string[]; resolution: FlowResolution | null },
   reResolve: boolean,
+  callerNpiUserId: string,
 ): Promise<StoredPreview> {
   const { assessed, values } = assessStored(job, state.extraction);
-  const resolution = reResolve ? (values === null ? null : await resolveFlow(deps.npi, job.flowType, values)) : state.resolution;
+  const resolution = reResolve ? (values === null ? null : await resolveFlow(deps.npi, job.flowType, values, { callerNpiUserId })) : state.resolution;
   const { model, fields } = buildPreview({
     flow: job.flowType,
     assessed,
@@ -169,7 +170,7 @@ export async function applyIntakeAction(deps: EditDeps, caller: IntakeCaller, ac
       const field = findField(stored.model, action.path);
       if (field === undefined || !field.confirmable) throw new IntakeStateError('not_confirmable');
       const confirmed = [...new Set([...stored.confirmed, action.path])];
-      const next = await rebuild(deps, job, { extraction, choices: stored.choices, confirmed, resolution: stored.resolution }, false);
+      const next = await rebuild(deps, job, { extraction, choices: stored.choices, confirmed, resolution: stored.resolution }, false, caller.npiUserId);
       return persist({ previewJson: asJson(next) });
     }
 
@@ -179,7 +180,7 @@ export async function applyIntakeAction(deps: EditDeps, caller: IntakeCaller, ac
       if (output === null) throw new IntakeStateError('bad_path');
       const nextExtraction: StoredExtraction = { ...extraction, output };
       const confirmed = [...new Set([...stored.confirmed, action.path])];
-      const next = await rebuild(deps, job, { extraction: nextExtraction, choices: stored.choices, confirmed, resolution: stored.resolution }, true);
+      const next = await rebuild(deps, job, { extraction: nextExtraction, choices: stored.choices, confirmed, resolution: stored.resolution }, true, caller.npiUserId);
       return persist({ extractedJson: asJson(nextExtraction), previewJson: asJson(next) });
     }
 
@@ -187,7 +188,7 @@ export async function applyIntakeAction(deps: EditDeps, caller: IntakeCaller, ac
       const choice = stored.model.choices.find((c) => c.target === action.target);
       if (choice === undefined || !choice.options.some((o) => o.id === action.choice)) throw new IntakeStateError('bad_choice');
       const choices = { ...stored.choices, [action.target]: action.choice };
-      const next = await rebuild(deps, job, { extraction, choices, confirmed: stored.confirmed, resolution: stored.resolution }, false);
+      const next = await rebuild(deps, job, { extraction, choices, confirmed: stored.confirmed, resolution: stored.resolution }, false, caller.npiUserId);
       return persist({ previewJson: asJson(next) });
     }
 
@@ -217,7 +218,7 @@ export async function applyIntakeAction(deps: EditDeps, caller: IntakeCaller, ac
       const nextExtraction: StoredExtraction = { ...extraction, output: result.wire, usage: [...extraction.usage, result.usage] };
       // A confirmation vouched for the value that was there; a changed value is no longer vouched for.
       const confirmed = stored.confirmed.filter((path) => wireValueAt(extraction.output, path) === wireValueAt(result.wire, path));
-      const next = await rebuild(deps, job, { extraction: nextExtraction, choices: stored.choices, confirmed, resolution: stored.resolution }, true);
+      const next = await rebuild(deps, job, { extraction: nextExtraction, choices: stored.choices, confirmed, resolution: stored.resolution }, true, caller.npiUserId);
       return persist({ extractedJson: asJson(nextExtraction), previewJson: asJson(next) });
     }
 

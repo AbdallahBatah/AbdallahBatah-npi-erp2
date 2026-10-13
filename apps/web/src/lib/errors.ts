@@ -1,4 +1,6 @@
+import { APPROVAL_DOCUMENT_META, type ApprovalDocumentType } from '@npi/shared';
 import { ApiError } from './api';
+import { formatNumber } from './format';
 import type { Locale } from './messages';
 
 /**
@@ -97,6 +99,13 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   { re: /role key already in use/i, ar: 'المعرّف التقني مستخدم مسبقاً — اختر معرّفاً آخر' },
   { re: /key must be a lowercase slug/i, ar: 'المعرّف التقني: حروف إنجليزية صغيرة وأرقام و _ فقط' },
   { re: /unknown permission key/i, ar: 'صلاحية غير معروفة — حدّث الصفحة وحاول مجدداً' },
+  // ADR-02 hard rule 8 (P1-9). Translated from the response body in
+  // translateError (it names the rules); this is only the fallback without one.
+  {
+    re: /role signs in an approval rule/i,
+    ar: 'الدور يوقّع في قاعدة اعتماد أو طلب اعتماد مفتوح — عدّل القاعدة أو أنهِ الطلبات المفتوحة أولاً',
+    en: 'The role signs in an approval rule or an open approval request - change the rule or finish the open requests first',
+  },
   { re: /current password is incorrect/i, ar: 'كلمة المرور الحالية غير صحيحة' },
   { re: /must differ from the current/i, ar: 'كلمة المرور الجديدة مطابقة للحالية — اختر كلمة مختلفة' },
   { re: /newPassword must be longer|password must be longer/i, ar: 'كلمة المرور قصيرة — 8 أحرف على الأقل' },
@@ -261,8 +270,8 @@ const PATTERNS: Array<{ re: RegExp; ar: string; en?: string }> = [
   },
   {
     re: /no other approver is available/i,
-    ar: 'لا يوجد معتمِد آخر غيرك لهذا العرض — لا يعتمد أحد عرضاً رفعه بنفسه. يلزم حامل آخر لدور الإدارة العليا، أو تفويض مؤقت من غيرك',
-    en: 'There is no other approver for this proposal - nobody approves what they raised themselves. Another holder of the executive role, or a temporary delegation from someone else, is needed',
+    ar: 'لا يوجد معتمِد آخر غيرك لهذا العرض — لا يعتمد أحد عرضاً رفعه بنفسه. يلزم حامل آخر لدور المدير العام، أو تفويض مؤقت من غيرك',
+    en: 'There is no other approver for this proposal - nobody approves what they raised themselves. Another holder of the general manager role, or a temporary delegation from someone else, is needed',
   },
   {
     re: /proposal revision has expired/i,
@@ -406,6 +415,57 @@ const FORBIDDEN_PATTERNS: Array<{ re: RegExp; ar: string; en: string }> = [
   },
 ];
 
+/** An approval rule as an APPROVAL_SEAT refusal names it: «أمر شراء من 100,000». */
+interface SeatRule {
+  documentType: string;
+  minAmount: number;
+  maxAmount: number | null;
+}
+
+function ruleLabel(r: SeatRule, locale: Locale): string {
+  const ar = locale === 'ar';
+  const meta = APPROVAL_DOCUMENT_META[r.documentType as ApprovalDocumentType];
+  const doc = meta ? (ar ? meta.labelAr : meta.labelEn) : r.documentType;
+  const min = Number(r.minAmount) || 0;
+  const max = r.maxAmount === null || r.maxAmount === undefined ? null : Number(r.maxAmount);
+  if (min === 0 && max === null) return doc;
+  if (min === 0) return `${doc} ${ar ? 'أقل من' : 'below'} ${formatNumber(max, locale)}`;
+  const from = `${doc} ${ar ? 'من' : 'from'} ${formatNumber(min, locale)}`;
+  return max === null ? from : `${from} ${ar ? 'إلى' : 'to'} ${formatNumber(max, locale)}`;
+}
+
+/**
+ * Hard rule 8 (P1-9): the role signs in an active approval rule or in a
+ * pending step of an open request, so the approve key cannot be taken off it.
+ * Names each rule and counts the open requests.
+ */
+function approvalSeatSentence(body: { rules?: SeatRule[]; openRequests?: number }, locale: Locale): string | null {
+  const ar = locale === 'ar';
+  const rules = Array.isArray(body.rules) ? body.rules : [];
+  const open = Number(body.openRequests) || 0;
+  if (rules.length === 0 && open === 0) return null;
+  const names = rules.map((r) => (ar ? `«${ruleLabel(r, locale)}»` : `“${ruleLabel(r, locale)}”`));
+  const where: string[] = [];
+  if (names.length)
+    where.push(
+      ar
+        ? `${names.length === 1 ? 'قاعدة اعتماد' : 'قواعد الاعتماد'} ${names.join('، ')}`
+        : `the approval ${names.length === 1 ? 'rule' : 'rules'} ${names.join(', ')}`,
+    );
+  if (open)
+    where.push(ar ? `طلبات اعتماد مفتوحة (${open})` : `${open} open approval request${open === 1 ? '' : 's'}`);
+  const fix = names.length
+    ? ar
+      ? 'عدّل القاعدة أو أنهِ الطلبات المفتوحة أولاً'
+      : 'change the rule or finish the open requests first'
+    : ar
+      ? 'أنهِ الطلبات المفتوحة أولاً'
+      : 'finish the open requests first';
+  return ar
+    ? `الدور يوقّع في ${where.join(' وفي ')} — ${fix}`
+    : `The role signs in ${where.join(' and in ')} — ${fix}`;
+}
+
 export function translateError(e: unknown, locale: Locale): string {
   const ar = locale === 'ar';
   if (e instanceof ApiError) {
@@ -441,6 +501,11 @@ export function translateError(e: unknown, locale: Locale): string {
       return ar
         ? `يوجد عميل بنفس ${field}: ${dup[2]} — ${dup[3]}`
         : `A customer with the same ${field} already exists: ${dup[2]} — ${dup[3]}`;
+    }
+    // A role save refused by hard rule 8 (P1-9) names the rules in the body.
+    if (e.status === 400 && e.body?.code === 'APPROVAL_SEAT') {
+      const sentence = approvalSeatSentence(e.body, locale);
+      if (sentence) return sentence;
     }
     // A refused stage move says WHY in the body (TERMINAL / SKIP / CONCURRENT).
     if (e.status === 409 && /^Invalid stage transition/i.test(e.message)) {

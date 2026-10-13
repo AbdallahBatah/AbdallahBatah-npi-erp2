@@ -10,6 +10,7 @@ import type { CustomerContractValues } from '../src/extract/schemas/customer_con
 import type { GrnValues } from '../src/extract/schemas/grn';
 import type { PoValues, VendorValues } from '../src/extract/schemas/po';
 import type { PrValues } from '../src/extract/schemas/pr';
+import type { UserPermissionsValues } from '../src/extract/schemas/user_permissions';
 import type { VendorBillValues } from '../src/extract/schemas/vendor_bill';
 import type { LlmAuditData } from '../src/audit/log';
 import { buildPlan, PlanError, type ExecutionPlan, type PlannedStep } from '../src/execute/plan';
@@ -17,7 +18,7 @@ import { executeJob, ExecutionClaimError, type ExecuteDeps, type ExecutionNpi } 
 import { previewSteps } from '../src/intake/preview';
 import { pickedId } from '../src/intake/resolution';
 import type { IntakeJobRow } from '../src/intake/job';
-import type { CreatedEntity, EntityPick, ExecutionLog, FlowResolution, FlowType } from '../src/intake/types';
+import type { CreatedEntity, EntityPick, ExecutionLog, FlowResolution, FlowType, UserPermissionState } from '../src/intake/types';
 import type { DocumentRow, DocumentStorage } from '../src/intake/upload';
 import { NpiError } from '../src/npi/errors';
 
@@ -634,6 +635,7 @@ function createFakeNpi() {
     receiveOnPurchaseOrder: make('receiveOnPurchaseOrder', () => ({ id: 'grn-5', code: 'GRN-00005' })),
     createBill: make('createBill', () => ({ id: 'bill-4', code: 'VB-00004' })),
     attachFile: make('attachFile', () => ({ id: 'att-1' })),
+    setUserPermissions: make('setUserPermissions', () => ({ roles: [], overrides: [], effective: [] })),
   };
   /** The next call of `name` rejects with `error` (and is still recorded in `order`). */
   const failNext = (name: NpiMethod, error: unknown) =>
@@ -1265,5 +1267,145 @@ describe('executeJob — the audit row never decides the outcome', () => {
     expect(result.status).toBe('failed');
     expect(world.log().failedAt).toBe(2);
     expect(errorSpy).toHaveBeenCalled();
+  });
+});
+
+// ─── user_permissions (D-26, T-48b) ─────────────────────────────────────────
+
+const REPORT_KEY = 'finance.report.read';
+const INVOICE_KEY = 'finance.invoice.read';
+const permissionState: UserPermissionState = {
+  roleAr: 'محاسب',
+  rolePermissions: [REPORT_KEY, INVOICE_KEY],
+  overrides: [{ permission: 'scm.requisition.read', effect: 'GRANT', reason: 'مؤقت' }],
+  effective: [REPORT_KEY, INVOICE_KEY, 'scm.requisition.read'],
+};
+const userMatched: EntityPick = { kind: 'matched', id: 'usr-ahmad', labelAr: 'أحمد الغامدي', by: 'name' };
+const reportMatched: EntityPick = { kind: 'matched', id: REPORT_KEY, labelAr: 'عرض التقارير المالية', by: 'name' };
+
+function permissionValues(overrides: Partial<UserPermissionsValues> = {}): UserPermissionsValues {
+  return { userName: 'أحمد', action: 'revoke', permissions: [{ name: 'التقارير المالية' }], reason: 'انتقل إلى قسم آخر', ...overrides };
+}
+
+function permissionResolution(overrides: Partial<FlowResolution> = {}): FlowResolution {
+  return res('user_permissions', {
+    user: userMatched,
+    current: { 'usr-ahmad': permissionState },
+    permissionLabels: { [REPORT_KEY]: 'عرض التقارير المالية', [INVOICE_KEY]: 'عرض الفواتير' },
+    lines: [{ permission: reportMatched, warnings: [] }],
+    ...overrides,
+  });
+}
+
+function permissionsPlan(): ExecutionPlan {
+  return planOf('user_permissions', { values: permissionValues(), resolution: permissionResolution() });
+}
+
+describe('buildPlan — user_permissions', () => {
+  it('one step: the full new override list, labelled as the card promised', () => {
+    const args: PlanArgs = { values: permissionValues(), resolution: permissionResolution() };
+    const plan = planOf('user_permissions', args);
+
+    expect(kindsOf(plan)).toEqual(['permissions_set']);
+    expect(labelsOf(plan)).toEqual(promised('user_permissions', args));
+    expect(labelsOf(plan)).toEqual([t('preview.step.permissions_set', { name: 'أحمد الغامدي', n: 1 })]);
+    const step = stepAt(plan, 0, 'permissions_set');
+    expect(step.userId).toBe('usr-ahmad');
+    expect(step.userLabelAr).toBe('أحمد الغامدي');
+    // the existing exception is kept, the new DENY (with the reason) is added, sorted by key
+    expect(step.overrides).toEqual([
+      { permission: REPORT_KEY, effect: 'DENY', reason: 'انتقل إلى قسم آخر' },
+      { permission: 'scm.requisition.read', effect: 'GRANT', reason: 'مؤقت' },
+    ]);
+  });
+
+  it('a chosen user and a chosen permission are used', () => {
+    const plan = planOf('user_permissions', {
+      values: permissionValues({ userName: 'أحمد' }),
+      resolution: permissionResolution({
+        user: { kind: 'candidates', candidates: [{ id: 'usr-ahmad', labelAr: 'أحمد الغامدي — محاسب', similarity: 0.5 }, { id: 'usr-x', labelAr: 'أحمد آخر', similarity: 0.4 }] },
+        lines: [{ permission: { kind: 'candidates', candidates: [{ id: REPORT_KEY, labelAr: 'عرض التقارير المالية', similarity: 1 }, { id: INVOICE_KEY, labelAr: 'عرض الفواتير', similarity: 1 }] }, warnings: [] }],
+      }),
+      choices: { user: 'usr-ahmad', 'permissions.0.key': INVOICE_KEY },
+    });
+    const step = stepAt(plan, 0, 'permissions_set');
+    expect(step.userId).toBe('usr-ahmad');
+    expect(step.userLabelAr).toBe('أحمد الغامدي — محاسب');
+    expect(step.overrides.map((o) => `${o.permission}:${o.effect}`)).toEqual([`${INVOICE_KEY}:DENY`, 'scm.requisition.read:GRANT']);
+  });
+
+  it('an undecided user is a plan error naming the user', () => {
+    const error = planError(() =>
+      planOf('user_permissions', {
+        values: permissionValues(),
+        resolution: permissionResolution({ user: { kind: 'candidates', candidates: [{ id: 'usr-ahmad', labelAr: 'أحمد الغامدي', similarity: 0.5 }] } }),
+      }),
+    );
+    expect(error.messageAr).toBe(t('exec.error.plan', { reason: t('exec.reason.entity_undecided', { entity: t('exec.kind.user') }) }));
+  });
+
+  it('an undecided permission is a plan error naming it', () => {
+    const error = planError(() =>
+      planOf('user_permissions', {
+        values: permissionValues({ permissions: [{ name: 'الفواتير' }] }),
+        resolution: permissionResolution({ lines: [{ permission: { kind: 'candidates', candidates: [{ id: INVOICE_KEY, labelAr: 'عرض الفواتير', similarity: 1 }] }, warnings: [] }] }),
+      }),
+    );
+    expect(error.messageAr).toBe(t('exec.error.plan', { reason: t('preview.permission_required', { name: 'الفواتير' }) }));
+  });
+
+  it('no stored state of the user: the card and the plan have drifted apart', () => {
+    const error = planError(() => planOf('user_permissions', { values: permissionValues(), resolution: permissionResolution({ current: {} }) }));
+    expect(error.messageAr).toBe(t('exec.error.plan', { reason: t('exec.reason.steps_drift') }));
+  });
+
+  it('a request that changes nothing is refused with the noop reason, never written', () => {
+    const error = planError(() => planOf('user_permissions', { values: permissionValues({ action: 'grant' }), resolution: permissionResolution() }));
+    expect(error.messageAr).toBe(
+      t('exec.error.plan', { reason: t('preview.permission_noop', { label: 'عرض التقارير المالية', state: t('preview.permission_state.held') }) }),
+    );
+  });
+});
+
+describe('executeJob — user_permissions', () => {
+  it('PUTs the whole list once, for that user, and returns the entity (npiPath /admin)', async () => {
+    const world = createWorld({ job: { flowType: 'user_permissions', documentId: null }, documents: [] });
+    const plan = permissionsPlan();
+
+    const result = await world.run(plan);
+
+    expect(world.npi.order).toEqual(['setUserPermissions']);
+    expect(world.npi.setUserPermissions).toHaveBeenCalledTimes(1);
+    expect(world.npi.setUserPermissions).toHaveBeenCalledWith('usr-ahmad', {
+      overrides: [
+        { permission: REPORT_KEY, effect: 'DENY', reason: 'انتقل إلى قسم آخر' },
+        { permission: 'scm.requisition.read', effect: 'GRANT', reason: 'مؤقت' },
+      ],
+    });
+    expect(result.status).toBe('done');
+    const created = entity('user_permissions', 'usr-ahmad', 'أحمد الغامدي', '/admin');
+    expect(world.log().steps).toEqual([{ n: 1, labelAr: plan.steps[0].labelAr, state: 'done', entity: viewOf(created) }]);
+    expect(world.log().steps[0].entity?.kindAr).toBe(t('exec.kind.user_permissions'));
+    expect(world.row().npiEntityRefs).toEqual([created]);
+    expect(world.audit.map((a) => a.event)).toEqual(['intake_executed']);
+  });
+
+  it('NPI refuses (400, the last administrator): the step fails with its Arabic message, once, nothing else runs', async () => {
+    const world = createWorld({ job: { flowType: 'user_permissions', documentId: null }, documents: [] });
+    const refusal = new NpiError({ status: 400, kind: 'validation', npiMessage: 'Cannot remove the last active administrator' });
+    world.npi.failNext('setUserPermissions', refusal);
+
+    const result = await world.run(permissionsPlan());
+
+    expect(result.status).toBe('failed');
+    expect(world.npi.setUserPermissions).toHaveBeenCalledTimes(1);
+    expect(world.npi.order).toEqual(['setUserPermissions']);
+    for (const write of world.npi.writes) expect(write).not.toHaveBeenCalled();
+    const log = world.log();
+    expect(log.status).toBe('failed');
+    expect(log.failedAt).toBe(1);
+    expect(log.steps[0]).toMatchObject({ state: 'failed', errorAr: refusal.messageAr });
+    expect(world.row().npiEntityRefs).toEqual([]);
+    expect(world.audit[0].event).toBe('intake_execution_failed');
   });
 });

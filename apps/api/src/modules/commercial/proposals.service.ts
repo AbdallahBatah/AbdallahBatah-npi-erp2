@@ -26,6 +26,7 @@ import { ApprovalService, type ApprovalRequestView } from '../../common/approval
 import { OrgSettingsService, ORG_SETTING_DEFAULTS, ORG_SETTING_KEYS } from '../../common/org-settings.service';
 import { WorkflowEngine } from '../../common/workflow/workflow.engine';
 import { priceRevision, sellingPrice } from '../../common/proposal-pricing';
+import { holdsEffectively, holdsRole } from '../../common/permission-predicates';
 import type { AuthUser } from '../../common/auth-user';
 import { BomLineDto, CreateProposalDto, CreateRevisionDto, RejectProposalDto } from './dto';
 import { OpportunitiesService } from '../crm/opportunities.service';
@@ -1017,11 +1018,12 @@ export class ProposalsService implements OnModuleInit {
 
   /**
    * Is there someone other than the raiser who could sign the first step? An active
-   * holder of the step's role (primary or extra) who also holds the approve key, or
-   * an active delegate who is not the raiser and borrows the role from a holder who
-   * is not the raiser either (the matrix refuses the raiser's own delegation).
-   * There is deliberately no standing deputy: absence is covered by the temporary
-   * delegation, nothing else (CRM-S4-a).
+   * holder of the step's role (primary or extra) who also holds the approve key
+   * effectively (through any role or a GRANT, not DENIED — ADR-02), or an active
+   * delegate who is not the raiser, holds the key effectively, and borrows the role
+   * from a holder who is not the raiser either (the matrix refuses the raiser's own
+   * delegation). There is deliberately no standing deputy: absence is covered by the
+   * temporary delegation, nothing else (CRM-S4-a).
    */
   private async hasOtherApprover(user: AuthUser, roleId: string): Promise<boolean> {
     const approve = PERMISSIONS.PROPOSAL_APPROVE;
@@ -1030,10 +1032,7 @@ export class ProposalsService implements OnModuleInit {
         organizationId: user.organizationId,
         isActive: true,
         id: { not: user.userId },
-        OR: [
-          { roleId, role: { permissions: { has: approve } } },
-          { extraRoles: { some: { roleId, role: { permissions: { has: approve } } } } },
-        ],
+        AND: [holdsRole(roleId), holdsEffectively(approve)],
       },
     });
     if (direct > 0) return true;
@@ -1047,8 +1046,10 @@ export class ProposalsService implements OnModuleInit {
         endsAt: { gte: now },
         toUserId: { not: user.userId },
         fromUserId: { not: user.userId },
-        toUser: { isActive: true, role: { permissions: { has: approve } } },
-        fromUser: { isActive: true, roleId },
+        toUser: { isActive: true, AND: [holdsEffectively(approve)] },
+        // The delegator must still hold the key too: decide() refuses a
+        // delegation whose delegator was denied it (ADR-02 §3-1).
+        fromUser: { isActive: true, roleId, AND: [holdsEffectively(approve)] },
       },
     });
     return lent > 0;

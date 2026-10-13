@@ -13,7 +13,7 @@
 // that needs NPI's live `GET /admin/permissions` response, which only exists
 // at request time. See `catalog.ts`'s `permissionGaps` for that half.
 import { z } from 'zod';
-import type { FlowType } from '../agents/router';
+import type { DocumentFlow, FlowType } from '../agents/router';
 
 // ─── Fixed vocabularies ─────────────────────────────────────────────────────
 
@@ -52,9 +52,15 @@ export const MODULE_NAMES_AR: Record<ModuleKey, string> = {
   telemetry: 'المراقبة والقياس',
 };
 
-// Must equal the `FlowType` union in `src/agents/router.ts:23` exactly — the
-// five chat flows the copilot has (08 §E.10: "exactly five flows, no sixth").
-export const FLOW_TYPES = ['customer_contract', 'pr', 'po', 'grn', 'vendor_bill'] as const;
+// The five flows that turn a document (or a sentence about one) into an NPI
+// record. These are the flows of the chip row, the baselines, the metrics and a
+// profile pack's `acceptedDocTypes`.
+export const DOCUMENT_FLOWS = ['customer_contract', 'pr', 'po', 'grn', 'vendor_bill'] as const;
+
+// Must equal the `FlowType` union in `src/agents/router.ts` exactly — the five
+// document flows plus the one administrative flow of D-26 (08 §E.10 said
+// "exactly five flows"; the deviation is recorded in PROGRESS.md).
+export const FLOW_TYPES = [...DOCUMENT_FLOWS, 'user_permissions'] as const;
 type SchemaFlowType = (typeof FLOW_TYPES)[number];
 
 // Compile-time-only assertion that FLOW_TYPES and router.ts's FlowType name
@@ -101,12 +107,15 @@ export const TERM_KEYS = [
 ] as const;
 export type TermKey = (typeof TERM_KEYS)[number];
 
-export const FLOW_REQUIRED_MODULE: Record<FlowType, ModuleKey> = {
+/** `null` = not gated by a module (the administrative flow is always offered
+ *  to a user whose NPI permission allows it). */
+export const FLOW_REQUIRED_MODULE: Record<FlowType, ModuleKey | null> = {
   customer_contract: 'commercial',
   pr: 'procurement',
   po: 'procurement',
   grn: 'procurement',
   vendor_bill: 'procurement',
+  user_permissions: null,
 };
 
 /**
@@ -124,6 +133,8 @@ export const FLOW_REQUIRED_MODULE: Record<FlowType, ModuleKey> = {
  *    (`@Post('purchase-orders/:id/receive')` / `receive()` → `PROCUREMENT_WRITE`)
  *  - vendor_bill       → apps/api/src/modules/procurement/procurement.controller.ts:108
  *    (`@Post('bills')` / `createBill()` → `PROCUREMENT_WRITE`)
+ *  - user_permissions  → apps/api/src/modules/admin/admin.controller.ts:72-73
+ *    (`@Put('users/:id/permissions')` → `USER_MANAGE` = 'admin.user.manage')
  */
 export const FLOW_REQUIRED_PERMISSION: Record<FlowType, string> = {
   customer_contract: 'commercial.contract.write',
@@ -131,6 +142,7 @@ export const FLOW_REQUIRED_PERMISSION: Record<FlowType, string> = {
   po: 'scm.procurement.write',
   grn: 'scm.procurement.write',
   vendor_bill: 'scm.procurement.write',
+  user_permissions: 'admin.user.manage',
 };
 
 /**
@@ -173,9 +185,9 @@ export const AcceptedDocTypeSchema = z.object({
   key: z.string().regex(DOC_TYPE_KEY_RE),
   labelAr: z.string().min(2),
   // null = the firm names this document but it is entered in NPI's own
-  // screens; the copilot has exactly five chat flows (08 §E.10) and never
-  // invents a sixth.
-  flow: z.enum(FLOW_TYPES).nullable(),
+  // screens; the copilot has five document flows plus one administrative flow
+  // (D-26), and a document type maps to one of the five only.
+  flow: z.enum(DOCUMENT_FLOWS).nullable(),
 });
 
 export const DepartmentSchema = z.object({
@@ -421,7 +433,7 @@ export const ProfilePackSchema = z
     for (const [index, docType] of (pack.acceptedDocTypes ?? []).entries()) {
       if (docType.flow === null) continue;
       const requiredModule = FLOW_REQUIRED_MODULE[docType.flow];
-      if (!visibleModuleSet.has(requiredModule)) {
+      if (requiredModule !== null && !visibleModuleSet.has(requiredModule)) {
         ctx.addIssue({
           code: 'custom',
           path: ['acceptedDocTypes', index, 'flow'],
@@ -448,12 +460,13 @@ export const ProfilePackSchema = z
 
 export type ProfilePack = z.infer<typeof ProfilePackSchema>;
 
-/** The flows a pack actually exposes (the ones among its `acceptedDocTypes`
- *  that have a non-null `flow`), deduplicated, in `FLOW_TYPES` order. */
-export function visibleFlowsOf(pack: ProfilePack): FlowType[] {
-  const present = new Set<FlowType>();
+/** The document flows a pack actually exposes (the ones among its
+ *  `acceptedDocTypes` that have a non-null `flow`), deduplicated, in
+ *  `DOCUMENT_FLOWS` order. The administrative flow is never part of a pack. */
+export function visibleFlowsOf(pack: ProfilePack): DocumentFlow[] {
+  const present = new Set<DocumentFlow>();
   for (const docType of pack.acceptedDocTypes) {
     if (docType.flow !== null) present.add(docType.flow);
   }
-  return FLOW_TYPES.filter((flow): flow is FlowType => present.has(flow as FlowType));
+  return DOCUMENT_FLOWS.filter((flow) => present.has(flow));
 }

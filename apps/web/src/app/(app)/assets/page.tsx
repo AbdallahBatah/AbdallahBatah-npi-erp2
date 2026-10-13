@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
+import { useLookup } from '@/lib/lookups';
 import { formatDate } from '@/lib/format';
 import { PageHeader, StatusBadge, statusLabel, EmptyRow, Modal, Field, LoadError, useConfirm, Can, Btn, TableSkeleton } from '@/components/ui';
 
@@ -38,7 +39,10 @@ export default function AssetsPage() {
   const { t, locale, pick } = useI18n();
   const [rows, setRows] = useState<Serial[] | null>(null);
   const [claims, setClaims] = useState<Claim[] | null>(null);
-  const [locations, setLocations] = useState<Loc[]>([]);
+  // The move-to list, its own request (ADR-02 §3-3; this screen's key,
+  // assets.serialunit.read, earns it).
+  const locationList = useLookup<Loc>('locations');
+  const locations = locationList.rows;
   const [moveId, setMoveId] = useState<string | null>(null);
   const [moveTo, setMoveTo] = useState('');
   const [loadErr, setLoadErr] = useState('');
@@ -74,7 +78,6 @@ export default function AssetsPage() {
       .catch(fail);
     // Replacement pickers need ALL in-stock units regardless of the table page.
     api.get<Serial[]>('/procurement/serial-units?state=IN_STOCK').then(setStockUnits).catch(() => {});
-    api.get<Loc[]>('/procurement/locations').then(setLocations).catch(fail);
     api.get<Claim[]>('/fsm/warranty-claims').then(setClaims).catch(fail);
   }, [locale, page, search, stateFilter]);
   useEffect(() => {
@@ -217,8 +220,15 @@ export default function AssetsPage() {
                       <Can perm="scm.procurement.write">
                       {moveId === s.id ? (
                         <span className="flex items-center gap-1">
-                          <select className="input !w-36 !py-1 text-xs" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
-                            <option value="">{t('ast.transferTo')}…</option>
+                          <select
+                            className="input !w-36 !py-1 text-xs"
+                            value={moveTo}
+                            onChange={(e) => setMoveTo(e.target.value)}
+                            disabled={locationList.state === 'unavailable'}
+                          >
+                            <option value="">
+                              {locationList.state === 'unavailable' ? t('lookup.unavailable') : `${t('ast.transferTo')}…`}
+                            </option>
                             {locations.filter((l) => l.id !== s.location?.id).map((l) => (
                               <option key={l.id} value={l.id}>{l.code}</option>
                             ))}

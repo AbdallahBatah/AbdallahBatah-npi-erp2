@@ -79,7 +79,7 @@ export function riyadhDayCount(period: UsagePeriod): number {
 
 // ─── the flow ───────────────────────────────────────────────────────────────
 
-const EXTRACT_EVENT = /^extract_(customer_contract|pr|po|grn|vendor_bill)(?:_edit)?$/;
+const EXTRACT_EVENT = /^extract_(customer_contract|pr|po|grn|vendor_bill|user_permissions)(?:_edit)?$/;
 
 /** Maps `llm_audit.event` to a `UsageFlow`; an event the mapping does not
  *  know lands in `other`, never dropped. */
@@ -114,6 +114,8 @@ export function usageFlowLabelAr(flow: UsageFlow): string {
       return t('flow.grn');
     case 'vendor_bill':
       return t('flow.vendor_bill');
+    case 'user_permissions':
+      return t('flow.user_permissions');
     case 'chat':
       return t('usage.flow.chat');
     case 'setup':

@@ -615,6 +615,17 @@ describe('handleSettingsAction — baseline', () => {
       handleSettingsAction(deps, adminCaller, { action: 'baseline', flow: 'not_a_flow' as never, minutes: 5 }),
     ).rejects.toBeInstanceOf(ZodError);
   });
+
+  it('the administrative flow has no manual reference time (D-26): it is not a baseline flow and the view stays at five', async () => {
+    const { deps, fake } = buildDeps();
+    await expect(
+      handleSettingsAction(deps, adminCaller, { action: 'baseline', flow: 'user_permissions' as never, minutes: 5 }),
+    ).rejects.toBeInstanceOf(ZodError);
+
+    fake.baselines.set('org1\u0000user_permissions', { npiOrgId: 'org1', flowType: 'user_permissions', minutes: 9, measuredAt: new Date(), npiUserId: 'u1' });
+    const view = await getSettingsView(deps, adminCaller);
+    expect(Object.keys(view.baselines).sort()).toEqual(['customer_contract', 'grn', 'po', 'pr', 'vendor_bill']);
+  });
 });
 
 // ─── rerun action ────────────────────────────────────────────────────────────

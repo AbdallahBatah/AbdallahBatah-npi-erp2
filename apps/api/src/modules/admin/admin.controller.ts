@@ -1,7 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { OrgSettingsService } from '../../common/org-settings.service';
-import { CreateRoleDto, CreateUserDto, ResetPasswordDto, UpdateOrgDto, UpdateRoleDto, UpdateUserDto } from './dto';
+import {
+  CreateRoleDto,
+  CreateUserDto,
+  ResetPasswordDto,
+  SetUserPermissionsDto,
+  UpdateOrgDto,
+  UpdateRoleDto,
+  UpdateUserDto,
+} from './dto';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
 import { PERMISSIONS, PERMISSION_CATALOG } from '@npi/shared';
@@ -48,6 +56,27 @@ export class AdminController {
     @Body() dto: ResetPasswordDto,
   ) {
     return this.admin.resetPassword(user, id, dto);
+  }
+
+  /**
+   * ADR-02 §3-1: a user's roles, their GRANT / DENY overrides and the
+   * effective set the server enforces — the user permission editor's data.
+   */
+  @Get('users/:id/permissions')
+  @RequirePermissions(PERMISSIONS.USER_MANAGE)
+  getUserPermissions(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.admin.getUserPermissions(user, id);
+  }
+
+  /** Replaces the user's whole set of overrides; answers what the GET answers. */
+  @Put('users/:id/permissions')
+  @RequirePermissions(PERMISSIONS.USER_MANAGE)
+  setUserPermissions(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SetUserPermissionsDto,
+  ) {
+    return this.admin.setUserPermissions(user, id, dto);
   }
 
   @Get('roles')

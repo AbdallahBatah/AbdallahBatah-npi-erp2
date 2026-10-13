@@ -1,8 +1,8 @@
 // Generic extraction runner (T-23, spec 02 §5.5, ADR-28): prompt → model →
 // strict JSON → zod → server-side validation → per-field confidence.
 //
-// Five flows are registered here (customer_contract, pr, po, grn,
-// vendor_bill), each a `FlowSpec` in `FLOWS` — nothing else in this file is
+// Six flows are registered here (customer_contract, pr, po, grn,
+// vendor_bill and the administrative user_permissions), each a `FlowSpec` in `FLOWS` — nothing else in this file is
 // flow-specific. The runner never talks to NPI and never writes anything:
 // it turns a document into an `ExtractionResult` that the preview card
 // (T-26) shows and the execution plan (T-27) consumes.
@@ -37,6 +37,13 @@ import {
   type VendorBillOutput,
   type VendorBillValues,
 } from './schemas/vendor_bill';
+import {
+  assessUserPermissions,
+  UserPermissionsOutputSchema,
+  type AssessedUserPermissions,
+  type UserPermissionsOutput,
+  type UserPermissionsValues,
+} from './schemas/user_permissions';
 
 // ─── Model-facing JSON schema ───────────────────────────────────────────────
 
@@ -217,6 +224,20 @@ export const FLOWS = {
     },
     jsonSchema: modelJsonSchema(VendorBillOutputSchema),
     assess: assessVendorBill,
+  }),
+  // D-26 (T-48b): the administrative flow — a sentence, no document.
+  user_permissions: specOf<UserPermissionsOutput, AssessedUserPermissions, UserPermissionsValues>({
+    flow: 'user_permissions',
+    promptFile: 'extract/user_permissions.md',
+    purpose: 'extract_user_permissions',
+    parse(raw) {
+      const parsed = UserPermissionsOutputSchema.safeParse(raw);
+      return parsed.success
+        ? { success: true, data: parsed.data }
+        : { success: false, detail: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+    },
+    jsonSchema: modelJsonSchema(UserPermissionsOutputSchema),
+    assess: assessUserPermissions,
   }),
 } as const;
 

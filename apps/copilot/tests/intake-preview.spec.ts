@@ -11,6 +11,7 @@ import { assessGrn, type GrnLineOutput, type GrnOutput } from '../src/extract/sc
 import { assessPo, type PoLineOutput, type PoOutput, type VendorOutput } from '../src/extract/schemas/po';
 import { assessPr, type PrLineOutput, type PrOutput } from '../src/extract/schemas/pr';
 import { assessVendorBill, type BillLineOutput, type VendorBillOutput } from '../src/extract/schemas/vendor_bill';
+import { assessUserPermissions, type UserPermissionsOutput } from '../src/extract/schemas/user_permissions';
 import type { FlowType } from '../src/agents/router';
 import {
   fieldKind,
@@ -218,6 +219,10 @@ function billOutput(overrides: Partial<VendorBillOutput> = {}): VendorBillOutput
 }
 
 /** Every member «not stated»: the tree has all its leaves, none with a value. */
+function permissionsOutput(overrides: Partial<UserPermissionsOutput> = {}): UserPermissionsOutput {
+  return { userName: f('أحمد'), action: f('revoke'), permissions: [{ name: f('التقارير المالية') }], reason: f('انتقل إلى قسم آخر'), ...overrides };
+}
+
 function emptyOf<T>(full: T): T {
   const blank = (node: unknown): unknown => {
     if (Array.isArray(node)) return node.slice(0, 1).map(blank);
@@ -278,12 +283,13 @@ describe('labels: every assessed path has an Arabic label', () => {
     ['po', () => assessPo(poOutput(), FLAGS), () => assessPo(emptyOf(poOutput()), FLAGS)],
     ['grn', () => assessGrn(grnOutput(), FLAGS), () => assessGrn(emptyOf(grnOutput()), FLAGS)],
     ['vendor_bill', () => assessVendorBill(billOutput(), FLAGS), () => assessVendorBill(emptyOf(billOutput()), FLAGS)],
+    ['user_permissions', () => assessUserPermissions(permissionsOutput(), FLAGS), () => assessUserPermissions(emptyOf(permissionsOutput()), FLAGS)],
   ];
 
   it.each(flows)('%s: a full and an empty output expose only labelled paths', (_flow, full, empty) => {
     for (const build of [full, empty]) {
       const paths = Object.keys(flattenFields(build().assessed));
-      expect(paths.length).toBeGreaterThan(5);
+      expect(paths.length).toBeGreaterThan(3);
       for (const path of paths) {
         const key = fieldLabelKey(path);
         expect(Object.prototype.hasOwnProperty.call(ar, key)).toBe(true);
@@ -308,7 +314,7 @@ describe('labels: every assessed path has an Arabic label', () => {
   });
 
   it('every flow names its line array', () => {
-    expect(LINE_ARRAY).toEqual({ customer_contract: 'milestones', pr: 'lines', po: 'lines', grn: 'lines', vendor_bill: 'lines' });
+    expect(LINE_ARRAY).toEqual({ customer_contract: 'milestones', pr: 'lines', po: 'lines', grn: 'lines', vendor_bill: 'lines', user_permissions: 'permissions' });
   });
 });
 

@@ -19,21 +19,33 @@ async function call(method, path, body) {
   if (!res.ok) throw new Error(`${method} ${path} → ${res.status}: ${json?.message ?? text}`);
   return json;
 }
+/**
+ * Sign in. The login route allows 5 attempts a minute per address; a run started right
+ * after another one (three logins each) can meet the limiter, so a 429 is waited out once.
+ */
+async function login(email, password) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.status === 429 && attempt === 0) {
+      console.log('… login limiter engaged (5 a minute) — waiting 61 s once');
+      await new Promise((r) => setTimeout(r, 61_000));
+      continue;
+    }
+    if (!res.ok) throw new Error(`login ${email} → ${res.status}: ${json?.message}`);
+    return json.accessToken;
+  }
+}
 /** Run `fn` with another user's token (the executive signs what the salesperson raises), then restore. */
 const tokens = new Map(); // one login per user: the login route is rate-limited
 async function asUser(email, password, fn) {
   const saved = TOKEN;
   try {
-    if (!tokens.has(email)) {
-      const res = await fetch(`${API}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(`login ${email} → ${res.status}: ${json?.message}`);
-      tokens.set(email, json.accessToken);
-    }
+    if (!tokens.has(email)) tokens.set(email, await login(email, password));
     TOKEN = tokens.get(email);
     return await fn();
   } finally {
@@ -51,9 +63,42 @@ const step = async (name, fn) => {
   }
 };
 
+// The seeded signers. P1-13: seed.ts writes the five rules of PROPOSED_APPROVAL_RULES
+// (packages/shared/src/presets.ts), every one from 0 SAR, so every order and claim the demo
+// raises waits in an approvals inbox: order → executive; claim → pm, then executive.
+const CEO = { email: 'ceo@npi.sa', password: 'Ceo@12345', titleAr: 'المدير العام' };
+const PM = { email: 'pm@npi.sa', password: 'Pm@123456', titleAr: 'مدير عام المشاريع' };
+
+/**
+ * Signs the open chain of one document, step by step, each step by the seeded user holding
+ * that step's role (`chain`, in signing order). A signer whose inbox does not hold the
+ * document is passed over without a line: on a rerun the chain may already be past them.
+ * Returns false when a signature was refused (the step() line says why).
+ */
+async function signChain(documentType, documentId, chain, label) {
+  for (const who of chain) {
+    let row;
+    try {
+      row = await asUser(who.email, who.password, async () =>
+        (await call('GET', '/approvals/inbox')).find((r) => r.documentType === documentType && r.documentId === documentId),
+      );
+    } catch (e) {
+      console.log(`~ اعتماد ${who.titleAr}: ${label} — skipped (${String(e.message).slice(0, 90)})`);
+      return false;
+    }
+    if (!row) continue;
+    const signed = await step(`اعتماد ${who.titleAr}: ${label}`, () =>
+      asUser(who.email, who.password, () =>
+        call('POST', `/approvals/${row.id}/decide`, { decision: 'APPROVE', note: `اعتماد ${label}` }),
+      ),
+    );
+    if (!signed) return false;
+  }
+  return true;
+}
+
 (async () => {
-  const login = await call('POST', '/auth/login', { email: 'admin@npi.sa', password: 'Admin@123' });
-  TOKEN = login.accessToken;
+  TOKEN = await login('admin@npi.sa', 'Admin@123');
 
   // ── 1. Customers ────────────────────────────────────────────────────────
   const customerDefs = [
@@ -107,7 +152,7 @@ const step = async (name, fn) => {
     const raised = await step(`رفع العرض للاعتماد: ${name}`, () => call('POST', `/proposals/${p.id}/submit`, {}));
     if (!raised || upTo === 'pending') return;
     const signed = await step(`اعتماد الرئيس التنفيذي: ${name}`, () =>
-      asUser('ceo@npi.sa', 'Ceo@12345', async () => {
+      asUser(CEO.email, CEO.password, async () => {
         const inbox = await call('GET', '/approvals/inbox');
         const row = inbox.find((r) => r.documentType === 'PROPOSAL' && r.documentId === p.id);
         if (!row) throw new Error('not in the executive inbox');
@@ -188,69 +233,137 @@ const step = async (name, fn) => {
       }
     }
 
-    // ── 5. Project #2 → PO → receive w/ serials → bill → install ──────────
+    // ── 5. Project #2 → PO → approve → send → receive → inspect → accept → bill → match
+    //       → approve → schedule → install serials
     let prj2 = (await call('GET', '/projects')).find((p) => p.contractId === contract2.id);
     if (!prj2) prj2 = await step('مشروع المستشفى', () => call('POST', '/projects', { contractId: contract2.id }));
     if (prj2) {
       const vendors = await call('GET', '/procurement/vendors');
-      const po = await step('أمر شراء 60 لوح', () =>
-        call('POST', '/procurement/purchase-orders', {
-          vendorId: vendors[0].id,
-          projectId: prj2.id,
-          lines: [
-            { itemId: mod.id, qty: 60, unitPrice: 780 },
-            { itemId: rail.id, qty: 120, unitPrice: 42 },
-          ],
-        }),
-      );
-      if (po) {
-        await step('اعتماد أمر الشراء', () => call('POST', `/procurement/purchase-orders/${po.id}/approve`, {}));
-        const poFull = await call('GET', `/procurement/purchase-orders/${po.id}`);
-        const modLine = poFull.lines.find((l) => l.item.sku === 'MOD-550');
-        const railLine = poFull.lines.find((l) => l.item.sku === 'MNT-RAIL');
-        const serials = Array.from({ length: 20 }, (_, i) => `DEMO-MOD-${String(i + 1).padStart(3, '0')}`);
-        const grn = await step('استلام جزئي (20 لوح + قضبان)', () =>
-          call('POST', `/procurement/purchase-orders/${po.id}/receive`, {
+      // The M4 workflow engine split what used to be two calls into the real procurement
+      // flow (spec §7). Purchase order: DRAFT → approve → APPROVED → send → SENT; `receive`
+      // refuses anything but SENT / PARTIALLY_RECEIVED. Goods receipt: a delivery note
+      // (DRAFT) → inspect → INSPECTED → accept → ACCEPTED — only acceptance moves stock,
+      // creates the serial units and books the project actuals, and only an ACCEPTED
+      // receipt can be billed. Vendor bill: DRAFT → match → MATCHED → approve → APPROVED
+      // (the journal Dr WIP + Dr VAT input / Cr AP is posted here) → schedule → SCHEDULED.
+      // Signatures (P1-13): the admin's approve raises the order for approval and the seeded
+      // PURCHASE_ORDER rule (from 0 SAR, executive) parks it in PENDING_APPROVAL until
+      // ceo@npi.sa signs it in the approvals inbox; the final signature applies it (APPROVED).
+      // Bill approve and schedule need PAYMENT_WRITE, which admin@npi.sa holds (every key) —
+      // with the company's roles alone the accountant (accountant@npi.sa) does those two.
+      // Rerun-safe the same way the rest of the script is: the hospital's existing order
+      // is picked up wherever an earlier run left it (each stage checks the status first)
+      // instead of raising a second order, so the DEMO-MOD serials are never offered twice.
+      const poList = await call('GET', '/procurement/purchase-orders');
+      let po = poList.find((p) => p.projectId === prj2.id && p.vendorId === vendors[0].id && p.status !== 'CANCELLED');
+      if (!po)
+        po = await step('أمر شراء 60 لوح', () =>
+          call('POST', '/procurement/purchase-orders', {
+            vendorId: vendors[0].id,
+            projectId: prj2.id,
             lines: [
-              { poLineId: modLine.id, qty: 20, serials },
-              { poLineId: railLine.id, qty: 120 },
+              { itemId: mod.id, qty: 60, unitPrice: 780 },
+              { itemId: rail.id, qty: 120, unitPrice: 42 },
             ],
           }),
         );
-        if (grn) await step('ترحيل فاتورة المورد', () => call('POST', '/procurement/bills', { goodsReceiptId: grn.id }));
-        const units = await call('GET', '/procurement/serial-units?state=IN_STOCK');
+      if (po) {
+        const poDetail = () => call('GET', `/procurement/purchase-orders/${po.id}`);
+        let poFull = await poDetail();
+        if (poFull.status === 'DRAFT') {
+          await step('رفع أمر الشراء للاعتماد', () => call('POST', `/procurement/purchase-orders/${po.id}/approve`, {}));
+          poFull = await poDetail();
+        }
+        if (poFull.status === 'PENDING_APPROVAL') {
+          await signChain('PURCHASE_ORDER', po.id, [CEO], 'أمر الشراء');
+          poFull = await poDetail();
+        }
+        if (poFull.status === 'APPROVED') {
+          await step('إرسال أمر الشراء للمورد', () => call('POST', `/procurement/purchase-orders/${po.id}/send`, {}));
+          poFull = await poDetail();
+        }
+
+        // The latest receipt on the order (the detail lists them newest first).
+        let grn = poFull.goodsReceipts?.[0] ?? null;
+        if (!grn && poFull.status === 'SENT') {
+          const modLine = poFull.lines.find((l) => l.item.sku === 'MOD-550');
+          const railLine = poFull.lines.find((l) => l.item.sku === 'MNT-RAIL');
+          const serials = Array.from({ length: 20 }, (_, i) => `DEMO-MOD-${String(i + 1).padStart(3, '0')}`);
+          grn = await step('استلام جزئي (20 لوح + قضبان) — إذن تسليم', () =>
+            call('POST', `/procurement/purchase-orders/${po.id}/receive`, {
+              lines: [
+                { poLineId: modLine.id, qty: 20, serials },
+                { poLineId: railLine.id, qty: 120 },
+              ],
+              notes: 'التسليم الأول: 20 لوحاً وكل قضبان التثبيت',
+            }),
+          );
+        }
+        // inspect / accept / match / approve / schedule take a WorkflowActionDto: `action`
+        // is required by validation (the service reads only `comment`).
+        if (grn?.status === 'DRAFT')
+          grn = (await step('فحص الاستلام', () =>
+            call('POST', `/procurement/receipts/${grn.id}/inspect`, { action: 'INSPECT', comment: 'الكميات والأرقام التسلسلية مطابقة لإذن التسليم' }),
+          )) ?? grn;
+        if (grn?.status === 'INSPECTED')
+          grn = (await step('قبول الاستلام (دخول المخزون وتسجيل الأرقام التسلسلية)', () =>
+            call('POST', `/procurement/receipts/${grn.id}/accept`, { action: 'ACCEPT' }),
+          )) ?? grn;
+
+        if (grn?.status === 'ACCEPTED') {
+          poFull = await poDetail();
+          let bill = poFull.vendorBills?.find((b) => b.goodsReceiptId === grn.id) ?? null;
+          if (!bill)
+            bill = await step('تسجيل فاتورة المورد', () =>
+              call('POST', '/procurement/bills', { goodsReceiptId: grn.id, vendorRef: 'VINV-2026-0458' }),
+            );
+          if (bill?.status === 'DRAFT')
+            bill = (await step('المطابقة الثلاثية للفاتورة', () =>
+              call('POST', `/procurement/bills/${bill.id}/match`, { action: 'MATCH' }),
+            )) ?? bill;
+          if (bill?.status === 'MATCHED')
+            bill = (await step('اعتماد الفاتورة (ترحيل القيد)', () =>
+              call('POST', `/procurement/bills/${bill.id}/approve`, { action: 'APPROVE', comment: 'اعتماد فاتورة التسليم الأول' }),
+            )) ?? bill;
+          if (bill?.status === 'APPROVED')
+            await step('جدولة الفاتورة للدفع', () => call('POST', `/procurement/bills/${bill.id}/schedule`, { action: 'SCHEDULE' }));
+        }
+
+        // Serial units exist only once the receipt is ACCEPTED (see above).
+        const units = await call('GET', '/procurement/serial-units?state=IN_STOCK&search=DEMO-MOD-');
         const demoUnits = units.filter((u) => u.serialNo.startsWith('DEMO-MOD-')).slice(0, 8);
         for (const u of demoUnits) await step(`تركيب ${u.serialNo}`, () => call('POST', `/procurement/serial-units/${u.id}/install`, {}));
       }
 
-      // Subcontract + claim
-      const sub = await step('عقد باطن أعمال مدنية', () =>
-        call('POST', '/procurement/subcontracts', {
-          vendorId: vendors[0].id, projectId: prj2.id,
-          scopeAr: 'الأعمال المدنية وقواعد الهياكل', scopeEn: 'Civil works & foundations',
-          amount: 180000, retentionPct: 10,
-        }),
+      // Subcontract + claim. The admin's approve raises the claim and the seeded
+      // PROGRESS_CLAIM rule (from 0 SAR) has pm@npi.sa sign it, then ceo@npi.sa; the last
+      // signature posts the accounting (APPROVED). Rerun-safe like the order above: the
+      // hospital's subcontract and its first claim are picked up wherever a run left them.
+      const SUB_SCOPE_AR = 'الأعمال المدنية وقواعد الهياكل';
+      let sub = (await call('GET', '/procurement/subcontracts')).find(
+        (a) => a.project?.id === prj2.id && a.scopeAr === SUB_SCOPE_AR,
       );
+      if (!sub)
+        sub = await step('عقد باطن أعمال مدنية', () =>
+          call('POST', '/procurement/subcontracts', {
+            vendorId: vendors[0].id, projectId: prj2.id,
+            scopeAr: SUB_SCOPE_AR, scopeEn: 'Civil works & foundations',
+            amount: 180000, retentionPct: 10,
+          }),
+        );
       if (sub) {
-        const claim = await step('مستخلص أول 60,000', () => call('POST', `/procurement/subcontracts/${sub.id}/claims`, { claimedAmount: 60000 }));
-        if (claim) await step('اعتماد المستخلص', () => call('POST', `/procurement/claims/${claim.id}/approve`, {}));
+        let claim = sub.claims?.find((c) => c.sequence === 1) ?? null;
+        if (!claim) claim = await step('مستخلص أول 60,000', () => call('POST', `/procurement/subcontracts/${sub.id}/claims`, { claimedAmount: 60000 }));
+        if (claim?.status === 'SUBMITTED') {
+          const open = (await call('GET', '/approvals/history?documentType=PROGRESS_CLAIM&status=PENDING')).rows.find(
+            (r) => r.documentId === claim.id,
+          );
+          const raised = open ?? (await step('رفع المستخلص للاعتماد', () => call('POST', `/procurement/claims/${claim.id}/approve`, {})));
+          if (raised) await signChain('PROGRESS_CLAIM', claim.id, [PM, CEO], 'المستخلص الأول');
+        }
       }
 
-      // ── 6. Telemetry on the new plant → alerts + auto WOs ───────────────
-      await step('محاكاة 14 يوم قراءات لمحطة المستشفى', () =>
-        call('POST', '/telemetry/simulate', { projectId: prj2.id, days: 14, badDayOffset: 3 }),
-      );
-
-      // ── 7. PPA on hospital project ──────────────────────────────────────
-      const term = await step('شروط PPA للمستشفى', () =>
-        call('POST', '/ppa/terms', { projectId: prj2.id, ratePerKwh: 0.29, escalationPctPerYear: 2.5, fixedMonthlyFee: 3500 }),
-      );
-      if (term) {
-        const end = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
-        const start = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-        const run = await step('تسوية الفترة → فاتورة', () => call('POST', `/ppa/terms/${term.id}/settle`, { periodStart: start, periodEnd: end }));
-        if (run?.invoiceId) await step('إصدار فاتورة التسوية', () => call('POST', `/finance/invoices/${run.invoiceId}/issue`, {}));
-      }
+      // Steps 6 (telemetry simulation) and 7 (PPA terms and settlement) went with the two hidden sections (owner decision 2026-10-12); their routes are no longer registered.
     }
   }
 

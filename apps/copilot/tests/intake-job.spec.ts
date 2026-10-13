@@ -15,6 +15,9 @@ import { metaSidecarPath, textSidecarPath, type DocumentKind, type DocumentRow, 
 import { getIntakeView, startIntake, type StartIntakeDeps, type StartIntakeInput } from '../src/intake/job';
 import { applyIntakeAction, IntakeEditFailed, IntakePlanFailed, IntakeStateError, type EditDeps } from '../src/intake/edit';
 import type { ResolutionNpi } from '../src/intake/resolution';
+// Relative import straight into the monorepo package, as tests/catalog.spec.ts
+// does for permissions.ts: lookups.ts imports only that import-free file.
+import { LOOKUP_ACCESS } from '../../../packages/shared/src/lookups';
 import type { CreatedEntity, ExecutionLog, IntakeAction, IntakeView, PreviewField, StoredExtraction, StoredPreview } from '../src/intake/types';
 
 process.env.COPILOT_PROMPTS_DIR = path.resolve(__dirname, '../prompts');
@@ -198,8 +201,12 @@ function createFakeNpi() {
   return {
     listCustomers: jest.fn(async () => [{ id: 'cus-1', code: 'CUS-00001', nameAr: CUSTOMER, nameEn: 'Al Nakheel Contracting', vatNumber: '310123456700003' }]),
     listVendors: jest.fn(async () => [{ id: 'ven-1', code: 'VEN-00001', nameAr: VENDOR, vatNumber: '311111111111113' }]),
-    listProjects: jest.fn(async () => [{ id: 'prj-12', code: 'PRJ-00012', nameAr: 'محطة الرياض الشمسية' }]),
-    getProject: jest.fn(async () => ({ id: 'prj-12', code: 'PRJ-00012', wbsElements: [] })),
+    // Projects and items are matched against NPI's pick lists (ADR-02 §3-3);
+    // `listProjects` / `listItems` stand for the full screens, which intake
+    // must not need (`gateByPermissions` below refuses them to an engineer).
+    lookupProjects: jest.fn(async (): Promise<unknown> => [{ id: 'prj-12', code: 'PRJ-00012', nameAr: 'محطة الرياض الشمسية', nameEn: null }]),
+    listProjects: jest.fn(async (): Promise<unknown> => [{ id: 'prj-12', code: 'PRJ-00012', nameAr: 'محطة الرياض الشمسية' }]),
+    getProject: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'prj-12', code: 'PRJ-00012', wbsElements: [] })),
     // An engineer cannot read the department list: the normal "unreadable" case.
     listDepartments: jest.fn(async () => {
       throw forbidden();
@@ -216,7 +223,8 @@ function createFakeNpi() {
       ],
       goodsReceipts: [],
     })),
-    listItems: jest.fn(async () => [{ id: 'itm-550', sku: 'MOD-550', nameAr: 'لوح شمسي 550 واط', unitCost: '320' }]),
+    lookupItems: jest.fn(async (): Promise<unknown> => [{ id: 'itm-550', sku: 'MOD-550', nameAr: 'لوح شمسي 550 واط', unitCost: '320' }]),
+    listItems: jest.fn(async (): Promise<unknown> => [{ id: 'itm-550', sku: 'MOD-550', nameAr: 'لوح شمسي 550 واط', unitCost: '320' }]),
 
     // Writes (T-27): every one a `jest.fn`, so the tests can count them.
     createCustomer: jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ id: 'cus-9', code: 'CUS-00009' })),
@@ -409,9 +417,11 @@ describe('startIntake — a sentence (purchase requisition)', () => {
     expect(extracted.usage).toHaveLength(1);
     expect(extracted.usage[0]).toMatchObject({ tokensIn: 100, tokensOut: 50, modelId: 'claude-sonnet-5' });
 
-    // previewJson: resolution from the NPI lists, nothing decided yet.
-    expect(world.npi.listProjects).toHaveBeenCalled();
-    expect(world.npi.listItems).toHaveBeenCalled();
+    // previewJson: resolution from the NPI pick lists, nothing decided yet.
+    expect(world.npi.lookupProjects).toHaveBeenCalled();
+    expect(world.npi.lookupItems).toHaveBeenCalled();
+    expect(world.npi.listProjects).not.toHaveBeenCalled();
+    expect(world.npi.listItems).not.toHaveBeenCalled();
     expect(preview.resolution?.project).toMatchObject({ kind: 'matched', id: 'prj-12' });
     expect(preview.resolution?.lines[0].item).toMatchObject({ kind: 'matched', id: 'itm-550', by: 'sku' });
     expect(preview.resolution?.lines[0].unitCost).toBe(320);
@@ -473,7 +483,7 @@ describe('startIntake — a sentence (purchase requisition)', () => {
     expect(preview.resolution).toBeNull();
     expect(preview.model.incompleteAr).toBe(t('extract.incomplete.pr'));
     expect(preview.model.canApprove).toBe(false);
-    expect(world.npi.listItems).not.toHaveBeenCalled();
+    expect(world.npi.lookupItems).not.toHaveBeenCalled();
   });
 
   it('tells the model which company is ours', async () => {
@@ -705,7 +715,7 @@ describe('applyIntakeAction — set', () => {
   it('patches the wire JSON at the path, re-assesses, and reads NPI again', async () => {
     const world = createWorld({ extract: () => reply(JSON.stringify(prWire())) });
     const jobId = await start(world);
-    const reads = world.npi.listProjects.mock.calls.length;
+    const reads = world.npi.lookupProjects.mock.calls.length;
 
     const view = await act(world, { id: jobId, action: 'set', path: 'lines.0.qty', value: '45' });
 
@@ -715,7 +725,7 @@ describe('applyIntakeAction — set', () => {
     expect(wire.lines[0].itemName.value).toBe('لوح 550 واط');
     expect(preview.confirmed).toEqual(['lines.0.qty']);
     expect(preview.fields['lines.0.qty'].value).toBe(45);
-    expect(world.npi.listProjects.mock.calls.length).toBeGreaterThan(reads);
+    expect(world.npi.lookupProjects.mock.calls.length).toBeGreaterThan(reads);
     expect(viewField(view, 'lines.0.qty')).toMatchObject({ value: 45, displayAr: '45', status: 'confirmed' });
     expect(view.status).toBe('preview');
     expect(world.llm.requests).toHaveLength(1);
@@ -1085,7 +1095,7 @@ describe('applyIntakeAction — items must already exist in NPI (D-T27-5)', () =
     const world = createWorld({
       extract: () => reply(JSON.stringify(prWire({ lines: [{ ...prWire().lines[0], itemName: f('لوح شمسي 550'), sku: none() }] }))),
     });
-    world.npi.listItems.mockResolvedValue([
+    world.npi.lookupItems.mockResolvedValue([
       { id: 'itm-550', sku: 'MOD-550', nameAr: 'لوح شمسي 550 واط', unitCost: '320' },
       { id: 'itm-545', sku: 'MOD-545', nameAr: 'لوح شمسي 545 واط', unitCost: '310' },
     ]);
@@ -1120,6 +1130,144 @@ describe('applyIntakeAction — items must already exist in NPI (D-T27-5)', () =
     expect(view.preview!.canApprove).toBe(false);
     await expectReason(act(world, { id: jobId, action: 'approve' }), 'state');
     expectNoNpiWrites(world);
+  });
+});
+
+// ─── ADR-02 task 10: names resolve through NPI's pick lists ─────────────────
+
+/**
+ * NPI's guard over the reads intake can make, for a caller holding
+ * `permissions`: a full screen needs its own read key (`@RequirePermissions`),
+ * a pick list any key of its `LOOKUP_ACCESS` row (`@RequireAnyPermission`) —
+ * the real table, so the test follows NPI if the table changes. `unitCost`
+ * comes back null without `finance.costs.view`, as NPI's cost-redaction
+ * interceptor sends it.
+ */
+function gateByPermissions(world: World, permissions: readonly string[]): void {
+  const holds = (keys: readonly string[]) => keys.some((key) => permissions.includes(key));
+  const answer =
+    (allowed: boolean, body: unknown) =>
+    async (): Promise<unknown> => {
+      if (!allowed) throw new NpiError({ status: 403, kind: 'forbidden', npiMessage: 'Forbidden resource' });
+      return body;
+    };
+  const unitCost = (value: string) => (holds(['finance.costs.view']) ? value : null);
+  const items = [
+    { id: 'itm-550', sku: 'MOD-550', nameAr: 'لوح شمسي 550 واط', nameEn: 'Solar module 550 W', uom: 'unit', isSerialised: true, unitCost: unitCost('320') },
+    { id: 'itm-inv', sku: 'INV-50K', nameAr: 'عاكس 50 كيلوواط', nameEn: null, uom: 'unit', isSerialised: true, unitCost: unitCost('6500') },
+  ];
+  const projects = [{ id: 'prj-12', code: 'PRJ-00012', nameAr: 'محطة الرياض الشمسية', nameEn: null }];
+  const project = { ...projects[0], wbsElements: [{ id: 'wbs-1', code: 'WBS-01', nameAr: 'أعمال التركيب', nameEn: null }] };
+
+  world.npi.listItems.mockImplementation(answer(holds(['commercial.item.read']), items));
+  world.npi.lookupItems.mockImplementation(answer(holds(LOOKUP_ACCESS.items), items));
+  world.npi.listProjects.mockImplementation(answer(holds(['projects.project.read']), projects));
+  world.npi.lookupProjects.mockImplementation(answer(holds(LOOKUP_ACCESS.projects), projects));
+  world.npi.getProject.mockImplementation(answer(holds(['projects.project.read']), project));
+}
+
+/** The site engineer once the owner applies ADR-02's presets (§3-4): the
+ *  projects and requisitions screens, and not the item catalogue. */
+const ENGINEER: readonly string[] = ['projects.project.read', 'projects.project.write', 'scm.requisition.read', 'scm.requisition.write'];
+
+const itemsUnreadable = () => t('preview.list_unreadable', { list: t('preview.list.items') });
+
+describe('ADR-02 task 10 — intake matches names through NPI’s pick lists', () => {
+  /** A requisition naming one panel by its name only and one inverter by its SKU. */
+  function engineerPr() {
+    return prWire({
+      lines: [
+        { ...prWire().lines[0], itemName: f('لوح شمسي 550 واط'), sku: none() },
+        { ...prWire().lines[0], itemName: f('عاكس شبكي 50 ك.و'), sku: f('INV-50K'), qty: f(2) },
+      ],
+    });
+  }
+
+  it('the engineer lacks the item catalogue key, and holds a key of the item pick list', () => {
+    expect(ENGINEER).not.toContain('commercial.item.read');
+    expect(LOOKUP_ACCESS.items).toContain('scm.requisition.write');
+  });
+
+  it('an engineer without commercial.item.read matches the items by name and SKU and raises the requisition with them', async () => {
+    const world = createWorld({ extract: () => reply(JSON.stringify(engineerPr())) });
+    gateByPermissions(world, ENGINEER);
+
+    const jobId = await start(world, { text: 'أبي 40 لوح شمسي 550 واط وعاكسين 50 كيلوواط للمشروع PRJ-00012' });
+
+    const { preview } = stored(world, jobId);
+    expect(world.npi.lookupItems).toHaveBeenCalledTimes(1);
+    expect(world.npi.lookupProjects).toHaveBeenCalledTimes(1);
+    expect(world.npi.listItems).not.toHaveBeenCalled();
+    expect(world.npi.listProjects).not.toHaveBeenCalled();
+    expect(preview.resolution?.project).toMatchObject({ kind: 'matched', id: 'prj-12', by: 'code' });
+    expect(preview.resolution?.lines[0].item).toMatchObject({ kind: 'matched', id: 'itm-550', by: 'name', labelAr: 'لوح شمسي 550 واط (MOD-550)' });
+    expect(preview.resolution?.lines[1].item).toMatchObject({ kind: 'matched', id: 'itm-inv', by: 'sku' });
+    // No finance.costs.view: NPI sends no cost, and none is invented.
+    expect(preview.resolution?.lines.map((line) => line.unitCost)).toEqual([null, null]);
+    expect(preview.resolution?.notesAr).not.toContain(itemsUnreadable());
+
+    const ready = await getIntakeView(world.deps, CALLER, jobId);
+    expect(ready!.preview!.blockersAr).toEqual([]);
+    expect(ready!.preview!.canApprove).toBe(true);
+
+    const view = await act(world, { id: jobId, action: 'approve' });
+
+    expect(view.status).toBe('done');
+    expect(world.npi.createRequisition).toHaveBeenCalledTimes(1);
+    const dto = world.npi.createRequisition.mock.calls[0][0] as { projectId?: string; lines: Record<string, unknown>[] };
+    expect(dto.projectId).toBe('prj-12');
+    expect(dto.lines).toEqual([expect.objectContaining({ itemId: 'itm-550', qty: 40 }), expect.objectContaining({ itemId: 'itm-inv', qty: 2 })]);
+    expect(dto.lines.every((line) => line.estimatedUnitPrice === undefined)).toBe(true);
+    expect(world.npi.submitRequisition).toHaveBeenCalledWith('req-1');
+  });
+
+  it('a caller who holds no key of the item pick list: the items are unreadable, said once, and the job still previews', async () => {
+    const world = createWorld({ extract: () => reply(JSON.stringify(engineerPr())) });
+    gateByPermissions(world, ['projects.project.read']);
+
+    const jobId = await start(world);
+
+    const { row, preview } = stored(world, jobId);
+    expect(row.status).toBe('preview');
+    expect(world.npi.lookupItems).toHaveBeenCalledTimes(1);
+    expect(world.npi.listItems).not.toHaveBeenCalled();
+    expect(preview.resolution?.project).toMatchObject({ kind: 'matched', id: 'prj-12' });
+    expect(preview.resolution?.lines.map((line) => line.item)).toEqual([
+      { kind: 'unreadable', messageAr: itemsUnreadable() },
+      { kind: 'unreadable', messageAr: itemsUnreadable() },
+    ]);
+    expect(preview.resolution?.notesAr.filter((note) => note === itemsUnreadable())).toHaveLength(1);
+    expect(preview.model.canApprove).toBe(false);
+    expectNoNpiWrites(world);
+  });
+
+  it('a project picked from the list whose record the caller may not open: matched, and only its work breakdown is said to be unreadable', async () => {
+    const wire = prWire({ lines: [{ ...prWire().lines[0], wbsCode: f('WBS-01') }] });
+    const world = createWorld({ extract: () => reply(JSON.stringify(wire)) });
+    // A buyer: raises requisitions and orders, has no projects screen.
+    gateByPermissions(world, ['scm.requisition.read', 'scm.requisition.write', 'scm.procurement.read', 'scm.procurement.write']);
+
+    const jobId = await start(world);
+
+    const { preview } = stored(world, jobId);
+    expect(preview.resolution?.project).toMatchObject({ kind: 'matched', id: 'prj-12' });
+    expect(world.npi.getProject).toHaveBeenCalledWith('prj-12');
+    expect(preview.resolution?.lines[0].wbs).toBeUndefined();
+    expect(preview.resolution?.lines[0].item).toMatchObject({ kind: 'matched', id: 'itm-550' });
+    expect(preview.resolution?.notesAr).toContain(t('preview.list_unreadable', { list: t('preview.list.project_wbs') }));
+    expect(preview.resolution?.notesAr).not.toContain(t('preview.list_unreadable', { list: t('preview.list.projects') }));
+  });
+
+  it('the same project with a caller who may open it: the work breakdown element is matched', async () => {
+    const wire = prWire({ lines: [{ ...prWire().lines[0], wbsCode: f('WBS-01') }] });
+    const world = createWorld({ extract: () => reply(JSON.stringify(wire)) });
+    gateByPermissions(world, ENGINEER);
+
+    const jobId = await start(world);
+
+    const { preview } = stored(world, jobId);
+    expect(preview.resolution?.lines[0].wbs).toMatchObject({ kind: 'matched', id: 'wbs-1', by: 'code' });
+    expect(preview.resolution?.notesAr).not.toContain(t('preview.list_unreadable', { list: t('preview.list.project_wbs') }));
   });
 });
 

@@ -23,6 +23,7 @@ import { performCustomerContract } from './flows/customer_contract';
 import { performGrn } from './flows/grn';
 import { performPo } from './flows/po';
 import { performPr } from './flows/pr';
+import { performUserPermissions } from './flows/user_permissions';
 import { performVendorBill } from './flows/vendor_bill';
 import { StepFailure, type ExecutionPlan, type PlannedStep, type Ref } from './plan';
 
@@ -39,6 +40,7 @@ export type ExecutionNpi = Pick<
   | 'receiveOnPurchaseOrder'
   | 'createBill'
   | 'attachFile'
+  | 'setUserPermissions'
 >;
 
 export interface ExecuteDeps {
@@ -73,6 +75,7 @@ const PERFORM: Record<ExecutionPlan['flow'], Perform> = {
   po: performPo,
   grn: performGrn,
   vendor_bill: performVendorBill,
+  user_permissions: performUserPermissions,
 };
 
 // ─── The attachment (shared by every flow that has one) ─────────────────────

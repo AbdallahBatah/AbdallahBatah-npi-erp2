@@ -209,13 +209,11 @@ export default function OpportunityPage() {
   const tabs = [
     { key: 'proposals', label: t('opps.tab.proposals'), count: o.proposals.length },
     { key: 'contracts', label: t('opps.tab.contracts'), count: o.contracts.length },
-    // CRM Step 5: the log and the tasks of this opportunity (the customer's own keys guard them).
-    ...(can('crm.customer.read')
-      ? [
-          { key: 'activities', label: t('opps.tab.activities') },
-          { key: 'tasks', label: t('opps.tab.tasks') },
-        ]
-      : []),
+    // CRM Step 5: the log and the tasks of this opportunity — the log behind the customers'
+    // read key, the tasks behind the key of the /tasks screen (P1-6), as GET /activities
+    // and GET /tasks are.
+    ...(can('crm.customer.read') ? [{ key: 'activities', label: t('opps.tab.activities') }] : []),
+    ...(can('crm.task.read') ? [{ key: 'tasks', label: t('opps.tab.tasks') }] : []),
     ...(can('platform.attachment.read') ? [{ key: 'files', label: t('opps.tab.files') }] : []),
   ];
   const activeTab = tabs.some((x) => x.key === tab) ? tab : 'proposals';

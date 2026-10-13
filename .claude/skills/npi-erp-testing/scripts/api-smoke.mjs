@@ -23,12 +23,19 @@ function valueOf(flag) {
 }
 
 // ── seeded accounts ────────────────────────────────────────────────────────
+// One login per seeded role (packages/db/prisma/seed.ts): admin, sales, and the
+// company's seven roles, which are ROLE_PRESETS since P1-13 (the executive,
+// the three below it, and finance management, technical office and warehouse).
 const ACCOUNTS = [
   { key: 'admin', email: 'admin@npi.sa', password: 'Admin@123' },
   { key: 'sales', email: 'sales@npi.sa', password: 'Sales@123' },
   { key: 'accountant', email: 'accountant@npi.sa', password: 'Acc@12345' },
   { key: 'pm', email: 'pm@npi.sa', password: 'Pm@123456' },
   { key: 'engineer', email: 'engineer@npi.sa', password: 'Eng@12345' },
+  { key: 'executive', email: 'ceo@npi.sa', password: 'Ceo@12345' },
+  { key: 'finance', email: 'finance@npi.sa', password: 'Fin@12345' },
+  { key: 'tech', email: 'tech@npi.sa', password: 'Tech@12345' },
+  { key: 'store', email: 'store@npi.sa', password: 'Store@12345' },
 ];
 
 /**
@@ -38,14 +45,16 @@ const ACCOUNTS = [
  * permission list from /auth/me and predict 200-or-403 from that. This asserts
  * the guard wiring still matches the declaration, and it keeps passing when
  * the seed's permission sets change — which they do, every time a package
- * adds a screen.
+ * adds a screen. A route may list several keys: holding ANY one of them is
+ * enough (the pick lists of ADR-02 §3-3, any-of on the server since P1-5).
  */
 const GUARDED_ROUTES = [
   ['/leads', 'crm.lead.read'],
   ['/customers', 'crm.customer.read'],
   ['/opportunities', 'crm.opportunity.read'],
-  ['/tasks', 'crm.customer.read'],
-  ['/tasks/summary', 'crm.customer.read'],
+  // ADR-02 task 4 (P1-6): one view key per screen — /tasks has its own.
+  ['/tasks', 'crm.task.read'],
+  ['/tasks/summary', 'crm.task.read'],
   ['/tasks/assignees', 'crm.customer.write'],
   ['/reference/dashboard', 'crm.lead.read'],
   ['/proposals', 'commercial.proposal.read'],
@@ -54,20 +63,32 @@ const GUARDED_ROUTES = [
   ['/finance/invoices', 'finance.invoice.read'],
   ['/finance/summary', 'finance.invoice.read'],
   ['/finance/reports/trial-balance', 'finance.ledger.read'],
-  ['/finance/reports/income-statement', 'finance.ledger.read'],
-  ['/finance/reports/balance-sheet', 'finance.ledger.read'],
-  ['/finance/reports/vat-return', 'finance.ledger.read'],
+  // P1-6: the statements and the reports split off the ledger key.
+  ['/finance/reports/income-statement', 'finance.statement.read'],
+  ['/finance/reports/balance-sheet', 'finance.statement.read'],
+  ['/finance/fiscal/years', 'finance.statement.read'],
+  ['/finance/reports/vat-return', 'finance.report.read'],
+  ['/finance/reports/poc', 'finance.report.read'],
   ['/finance/payables/outstanding', 'finance.payment.read'],
   ['/projects', 'projects.project.read'],
+  // P1-6: the requisitions screen has its own view key.
+  ['/requisitions', 'scm.requisition.read'],
   ['/procurement/vendors', 'scm.procurement.read'],
   ['/procurement/purchase-orders', 'scm.procurement.read'],
   ['/procurement/serial-units', 'assets.serialunit.read'],
   ['/fsm/work-orders', 'fsm.workorder.read'],
   ['/fsm/work-orders/summary', 'fsm.workorder.read'],
-  ['/telemetry/dashboard', 'fsm.workorder.read'],
   ['/admin/users', 'admin.user.manage'],
   ['/admin/roles', 'admin.user.manage'],
+  // P1-11: the presets page's preview.
+  ['/admin/role-presets', 'admin.user.manage'],
   ['/admin/audit', 'admin.audit.read'],
+  // P1-5: the pick lists, any one key of the list's LOOKUP_ACCESS row.
+  ['/reference/lookups/items', ['commercial.item.read', 'scm.requisition.write', 'scm.procurement.write', 'commercial.proposal.write', 'fsm.workorder.write']],
+  ['/reference/lookups/projects', ['projects.project.read', 'scm.procurement.write']],
+  ['/reference/lookups/customers', ['crm.customer.read', 'crm.opportunity.write']],
+  ['/reference/lookups/vendors', ['scm.procurement.read', 'projects.project.write']],
+  ['/reference/lookups/locations', ['scm.procurement.read', 'assets.serialunit.read', 'fsm.workorder.write']],
 ];
 
 // ── tiny harness ───────────────────────────────────────────────────────────
@@ -129,10 +150,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * `/auth/login` is throttled to 5 per minute per IP (bcrypt makes it a
- * credential-stuffing target). This suite needs exactly five logins for the
- * five seeded roles, which is the entire budget — so every later check that
- * touches the login endpoint has to wait the window out or it reads a 429 as
- * a product failure. `loginWindowOpensAt` tracks when that is safe again.
+ * credential-stuffing target). This suite logs in once per seeded role — nine
+ * since P1-13, more than one window's budget — so `login()` waits the limiter
+ * out once when the sixth meets it, and every later check that touches the
+ * login endpoint has to wait the window out or it reads a 429 as a product
+ * failure. `firstLoginAt` tracks when that is safe again.
  */
 let firstLoginAt = 0;
 const LOGIN_WINDOW_MS = 61_000;
@@ -208,11 +230,13 @@ async function main() {
 
     const mismatches = [];
     for (const [path, perm] of GUARDED_ROUTES) {
-      const shouldPass = held.includes(perm);
+      const needs = Array.isArray(perm) ? perm : [perm];
+      const shouldPass = needs.some((p) => held.includes(p));
       const r = await call(path, { token });
       const allowed = r.status !== 403;
       if (allowed !== shouldPass) {
-        mismatches.push(`${path} (needs ${perm}) → ${r.status}, expected ${shouldPass ? 'not 403' : '403'}`);
+        const label = needs.length === 1 ? needs[0] : `any of ${needs.join(' | ')}`;
+        mismatches.push(`${path} (needs ${label}) → ${r.status}, expected ${shouldPass ? 'not 403' : '403'}`);
       }
     }
     await check(
@@ -350,8 +374,8 @@ async function main() {
     return r.status === 401 ? true : `status ${r.status}, expected 401`;
   });
 
-  // The five role logins above used the whole 5/min budget. Wait it out rather
-  // than reading the resulting 429 as "the password check is broken".
+  // The role logins above used the 5/min budget. Wait it out rather than
+  // reading the resulting 429 as "the password check is broken".
   await waitForLoginWindow('the wrong-password check needs a real 401, not a 429');
 
   await check('wrong password does not authenticate', async () => {

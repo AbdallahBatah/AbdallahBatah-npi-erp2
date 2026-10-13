@@ -112,12 +112,17 @@ async function handoverGuidanceIfRecent(
 }
 
 /** The flows this firm switched on (D-T26-9): a flow is offered when the module
- *  it belongs to is among the firm's visible modules. A firm that has not run
- *  the setup yet has no row, and sees all five. */
+ *  it belongs to is among the firm's visible modules. A flow with no module
+ *  (the administrative `user_permissions`, D-26) is always offered here; NPI's
+ *  own permission decides whether the user may run it. A firm that has not run
+ *  the setup yet has no row, and sees every flow. */
 export function visibleFlowsOf(visibleModulesJson: unknown): FlowType[] {
   if (!Array.isArray(visibleModulesJson)) return [...FLOW_TYPES];
   const modules = new Set(visibleModulesJson.filter((m): m is string => typeof m === 'string'));
-  return FLOW_TYPES.filter((flow) => modules.has(FLOW_REQUIRED_MODULE[flow]));
+  return FLOW_TYPES.filter((flow) => {
+    const required = FLOW_REQUIRED_MODULE[flow];
+    return required === null || modules.has(required);
+  });
 }
 
 export async function buildTurn(session: TurnSession): Promise<{ deps: TurnDeps; user: TurnUser }> {

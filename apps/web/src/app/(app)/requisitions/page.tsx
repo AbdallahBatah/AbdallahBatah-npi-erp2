@@ -10,9 +10,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
+import { useLookup } from '@/lib/lookups';
 import { formatDate, formatMoney } from '@/lib/format';
 import {
   Btn,
@@ -57,13 +59,19 @@ interface DraftLine {
 
 export default function RequisitionsPage() {
   const { locale, t } = useI18n();
+  const { can } = useAuth();
   const { act, busy } = useAct();
   const ar = locale === 'ar';
 
   const [rows, setRows] = useState<RequisitionRow[] | null>(null);
   const [err, setErr] = useState('');
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<ItemOption[]>([]);
+  // The item list comes with scm.requisition.write itself (ADR-02 §3-3): a
+  // requester picks an item without holding the item catalogue screen.
+  // Asked for when the dialog opens.
+  const itemList = useLookup<ItemOption>('items', { enabled: open });
+  const items = itemList.rows;
+  const itemsUnavailable = itemList.state === 'unavailable';
   const [justification, setJustification] = useState('');
   const [neededBy, setNeededBy] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([{ itemId: '', qty: '1', estimatedUnitPrice: '' }]);
@@ -76,11 +84,6 @@ export default function RequisitionsPage() {
       .catch((e) => setErr(translateError(e, locale)));
   }, [locale]);
   useEffect(load, [load]);
-
-  useEffect(() => {
-    if (!open || items.length) return;
-    api.get<ItemOption[]>('/commercial/items').then(setItems).catch(() => setItems([]));
-  }, [open, items.length]);
 
   const total = lines.reduce(
     (s, l) => s + (Number(l.qty) || 0) * (Number(l.estimatedUnitPrice) || 0),
@@ -115,9 +118,11 @@ export default function RequisitionsPage() {
         title={t('pr.title')}
         subtitle={t('pr.hint')}
         action={
-          <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
-            {t('pr.new')}
-          </Btn>
+          can('scm.requisition.write') ? (
+            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+              {t('pr.new')}
+            </Btn>
+          ) : undefined
         }
       />
 
@@ -200,11 +205,15 @@ export default function RequisitionsPage() {
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               {t('pr.f.lines')}
             </div>
+            {itemsUnavailable && (
+              <p className="mb-2 text-xs text-slate-500">{t('lookup.unavailable')}</p>
+            )}
             <div className="space-y-2">
               {lines.map((l, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2">
                   <select
                     className="input col-span-6"
+                    disabled={itemsUnavailable}
                     value={l.itemId}
                     onChange={(e) => {
                       const itemId = e.target.value;

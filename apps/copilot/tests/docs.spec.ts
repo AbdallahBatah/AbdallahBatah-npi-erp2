@@ -315,30 +315,26 @@ describe('docs/COPILOT_CHANGELOG.md: one section per tag, newest first', () => {
     }
     for (const tag of TAGS) {
       const bullets = sections.get(tag) ?? [];
-      // v0.5.0 carries twelve bullets (two halves of T-43, T-46) and v0.6.0 eleven (T-47, Q-1..Q-5, the release); every section stays within the brief's range.
+      // v0.5.0 carries twelve bullets (two halves of T-43, T-46) and v0.6.0 eleven (T-47, Q-1..Q-6, the release); every section stays within the brief's range.
       expect({ tag, ok: bullets.length >= 4 && bullets.length <= 12 }).toEqual({ tag, ok: true });
       for (const b of bullets) expect(b).toMatch(/`(?:T|D|G|Q)-[0-9a-z]+/);
     }
   });
 
-  it('the newest section is "in preparation" and says what is NOT done yet (v0.6.0, 2026-10-11)', () => {
+  it('the newest section is tagged and claims nothing as still open (v0.6.0, 2026-10-11)', () => {
     const text = fs.readFileSync(DOCS.changelog, 'utf8');
     const start = text.indexOf('## `copilot-v0.6.0`');
     const end = text.indexOf('## `copilot-v0.5.0`');
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const section = text.slice(start, end);
-    expect(section).toContain('قيد الإعداد');
-    expect(section).toContain('لم يُنفَّذ بعد');
-    // The release step (merge, tag, main re-analysis) sits AFTER that marker and names the tag.
-    const afterMarker = section.slice(section.indexOf('لم يُنفَّذ بعد'));
-    expect(afterMarker).toContain('`copilot-v0.6.0`');
-    expect(afterMarker).toContain('`main`');
-    // What is done sits before it, each as a code span: both halves of T-47 and the five quality stages.
-    const beforeMarker = section.slice(section.indexOf('\n'), section.indexOf('لم يُنفَّذ بعد'));
-    for (const task of ['T-47a', 'T-47b', 'Q-1', 'Q-2', 'Q-3', 'Q-4', 'Q-5']) expect(beforeMarker).toContain(`\`${task}\``);
-    // and nothing before the marker claims the tag as placed.
-    expect(beforeMarker).not.toContain('وُسم `copilot-v0.6.0`');
+    // Until the tag the section was «قيد الإعداد» with a «لم يُنفَّذ بعد» list; the tag retired both.
+    expect(section).not.toContain('قيد الإعداد');
+    expect(section).not.toContain('لم يُنفَّذ بعد');
+    expect(section).toContain('وُسم');
+    // The release carries both halves of T-47, the five quality stages and the merge commit, each as a code span.
+    for (const task of ['T-47a', 'T-47b', 'Q-1', 'Q-2', 'Q-3', 'Q-4', 'Q-5']) expect(section).toContain(`\`${task}\``);
+    expect(section).toContain('`d971454`');
   });
 
   it('the previous section stays a tagged release (T-46, 2026-10-10)', () => {
