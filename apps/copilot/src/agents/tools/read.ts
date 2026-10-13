@@ -563,7 +563,7 @@ const getUserPermissions: ReadTool = {
     const body = isRecord(detail) ? detail : {};
     const effective = (Array.isArray(body.effective) ? body.effective : [])
       .filter((k): k is string => typeof k === 'string')
-      .sort()
+      .sort((a, b) => a.localeCompare(b, 'en'))
       .map((key) => ({ key, labelAr: labelOf(key) }));
     const overrides = (Array.isArray(body.overrides) ? body.overrides.filter(isRecord) : []).flatMap((o) => {
       const key = str(o.permission);

@@ -823,8 +823,10 @@ export function userPermissionStateFrom(body: unknown): UserPermissionState {
     throw new NpiError({ status: 0, kind: 'unexpected', npiMessage: null, devDetail: 'userPermissionStateFrom: body is not { roles, overrides, effective }' });
   }
   const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
+  // Permission keys are ASCII (`finance.report.read`); an explicit comparator keeps the order stable (Sonar S2871).
+  const byKey = (a: string, b: string): number => a.localeCompare(b, 'en');
   const roles = body.roles.filter(isRecord);
-  const rolePermissions = [...new Set(roles.flatMap((r) => strings(r.permissions)))].sort();
+  const rolePermissions = [...new Set(roles.flatMap((r) => strings(r.permissions)))].sort(byKey);
   const overrides: UserPermissionState['overrides'] = [];
   for (const o of body.overrides) {
     if (!isRecord(o)) continue;
@@ -835,7 +837,7 @@ export function userPermissionStateFrom(body: unknown): UserPermissionState {
   return {
     roleAr: roles.length > 0 ? str(roles[0].nameAr) : null,
     rolePermissions,
-    overrides: overrides.sort((a, b) => (a.permission < b.permission ? -1 : a.permission > b.permission ? 1 : 0)),
-    effective: strings(body.effective).sort(),
+    overrides: overrides.sort((a, b) => byKey(a.permission, b.permission)),
+    effective: strings(body.effective).sort(byKey),
   };
 }

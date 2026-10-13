@@ -105,7 +105,7 @@ export function planPermissionOverrides(
     }
   }
 
-  const list = [...overrides.values()].sort((a, b) => (a.permission < b.permission ? -1 : a.permission > b.permission ? 1 : 0));
+  const list = [...overrides.values()].sort((a, b) => a.permission.localeCompare(b.permission, 'en'));
   return { overrides: list, changes };
 }
 
