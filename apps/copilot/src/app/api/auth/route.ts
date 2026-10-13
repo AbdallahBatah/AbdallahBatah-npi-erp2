@@ -67,6 +67,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       await recordAttempt({ db: deps.rateLimitDb }, key, false);
       return json({ error: 'invalid' }, 401);
     }
+    if (err.kind === 'validation') {
+      // NPI's own DTO check (400): the e-mail is not an e-mail or the
+      // password is shorter than six characters. Those credentials cannot be
+      // right, so the user sees «invalid», not «NPI unavailable»; not counted
+      // as a failed attempt (no real password was tried against NPI).
+      return json({ error: 'invalid' }, 401);
+    }
     if (err.status === 429) {
       // NPI's own per-IP throttle tripped — not this copilot's rate limit,
       // and NOT counted as a failed attempt for this e-mail's key.
