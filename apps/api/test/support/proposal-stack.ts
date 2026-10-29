@@ -32,7 +32,9 @@ export function buildProposalStack(prisma: PrismaService) {
   const settings = new OrgSettingsService(prisma, audit);
   const opportunities = new OpportunitiesService(prisma, numbering, audit, outbox);
   const itemCosts = new ItemCostService(prisma);
-  const proposals = new ProposalsService(prisma, numbering, audit, opportunities, engine, approvals, itemCosts, settings);
+  const proposals = new ProposalsService(
+    prisma, numbering, audit, opportunities, engine, approvals, itemCosts, settings, notifications,
+  );
   // What Nest does on start: hand the matrix the proposal's applier and rejecter.
   proposals.onModuleInit();
   const contracts = new ContractsService(prisma, numbering, audit, notifications, opportunities);
