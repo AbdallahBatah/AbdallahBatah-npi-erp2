@@ -858,6 +858,11 @@ export const messages: Record<Locale, Record<string, string>> = {
     'pr.col.requestedBy': 'مقدّم الطلب',
     'pr.col.project': 'المشروع',
     'pr.col.purchaseOrder': 'أمر الشراء',
+    // P4-4: sourcing during approval.
+    'pr.source': 'التوريد: المورد والأسعار',
+    'pr.sourceHint': 'حدّد المورد والأسعار والموعد ومكان التسليم. عند آخر توقيع يتحول الطلب إلى أمر شراء معتمد باسم هذا المورد. لا يجوز أن يتجاوز الإجمالي المبلغ المرفوع للاعتماد.',
+    'pr.vendor': 'المورد',
+    'pr.deliverTo': 'مكان التسليم',
     'pr.f.justification': 'مبرر الطلب',
     'pr.f.justificationHint': 'لماذا تحتاجه المنشأة؟ هذا أول ما يسأل عنه المعتمِد والمراجع.',
     'pr.f.neededBy': 'مطلوب بحلول',
@@ -2334,6 +2339,11 @@ export const messages: Record<Locale, Record<string, string>> = {
     'pr.col.requestedBy': 'Requested by',
     'pr.col.project': 'Project',
     'pr.col.purchaseOrder': 'Purchase order',
+    // P4-4: sourcing during approval.
+    'pr.source': 'Sourcing: vendor and prices',
+    'pr.sourceHint': 'Set the vendor, prices, date and delivery place. On the last signature the requisition becomes an approved purchase order to this vendor. The total may not exceed the amount submitted for approval.',
+    'pr.vendor': 'Vendor',
+    'pr.deliverTo': 'Delivery place',
     'pr.f.justification': 'Justification',
     'pr.f.justificationHint': 'Why does the company need this? It is the first thing an approver and an auditor ask.',
     'pr.f.neededBy': 'Needed by',

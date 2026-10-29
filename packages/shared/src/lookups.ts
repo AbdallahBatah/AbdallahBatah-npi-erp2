@@ -64,6 +64,8 @@ export const LOOKUP_ACCESS: Record<LookupKind, readonly PermissionKey[]> = {
     PERMISSIONS.PROCUREMENT_READ,
     PERMISSIONS.ASSET_READ,
     PERMISSIONS.WORKORDER_WRITE,
+    // P4-4: the projects GM picks the delivery place while sourcing a requisition.
+    PERMISSIONS.PROCUREMENT_APPROVE,
   ],
   // Package 3 · P3-3 (ADR-03 §4-3): the work-item list's own screen key (the
   // items screen) and the budget editor, which is the proposal form.

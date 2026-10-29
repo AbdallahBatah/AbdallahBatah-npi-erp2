@@ -1295,6 +1295,7 @@ model Vendor {
   updatedAt      DateTime @updatedAt
 
   purchaseOrders PurchaseOrder[]
+  requisitions   PurchaseRequisition[]
   serialUnits    SerialUnit[]
   vendorBills    VendorBill[]
   subcontracts   SubcontractAgreement[]
@@ -1473,6 +1474,10 @@ model PurchaseOrder {
   total          Decimal  @default(0) @db.Decimal(18, 2)
   approvedAt     DateTime?
   approvedById   String?
+  /// Package 4 · P4-4: where and when the vendor delivers (from the requisition's sourcing).
+  deliveryLocationId String?
+  deliveryLocation   Location? @relation("PoDeliverTo", fields: [deliveryLocationId], references: [id], onDelete: SetNull)
+  expectedDelivery   DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -1734,6 +1739,8 @@ model Location {
   movementsTo    StockMovement[] @relation("MoveTo")
   issuesFrom     MaterialIssue[] @relation("IssueFrom")
   issuesTo       MaterialIssue[] @relation("IssueTo")
+  requisitionsDeliveredHere PurchaseRequisition[] @relation("PrDeliverTo")
+  ordersDeliveredHere       PurchaseOrder[]       @relation("PoDeliverTo")
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -2817,6 +2824,14 @@ model PurchaseRequisition {
   /// Package 4 · P4-3: the material request whose shortage this requisition buys.
   materialRequestId String?
   materialRequest   MaterialRequest? @relation(fields: [materialRequestId], references: [id], onDelete: SetNull)
+  /// Package 4 · P4-4 (ADR-04 §4-4): sourcing set by the projects GM while the
+  /// chain is open. With a vendor, the last signature raises an APPROVED PO.
+  vendorId           String?
+  vendor             Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  deliveryLocationId String?
+  deliveryLocation   Location? @relation("PrDeliverTo", fields: [deliveryLocationId], references: [id], onDelete: SetNull)
+  sourcedById        String?
+  sourcedAt          DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

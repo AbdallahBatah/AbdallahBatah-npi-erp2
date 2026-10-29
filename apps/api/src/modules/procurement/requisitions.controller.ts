@@ -7,6 +7,7 @@ import type { AuthUser } from '../../common/auth-user';
 import {
   ConvertToPoDto,
   CreateRequisitionDto,
+  SourceRequisitionDto,
   UpdateRequisitionDto,
   WorkflowActionDto,
 } from './requisitions.dto';
@@ -89,5 +90,19 @@ export class RequisitionsController {
     @Body() dto: ConvertToPoDto,
   ) {
     return this.requisitions.convertToPo(user, id, dto);
+  }
+
+  /**
+   * P4-4: the projects GM sources the requisition while it awaits signatures;
+   * with a vendor set, the last signature raises the PO already approved.
+   */
+  @Patch(':id/sourcing')
+  @RequirePermissions(PERMISSIONS.PROCUREMENT_APPROVE)
+  source(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SourceRequisitionDto,
+  ) {
+    return this.requisitions.source(user, id, dto);
   }
 }

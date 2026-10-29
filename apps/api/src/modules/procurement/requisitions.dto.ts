@@ -83,3 +83,20 @@ export class ConvertLinePriceDto {
   @IsString() requisitionLineId!: string;
   @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) unitPrice!: number;
 }
+
+/**
+ * Package 4 · P4-4 (ADR-04 §4-4) — the projects GM's sourcing step while the
+ * chain is open: vendor, real prices, date, delivery place. The total may not
+ * rise above the amount the chain was opened for — that would be signing a
+ * smaller number than the one committed.
+ */
+export class SourceRequisitionDto {
+  @IsString() vendorId!: string;
+  @IsOptional() @IsString() deliveryLocationId?: string;
+  @IsOptional() @IsDateString() neededBy?: string;
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ConvertLinePriceDto)
+  prices?: ConvertLinePriceDto[];
+}

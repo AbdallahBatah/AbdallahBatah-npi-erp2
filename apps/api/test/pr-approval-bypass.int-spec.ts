@@ -51,6 +51,7 @@ const requisitions = new RequisitionsService(
   notifications,
   engine,
   events,
+  outbox,
 );
 
 /**
@@ -110,11 +111,14 @@ async function authUserFor(email: string): Promise<AuthUser> {
 let REQUESTER: AuthUser;
 /**
  * ceo@npi.sa (the executive) — holds scm.procurement.approve, the APPROVE
- * transition's key, but is not the chain's 'pm' step.
+ * transition's key, but is not the chain's *current* step while it waits on
+ * 'pm'. Since P4-4 the executive is the chain's last step.
  */
 let NON_STEP: AuthUser;
-/** pm@npi.sa — the seeded chain's one step for PURCHASE_REQUISITION. */
+/** pm@npi.sa — the seeded chain's first step for PURCHASE_REQUISITION. */
 let PM: AuthUser;
+/** finance@npi.sa — P4-4: the seeded chain's second step (pm → finance_manager → executive). */
+let FINANCE: AuthUser;
 let itemId: string;
 
 const createdPrIds: string[] = [];
@@ -131,6 +135,7 @@ beforeAll(async () => {
   REQUESTER = await authUserFor('admin@npi.sa');
   NON_STEP = await authUserFor('ceo@npi.sa');
   PM = await authUserFor('pm@npi.sa');
+  FINANCE = await authUserFor('finance@npi.sa');
 
   // Fail loudly here rather than produce a confusing assertion failure deep
   // in a test if the seed ever changes these roles' permissions.
@@ -181,7 +186,7 @@ afterAll(async () => {
     await prisma.purchaseRequisition.deleteMany({ where: { id: { in: createdPrIds } } });
     await prisma.notification.deleteMany({
       where: {
-        userId: { in: [REQUESTER.userId, NON_STEP.userId, PM.userId] },
+        userId: { in: [REQUESTER.userId, NON_STEP.userId, PM.userId, FINANCE.userId] },
         createdAt: { gte: testStartedAt },
       },
     });
@@ -254,10 +259,20 @@ describe('a purchase requisition cannot be approved outside its signature chain'
     expect(instance.currentState).toBe('PENDING_APPROVAL');
   });
 
-  it('lets the current step (pm) approve it — the positive control against over-blocking', async () => {
+  it('lets each current step sign in turn (pm → finance → executive) — the positive control against over-blocking', async () => {
     const prId = await submittedRequisition();
 
-    const result = await requisitions.act(PM, prId, 'APPROVE');
+    const first = await requisitions.act(PM, prId, 'APPROVE');
+    expect(first.status).toBe('PENDING_APPROVAL');
+    expect((await chainOf(prId)).currentStep).toBe(2);
+    // The executive signs last, never ahead of finance.
+    await expect(requisitions.act(NON_STEP, prId, 'APPROVE')).rejects.toThrow(ForbiddenException);
+    const second = await requisitions.act(FINANCE, prId, 'APPROVE');
+    expect(second.status).toBe('PENDING_APPROVAL');
+    expect((await chainOf(prId)).currentStep).toBe(3);
+
+    // Unsourced (no vendor), so the last signature leaves it APPROVED for manual conversion.
+    const result = await requisitions.act(NON_STEP, prId, 'APPROVE');
     expect(result.status).toBe('APPROVED');
 
     const pr = await prOf(prId);

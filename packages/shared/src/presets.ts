@@ -145,10 +145,14 @@ export const ROLE_PRESETS: readonly RolePreset[] = [
     nameEn: 'Finance management',
     permissions: [
       P.CONTRACT_READ,
-      // Added to the owner's table: turns an approved requisition into a PO.
       P.REQUISITION_READ,
       P.PROCUREMENT_READ,
-      P.PROCUREMENT_WRITE,
+      // Package 4 · P4-4 (owner work cycle step 13): the second signature on a
+      // purchase requisition. It replaces procurement.write (converting an
+      // approved requisition by hand): the sourced requisition now becomes a PO
+      // on the last signature, and holding both keys is the SoD pair
+      // «creates and approves purchase orders».
+      P.PROCUREMENT_APPROVE,
       P.INVOICE_READ,
       P.INVOICE_WRITE,
       // Views vendor payables only: the accountant pays (owner's answer 2).
@@ -175,7 +179,15 @@ export const ROLE_PRESETS: readonly RolePreset[] = [
     nameAr: 'أمين المستودع',
     nameEn: 'Warehouse keeper',
     // procurement.write for receiving and transfers, as for technical_office.
-    permissions: [P.PROCUREMENT_READ, P.PROCUREMENT_WRITE, P.ITEM_READ],
+    // Package 4 · P4-2/P4-4: requisition read/write — the keeper issues against
+    // material requests and raises the purchase requisition for the shortage.
+    permissions: [
+      P.PROCUREMENT_READ,
+      P.PROCUREMENT_WRITE,
+      P.REQUISITION_READ,
+      P.REQUISITION_WRITE,
+      P.ITEM_READ,
+    ],
   },
 ];
 
@@ -192,7 +204,10 @@ export interface ProposedApprovalRule {
  * ceiling (owner's answers 1 and 4). PROPOSAL is what the seed already has.
  */
 export const PROPOSED_APPROVAL_RULES: readonly ProposedApprovalRule[] = [
-  { documentType: 'PURCHASE_REQUISITION', minAmount: 0, steps: ['pm'] },
+  // Package 4 · P4-4 (owner, 2026-10-29): projects GM (sources it) → finance
+  // management → general manager (final). A proposal only: live rules change
+  // when the owner applies it from the role presets page (ADR-02 §2-7).
+  { documentType: 'PURCHASE_REQUISITION', minAmount: 0, steps: ['pm', 'finance_manager', 'executive'] },
   { documentType: 'PURCHASE_ORDER', minAmount: 0, steps: ['executive'] },
   { documentType: 'PROGRESS_CLAIM', minAmount: 0, steps: ['pm', 'executive'] },
   { documentType: 'CHANGE_ORDER', minAmount: 0, steps: ['executive'] },

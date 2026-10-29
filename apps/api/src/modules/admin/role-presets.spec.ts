@@ -169,9 +169,9 @@ describe('ROLE_PRESETS and PROPOSED_APPROVAL_RULES (@npi/shared)', () => {
     expect(rolePreset('sales')).toBeUndefined();
   });
 
-  it('gives the sidebar counts of the ADR table (17, 12, 9, 6, 12, 6, 6 of 24)', () => {
+  it('gives the sidebar counts of the ADR table (17, 12, 9, 6, 12, 6, 7 of 24; P4 gave the keeper requisitions)', () => {
     expect(ROLE_PRESETS.map((p) => visibleScreens(p.permissions).length)).toEqual([
-      17, 12, 9, 6, 12, 6, 6,
+      17, 12, 9, 6, 12, 6, 7,
     ]);
   });
 
@@ -201,7 +201,7 @@ describe('ROLE_PRESETS and PROPOSED_APPROVAL_RULES (@npi/shared)', () => {
 
   it('proposes the six rules from zero in order (P2-2 added CONTRACT), each step a preset that holds the document approve key', () => {
     expect(PROPOSED_APPROVAL_RULES.map((r) => [r.documentType, r.minAmount, [...r.steps]])).toEqual([
-      ['PURCHASE_REQUISITION', 0, ['pm']],
+      ['PURCHASE_REQUISITION', 0, ['pm', 'finance_manager', 'executive']],
       ['PURCHASE_ORDER', 0, ['executive']],
       ['PROGRESS_CLAIM', 0, ['pm', 'executive']],
       ['CHANGE_ORDER', 0, ['executive']],

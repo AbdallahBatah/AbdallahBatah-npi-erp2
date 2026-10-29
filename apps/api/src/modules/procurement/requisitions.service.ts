@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ForbiddenException,
+  ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -13,12 +15,14 @@ import { TaxService } from '../../common/tax.service';
 import { NotificationService } from '../../common/notification.service';
 import { WorkflowEngine } from '../../common/workflow/workflow.engine';
 import { EventDispatcher } from '../../common/workflow/event-dispatcher.service';
+import { OutboxService } from '../../common/workflow/outbox.service';
 import { PERMISSIONS, WF_ACTIONS, WF_EVENTS, WF_FLOWS } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
 import type { Prisma } from '@npi/db';
 import type {
   ConvertToPoDto,
   CreateRequisitionDto,
+  SourceRequisitionDto,
   UpdateRequisitionDto,
 } from './requisitions.dto';
 
@@ -47,7 +51,10 @@ export class RequisitionsService implements OnModuleInit {
     private readonly notifications: NotificationService,
     private readonly engine: WorkflowEngine,
     private readonly events: EventDispatcher,
+    private readonly outbox: OutboxService,
   ) {}
+
+  private readonly logger = new Logger(RequisitionsService.name);
 
   /**
    * `pr.approved ← فتح أمر شراء` (§6).
@@ -114,6 +121,8 @@ export class RequisitionsService implements OnModuleInit {
         project: { select: { id: true, code: true, nameAr: true, nameEn: true } },
         requestedBy: { select: { id: true, nameAr: true, nameEn: true } },
         purchaseOrder: { select: { id: true, code: true, status: true } },
+        vendor: { select: { id: true, code: true, nameAr: true, nameEn: true } },
+        deliveryLocation: { select: { id: true, code: true, nameAr: true, nameEn: true } },
         lines: {
           include: {
             item: { select: { sku: true, nameAr: true, nameEn: true, uom: true } },
@@ -447,7 +456,132 @@ export class RequisitionsService implements OnModuleInit {
         });
       },
     });
+
+    // P4-4 (ADR-04 §3-6): sourced during the chain → the last signature raises
+    // the PO already approved; the general manager signed it in the chain.
+    // Unsourced, it stays APPROVED for manual conversion, as before.
+    if (pr.vendorId && !pr.purchaseOrderId) {
+      try {
+        const po = await this.raiseApprovedPo(user, pr.id);
+        return { ...result, status: 'CONVERTED', purchaseOrder: { id: po.id, code: po.code } };
+      } catch (err) {
+        // The approval has committed; a PO that failed to raise leaves the
+        // requisition APPROVED, and the pr.approved handler tells procurement
+        // to convert it by hand. Never undo a signature over a side effect.
+        this.logger.warn(`Auto PO for ${pr.code} failed: ${(err as Error).message}`);
+      }
+    }
     return { ...result, status: 'APPROVED' };
+  }
+
+  // ── sourcing during approval (P4-4) ───────────────────────────────────────
+
+  /**
+   * The projects GM's step in the new chain (owner work cycle step 13): what,
+   * at what price, from whom, by when, delivered where. Allowed only while the
+   * chain is open. Prices may fall freely but the total may not exceed the
+   * amount the chain was opened for — the later signers would otherwise be
+   * signing for less than the company commits.
+   */
+  async source(user: AuthUser, id: string, dto: SourceRequisitionDto) {
+    const pr = await this.prisma.purchaseRequisition.findFirst({
+      where: { id, organizationId: user.organizationId },
+      include: { lines: true },
+    });
+    if (!pr) throw new NotFoundException('Purchase requisition not found');
+    if (pr.status !== 'PENDING_APPROVAL') {
+      throw new ConflictException('Sourcing is set while the requisition awaits approval');
+    }
+    if (pr.requestedById === user.userId) {
+      throw new ForbiddenException('You cannot source a requisition you raised yourself');
+    }
+    const vendor = await this.prisma.vendor.findFirst({
+      where: { id: dto.vendorId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!vendor) throw new NotFoundException('Vendor not found');
+    if (dto.deliveryLocationId) {
+      const loc = await this.prisma.location.findFirst({
+        where: { id: dto.deliveryLocationId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!loc) throw new NotFoundException('Delivery location not found');
+    }
+    const prices = new Map((dto.prices ?? []).map((p) => [p.requisitionLineId, p.unitPrice]));
+    const unknown = [...prices.keys()].find((lid) => !pr.lines.some((l) => l.id === lid));
+    if (unknown) throw new BadRequestException(`Line ${unknown} is not on this requisition`);
+
+    const lines = pr.lines.map((l) => {
+      const unit = prices.get(l.id) ?? Number(l.estimatedUnitPrice);
+      return { id: l.id, unit, lineTotal: round2(Number(l.qty) * unit) };
+    });
+    const total = round2(lines.reduce((s, l) => s + l.lineTotal, 0));
+    const chain = await this.approvals.forDocument(user, 'PURCHASE_REQUISITION', pr.id);
+    const ceiling = chain?.status === 'PENDING' ? Number(chain.amount) : Number(pr.estimatedTotal);
+    if (total > ceiling + 0.005) {
+      throw new ConflictException(
+        `Sourced total ${total} exceeds the ${ceiling} the approval was opened for — return the requisition to be resubmitted`,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      for (const l of lines) {
+        await tx.purchaseRequisitionLine.update({
+          where: { id: l.id },
+          data: { estimatedUnitPrice: l.unit, lineTotal: l.lineTotal },
+        });
+      }
+      const updated = await tx.purchaseRequisition.update({
+        where: { id: pr.id },
+        data: {
+          vendorId: vendor.id,
+          deliveryLocationId: dto.deliveryLocationId ?? pr.deliveryLocationId,
+          neededBy: dto.neededBy ? new Date(dto.neededBy) : pr.neededBy,
+          estimatedTotal: total,
+          sourcedById: user.userId,
+          sourcedAt: new Date(),
+        },
+      });
+      await this.audit.record(
+        {
+          organizationId: user.organizationId,
+          actorId: user.userId,
+          entityType: 'PurchaseRequisition',
+          entityId: pr.id,
+          action: 'SOURCE',
+          before: { vendorId: pr.vendorId, estimatedTotal: Number(pr.estimatedTotal) },
+          after: { vendorId: vendor.id, estimatedTotal: total, deliveryLocationId: updated.deliveryLocationId },
+        },
+        tx,
+      );
+      return updated;
+    });
+  }
+
+  /** The sourced requisition's PO, born APPROVED, its commitment booked by po.approved. */
+  private async raiseApprovedPo(user: AuthUser, id: string) {
+    const pr = await this.prisma.purchaseRequisition.findFirst({
+      where: { id, organizationId: user.organizationId },
+      include: { lines: true },
+    });
+    if (!pr?.vendorId) throw new BadRequestException('Requisition has no sourced vendor');
+    const po = await this.prisma.$transaction((tx) =>
+      this.buildPoFromRequisition(tx, user.organizationId, pr, pr.vendorId!, new Map(), {
+        actorId: user.userId,
+        approvedById: user.userId,
+        deliveryLocationId: pr.deliveryLocationId,
+        expectedDelivery: pr.neededBy,
+      }),
+    );
+    await this.notifications.notifyBestEffort({
+      organizationId: user.organizationId,
+      permission: PERMISSIONS.PROCUREMENT_WRITE,
+      type: 'PURCHASE_ORDER_APPROVED',
+      titleAr: `أمر شراء معتمد جاهز للإرسال للمورّد: ${po.code} (من ${pr.code})`,
+      titleEn: `Approved purchase order ready to send to the vendor: ${po.code} (from ${pr.code})`,
+      linkPath: `/procurement/${po.id}`,
+    });
+    return po;
   }
 
   /** The matrix's rejection path: the document must move too, not just the chain. */
@@ -547,7 +681,14 @@ export class RequisitionsService implements OnModuleInit {
     },
     vendorId: string,
     overrides: Map<string, number>,
-    opts: { actorId: string; currency?: string },
+    opts: {
+      actorId: string;
+      currency?: string;
+      /** P4-4: set when the chain already carried the final signature. */
+      approvedById?: string;
+      deliveryLocationId?: string | null;
+      expectedDelivery?: Date | null;
+    },
   ) {
     const poLines = pr.lines.map((l) => {
       const unitPrice = overrides.get(l.id) ?? Number(l.estimatedUnitPrice);
@@ -576,18 +717,49 @@ export class RequisitionsService implements OnModuleInit {
         subtotal,
         vatAmount,
         total: round2(subtotal + vatAmount),
+        deliveryLocationId: opts.deliveryLocationId ?? null,
+        expectedDelivery: opts.expectedDelivery ?? null,
+        ...(opts.approvedById
+          ? { status: 'APPROVED' as const, approvedAt: new Date(), approvedById: opts.approvedById }
+          : {}),
         lines: { create: poLines },
       },
       include: { lines: true },
     });
 
-    await this.engine.open(tx, {
-      organizationId,
-      flowCode: WF_FLOWS.PURCHASE_ORDER,
-      documentId: po.id,
-      documentCode: po.code,
-      assigneeRoleId: null,
-    });
+    if (opts.approvedById) {
+      // Adopted straight into APPROVED (no DRAFT → SUBMIT → APPROVE replay),
+      // and po.approved emitted in the same transaction so the project
+      // commitment is booked exactly as for a PO approved on its own page.
+      await this.engine.adopt(tx, {
+        organizationId,
+        flowCode: WF_FLOWS.PURCHASE_ORDER,
+        documentId: po.id,
+        documentCode: po.code,
+        stateCode: 'APPROVED',
+      });
+      await this.outbox.emit(tx, {
+        organizationId,
+        eventCode: WF_EVENTS.PO_APPROVED,
+        payload: {
+          documentType: 'PurchaseOrder',
+          documentId: po.id,
+          documentCode: po.code,
+          fromState: 'DRAFT',
+          toState: 'APPROVED',
+          actorId: opts.approvedById,
+          requisitionId: pr.id,
+        },
+      });
+    } else {
+      await this.engine.open(tx, {
+        organizationId,
+        flowCode: WF_FLOWS.PURCHASE_ORDER,
+        documentId: po.id,
+        documentCode: po.code,
+        assigneeRoleId: null,
+      });
+    }
 
     await tx.purchaseRequisition.update({
       where: { id: pr.id },

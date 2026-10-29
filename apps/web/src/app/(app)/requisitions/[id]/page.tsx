@@ -9,10 +9,12 @@
  * transition's condition — so the screen cannot offer a move the server will
  * refuse, and a flow that gains a transition gains a button with no deploy.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { useAuth } from '@/lib/auth';
+import { useLookup } from '@/lib/lookups';
 import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
@@ -62,6 +64,10 @@ interface Requisition {
   project: { id: string; code: string; nameAr: string; nameEn: string } | null;
   requestedBy: { nameAr: string; nameEn: string } | null;
   purchaseOrder: { id: string; code: string; status: string } | null;
+  /** P4-4: set by the projects GM while the chain is open. */
+  vendor: { id: string; code: string; nameAr: string; nameEn: string } | null;
+  deliveryLocation: { id: string; code: string; nameAr: string; nameEn: string } | null;
+  sourcedAt: string | null;
   lines: Array<{
     id: string;
     qty: string | number;
@@ -93,6 +99,11 @@ export default function RequisitionPage() {
   const [err, setErr] = useState('');
   const [pending, setPending] = useState<AvailableAction | null>(null);
   const [comment, setComment] = useState('');
+  const { can } = useAuth();
+  const [sourcing, setSourcing] = useState(false);
+  const [prices, setPrices] = useState<Record<string, string>>({});
+  const vendors = useLookup<{ id: string; code: string; nameAr: string; nameEn: string }>('vendors', { enabled: sourcing });
+  const locations = useLookup<{ id: string; code: string; nameAr: string; nameEn: string }>('locations', { enabled: sourcing });
 
   const load = useCallback(() => {
     setErr('');
@@ -120,6 +131,28 @@ export default function RequisitionPage() {
   if (err) return <LoadError message={err} onRetry={load} />;
   if (!pr) return <PageSkeleton />;
 
+  const canSource = pr.status === 'PENDING_APPROVAL' && can('scm.procurement.approve');
+  const openSourcing = () => {
+    setPrices(Object.fromEntries(pr.lines.map((l) => [l.id, String(Number(l.estimatedUnitPrice))])));
+    setSourcing(true);
+  };
+  async function source(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const ok = await act('source', () =>
+      api.patch(`/requisitions/${id}/sourcing`, {
+        vendorId: String(f.get('vendorId') || ''),
+        deliveryLocationId: String(f.get('deliveryLocationId') || '') || undefined,
+        neededBy: String(f.get('neededBy') || '') || undefined,
+        prices: pr!.lines.map((l) => ({ requisitionLineId: l.id, unitPrice: Number(prices[l.id] || 0) })),
+      }),
+    );
+    if (ok) {
+      setSourcing(false);
+      load();
+    }
+  }
+
   const state = pr.workflow.instance?.state;
 
   return (
@@ -131,6 +164,11 @@ export default function RequisitionPage() {
         backLabel={t('pr.title')}
         action={
           <div className="flex flex-wrap gap-2">
+            {canSource && (
+              <Btn icon="cart" onClick={openSourcing}>
+                {t('pr.source')}
+              </Btn>
+            )}
             {pr.workflow.actions.map((a) => (
               <Btn
                 key={a.actionCode}
@@ -259,6 +297,14 @@ export default function RequisitionPage() {
             {pr.neededBy ? formatDate(pr.neededBy, locale) : '—'}
           </Row>
           {pr.project && <Row label={t('pr.col.project')}>{pr.project.code}</Row>}
+          <Row label={t('pr.vendor')}>
+            {pr.vendor ? `${pr.vendor.code} · ${ar ? pr.vendor.nameAr : pr.vendor.nameEn}` : '—'}
+          </Row>
+          {pr.deliveryLocation && (
+            <Row label={t('pr.deliverTo')}>
+              {pr.deliveryLocation.code} · {ar ? pr.deliveryLocation.nameAr : pr.deliveryLocation.nameEn}
+            </Row>
+          )}
           {pr.purchaseOrder && (
             <Row label={t('pr.col.purchaseOrder')}>
               <a
@@ -271,6 +317,61 @@ export default function RequisitionPage() {
           )}
         </aside>
       </div>
+
+      <Modal open={sourcing} title={t('pr.source')} onClose={() => setSourcing(false)}>
+        <form onSubmit={source} className="space-y-4">
+          <p className="text-xs text-slate-500">{t('pr.sourceHint')}</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field label={t('pr.vendor')}>
+              <select name="vendorId" className="input" required defaultValue={pr.vendor?.id ?? ''} disabled={vendors.state !== 'ready'}>
+                <option value="">—</option>
+                {vendors.rows.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.code} · {ar ? v.nameAr : v.nameEn}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t('pr.deliverTo')}>
+              <select name="deliveryLocationId" className="input" defaultValue={pr.deliveryLocation?.id ?? ''} disabled={locations.state !== 'ready'}>
+                <option value="">—</option>
+                {locations.rows.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.code} · {ar ? l.nameAr : l.nameEn}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t('pr.col.neededBy')}>
+              <input type="date" name="neededBy" className="input" defaultValue={pr.neededBy ? pr.neededBy.slice(0, 10) : ''} />
+            </Field>
+          </div>
+          <div className="space-y-2">
+            {pr.lines.map((l) => (
+              <div key={l.id} className="flex items-center justify-between gap-3 text-sm">
+                <span>
+                  {l.item.sku} · {ar ? l.item.nameAr : l.item.nameEn} — {Number(l.qty)} {l.item.uom}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  aria-label={`${t('pr.f.unitPrice')} ${l.item.sku}`}
+                  className="input w-32"
+                  value={prices[l.id] ?? ''}
+                  onChange={(e) => setPrices((p) => ({ ...p, [l.id]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Btn onClick={() => setSourcing(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('source')} disabled={busy()}>
+              {t('common.save')}
+            </Btn>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         open={pending !== null}

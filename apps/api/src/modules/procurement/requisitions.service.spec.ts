@@ -59,6 +59,7 @@ describe('RequisitionsService.act — APPROVE bypass', () => {
       undefined as never, // notifications
       engine as never,
       undefined as never, // events
+      undefined as never, // outbox
     );
     return { svc, prisma, approvals, engine };
   }

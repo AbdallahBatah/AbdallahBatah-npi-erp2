@@ -1,0 +1,9 @@
+ALTER TABLE "PurchaseOrder" DROP CONSTRAINT IF EXISTS "PurchaseOrder_deliveryLocationId_fkey";
+ALTER TABLE "PurchaseOrder" DROP COLUMN IF EXISTS "expectedDelivery";
+ALTER TABLE "PurchaseOrder" DROP COLUMN IF EXISTS "deliveryLocationId";
+ALTER TABLE "PurchaseRequisition" DROP CONSTRAINT IF EXISTS "PurchaseRequisition_deliveryLocationId_fkey";
+ALTER TABLE "PurchaseRequisition" DROP CONSTRAINT IF EXISTS "PurchaseRequisition_vendorId_fkey";
+ALTER TABLE "PurchaseRequisition" DROP COLUMN IF EXISTS "sourcedAt";
+ALTER TABLE "PurchaseRequisition" DROP COLUMN IF EXISTS "sourcedById";
+ALTER TABLE "PurchaseRequisition" DROP COLUMN IF EXISTS "deliveryLocationId";
+ALTER TABLE "PurchaseRequisition" DROP COLUMN IF EXISTS "vendorId";
