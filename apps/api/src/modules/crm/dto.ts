@@ -30,7 +30,7 @@ const CUSTOMER_ENTITY_KINDS = ['COMPANY', 'INDIVIDUAL'] as const;
 const LEAD_SOURCES = ['WEBSITE', 'REFERRAL', 'CAMPAIGN', 'DIRECT', 'WHATSAPP', 'OTHER'] as const;
 // Package 3 · P3-1 (ADR-03 §4-1): the company's negotiation statuses.
 const LEAD_STATUSES = ['NEGOTIATING', 'ACCEPTED', 'REJECTED'] as const;
-const OPPORTUNITY_STAGES = ['PROSPECTING', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'] as const;
+const OPPORTUNITY_STAGES = ['PROSPECTING', 'COST_STUDY', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'] as const;
 const OPPORTUNITY_TYPES = ['DIRECT', 'TENDER'] as const;
 
 export class CreateCustomerDto {

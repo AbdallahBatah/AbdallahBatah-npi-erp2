@@ -78,7 +78,7 @@ function build(over: { proposal?: unknown; costs?: Map<string, unknown>; approve
   };
   const prisma = {
     proposal: { findFirst: jest.fn().mockResolvedValue(over.proposal ?? proposalRow()), findMany: jest.fn().mockResolvedValue([]) },
-    opportunity: { findFirst: jest.fn().mockResolvedValue({ id: 'opp1', organizationId: 'org1', stage: 'QUALIFICATION' }) },
+    opportunity: { findFirst: jest.fn().mockResolvedValue({ id: 'opp1', organizationId: 'org1', stage: 'COST_STUDY' }) },
     item: { findMany: jest.fn().mockResolvedValue([{ id: 'i1' }]) },
     pricingScheme: { findFirst: jest.fn().mockResolvedValue(null) },
     user: {

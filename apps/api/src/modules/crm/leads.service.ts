@@ -154,7 +154,7 @@ export class LeadsService {
   }
 
   /**
-   * Convert a qualified lead into an opportunity. Creates a customer from the
+   * Convert an accepted lead into an opportunity. Creates a customer from the
    * lead when none is linked, sets the lead to CONVERTED, and links the two.
    */
   async convert(user: AuthUser, id: string, dto: ConvertLeadDto) {

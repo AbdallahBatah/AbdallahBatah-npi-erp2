@@ -429,7 +429,7 @@ describe('a tenant cannot reach another tenant by id', () => {
       must404('opportunity.get', () => opportunities.get(ATTACKER, B.opportunityId)));
     it('cannot move the opportunity through its stages', () =>
       must404('opportunity.changeStage', () =>
-        opportunities.changeStage(ATTACKER, B.opportunityId, { stage: 'QUALIFICATION' })));
+        opportunities.changeStage(ATTACKER, B.opportunityId, { stage: 'COST_STUDY' })));
     it('cannot edit the opportunity', () =>
       must404('opportunity.update', () => opportunities.update(ATTACKER, B.opportunityId, { name: 'Owned' })));
     it('cannot edit or switch off the loss reason', () =>

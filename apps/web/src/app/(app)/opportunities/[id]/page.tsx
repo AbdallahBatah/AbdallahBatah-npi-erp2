@@ -3,7 +3,7 @@
 /**
  * Opportunity detail — CRM Phase 1 · Step 3 (§4.2).
  *
- * The funnel stepper (محتمل ← تأهيل ← عرض سعر ← تفاوض ← رابحة | خاسرة) with the
+ * The funnel stepper (فرصة جديدة ← دراسة وتكلفة ← موازنة / عرض سعر ← تفاوض ← رابحة | خاسرة) with the
  * buttons that move the opportunity, the tender card for a tender, and the
  * proposals / contracts / attachments tabs. Every rule shown here (one step at
  * a time, a loss reason is mandatory, a closed opportunity is final) is

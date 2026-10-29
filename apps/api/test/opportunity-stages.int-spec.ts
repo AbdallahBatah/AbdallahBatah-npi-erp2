@@ -121,17 +121,17 @@ describe('the funnel, end to end: prospecting → qualification → proposal →
     expect(o.code).toMatch(/^OPP-/);
   });
 
-  it('moves to QUALIFICATION through /stage, stamping stageChangedAt, and audits it', async () => {
-    const o = await opportunities.changeStage(USER, oppId, { stage: 'QUALIFICATION' });
-    expect(o.stage).toBe('QUALIFICATION');
+  it('moves to COST_STUDY through /stage, stamping stageChangedAt, and audits it', async () => {
+    const o = await opportunities.changeStage(USER, oppId, { stage: 'COST_STUDY' });
+    expect(o.stage).toBe('COST_STUDY');
     expect(o.stageChangedAt).toBeInstanceOf(Date);
-    expect((await stageRows(oppId)).map((r) => (r.afterJson as { stage: string }).stage)).toEqual(['QUALIFICATION']);
+    expect((await stageRows(oppId)).map((r) => (r.afterJson as { stage: string }).stage)).toEqual(['COST_STUDY']);
   });
 
   it('refuses to skip ahead (409 OPPORTUNITY_STAGE / SKIP)', async () => {
     const e = (await opportunities.changeStage(USER, oppId, { stage: 'NEGOTIATION' }).catch((x) => x)) as ConflictException;
     expect(e).toBeInstanceOf(ConflictException);
-    expect(e.getResponse()).toMatchObject({ code: 'OPPORTUNITY_STAGE', from: 'QUALIFICATION', to: 'NEGOTIATION', reason: 'SKIP' });
+    expect(e.getResponse()).toMatchObject({ code: 'OPPORTUNITY_STAGE', from: 'COST_STUDY', to: 'NEGOTIATION', reason: 'SKIP' });
   });
 
   it('creating a proposal carries it to PROPOSAL automatically, audited with via: proposal', async () => {
@@ -237,9 +237,9 @@ describe('a contract wins the opportunity', () => {
 });
 
 describe('concurrency', () => {
-  it('two simultaneous QUALIFICATION → PROPOSAL changes: exactly one wins, one audit row, one 409', async () => {
+  it('two simultaneous COST_STUDY → PROPOSAL changes: exactly one wins, one audit row, one 409', async () => {
     const o = await prisma.opportunity.create({
-      data: { organizationId: ORG, code: `CC-${suffix}`, name: 'سباق', customerId: CUSTOMER, stage: 'QUALIFICATION' },
+      data: { organizationId: ORG, code: `CC-${suffix}`, name: 'سباق', customerId: CUSTOMER, stage: 'COST_STUDY' },
     });
     const results = await Promise.allSettled([
       opportunities.changeStage(USER, o.id, { stage: 'PROPOSAL' }),

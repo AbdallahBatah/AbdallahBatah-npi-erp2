@@ -1,8 +1,9 @@
 /**
  * CRM Phase 1 · Step 3 — the opportunity funnel's movement rules (§2, §3).
  *
- *   محتمل ← تأهيل ← عرض سعر ← تفاوض ← رابحة | خاسرة
- *   PROSPECTING → QUALIFICATION → PROPOSAL → NEGOTIATION → WON | LOST
+ *   فرصة جديدة ← دراسة وتكلفة ← موازنة / عرض سعر ← تفاوض على العرض ← رابحة | خاسرة
+ *   (company order, ADR-03 §4-2; COST_STUDY was QUALIFICATION until migration 0033)
+ *   PROSPECTING → COST_STUDY → PROPOSAL → NEGOTIATION → WON | LOST
  *
  * One pure function decides whether a manual move is allowed; the server calls
  * it (the browser may call it too, to decide which buttons to draw). Nothing
@@ -15,7 +16,7 @@
  */
 
 /** The open stages, in funnel order. */
-export const OPPORTUNITY_STAGE_FLOW = ['PROSPECTING', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION'] as const;
+export const OPPORTUNITY_STAGE_FLOW = ['PROSPECTING', 'COST_STUDY', 'PROPOSAL', 'NEGOTIATION'] as const;
 
 /** The closed stages. Nothing leaves them: reopening means a new opportunity. */
 export const OPPORTUNITY_TERMINAL = ['WON', 'LOST'] as const;

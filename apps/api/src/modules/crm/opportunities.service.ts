@@ -313,7 +313,7 @@ export class OpportunitiesService {
     const opp = await tx.opportunity.findFirst({ where: { id: opportunityId, organizationId: user.organizationId } });
     if (!opp) throw new NotFoundException('Opportunity not found');
     if (!isOpenStage(opp.stage)) throw new ConflictException('Opportunity is closed');
-    if (opp.stage === 'PROSPECTING' || opp.stage === 'QUALIFICATION') {
+    if (opp.stage === 'PROSPECTING' || opp.stage === 'COST_STUDY') {
       await this.applyStageChange(tx, user, opp, 'PROPOSAL', { via: 'proposal' });
     }
   }

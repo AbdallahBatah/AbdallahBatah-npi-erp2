@@ -149,9 +149,9 @@ describe('OpportunitiesService.changeStage — the funnel rules', () => {
   it('an ordinary move between open stages is audited, not announced, and closes nothing', async () => {
     const tx = makeTx({ row: opp({ stage: 'PROSPECTING' }) });
     const { svc, audit, outbox } = setup(tx);
-    await svc.changeStage(USER, 'o1', { stage: 'QUALIFICATION' });
+    await svc.changeStage(USER, 'o1', { stage: 'COST_STUDY' });
     const data = tx.opportunity.updateMany.mock.calls[0][0].data;
-    expect(data.stage).toBe('QUALIFICATION');
+    expect(data.stage).toBe('COST_STUDY');
     expect(data.closedAt).toBeUndefined();
     expect(outbox.emit).not.toHaveBeenCalled();
     expect(audit.record.mock.calls[0][0].action).toBe('STAGE_CHANGE');
@@ -167,7 +167,7 @@ describe('OpportunitiesService.changeStage — the funnel rules', () => {
 
   it.each([
     ['PROSPECTING', 'PROPOSAL', 'SKIP'],
-    ['QUALIFICATION', 'WON', 'SKIP'],
+    ['COST_STUDY', 'WON', 'SKIP'],
     ['WON', 'PROPOSAL', 'TERMINAL'],
     ['LOST', 'PROSPECTING', 'TERMINAL'],
   ])('refuses %s → %s with 409 "Invalid stage transition" (%s)', async (from, to, reason) => {
@@ -182,7 +182,7 @@ describe('OpportunitiesService.changeStage — the funnel rules', () => {
   });
 
   it('loses the race (another request moved it first: updateMany matches no row) → 409, nothing audited or emitted', async () => {
-    const tx = makeTx({ row: opp({ stage: 'QUALIFICATION' }), updateCount: 0 });
+    const tx = makeTx({ row: opp({ stage: 'COST_STUDY' }), updateCount: 0 });
     const { svc, audit, outbox } = setup(tx);
     const e = (await thrown(svc.changeStage(USER, 'o1', { stage: 'PROPOSAL' }))) as ConflictException;
     expect(e).toBeInstanceOf(ConflictException);
@@ -194,7 +194,7 @@ describe('OpportunitiesService.changeStage — the funnel rules', () => {
   it('404s an opportunity of another organization (the lookup is scoped to the caller\'s)', async () => {
     const tx = makeTx({ row: null });
     const { svc } = setup(tx);
-    await expect(svc.changeStage(USER, 'o-other', { stage: 'QUALIFICATION' })).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.changeStage(USER, 'o-other', { stage: 'COST_STUDY' })).rejects.toBeInstanceOf(NotFoundException);
     expect(tx.opportunity.findFirst.mock.calls[0][0].where).toMatchObject({ id: 'o-other', organizationId: 'org1' });
   });
 });
@@ -328,7 +328,7 @@ describe('OpportunitiesService.markWonViaContract (the contract path)', () => {
   });
 
   it('wins an open opportunity from ANY open stage, tagged via: contract, with the won event', async () => {
-    for (const stage of ['PROSPECTING', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION']) {
+    for (const stage of ['PROSPECTING', 'COST_STUDY', 'PROPOSAL', 'NEGOTIATION']) {
       const tx = makeTx({ row: opp({ stage }) });
       const { svc, audit, outbox } = setup(tx);
       await svc.markWonViaContract(tx as never, USER, 'o1');
@@ -359,7 +359,7 @@ describe('OpportunitiesService.markWonViaContract (the contract path)', () => {
 });
 
 describe('OpportunitiesService.advanceOnProposal (the proposal path)', () => {
-  it.each(['PROSPECTING', 'QUALIFICATION'])('moves a %s opportunity to PROPOSAL, tagged via: proposal', async (stage) => {
+  it.each(['PROSPECTING', 'COST_STUDY'])('moves a %s opportunity to PROPOSAL, tagged via: proposal', async (stage) => {
     const tx = makeTx({ row: opp({ stage }) });
     const { svc, audit, outbox } = setup(tx);
     await svc.advanceOnProposal(tx as never, USER, 'o1');
@@ -394,6 +394,6 @@ describe('OpportunitiesService.list', () => {
     await svc.list(USER, { type: 'TENDER', open: true });
     const where = prisma.opportunity.findMany.mock.calls[0][0].where;
     expect(where).toMatchObject({ organizationId: 'org1', opportunityType: 'TENDER' });
-    expect(where.stage).toEqual({ in: ['PROSPECTING', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION'] });
+    expect(where.stage).toEqual({ in: ['PROSPECTING', 'COST_STUDY', 'PROPOSAL', 'NEGOTIATION'] });
   });
 });

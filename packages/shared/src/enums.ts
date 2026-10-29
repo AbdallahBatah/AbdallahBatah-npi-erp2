@@ -39,14 +39,14 @@ export const LEAD_STATUSES: EnumOption[] = [
   { value: 'REJECTED', labelAr: 'تم الرفض', labelEn: 'Rejected' },
 ];
 
-// CRM Phase 1 · Step 3 (§4.2 / §9): محتمل ← تأهيل ← عرض سعر ← تفاوض ← رابحة | خاسرة.
+// The company's order (ADR-03 §4-2): فرصة جديدة ← دراسة وتكلفة ← موازنة / عرض سعر ← تفاوض على العرض ← رابحة | خاسرة.
 // The order here IS the funnel order; the transition rules live in
 // opportunity-stages.ts.
 export const OPPORTUNITY_STAGES: EnumOption[] = [
-  { value: 'PROSPECTING', labelAr: 'محتمل', labelEn: 'Prospecting' },
-  { value: 'QUALIFICATION', labelAr: 'تأهيل', labelEn: 'Qualification' },
-  { value: 'PROPOSAL', labelAr: 'عرض سعر', labelEn: 'Proposal' },
-  { value: 'NEGOTIATION', labelAr: 'تفاوض', labelEn: 'Negotiation' },
+  { value: 'PROSPECTING', labelAr: 'فرصة جديدة', labelEn: 'New opportunity' },
+  { value: 'COST_STUDY', labelAr: 'دراسة وتكلفة', labelEn: 'Cost study' },
+  { value: 'PROPOSAL', labelAr: 'موازنة / عرض سعر', labelEn: 'Budget / quote' },
+  { value: 'NEGOTIATION', labelAr: 'تفاوض على العرض', labelEn: 'Quote negotiation' },
   { value: 'WON', labelAr: 'رابحة', labelEn: 'Won' },
   { value: 'LOST', labelAr: 'خاسرة', labelEn: 'Lost' },
 ];

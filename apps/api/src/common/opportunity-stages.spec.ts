@@ -17,12 +17,12 @@ import {
   WF_EVENT_LABELS,
 } from '@npi/shared';
 
-const OPEN = ['PROSPECTING', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION'] as const;
+const OPEN = ['PROSPECTING', 'COST_STUDY', 'PROPOSAL', 'NEGOTIATION'] as const;
 
 describe('the stage vocabulary', () => {
   it('lists the six stages in funnel order with the document\'s Arabic names', () => {
     expect(OPPORTUNITY_STAGES.map((s) => s.value)).toEqual([
-      'PROSPECTING', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST',
+      'PROSPECTING', 'COST_STUDY', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST',
     ]);
     expect(OPPORTUNITY_STAGES.map((s) => s.labelAr)).toEqual([
       'محتمل', 'تأهيل', 'عرض سعر', 'تفاوض', 'رابحة', 'خاسرة',
@@ -56,20 +56,20 @@ describe('the stage vocabulary', () => {
 
 describe('opportunityTransition', () => {
   it('allows the next stage, one step at a time', () => {
-    expect(opportunityTransition('PROSPECTING', 'QUALIFICATION')).toEqual({ ok: true });
-    expect(opportunityTransition('QUALIFICATION', 'PROPOSAL')).toEqual({ ok: true });
+    expect(opportunityTransition('PROSPECTING', 'COST_STUDY')).toEqual({ ok: true });
+    expect(opportunityTransition('COST_STUDY', 'PROPOSAL')).toEqual({ ok: true });
     expect(opportunityTransition('PROPOSAL', 'NEGOTIATION')).toEqual({ ok: true });
   });
 
   it('refuses to jump forward over a stage (SKIP)', () => {
     expect(opportunityTransition('PROSPECTING', 'PROPOSAL')).toEqual({ ok: false, reason: 'SKIP' });
     expect(opportunityTransition('PROSPECTING', 'NEGOTIATION')).toEqual({ ok: false, reason: 'SKIP' });
-    expect(opportunityTransition('QUALIFICATION', 'NEGOTIATION')).toEqual({ ok: false, reason: 'SKIP' });
+    expect(opportunityTransition('COST_STUDY', 'NEGOTIATION')).toEqual({ ok: false, reason: 'SKIP' });
   });
 
   it('allows going back to any earlier open stage', () => {
-    expect(opportunityTransition('QUALIFICATION', 'PROSPECTING')).toEqual({ ok: true });
-    expect(opportunityTransition('PROPOSAL', 'QUALIFICATION')).toEqual({ ok: true });
+    expect(opportunityTransition('COST_STUDY', 'PROSPECTING')).toEqual({ ok: true });
+    expect(opportunityTransition('PROPOSAL', 'COST_STUDY')).toEqual({ ok: true });
     expect(opportunityTransition('NEGOTIATION', 'PROPOSAL')).toEqual({ ok: true });
     expect(opportunityTransition('NEGOTIATION', 'PROSPECTING')).toEqual({ ok: true });
   });
@@ -77,8 +77,8 @@ describe('opportunityTransition', () => {
   it('tells a backward move from a forward one', () => {
     expect(isBackwardMove('NEGOTIATION', 'PROPOSAL')).toBe(true);
     expect(isBackwardMove('PROPOSAL', 'PROSPECTING')).toBe(true);
-    expect(isBackwardMove('PROSPECTING', 'QUALIFICATION')).toBe(false);
-    expect(isBackwardMove('QUALIFICATION', 'LOST')).toBe(false);
+    expect(isBackwardMove('PROSPECTING', 'COST_STUDY')).toBe(false);
+    expect(isBackwardMove('COST_STUDY', 'LOST')).toBe(false);
     expect(isBackwardMove('NEGOTIATION', 'WON')).toBe(false);
   });
 
@@ -88,7 +88,7 @@ describe('opportunityTransition', () => {
 
   it('allows WON by hand from NEGOTIATION only', () => {
     expect(opportunityTransition('NEGOTIATION', 'WON')).toEqual({ ok: true });
-    for (const from of ['PROSPECTING', 'QUALIFICATION', 'PROPOSAL'] as const) {
+    for (const from of ['PROSPECTING', 'COST_STUDY', 'PROPOSAL'] as const) {
       expect(opportunityTransition(from, 'WON')).toEqual({ ok: false, reason: 'SKIP' });
     }
   });

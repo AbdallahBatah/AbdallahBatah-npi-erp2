@@ -59,12 +59,12 @@ enum LeadStatus {
   REJECTED
 }
 
-/// CRM Phase 1 (Step 3): محتمل ← تأهيل ← عرض سعر ← تفاوض ← رابحة | خاسرة.
-/// QUALIFICATION was added by migration 0024; Postgres cannot drop an enum
-/// value, so it survives a rollback of that migration.
+/// The company's order (owner work cycle 2026-10-29, ADR-03 §4-2):
+/// فرصة جديدة ← دراسة وتكلفة ← موازنة / عرض سعر ← تفاوض على العرض ← رابحة | خاسرة.
+/// COST_STUDY is migration 0024's QUALIFICATION, renamed in place by 0033.
 enum OpportunityStage {
   PROSPECTING
-  QUALIFICATION
+  COST_STUDY
   PROPOSAL
   NEGOTIATION
   WON
