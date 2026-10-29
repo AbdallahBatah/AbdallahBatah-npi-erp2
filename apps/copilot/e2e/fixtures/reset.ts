@@ -170,9 +170,10 @@ export const PROJECT_NAME_AR = 'مشروع الموقع الشمالي — مَ�
  *    (:559) is a relation neither list nor `GET /contracts/:id` (:33-44)
  *    includes — so the contracts that already have one are excluded by the
  *    `contractId`s of `GET /projects`;
- *  - `POST /contracts/:id/activate` (`contracts.controller.ts:39-43`) answers the
- *    updated `Contract` row (`contracts.service.ts:149-168`): DRAFT -> ACTIVE
- *    and no other rule, refused with 400 «Only draft contracts can be activated»;
+ *  - `POST /contracts/:id/activate` answers the updated `Contract` row. Since NPI
+ *    package 2 a hand-written contract (no `proposalRevisionId`) still goes
+ *    DRAFT -> ACTIVE; one from an accepted quote needs APPROVED plus the
+ *    customer's signed copy, so the fixture never picks it as its DRAFT;
  *  - `POST /projects` (`projects.controller.ts` `create`, `projects.project.write`)
  *    takes `CreateProjectDto { contractId, nameAr?, … }` (`projects/dto.ts:5-13`)
  *    and answers the created `Project` with its `wbsElements`
@@ -208,11 +209,15 @@ export async function ensureProject(request: APIRequestContext): Promise<NpiEnti
         code: text(c.code, 'contract.code'),
         status: text(c.status, 'contract.status'),
         createdAt: text(c.createdAt, 'contract.createdAt'),
+        // NPI package 2 (P2-2): a contract born from an accepted quote is activated
+        // only after the general manager's approval and the customer's signed copy;
+        // only a hand-written one (no proposal revision) still goes DRAFT -> ACTIVE.
+        fromQuote: c.proposalRevisionId !== null && c.proposalRevisionId !== undefined,
       };
     })
     .filter((c) => !taken.has(c.id))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const draft = contracts.find((c) => c.status === 'DRAFT');
+  const draft = contracts.find((c) => c.status === 'DRAFT' && !c.fromQuote);
   const active = contracts.find((c) => c.status === 'ACTIVE');
   const source = draft ?? active;
   if (source === undefined) {

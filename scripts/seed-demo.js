@@ -215,7 +215,7 @@ async function signChain(documentType, documentId, chain, label) {
     return { opp, proposal: p, revision: rev };
   }
 
-  const hosp = await makeOppWithProposal('مستشفى الشفاء التخصصي', 'نظام شمسي لمواقف المستشفى 500kWp', 500, 910, 'accept');
+  await makeOppWithProposal('مستشفى الشفاء التخصصي', 'نظام شمسي لمواقف المستشفى 500kWp', 500, 910, 'accept');
   await makeOppWithProposal('مصنع أسمنت الشرقية', 'محطة أرضية للمصنع 2MWp', 2000, 3640, 'sent');
   await makeOppWithProposal('مجمع الواحة التجاري', 'أسطح المجمع التجاري 300kWp', 300, 546, 'pending');
 
@@ -292,22 +292,45 @@ async function signChain(documentType, documentId, chain, label) {
   }
 
   // ── 4. Contract #2 (hospital) → activate → milestone → invoice → payment
+  // Package 2: accepting the quote drafted the contract (50 / 30 / 20). The demo sets
+  // its terms, raises it, the general manager signs it, the customer's signed copy is
+  // filed, and only then is it activated — the company's cycle, step 9.
   let contract2 = (await call('GET', '/contracts')).find((c) => c.customer?.nameAr === 'مستشفى الشفاء التخصصي');
-  if (!contract2 && hosp?.revision) {
-    contract2 = await step('عقد المستشفى + مراحل', () =>
-      call('POST', '/contracts', {
-        proposalRevisionId: hosp.revision.id,
-        contractType: 'EPC',
+  if (contract2 && contract2.status === 'DRAFT') {
+    const total = Number(contract2.totalValue);
+    const a1 = Math.round(total * 0.25 * 100) / 100;
+    const a2 = Math.round(total * 0.45 * 100) / 100;
+    const a3 = Math.round((total - a1 - a2) * 100) / 100;
+    await step('شروط عقد المستشفى ودفعاته', () =>
+      call('PATCH', `/contracts/${contract2.id}`, {
         retentionPct: 5,
         advancePct: 10,
         milestones: [
-          { sequence: 1, descriptionAr: 'دفعة التعاقد والتصاميم', descriptionEn: 'Mobilization & design', amount: 250000, triggerType: 'PROGRESS' },
-          { sequence: 2, descriptionAr: 'توريد المعدات للموقع', descriptionEn: 'Equipment delivery', amount: 500000, triggerType: 'PROGRESS' },
-          { sequence: 3, descriptionAr: 'التركيب والتشغيل التجريبي', descriptionEn: 'Installation & commissioning', amount: 350000, triggerType: 'PROGRESS' },
+          { sequence: 1, descriptionAr: 'دفعة التعاقد والتصاميم', descriptionEn: 'Mobilization & design', amount: a1, triggerType: 'PROGRESS' },
+          { sequence: 2, descriptionAr: 'توريد المعدات للموقع', descriptionEn: 'Equipment delivery', amount: a2, triggerType: 'PROGRESS' },
+          { sequence: 3, descriptionAr: 'التركيب والتشغيل التجريبي', descriptionEn: 'Installation & commissioning', amount: a3, triggerType: 'PROGRESS' },
         ],
       }),
     );
-    if (contract2) await step('تفعيل عقد المستشفى', () => call('POST', `/contracts/${contract2.id}/activate`, {}));
+    await step('رفع عقد المستشفى للمدير العام', () => call('POST', `/contracts/${contract2.id}/submit`, {}));
+    contract2 = await call('GET', `/contracts/${contract2.id}`);
+  }
+  if (contract2 && contract2.status === 'PENDING_APPROVAL') {
+    await step('اعتماد المدير العام لعقد المستشفى', () =>
+      asUser(CEO.email, CEO.password, async () => {
+        const inbox = await call('GET', '/approvals/inbox');
+        const row = inbox.find((r) => r.documentType === 'CONTRACT' && r.documentId === contract2.id);
+        if (!row) throw new Error('not in the executive inbox');
+        return call('POST', `/approvals/${row.id}/decide`, { decision: 'APPROVE', note: 'اعتماد العرض المقبول والعقد' });
+      }),
+    );
+    contract2 = await call('GET', `/contracts/${contract2.id}`);
+  }
+  if (contract2 && contract2.status === 'APPROVED') {
+    const filed = await step('رفع النسخة الموقّعة من العميل', () =>
+      upload(`/attachments/CONTRACT/${contract2.id}`, 'العقد-موقع.pdf', DEMO_PDF, 'application/pdf'),
+    );
+    if (filed) await step('تفعيل عقد المستشفى', () => call('POST', `/contracts/${contract2.id}/activate`, {}));
   }
   if (contract2) {
     const full = await call('GET', `/contracts/${contract2.id}`);

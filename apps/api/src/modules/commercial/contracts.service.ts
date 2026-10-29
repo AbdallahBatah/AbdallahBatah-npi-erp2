@@ -112,12 +112,14 @@ export class ContractsService implements OnModuleInit {
       },
     });
     if (!contract) throw new NotFoundException('Contract not found');
+    // Package 2 · P2-4: the CONTRACT signature chain, for the page's banner.
+    const approval = await this.approvals.forDocument(user, 'CONTRACT', contract.id);
     // The embedded revision carries the price build-up; hide it from callers
     // who may not see costs and margins (totalAmount stays).
     if (!canViewCosts(user) && contract.proposalRevision) {
-      return { ...contract, proposalRevision: hideRevisionPricing(contract.proposalRevision) };
+      return { ...contract, approval, proposalRevision: hideRevisionPricing(contract.proposalRevision) };
     }
-    return contract;
+    return { ...contract, approval };
   }
 
   /**

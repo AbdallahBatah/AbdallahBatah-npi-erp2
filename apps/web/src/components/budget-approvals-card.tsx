@@ -32,15 +32,33 @@ interface Row {
   waitingSince: string;
 }
 
+/** Package 2 · P2-4: a contract waiting on the general manager (GET /contracts/awaiting-me). */
+interface ContractRow {
+  requestId: string;
+  id: string;
+  code: string;
+  totalValue: string;
+  customer: { nameAr: string; nameEn: string };
+  proposal: { id: string; code: string } | null;
+  _count: { milestones: number };
+  waitingSince: string;
+}
+
 export function BudgetApprovalsCard() {
   const { t, locale, pick } = useI18n();
   const [data, setData] = useState<{ minMarginPct: number; rows: Row[] } | null>(null);
+  const [contracts, setContracts] = useState<ContractRow[]>([]);
 
   useEffect(() => {
     api
       .get<{ minMarginPct: number; rows: Row[] }>('/proposals/awaiting-me')
       .then(setData)
       .catch(() => setData(null));
+    // Owner work cycle step 9: the accepted offers, as draft contracts, come to the same screen.
+    api
+      .get<ContractRow[]>('/contracts/awaiting-me')
+      .then(setContracts)
+      .catch(() => setContracts([]));
   }, []);
 
   if (!data) return null;
@@ -110,6 +128,31 @@ export function BudgetApprovalsCard() {
               {t('dash.budgets.belowFloor').replace('{n}', String(data.minMarginPct))}
             </p>
           )}
+        </div>
+      )}
+      {contracts.length > 0 && (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800">
+            <Icon name="file-signature" className="h-4 w-4 text-warning-600" />
+            {t('dash.contracts.title')}
+            <span className="rounded-full bg-warning-100 px-2 py-0.5 text-xs font-bold text-warning-800">{contracts.length}</span>
+          </h3>
+          <ul className="divide-y divide-slate-50 text-sm">
+            {contracts.map((c) => (
+              <li key={c.requestId} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span>
+                  <Link href={`/contracts/${c.id}`} className="font-semibold text-brand-700 hover:underline">
+                    {c.code}
+                  </Link>
+                  <span className="ms-2 text-xs text-slate-500">
+                    {pick(c.customer, 'name')}
+                    {c.proposal ? ` · ${c.proposal.code}` : ''} · {t('dash.contracts.payments').replace('{n}', String(c._count.milestones))}
+                  </span>
+                </span>
+                <span className="font-semibold tabular-nums">{formatMoney(c.totalValue, locale)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

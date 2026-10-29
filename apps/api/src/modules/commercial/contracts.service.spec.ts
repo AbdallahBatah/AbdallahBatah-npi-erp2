@@ -39,7 +39,7 @@ describe('ContractsService.create — proposal revision guard', () => {
       audit as never,
       notifications as never,
       opportunities,
-      { register: jest.fn(), gate: jest.fn(), inbox: jest.fn() } as never,
+      { register: jest.fn(), gate: jest.fn(), inbox: jest.fn(), forDocument: jest.fn().mockResolvedValue(null) } as never,
     );
     return { svc, prisma, tx, outbox };
   }
@@ -144,6 +144,7 @@ function world(contract: Record<string, unknown> | null, opts: { gate?: unknown;
     register: jest.fn(),
     gate: jest.fn().mockResolvedValue(opts.gate ?? { cleared: false, request: { id: 'req1' } }),
     inbox: jest.fn().mockResolvedValue([]),
+    forDocument: jest.fn().mockResolvedValue(null),
   };
   const audit = { record: jest.fn().mockResolvedValue(undefined) };
   const notifications = { notifyBestEffort: jest.fn().mockResolvedValue(1) };

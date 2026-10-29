@@ -595,12 +595,19 @@ export default function ProposalDetailPage() {
       return;
     }
     setAcceptErr('');
+    let contractId: string | null = null;
     const ok = await act(`accept:${revId}`, async () => {
       await apiUpload(`/attachments/PROPOSAL/${id}`, acceptFile);
-      await api.post(`/proposals/${id}/revisions/${revId}/accept`, {});
+      // P2-3: the draft contract is created with the acceptance.
+      const res = await api.post<{ contractId?: string | null }>(`/proposals/${id}/revisions/${revId}/accept`, {});
+      contractId = res.contractId ?? null;
     });
     if (ok) setAcceptFor(null);
     setFilesKey((k) => k + 1);
+    if (ok && contractId) {
+      router.push(`/contracts/${contractId}`);
+      return;
+    }
     // Same as send: acceptance of a lapsed revision expires it server-side.
     load();
   }
