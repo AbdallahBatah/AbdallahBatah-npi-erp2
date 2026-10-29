@@ -24,3 +24,16 @@ export class CreateChangeOrderDto {
   @IsOptional() @IsNumber() scheduleImpactDays?: number;
   @IsOptional() @IsString() wbsElementId?: string;
 }
+
+// Package 4 · P4-1 (ADR-04 §4-1): the engineer and the planned dates.
+export class AssignProjectDto {
+  /** A user of the organization; an empty string unassigns. */
+  @IsOptional() @IsString() engineerId?: string;
+  @IsOptional() @IsString() plannedStart?: string | null;
+  @IsOptional() @IsString() plannedEnd?: string | null;
+}
+
+export class PlanElementDto {
+  @IsOptional() @IsString() plannedStart?: string | null;
+  @IsOptional() @IsString() plannedEnd?: string | null;
+}

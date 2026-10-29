@@ -95,6 +95,8 @@ const GUARDED_ROUTES = [
   // P3-5: the standard budgets and their pick list.
   ['/budget-templates', 'commercial.item.read'],
   ['/reference/lookups/budget-templates', ['commercial.item.read', 'commercial.proposal.write']],
+  // P4-1: active users' names, for naming a project's engineer.
+  ['/reference/lookups/users', ['admin.user.manage', 'commercial.contract.write']],
 ];
 
 // ── tiny harness ───────────────────────────────────────────────────────────

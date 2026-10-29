@@ -744,6 +744,7 @@ model WorkItem {
 
   bomLines        BomLine[]
   templateLines   BudgetTemplateLine[]
+  wbsElements     WbsElement[]
 
   @@unique([organizationId, code])
   @@index([organizationId, isActive, sortOrder])
@@ -1427,6 +1428,15 @@ model WbsElement {
   nameEn       String
   budgetAmount Decimal @default(0) @db.Decimal(18, 2)
   createdAt    DateTime @default(now())
+  // Package 4 · P4-1 (ADR-04 §4-1, migration 0040): a project opened from a
+  // lump-sum budget has one element per budget line — its work item, quantity
+  // and unit — and the engineer's planned dates for it.
+  workItemId   String?
+  workItem     WorkItem? @relation(fields: [workItemId], references: [id], onDelete: SetNull)
+  qty          Decimal? @db.Decimal(14, 3)
+  uom          String?
+  plannedStart DateTime?
+  plannedEnd   DateTime?
 
   poLines      PurchaseOrderLine[]
   prLines      PurchaseRequisitionLine[]
@@ -1437,6 +1447,7 @@ model WbsElement {
 
   @@unique([projectId, code])
   @@index([projectId])
+  @@index([workItemId])
 }
 
 // SCM-01/02: committed cost against the project.

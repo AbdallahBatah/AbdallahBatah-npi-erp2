@@ -40,8 +40,8 @@
 ## 4. التصميم
 
 ### 4-1. المهندس والخطة (P4-1)
-- `PATCH /projects/:id/assignment {engineerId, plannedStart, plannedEnd}` بـ`projects.project.write` (م.ع.م)؛ يُشعَر المهندس.
-- `WbsElement += plannedStart, plannedEnd, workItemId, qty, uom`؛ المهندس يعدّل تواريخ البنود (`PATCH /projects/:id/wbs/:wbsId/plan`) بمفتاحه `scm.requisition.write`، والمشروع يبقى في «تخطيط» حتى ينقله م.ع.م.
+- `PATCH /projects/:id/assignment {engineerId, plannedStart, plannedEnd}` بـ`commercial.contract.write` (م.ع.م) — لا بمفتاح المشروع، لأن قالب المهندس يحمله فيُسند نفسه؛ يُشعَر المهندس.
+- `WbsElement += plannedStart, plannedEnd, workItemId, qty, uom`؛ المهندس يعدّل تواريخ البنود (`PATCH /projects/:id/wbs/:wbsId/plan`) بـ`projects.project.write`، والمشروع يبقى في «تخطيط» حتى ينقله م.ع.م.
 - فتح المشروع من عقد موازنته مقطوعة: عنصر لكل سطر؛ وإلا الأبواب كما اليوم. وينشأ موقع `SITE-<رمز المشروع>`.
 
 ### 4-2. طلب المواد (P4-2)

@@ -9,9 +9,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
 import { ApprovalService } from '../../common/approval.service';
+import { NotificationService } from '../../common/notification.service';
 import { isValidStageTransition, PERMISSIONS } from '@npi/shared';
 import type { AuthUser } from '../../common/auth-user';
-import type { CreateChangeOrderDto, CreateProjectDto, SetStageDto } from './dto';
+import type { AssignProjectDto, CreateChangeOrderDto, CreateProjectDto, PlanElementDto, SetStageDto } from './dto';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -53,6 +54,42 @@ function bucketOf(line: {
   return { key: `WK_${kind}`, ...WORK_KIND_BUCKETS[kind] };
 }
 
+/**
+ * Package 4 · P4-1 — one WBS element per budget line, in the work-item list
+ * order: code = the work item's code (a repeat gets -2, -3 …), name = the
+ * line's own wording else the work item's, budget = qty × the cost recorded on
+ * the line (what the general manager approved), never the catalogue's today.
+ */
+export function wbsPerBudgetLine(
+  lines: Array<{
+    qty: unknown;
+    unitCost: unknown;
+    uom: string | null;
+    description: string | null;
+    item: { nameAr: string; nameEn: string; uom: string } | null;
+    workItem: { id: string; code: string; nameAr: string; nameEn: string; uom: string; sortOrder: number } | null;
+  }>,
+) {
+  const used = new Map<string, number>();
+  return [...lines]
+    .sort((a, b) => (a.workItem?.sortOrder ?? 1e9) - (b.workItem?.sortOrder ?? 1e9))
+    .map((l, i) => {
+      const base = l.workItem?.code ?? `L${String(i + 1).padStart(2, '0')}`;
+      const n = (used.get(base) ?? 0) + 1;
+      used.set(base, n);
+      const qty = Number(l.qty);
+      return {
+        code: n === 1 ? base : `${base}-${n}`,
+        nameAr: l.description || l.workItem?.nameAr || l.item?.nameAr || base,
+        nameEn: l.workItem?.nameEn || l.item?.nameEn || base,
+        workItemId: l.workItem?.id ?? null,
+        qty,
+        uom: l.uom || l.workItem?.uom || l.item?.uom || null,
+        budgetAmount: round2(qty * Number(l.unitCost ?? 0)),
+      };
+    });
+}
+
 @Injectable()
 export class ProjectsService implements OnModuleInit {
   constructor(
@@ -60,6 +97,7 @@ export class ProjectsService implements OnModuleInit {
     private readonly numbering: NumberingService,
     private readonly audit: AuditService,
     private readonly approvals: ApprovalService,
+    private readonly notifications: NotificationService,
   ) {}
 
   onModuleInit(): void {
@@ -102,8 +140,8 @@ export class ProjectsService implements OnModuleInit {
             designVersion: { select: { capacityKwp: true } },
             bomLines: {
               include: {
-                item: { select: { itemCategory: true, unitCost: true } },
-                workItem: { select: { kind: true } },
+                item: { select: { itemCategory: true, unitCost: true, nameAr: true, nameEn: true, uom: true } },
+                workItem: { select: { id: true, kind: true, code: true, nameAr: true, nameEn: true, uom: true, sortOrder: true } },
               },
             },
           },
@@ -131,6 +169,13 @@ export class ProjectsService implements OnModuleInit {
       buckets.set(b.key, row);
     }
 
+    // Package 4 · P4-1 (ADR-04 §4-1): a project opened from a lump-sum budget gets
+    // one element per budget line — the line's work item, quantity, unit and the
+    // cost the general manager approved — so material requests, purchases and
+    // later the daily log land on the very line they were budgeted on.
+    const perLine = contract.proposalRevision?.pricingMode === 'LUMP_SUM';
+    const lineElements = perLine ? wbsPerBudgetLine(contract.proposalRevision?.bomLines ?? []) : null;
+
     const capacity =
       dto.capacityKwp ??
       (contract.proposalRevision?.designVersion?.capacityKwp
@@ -151,8 +196,9 @@ export class ProjectsService implements OnModuleInit {
           plannedStart: dto.plannedStart ? new Date(dto.plannedStart) : undefined,
           plannedEnd: dto.plannedEnd ? new Date(dto.plannedEnd) : undefined,
           wbsElements: {
-            create:
-              buckets.size > 0
+            create: lineElements && lineElements.length > 0
+              ? lineElements
+              : buckets.size > 0
                 ? [...buckets.values()].map((b) => ({
                     code: b.code,
                     nameAr: b.nameAr,
@@ -176,10 +222,102 @@ export class ProjectsService implements OnModuleInit {
         },
         tx,
       );
+      // P4-1 (ADR-04 §3 rule 4): the project's own stock location, where the
+      // warehouse sends its materials and the engineer confirms them.
+      await tx.location.create({
+        data: {
+          organizationId: user.organizationId,
+          code: `SITE-${code}`,
+          nameAr: `موقع ${created.nameAr}`,
+          nameEn: `Site — ${created.nameEn}`,
+          locationType: 'SITE',
+          projectId: created.id,
+        },
+      });
       return created;
     });
 
     return project;
+  }
+
+  /**
+   * Package 4 · P4-1 (owner work cycle step 6 «تعيين مهندس المشروع»): the projects
+   * general manager names the site engineer and the project's planned dates.
+   * The engineer is told (best effort).
+   */
+  async assign(user: AuthUser, id: string, dto: AssignProjectDto) {
+    const project = await this.prisma.project.findFirst({ where: { id, organizationId: user.organizationId } });
+    if (!project) throw new NotFoundException('Project not found');
+    if (project.stage === 'CLOSED') throw new BadRequestException('The project is closed');
+    let engineer: { id: string; nameAr: string } | null = null;
+    if (dto.engineerId) {
+      engineer = await this.prisma.user.findFirst({
+        where: { id: dto.engineerId, organizationId: user.organizationId, isActive: true },
+        select: { id: true, nameAr: true },
+      });
+      if (!engineer) throw new BadRequestException('Unknown or inactive user');
+    }
+    const start = dto.plannedStart === undefined ? undefined : dto.plannedStart ? new Date(dto.plannedStart) : null;
+    const end = dto.plannedEnd === undefined ? undefined : dto.plannedEnd ? new Date(dto.plannedEnd) : null;
+    const s = start === undefined ? project.plannedStart : start;
+    const e = end === undefined ? project.plannedEnd : end;
+    if (s && e && e < s) throw new BadRequestException('The planned end is before the planned start');
+
+    const updated = await this.prisma.project.update({
+      where: { id },
+      data: {
+        ...(dto.engineerId !== undefined ? { projectManagerId: dto.engineerId || null } : {}),
+        ...(start !== undefined ? { plannedStart: start } : {}),
+        ...(end !== undefined ? { plannedEnd: end } : {}),
+      },
+    });
+    await this.audit.record({
+      organizationId: user.organizationId,
+      actorId: user.userId,
+      entityType: 'Project',
+      entityId: id,
+      action: 'ASSIGN',
+      before: { projectManagerId: project.projectManagerId, plannedStart: project.plannedStart, plannedEnd: project.plannedEnd },
+      after: { projectManagerId: updated.projectManagerId, plannedStart: updated.plannedStart, plannedEnd: updated.plannedEnd },
+    });
+    if (engineer && engineer.id !== project.projectManagerId) {
+      await this.notifications.notifyUserBestEffort({
+        organizationId: user.organizationId,
+        userId: engineer.id,
+        type: 'PROJECT_ASSIGNED',
+        titleAr: `أُسند إليك المشروع ${project.code}`,
+        titleEn: `You are the engineer of project ${project.code}`,
+        bodyAr: 'أعدّ خطة التنفيذ على بنود الموازنة وناقشها مع مدير عام المشاريع.',
+        bodyEn: 'Prepare the execution plan on the budget lines and go through it with the projects general manager.',
+        linkPath: `/projects/${id}`,
+      });
+    }
+    return updated;
+  }
+
+  /** Package 4 · P4-1 (work cycle step 10): the engineer's planned dates for one budget line. */
+  async planElement(user: AuthUser, projectId: string, wbsId: string, dto: PlanElementDto) {
+    const el = await this.prisma.wbsElement.findFirst({
+      where: { id: wbsId, projectId, project: { organizationId: user.organizationId } },
+    });
+    if (!el) throw new NotFoundException('WBS element not found');
+    const start = dto.plannedStart ? new Date(dto.plannedStart) : null;
+    const end = dto.plannedEnd ? new Date(dto.plannedEnd) : null;
+    if (start && end && end < start) throw new BadRequestException('The planned end is before the planned start');
+    const updated = await this.prisma.wbsElement.update({
+      where: { id: el.id },
+      data: { plannedStart: start, plannedEnd: end },
+    });
+    await this.audit.record({
+      organizationId: user.organizationId,
+      actorId: user.userId,
+      entityType: 'WbsElement',
+      entityId: el.id,
+      action: 'PLAN',
+      before: { plannedStart: el.plannedStart, plannedEnd: el.plannedEnd },
+      after: { plannedStart: updated.plannedStart, plannedEnd: updated.plannedEnd },
+    });
+    return updated;
   }
 
   /**
@@ -269,9 +407,24 @@ export class ProjectsService implements OnModuleInit {
       ),
       this.approvals.pendingFor(user.organizationId, 'PROGRESS_CLAIM', claims.map((c) => c.id)),
     ]);
+    // P4-1: who the engineer is, and the project's own stock location.
+    const [engineer, siteLocation] = await Promise.all([
+      project.projectManagerId
+        ? this.prisma.user.findFirst({
+            where: { id: project.projectManagerId, organizationId: user.organizationId },
+            select: { id: true, nameAr: true, nameEn: true },
+          })
+        : Promise.resolve(null),
+      this.prisma.location.findFirst({
+        where: { organizationId: user.organizationId, projectId: project.id, locationType: 'SITE' },
+        select: { id: true, code: true, nameAr: true, nameEn: true },
+      }),
+    ]);
 
     return {
       ...project,
+      engineer,
+      siteLocation,
       changeOrders: project.changeOrders.map((c) => ({
         ...c,
         pendingApproval: coPending.get(c.id) ?? null,

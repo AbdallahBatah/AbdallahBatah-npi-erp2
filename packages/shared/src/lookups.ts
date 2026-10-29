@@ -18,7 +18,15 @@
  */
 import { PERMISSIONS, type PermissionKey } from './permissions';
 
-export type LookupKind = 'items' | 'projects' | 'customers' | 'vendors' | 'locations' | 'workItems' | 'budgetTemplates';
+export type LookupKind =
+  | 'items'
+  | 'projects'
+  | 'customers'
+  | 'vendors'
+  | 'locations'
+  | 'workItems'
+  | 'budgetTemplates'
+  | 'users';
 
 /** The URL segment of each list (`GET /reference/lookups/<segment>`). */
 export const LOOKUP_PATH: Record<LookupKind, string> = {
@@ -29,6 +37,7 @@ export const LOOKUP_PATH: Record<LookupKind, string> = {
   locations: 'locations',
   workItems: 'work-items',
   budgetTemplates: 'budget-templates',
+  users: 'users',
 };
 
 /** Holding ANY one of a list's keys is enough to read it. */
@@ -61,6 +70,9 @@ export const LOOKUP_ACCESS: Record<LookupKind, readonly PermissionKey[]> = {
   workItems: [PERMISSIONS.ITEM_READ, PERMISSIONS.PROPOSAL_WRITE],
   // P3-5: the standard budgets, same rule as the work items they are made of.
   budgetTemplates: [PERMISSIONS.ITEM_READ, PERMISSIONS.PROPOSAL_WRITE],
+  // P4-1: the active users' names, for naming a project's engineer (the
+  // projects general manager holds the contract write key).
+  users: [PERMISSIONS.USER_MANAGE, PERMISSIONS.CONTRACT_WRITE],
 };
 
 /** True when `permissions` holds at least one of the list's keys. */

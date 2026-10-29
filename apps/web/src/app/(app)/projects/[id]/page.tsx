@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -28,6 +28,11 @@ interface Wbs {
   committed: number | null;
   actual: number | null;
   variance: number | null;
+  // Package 4 · P4-1: a budget line's quantity, unit and the engineer's dates.
+  qty?: string | null;
+  uom?: string | null;
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
 }
 interface Po {
   id: string;
@@ -99,7 +104,15 @@ interface Project {
   changeOrders: ChangeOrder[];
   subcontracts: Subcontract[];
   costSummary: { budget: number | null; committed: number | null; actual: number | null; variance: number | null };
+  // Package 4 · P4-1
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
+  engineer?: { id: string; nameAr: string; nameEn: string } | null;
+  siteLocation?: { id: string; code: string; nameAr: string; nameEn: string } | null;
 }
+
+/** A date input's value from an ISO timestamp ('' when none). */
+const dayOf = (iso?: string | null) => (iso ? iso.slice(0, 10) : '');
 
 // Order comes from the shared package — the API enforces the same sequence.
 
@@ -117,6 +130,11 @@ export default function ProjectDetailPage() {
   const { act, busy } = useAct();
   const { confirm, confirmNode } = useConfirm();
   const toast = useToast();
+  // P4-1: the engineer and the plan.
+  const canAssign = can('commercial.contract.write');
+  const users = useLookup<{ id: string; nameAr: string; nameEn: string }>('users', { enabled: canAssign });
+  const [assigning, setAssigning] = useState(false);
+  const [planFor, setPlanFor] = useState<Wbs | null>(null);
   // Change order modal
   const [coOpen, setCoOpen] = useState(false);
   const [coDescAr, setCoDescAr] = useState('');
@@ -252,6 +270,38 @@ export default function ProjectDetailPage() {
       load();
   }
 
+  async function saveAssignment(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const ok = await act('assign', () =>
+      api.patch(`/projects/${id}/assignment`, {
+        engineerId: String(f.get('engineerId') || ''),
+        plannedStart: String(f.get('plannedStart') || '') || null,
+        plannedEnd: String(f.get('plannedEnd') || '') || null,
+      }),
+    );
+    if (ok) {
+      setAssigning(false);
+      load();
+    }
+  }
+
+  async function savePlan(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!planFor) return;
+    const f = new FormData(e.currentTarget);
+    const ok = await act('plan', () =>
+      api.patch(`/projects/${id}/wbs/${planFor.id}/plan`, {
+        plannedStart: String(f.get('plannedStart') || '') || null,
+        plannedEnd: String(f.get('plannedEnd') || '') || null,
+      }),
+    );
+    if (ok) {
+      setPlanFor(null);
+      load();
+    }
+  }
+
   if (loadErr && !p) return <LoadError message={loadErr} onRetry={load} />;
   if (!p) return <PageSkeleton />;
   const cs = {
@@ -283,6 +333,74 @@ export default function ProjectDetailPage() {
         }
       />
       {confirmNode}
+
+      {/* P4-1 (work cycle steps 6 and 10): who runs the site, and when. */}
+      <div className="card mb-4 flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+          <span>
+            <span className="text-slate-500">{t('prj.engineer')}: </span>
+            <span className="font-semibold">{p.engineer ? pick(p.engineer, 'name') : t('prj.noEngineer')}</span>
+          </span>
+          <span>
+            <span className="text-slate-500">{t('prj.plan')}: </span>
+            {p.plannedStart ? formatDate(p.plannedStart, locale) : '—'} ← {p.plannedEnd ? formatDate(p.plannedEnd, locale) : '—'}
+          </span>
+          {p.siteLocation && (
+            <span className="text-xs text-slate-500">
+              {t('prj.siteLocation')}: <span className="font-mono">{p.siteLocation.code}</span>
+            </span>
+          )}
+        </div>
+        {canAssign && p.stage !== 'CLOSED' && (
+          <Btn sm icon="users" onClick={() => setAssigning(true)} disabled={busy()}>
+            {t('prj.assign')}
+          </Btn>
+        )}
+      </div>
+      <Modal open={assigning} title={t('prj.assign')} onClose={() => setAssigning(false)}>
+        <form onSubmit={saveAssignment} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Field label={t('prj.engineer')}>
+              <select name="engineerId" className="input" defaultValue={p.engineer?.id ?? ''} disabled={users.state !== 'ready'}>
+                <option value="">—</option>
+                {users.rows.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {pick(u, 'name')}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <Field label={t('prj.plannedStart')}>
+            <input type="date" name="plannedStart" className="input" defaultValue={dayOf(p.plannedStart)} />
+          </Field>
+          <Field label={t('prj.plannedEnd')}>
+            <input type="date" name="plannedEnd" className="input" defaultValue={dayOf(p.plannedEnd)} />
+          </Field>
+          <div className="flex justify-end gap-2 sm:col-span-2">
+            <Btn onClick={() => setAssigning(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('assign')} disabled={busy()}>
+              {t('common.save')}
+            </Btn>
+          </div>
+        </form>
+      </Modal>
+      <Modal open={!!planFor} title={planFor ? `${planFor.code} · ${pick(planFor, 'name')}` : ''} onClose={() => setPlanFor(null)}>
+        <form key={planFor?.id} onSubmit={savePlan} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label={t('prj.plannedStart')}>
+            <input type="date" name="plannedStart" className="input" defaultValue={dayOf(planFor?.plannedStart)} />
+          </Field>
+          <Field label={t('prj.plannedEnd')}>
+            <input type="date" name="plannedEnd" className="input" defaultValue={dayOf(planFor?.plannedEnd)} />
+          </Field>
+          <div className="flex justify-end gap-2 sm:col-span-2">
+            <Btn onClick={() => setPlanFor(null)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" busy={busy('plan')} disabled={busy()}>
+              {t('common.save')}
+            </Btn>
+          </div>
+        </form>
+      </Modal>
 
       {/* Cost summary (PRJ-03) — hidden without finance.costs.view */}
       {showCosts && (
@@ -353,6 +471,8 @@ export default function ProjectDetailPage() {
               <tr>
                 <th scope="col" className="th">{t('common.code')}</th>
                 <th scope="col" className="th">{t('common.name')}</th>
+                <th scope="col" className="th text-end">{t('proposals.qty')}</th>
+                <th scope="col" className="th">{t('prj.plan')}</th>
                 {showCosts && <th scope="col" className="th text-end">{t('prj.budget')}</th>}
                 {showCosts && <th scope="col" className="th text-end">{t('prj.committed')}</th>}
                 {showCosts && <th scope="col" className="th text-end">{t('prj.actual')}</th>}
@@ -364,6 +484,20 @@ export default function ProjectDetailPage() {
                 <tr key={w.id}>
                   <td className="td font-mono text-xs">{w.code}</td>
                   <td className="td">{locale === 'ar' ? w.nameAr : w.nameEn}</td>
+                  <td className="td-num">
+                    {w.qty != null ? Number(w.qty) : '—'}
+                    {w.uom && <span className="ms-1 text-xs text-slate-400">{w.uom}</span>}
+                  </td>
+                  <td className="td text-xs">
+                    {w.plannedStart || w.plannedEnd
+                      ? `${w.plannedStart ? formatDate(w.plannedStart, locale) : '—'} ← ${w.plannedEnd ? formatDate(w.plannedEnd, locale) : '—'}`
+                      : '—'}
+                    {can('projects.project.write') && p.stage !== 'CLOSED' && (
+                      <button type="button" className="ms-2 text-brand-700 underline" onClick={() => setPlanFor(w)}>
+                        {t('prj.planLine')}
+                      </button>
+                    )}
+                  </td>
                   {showCosts && <td className="td-num">{formatMoney(w.budgetAmount ?? 0, locale)}</td>}
                   {showCosts && <td className="td-num">{formatMoney(w.committed ?? 0, locale)}</td>}
                   {showCosts && <td className="td-num">{formatMoney(w.actual ?? 0, locale)}</td>}

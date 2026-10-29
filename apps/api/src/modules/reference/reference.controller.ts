@@ -181,6 +181,12 @@ export class ReferenceController {
     return this.lookups.workItems(user.organizationId);
   }
 
+  @RequireAnyPermission(...LOOKUP_ACCESS.users)
+  @Get('lookups/users')
+  lookupUsers(@CurrentUser() user: AuthUser) {
+    return this.lookups.users(user.organizationId);
+  }
+
   @RequireAnyPermission(...LOOKUP_ACCESS.budgetTemplates)
   @Get('lookups/budget-templates')
   lookupBudgetTemplates(@CurrentUser() user: AuthUser) {

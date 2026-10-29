@@ -91,6 +91,15 @@ export class ReferenceLookupsService {
     });
   }
 
+  /** Package 4 · P4-1: active users, names only (no e-mail, no role, no permission). */
+  users(organizationId: string) {
+    return this.prisma.user.findMany({
+      where: { organizationId, isActive: true },
+      select: { id: true, nameAr: true, nameEn: true },
+      orderBy: { nameAr: 'asc' },
+    });
+  }
+
   /** Package 3 · P3-5: the active standard budgets, each with its lines in order. */
   budgetTemplates(organizationId: string) {
     return this.prisma.budgetTemplate.findMany({
