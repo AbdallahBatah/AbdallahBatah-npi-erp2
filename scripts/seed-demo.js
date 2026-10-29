@@ -19,6 +19,23 @@ async function call(method, path, body) {
   if (!res.ok) throw new Error(`${method} ${path} → ${res.status}: ${json?.message ?? text}`);
   return json;
 }
+/** Multipart upload (attachments): Node's own FormData and Blob, no package. */
+async function upload(path, fileName, bytes, type) {
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type }), fileName);
+  const res = await fetch(`${API}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}` }, body: form });
+  const text = await res.text();
+  let json;
+  try { json = text ? JSON.parse(text) : undefined; } catch { json = text; }
+  if (!res.ok) throw new Error(`POST ${path} → ${res.status}: ${json?.message ?? text}`);
+  return json;
+}
+/** A one-page placeholder PDF standing for the customer's signed approval (demo only). */
+const DEMO_PDF = Buffer.from(
+  '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj ' +
+    '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
+);
+
 /**
  * Sign in. The login route allows 5 attempts a minute per address; a run started right
  * after another one (three logins each) can meet the limiter, so a 429 is waited out once.
@@ -162,6 +179,11 @@ async function signChain(documentType, documentId, chain, label) {
     if (!signed) return;
     const sent = await step(`إرسال العرض للعميل: ${name}`, () => call('POST', `/proposals/${p.id}/send`, {}));
     if (!sent || upTo === 'sent') return;
+    // P3-8: the customer's approval is filed on the proposal before it is accepted.
+    const filed = await step(`إرفاق موافقة العميل: ${name}`, () =>
+      upload(`/attachments/PROPOSAL/${p.id}`, 'موافقة-العميل.pdf', DEMO_PDF, 'application/pdf'),
+    );
+    if (!filed) return;
     await step(`قبول العميل: ${name}`, () => call('POST', `/proposals/${p.id}/revisions/${rev.id}/accept`, {}));
   }
 
@@ -196,6 +218,78 @@ async function signChain(documentType, documentId, chain, label) {
   const hosp = await makeOppWithProposal('مستشفى الشفاء التخصصي', 'نظام شمسي لمواقف المستشفى 500kWp', 500, 910, 'accept');
   await makeOppWithProposal('مصنع أسمنت الشرقية', 'محطة أرضية للمصنع 2MWp', 2000, 3640, 'sent');
   await makeOppWithProposal('مجمع الواحة التجاري', 'أسطح المجمع التجاري 300kWp', 300, 546, 'pending');
+
+  // ── 3b. Package 3: project work items, a standard budget, and one estimated
+  // budget (lump sum) waiting on the general manager. DEMO data only — the
+  // company's own work-item list and its 990 / 1230 templates replace these.
+  const workItemDefs = [
+    { code: 'DEMO-WI-01', nameAr: 'ألواح شمسية', nameEn: 'Solar panels', kind: 'MATERIAL', uom: 'panel', itemId: mod?.id, sortOrder: 1 },
+    { code: 'DEMO-WI-02', nameAr: 'محولات (عواكس)', nameEn: 'Inverters', kind: 'MATERIAL', uom: 'unit', itemId: inv?.id, sortOrder: 2 },
+    { code: 'DEMO-WI-03', nameAr: 'هياكل التثبيت', nameEn: 'Mounting structures', kind: 'MATERIAL', uom: 'm', itemId: rail?.id, sortOrder: 3 },
+    { code: 'DEMO-WI-04', nameAr: 'دق وتركيب الهياكل', nameEn: 'Piling and structure installation', kind: 'LABOUR', uom: 'kW', defaultUnitCost: 40, sortOrder: 4 },
+    { code: 'DEMO-WI-05', nameAr: 'تنفيذ أعمال الكهرباء', nameEn: 'Electrical works', kind: 'LABOUR', uom: 'kW', defaultUnitCost: 55, sortOrder: 5 },
+    { code: 'DEMO-WI-06', nameAr: 'إيجار رافعة ومعدات', nameEn: 'Crane and equipment rental', kind: 'EQUIPMENT', uom: 'day', defaultUnitCost: 1800, sortOrder: 6 },
+    { code: 'DEMO-WI-07', nameAr: 'نقل وإقامة الفريق', nameEn: 'Transport and crew lodging', kind: 'EXPENSE', uom: 'lot', defaultUnitCost: 25000, sortOrder: 7 },
+  ];
+  const wiNow = await call('GET', '/work-items?all=1').catch(() => []);
+  const wi = {};
+  for (const d of workItemDefs) {
+    const found = wiNow.find((w) => w.code === d.code);
+    const body = Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined));
+    wi[d.code] = found ?? (await step(`بند مشروع: ${d.nameAr}`, () => call('POST', '/work-items', body)));
+  }
+  const tplNow = await call('GET', '/budget-templates?all=1').catch(() => []);
+  if (!tplNow.find((x) => x.code === 'DEMO-T-300') && Object.values(wi).every(Boolean)) {
+    await step('قالب موازنة تجريبي 300kWp', () =>
+      call('POST', '/budget-templates', {
+        code: 'DEMO-T-300',
+        nameAr: 'قالب تجريبي — 546 لوحاً (300kWp)',
+        nameEn: 'Demo template — 546 panels (300kWp)',
+        panelCount: 546,
+        capacityKwp: 300,
+        lines: [
+          { workItemId: wi['DEMO-WI-01'].id, qty: 546 },
+          { workItemId: wi['DEMO-WI-02'].id, qty: 6 },
+          { workItemId: wi['DEMO-WI-03'].id, qty: 1092 },
+          { workItemId: wi['DEMO-WI-04'].id, qty: 300 },
+          { workItemId: wi['DEMO-WI-05'].id, qty: 300 },
+          { workItemId: wi['DEMO-WI-06'].id, qty: 4 },
+          { workItemId: wi['DEMO-WI-07'].id, qty: 1 },
+        ],
+      }),
+    );
+  }
+  // One estimated budget (lump sum) for a pump-station farm, raised to the general manager.
+  const farmCust = customers['مجمع الواحة التجاري'];
+  const farmName = 'مزرعة تجريبية — تشغيل مضخات الآبار 300kWp';
+  const oppsNow = await call('GET', '/opportunities');
+  if (farmCust && Object.values(wi).every(Boolean) && !oppsNow.find((o) => o.name === farmName)) {
+    const opp = await step(`فرصة: ${farmName}`, () =>
+      call('POST', '/opportunities', { name: farmName, customerId: farmCust.id, estimatedKwp: 300 }),
+    );
+    const p = opp && (await step(`موازنة تقديرية: ${farmName}`, () => call('POST', '/proposals', { opportunityId: opp.id })));
+    const rev =
+      p &&
+      (await step(`سطور الموازنة (سعر مقطوع): ${farmName}`, () =>
+        call('POST', `/proposals/${p.id}/revisions`, {
+          pricingMode: 'LUMP_SUM',
+          sellingTotal: 690000,
+          contingencyPct: 3,
+          riskNotes: 'تذبذب سعر الألواح؛ بُعد الموقع عن المستودع.',
+          bomLines: [
+            { workItemId: wi['DEMO-WI-01'].id, qty: 546 },
+            { workItemId: wi['DEMO-WI-02'].id, qty: 6 },
+            { workItemId: wi['DEMO-WI-03'].id, qty: 1092 },
+            { workItemId: wi['DEMO-WI-04'].id, qty: 300 },
+            { workItemId: wi['DEMO-WI-05'].id, qty: 300 },
+            { workItemId: wi['DEMO-WI-06'].id, qty: 4 },
+            { workItemId: wi['DEMO-WI-07'].id, qty: 1 },
+          ],
+          designVersion: { sourceTool: 'manual', capacityKwp: 300, expectedAnnualKwh: 300 * 1650 },
+        }),
+      ));
+    if (rev) await takeProposalTo('pending', farmName, p, rev);
+  }
 
   // ── 4. Contract #2 (hospital) → activate → milestone → invoice → payment
   let contract2 = (await call('GET', '/contracts')).find((c) => c.customer?.nameAr === 'مستشفى الشفاء التخصصي');

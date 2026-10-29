@@ -359,6 +359,21 @@ describe('the full road: cost capture → approval → sent → a new revision �
     await expect(proposals.acceptRevision(SALES, proposalId, rev1)).rejects.toThrow(
       new ConflictException('Only the current sent revision can be accepted'),
     );
+    // P3-8: not without the customer's approval filed on the proposal since it was sent.
+    await expect(proposals.acceptRevision(SALES, proposalId, rev2)).rejects.toThrow(
+      "Attach the customer's approval to the proposal before accepting it",
+    );
+    await prisma.attachment.create({
+      data: {
+        organizationId: ORG,
+        entityType: 'PROPOSAL' as never,
+        entityId: proposalId,
+        fileName: 'customer-approval.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 1,
+        storageKey: `int-spec/${proposalId}-approval.pdf`,
+      },
+    });
     await proposals.acceptRevision(SALES, proposalId, rev2);
     expect(await revOf(rev2)).toMatchObject({ status: 'ACCEPTED', isWinning: true });
     expect((await propOf(proposalId)).status).toBe('ACCEPTED');
