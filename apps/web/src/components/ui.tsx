@@ -339,6 +339,9 @@ const STATUS_META: Record<string, { ar: string; en: string; cls: string; dot: st
   // retention
   WITHHELD: { ar: 'محتجزة', en: 'Withheld', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
   RELEASED: { ar: 'مُفرَج عنها', en: 'Released', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  // P4-2: material request progress.
+  PARTIAL: { ar: 'مستلم جزئياً', en: 'Partly received', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
+  FULFILLED: { ar: 'مستوفى', en: 'Fulfilled', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
 };
 
 /**

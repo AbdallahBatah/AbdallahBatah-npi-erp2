@@ -248,6 +248,8 @@ model Organization {
   items               Item[]
   workItems           WorkItem[]
   budgetTemplates     BudgetTemplate[]
+  materialRequests    MaterialRequest[]
+  materialIssues      MaterialIssue[]
   pricingSchemes      PricingScheme[]
   designVersions      DesignVersion[]
   proposals           Proposal[]
@@ -699,6 +701,8 @@ model Item {
   workItems      WorkItem[]
   poLines        PurchaseOrderLine[]
   prLines        PurchaseRequisitionLine[]
+  materialRequestLines MaterialRequestLine[]
+  materialIssueLines   MaterialIssueLine[]
   serialUnits    SerialUnit[]
   stockLevels    StockLevel[]
   stockMovements StockMovement[]
@@ -1408,6 +1412,7 @@ model Project {
   ppaTerms       PpaTerm[]
   journalEntries JournalEntry[]
   requisitions   PurchaseRequisition[]
+  materialRequests MaterialRequest[]
   commitments    ProjectCommitment[]
   // CRM Phase 1 · Step 5 (optional link; the screens do not offer it yet)
   activities     Activity[]
@@ -1440,6 +1445,7 @@ model WbsElement {
 
   poLines      PurchaseOrderLine[]
   prLines      PurchaseRequisitionLine[]
+  materialRequestLines MaterialRequestLine[]
   costEntries  ProjectCostEntry[]
   commitments  ProjectCommitment[]
   changeOrders ChangeOrder[]
@@ -1726,6 +1732,8 @@ model Location {
   stockLevels    StockLevel[]
   movementsFrom  StockMovement[] @relation("MoveFrom")
   movementsTo    StockMovement[] @relation("MoveTo")
+  issuesFrom     MaterialIssue[] @relation("IssueFrom")
+  issuesTo       MaterialIssue[] @relation("IssueTo")
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -2806,6 +2814,9 @@ model PurchaseRequisition {
   /// conversion would double-commit the same request.
   purchaseOrderId String? @unique
   purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  /// Package 4 · P4-3: the material request whose shortage this requisition buys.
+  materialRequestId String?
+  materialRequest   MaterialRequest? @relation(fields: [materialRequestId], references: [id], onDelete: SetNull)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -2899,4 +2910,119 @@ model ThreeWayMatch {
   matchedById    String?
 
   @@index([organizationId, result])
+}
+
+/// Package 4 · P4-2 (ADR-04 §4-2): a material request's life.
+enum MaterialRequestStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  /// Something issued and received, something still owed.
+  PARTIAL
+  /// Every line received in full (or bought through a requisition).
+  FULFILLED
+  CANCELLED
+}
+
+/// طلب مواد المشروع — raised by the site engineer, approved by the projects
+/// general manager, served by the warehouse keeper (owner work cycle 11–12).
+model MaterialRequest {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  requestedById  String
+  status         MaterialRequestStatus @default(DRAFT)
+  neededBy       DateTime?
+  notes          String?
+  submittedAt    DateTime?
+  approvedAt     DateTime?
+  approvedById   String?
+  rejectionNote  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lines          MaterialRequestLine[]
+  issues         MaterialIssue[]
+  requisitions   PurchaseRequisition[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([projectId])
+}
+
+model MaterialRequestLine {
+  id           String  @id @default(cuid())
+  requestId    String
+  request      MaterialRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  itemId       String
+  item         Item    @relation(fields: [itemId], references: [id])
+  wbsElementId String?
+  wbsElement   WbsElement? @relation(fields: [wbsElementId], references: [id], onDelete: SetNull)
+  qty          Decimal @db.Decimal(14, 3)
+  /// On issue vouchers not yet cancelled (issued and in transit, or received).
+  issuedQty    Decimal @default(0) @db.Decimal(14, 3)
+  /// Confirmed on site by the engineer.
+  receivedQty  Decimal @default(0) @db.Decimal(14, 3)
+  /// Sent to purchasing on a requisition for the shortage.
+  purchasedQty Decimal @default(0) @db.Decimal(14, 3)
+  notes        String?
+
+  issueLines   MaterialIssueLine[]
+
+  @@index([requestId])
+  @@index([itemId])
+}
+
+/// Package 4 · P4-3 (ADR-04 §4-3): an issue voucher's life.
+enum MaterialIssueStatus {
+  ISSUED
+  RECEIVED
+  CANCELLED
+}
+
+/// إذن صرف — the warehouse keeper sends materials from a store to the project
+/// site; stock moves only when the engineer confirms receipt.
+model MaterialIssue {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  requestId      String
+  request        MaterialRequest @relation(fields: [requestId], references: [id])
+  fromLocationId String
+  fromLocation   Location @relation("IssueFrom", fields: [fromLocationId], references: [id])
+  toLocationId   String
+  toLocation     Location @relation("IssueTo", fields: [toLocationId], references: [id])
+  status         MaterialIssueStatus @default(ISSUED)
+  issuedById     String
+  issuedAt       DateTime @default(now())
+  receivedById   String?
+  receivedAt     DateTime?
+  notes          String?
+
+  lines          MaterialIssueLine[]
+
+  @@unique([organizationId, code])
+  @@index([requestId])
+  @@index([organizationId, status])
+}
+
+model MaterialIssueLine {
+  id            String  @id @default(cuid())
+  issueId       String
+  issue         MaterialIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  requestLineId String
+  requestLine   MaterialRequestLine @relation(fields: [requestLineId], references: [id])
+  itemId        String
+  item          Item    @relation(fields: [itemId], references: [id])
+  qty           Decimal @db.Decimal(14, 3)
+  /// For a serialised item: the exact units sent (qty = their count).
+  serialUnitIds String[]
+
+  @@index([issueId])
+  @@index([requestLineId])
 }

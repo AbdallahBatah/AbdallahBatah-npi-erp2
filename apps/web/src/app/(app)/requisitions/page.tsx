@@ -118,11 +118,17 @@ export default function RequisitionsPage() {
         title={t('pr.title')}
         subtitle={t('pr.hint')}
         action={
-          can('scm.requisition.write') ? (
-            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
-              {t('pr.new')}
-            </Btn>
-          ) : undefined
+          <div className="flex flex-wrap gap-2">
+            {/* P4-2: the project material requests live under this screen. */}
+            <Link href="/requisitions/materials" className="btn-ghost">
+              {t('mr.title')}
+            </Link>
+            {can('scm.requisition.write') ? (
+              <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+                {t('pr.new')}
+              </Btn>
+            ) : null}
+          </div>
         }
       />
 
