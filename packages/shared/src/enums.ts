@@ -33,10 +33,10 @@ export const LEAD_SOURCES: EnumOption[] = [
 ];
 
 export const LEAD_STATUSES: EnumOption[] = [
-  { value: 'NEW', labelAr: 'جديد', labelEn: 'New' },
-  { value: 'QUALIFIED', labelAr: 'مؤهَّل', labelEn: 'Qualified' },
-  { value: 'DISQUALIFIED', labelAr: 'غير مؤهَّل', labelEn: 'Disqualified' },
-  { value: 'CONVERTED', labelAr: 'محوَّل', labelEn: 'Converted' },
+  // Package 3 · P3-1 (ADR-03 §4-1): the company's negotiation statuses.
+  { value: 'NEGOTIATING', labelAr: 'جارٍ التفاوض', labelEn: 'Negotiating' },
+  { value: 'ACCEPTED', labelAr: 'تم القبول', labelEn: 'Accepted' },
+  { value: 'REJECTED', labelAr: 'تم الرفض', labelEn: 'Rejected' },
 ];
 
 // CRM Phase 1 · Step 3 (§4.2 / §9): محتمل ← تأهيل ← عرض سعر ← تفاوض ← رابحة | خاسرة.

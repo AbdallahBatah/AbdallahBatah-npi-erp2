@@ -513,7 +513,7 @@ async function main() {
       contactName: 'أحمد العتيبي',
       companyName: 'مصنع الرياض للصناعات',
       source: 'REFERRAL' as LeadSource,
-      status: 'NEW' as LeadStatus,
+      status: 'NEGOTIATING' as LeadStatus,
       estimatedKwp: 500,
       phone: '+966500000000',
       email: 'ahmed@riyadh-industries.sa',

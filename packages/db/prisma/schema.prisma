@@ -51,10 +51,12 @@ enum LeadSource {
 }
 
 enum LeadStatus {
-  NEW
-  QUALIFIED
-  DISQUALIFIED
-  CONVERTED
+  /// جارٍ التفاوض — every lead starts here (owner work cycle 2026-10-29, step 2).
+  NEGOTIATING
+  /// تم القبول — set together with the automatic conversion to an opportunity.
+  ACCEPTED
+  /// تم الرفض — needs a reason from the loss-reason list.
+  REJECTED
 }
 
 /// CRM Phase 1 (Step 3): محتمل ← تأهيل ← عرض سعر ← تفاوض ← رابحة | خاسرة.
@@ -566,11 +568,22 @@ model Lead {
   contactName    String
   companyName    String?
   source         LeadSource @default(DIRECT)
-  status         LeadStatus @default(NEW)
+  status         LeadStatus @default(NEGOTIATING)
   estimatedKwp   Decimal? @db.Decimal(12, 3)
   phone          String?
   email          String?
   notes          String?
+  // Package 3 · P3-1 (ADR-03 §4-1, migration 0032): where the customer is and
+  // where the plant will be built, the rejection reason, and when the
+  // negotiation status last changed.
+  address        String?
+  siteLocation   String?
+  siteLat        Decimal? @db.Decimal(9, 6)
+  siteLng        Decimal? @db.Decimal(9, 6)
+  rejectionReasonId String?
+  rejectionReason   LossReason? @relation(fields: [rejectionReasonId], references: [id], onDelete: Restrict)
+  rejectionNotes String?
+  statusChangedAt DateTime?
   ownerId        String?
   owner          User?    @relation("LeadOwner", fields: [ownerId], references: [id])
   customerId     String?
@@ -582,6 +595,7 @@ model Lead {
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
+  @@index([rejectionReasonId])
 }
 
 model Opportunity {
@@ -649,6 +663,7 @@ model LossReason {
   updatedAt      DateTime @updatedAt
 
   opportunities  Opportunity[]
+  rejectedLeads  Lead[]
 
   @@unique([organizationId, nameAr])
   @@index([organizationId, isActive, sortOrder])

@@ -281,6 +281,7 @@ const STATUS_META: Record<string, { ar: string; en: string; cls: string; dot: st
   QUALIFIED: { ar: 'مؤهَّل', en: 'Qualified', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
   CONVERTED: { ar: 'محوَّل', en: 'Converted', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
   DISQUALIFIED: { ar: 'غير مؤهَّل', en: 'Disqualified', cls: 'bg-danger-50 text-danger-600', dot: 'bg-danger-500' },
+  NEGOTIATING: { ar: 'جارٍ التفاوض', en: 'Negotiating', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
   PROSPECTING: { ar: 'محتمل', en: 'Prospecting', cls: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
   QUALIFICATION: { ar: 'تأهيل', en: 'Qualification', cls: 'bg-info-50 text-info-700', dot: 'bg-info-500' },
   PROPOSAL: { ar: 'عرض سعر', en: 'Proposal', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },

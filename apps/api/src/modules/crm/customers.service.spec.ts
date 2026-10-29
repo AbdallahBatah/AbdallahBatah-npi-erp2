@@ -181,7 +181,7 @@ describe('CustomersService.similar', () => {
 
 describe('LeadsService.convert', () => {
   const lead = {
-    id: 'l1', code: 'LEAD-00009', status: 'QUALIFIED', contactName: 'سعد', companyName: 'شركة الأمل',
+    id: 'l1', code: 'LEAD-00009', status: 'NEGOTIATING', contactName: 'سعد', companyName: 'شركة الأمل',
     phone: '0501234567', email: null, customerId: null, estimatedKwp: null,
   };
 

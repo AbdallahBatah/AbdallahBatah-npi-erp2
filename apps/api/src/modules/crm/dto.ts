@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -27,7 +28,8 @@ const VAT_MESSAGE = {
 const CUSTOMER_TYPES = ['RESIDENTIAL', 'CI', 'UTILITY', 'GOVERNMENT'] as const;
 const CUSTOMER_ENTITY_KINDS = ['COMPANY', 'INDIVIDUAL'] as const;
 const LEAD_SOURCES = ['WEBSITE', 'REFERRAL', 'CAMPAIGN', 'DIRECT', 'WHATSAPP', 'OTHER'] as const;
-const LEAD_STATUSES = ['NEW', 'QUALIFIED', 'DISQUALIFIED', 'CONVERTED'] as const;
+// Package 3 · P3-1 (ADR-03 §4-1): the company's negotiation statuses.
+const LEAD_STATUSES = ['NEGOTIATING', 'ACCEPTED', 'REJECTED'] as const;
 const OPPORTUNITY_STAGES = ['PROSPECTING', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'] as const;
 const OPPORTUNITY_TYPES = ['DIRECT', 'TENDER'] as const;
 
@@ -68,18 +70,27 @@ export class CreateLeadDto {
   @IsOptional() @IsEmail() email?: string;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() customerId?: string;
+  @IsOptional() @IsString() @MaxLength(500) address?: string;
+  @IsOptional() @IsString() @MaxLength(500) siteLocation?: string;
+  @IsOptional() @IsNumber() @Min(-90) @Max(90) siteLat?: number;
+  @IsOptional() @IsNumber() @Min(-180) @Max(180) siteLng?: number;
 }
 
 export class UpdateLeadDto {
   @IsOptional() @IsString() contactName?: string;
   @IsOptional() @IsString() companyName?: string;
   @IsOptional() @IsEnum(LEAD_SOURCES) source?: (typeof LEAD_SOURCES)[number];
-  @IsOptional() @IsEnum(LEAD_STATUSES) status?: (typeof LEAD_STATUSES)[number];
+  // No status here: it moves only through POST /leads/:id/status, where
+  // acceptance converts and rejection demands a reason (ADR-03 §4-1).
   @IsOptional() @IsNumber() estimatedKwp?: number;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsEmail() email?: string;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() customerId?: string;
+  @IsOptional() @IsString() @MaxLength(500) address?: string;
+  @IsOptional() @IsString() @MaxLength(500) siteLocation?: string;
+  @IsOptional() @IsNumber() @Min(-90) @Max(90) siteLat?: number;
+  @IsOptional() @IsNumber() @Min(-180) @Max(180) siteLng?: number;
 }
 
 export class ConvertLeadDto {
@@ -95,6 +106,17 @@ export class ConvertLeadDto {
   @IsOptional() @IsEnum(OPPORTUNITY_TYPES) opportunityType?: (typeof OPPORTUNITY_TYPES)[number];
   /** Mandatory when opportunityType is TENDER (the same rule as creating one by hand). */
   @IsOptional() @IsString() tenderCloseDate?: string;
+}
+
+/**
+ * Package 3 · P3-1 — the negotiation outcome (ADR-03 §4-1).
+ * ACCEPTED converts the lead into an opportunity (the convert fields apply);
+ * REJECTED needs `rejectionReasonId`; NEGOTIATING reopens a rejected lead.
+ */
+export class SetLeadStatusDto extends ConvertLeadDto {
+  @IsEnum(LEAD_STATUSES) status!: (typeof LEAD_STATUSES)[number];
+  @IsOptional() @IsString() rejectionReasonId?: string;
+  @IsOptional() @IsString() @MaxLength(2000) rejectionNotes?: string;
 }
 
 /**

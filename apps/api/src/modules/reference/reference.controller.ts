@@ -126,7 +126,7 @@ export class ReferenceController {
     // them behind this crm.lead.read endpoint hid the card from roles that may see tasks but
     // not leads (CRM Step 5-b).
     const [leads, openOpps, contracts, activeContracts, pipeline] = await Promise.all([
-      this.prisma.lead.count({ where: { organizationId: org, status: { not: 'CONVERTED' } } }),
+      this.prisma.lead.count({ where: { organizationId: org, status: 'NEGOTIATING' } }),
       this.prisma.opportunity.count({
         where: { organizationId: org, stage: { in: [...OPPORTUNITY_STAGE_FLOW] } },
       }),

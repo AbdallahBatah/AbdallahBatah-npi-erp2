@@ -127,8 +127,8 @@ async function signChain(documentType, documentId, chain, label) {
     const found = leadsNow.find?.((x) => x.contactName === l.contactName) ?? (Array.isArray(leadsNow) ? undefined : leadsNow.rows?.find((x) => x.contactName === l.contactName));
     leads.push(found ?? (await step(`عميل محتمل: ${l.contactName}`, () => call('POST', '/leads', l))));
   }
-  if (leads[0] && leads[0].status === 'NEW')
-    await step('تحويل عميل محتمل → فرصة', () => call('POST', `/leads/${leads[0].id}/convert`, {}));
+  if (leads[0] && leads[0].status === 'NEGOTIATING')
+    await step('قبول عميل محتمل → فرصة', () => call('POST', `/leads/${leads[0].id}/status`, { status: 'ACCEPTED' }));
 
   // ── 3. Opportunities + proposals ────────────────────────────────────────
   const items = await call('GET', '/items');

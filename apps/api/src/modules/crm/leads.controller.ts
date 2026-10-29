@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { LeadsService } from './leads.service';
-import { ConvertLeadDto, CreateLeadDto, UpdateLeadDto } from './dto';
+import { ConvertLeadDto, CreateLeadDto, SetLeadStatusDto, UpdateLeadDto } from './dto';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
 import { PERMISSIONS } from '@npi/shared';
@@ -68,5 +68,20 @@ export class LeadsController {
     @Body() dto: ConvertLeadDto,
   ) {
     return this.leads.convert(user, id, dto);
+  }
+
+  /**
+   * Package 3 · P3-1 — negotiation outcome: ACCEPTED converts into an
+   * opportunity (the service also demands crm.opportunity.write), REJECTED
+   * needs a reason, NEGOTIATING reopens a rejected lead.
+   */
+  @Post(':id/status')
+  @RequirePermissions(PERMISSIONS.LEAD_WRITE)
+  setStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SetLeadStatusDto,
+  ) {
+    return this.leads.setStatus(user, id, dto);
   }
 }
