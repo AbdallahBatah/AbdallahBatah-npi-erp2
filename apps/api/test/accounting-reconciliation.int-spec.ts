@@ -54,7 +54,7 @@ const events = new EventDispatcher(prisma);
 
 const invoices = new InvoicesService(prisma, numbering, audit, posting, tax, new ZatcaService(), notifications);
 const reports = new ReportsService(prisma, audit, posting);
-const contracts = new ContractsService(prisma, numbering, audit, notifications, new OpportunitiesService(prisma, numbering, audit, outbox));
+const contracts = new ContractsService(prisma, numbering, audit, notifications, new OpportunitiesService(prisma, numbering, audit, outbox), approvals);
 const procurement = new ProcurementService(prisma, numbering, audit, posting, tax, approvals, notifications, engine, events);
 // What Nest does on start: hand the matrix the purchase order's applier.
 procurement.onModuleInit();

@@ -31,6 +31,7 @@ import { holdsEffectively, holdsRole } from '../../common/permission-predicates'
 import type { AuthUser } from '../../common/auth-user';
 import { BomLineDto, CreateProposalDto, CreateRevisionDto, RejectProposalDto } from './dto';
 import { OpportunitiesService } from '../crm/opportunities.service';
+import { ContractsService } from './contracts.service';
 import { ItemCostService, type LastCost } from './item-cost.service';
 import { assertCanSetCosts, canViewCosts, hideRevisionPricing } from './revision-pricing';
 
@@ -149,6 +150,7 @@ export class ProposalsService implements OnModuleInit {
     private readonly itemCosts: ItemCostService,
     private readonly settings: OrgSettingsService,
     private readonly notifications: NotificationService,
+    private readonly contracts: ContractsService,
   ) {}
 
   /**
@@ -797,7 +799,7 @@ export class ProposalsService implements OnModuleInit {
       throw new BadRequestException("Attach the customer's approval to the proposal before accepting it");
     }
 
-    const out: { winning?: ProposalRevision } = {};
+    const out: { winning?: ProposalRevision; contractId?: string; contractCode?: string } = {};
     await this.engine.transition(user, {
       documentType: DOC,
       documentId: proposal.id,
@@ -810,6 +812,11 @@ export class ProposalsService implements OnModuleInit {
           isWinning: true,
           closedAt: new Date(),
         });
+        // Package 2 · P2-3: the draft contract is born with the acceptance, in
+        // the same transaction (ADR-01 §3) — accepted price, 50 / 30 / 20.
+        const draft = await this.contracts.draftFromAcceptance(tx, user, current.id);
+        out.contractId = draft.id;
+        out.contractCode = draft.code;
       },
     });
     const winning = out.winning!;
@@ -823,11 +830,12 @@ export class ProposalsService implements OnModuleInit {
       type: 'PROPOSAL_ACCEPTED',
       titleAr: `قَبِل العميل عرض السعر ${proposal.code}`,
       titleEn: `The customer accepted quote ${proposal.code}`,
-      bodyAr: `النسخة ${current.revisionNo} مقبولة وموافقة العميل مرفقة (${approval.fileName}). التالي: العقد.`,
-      bodyEn: `Revision ${current.revisionNo} is accepted with the customer's approval attached (${approval.fileName}). Next: the contract.`,
-      linkPath: `/proposals/${proposal.id}`,
+      bodyAr: `النسخة ${current.revisionNo} مقبولة وموافقة العميل مرفقة (${approval.fileName}). مسودة العقد ${out.contractCode ?? ''} أُنشئت وستصلك للاعتماد بعد ضبط شروطها.`,
+      bodyEn: `Revision ${current.revisionNo} is accepted with the customer's approval attached (${approval.fileName}). Draft contract ${out.contractCode ?? ''} was created and comes to you for approval once its terms are set.`,
+      linkPath: out.contractId ? `/contracts/${out.contractId}` : `/proposals/${proposal.id}`,
     });
-    return canViewCosts(user) ? winning : hideRevisionPricing(winning);
+    const shown = canViewCosts(user) ? winning : hideRevisionPricing(winning);
+    return { ...shown, contractId: out.contractId ?? null };
   }
 
   /** The customer refused the current, sent revision. The reason is mandatory; the opportunity is untouched. */

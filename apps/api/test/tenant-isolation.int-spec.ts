@@ -22,6 +22,9 @@ import { NotificationService } from '../src/common/notification.service';
 import { ZatcaService } from '../src/modules/finance/zatca.service';
 import { InvoicesService } from '../src/modules/finance/invoices.service';
 import { ContractsService } from '../src/modules/commercial/contracts.service';
+import { ApprovalService } from '../src/common/approval.service';
+import { DelegationService } from '../src/common/delegation.service';
+import { EffectivePermissionsService } from '../src/common/effective-permissions.service';
 import { OutboxService } from '../src/common/workflow/outbox.service';
 import { CustomersService } from '../src/modules/crm/customers.service';
 import { OpportunitiesService } from '../src/modules/crm/opportunities.service';
@@ -44,7 +47,10 @@ const invoices = new InvoicesService(
 );
 const opportunities = new OpportunitiesService(prisma, numbering, audit, new OutboxService(prisma));
 const lossReasons = new LossReasonsService(prisma, audit);
-const contracts = new ContractsService(prisma, numbering, audit, notifications, opportunities);
+const contracts = new ContractsService(
+  prisma, numbering, audit, notifications, opportunities,
+  new ApprovalService(prisma, audit, notifications, new DelegationService(prisma), new EffectivePermissionsService(prisma)),
+);
 const customers = new CustomersService(prisma, numbering, audit, new OrgSettingsService(prisma, audit));
 const customerContacts = new CustomerContactsService(prisma, audit);
 const attachments = new AttachmentsService(prisma, audit);

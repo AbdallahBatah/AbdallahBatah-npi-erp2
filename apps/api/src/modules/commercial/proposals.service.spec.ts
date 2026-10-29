@@ -129,12 +129,14 @@ function build(over: { proposal?: unknown; costs?: Map<string, unknown>; approve
   };
   const settings = { get: jest.fn().mockImplementation(async (_o: string, _k: string, d: number) => d) };
   const notifications = { notifyBestEffort: jest.fn().mockResolvedValue(1) };
+  // Package 2 · P2-3: acceptance creates the draft contract in its transaction.
+  const contracts = { draftFromAcceptance: jest.fn().mockResolvedValue({ id: 'c1', code: 'CTR-00009' }) };
   const svc = new ProposalsService(
     prisma as never, numbering as never, audit as never, opportunities as never,
     engine as never, approvals as never, itemCosts as never, settings as never,
-    notifications as never,
+    notifications as never, contracts as never,
   );
-  return { svc, prisma, tx, engine, approvals, itemCosts, audit, opportunities, settings, notifications };
+  return { svc, prisma, tx, engine, approvals, itemCosts, audit, opportunities, settings, notifications, contracts };
 }
 
 // ───────────────────────────── Step 3 (kept) ─────────────────────────────
@@ -895,8 +897,15 @@ describe('ProposalsService.acceptRevision — the customer approval is attached 
         permission: PERMISSIONS.PROPOSAL_APPROVE,
         excludeUserId: 'u-sales',
         type: 'PROPOSAL_ACCEPTED',
-        linkPath: '/proposals/p1',
+        linkPath: '/contracts/c1',
       }),
     );
+  });
+
+  it('creates the draft contract inside the acceptance transaction and returns its id (P2-3)', async () => {
+    const { svc, tx, contracts } = build({ proposal: sentProposal() });
+    const out = await svc.acceptRevision(sales, 'p1', 'rev1');
+    expect(contracts.draftFromAcceptance).toHaveBeenCalledWith(tx, sales, 'rev1');
+    expect(out).toMatchObject({ contractId: 'c1' });
   });
 });

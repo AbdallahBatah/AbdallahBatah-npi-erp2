@@ -145,6 +145,10 @@ enum ContractType {
 
 enum ContractStatus {
   DRAFT
+  /// Package 2 · P2-2 (migration 0038): raised to the general manager.
+  PENDING_APPROVAL
+  /// Signed off by the general manager; activated once the customer's signed copy is filed.
+  APPROVED
   ACTIVE
   SUSPENDED
   CLOSED
@@ -953,6 +957,11 @@ model Contract {
   totalValue         Decimal  @default(0) @db.Decimal(18, 2)
   retentionPct       Decimal  @default(0) @db.Decimal(6, 3)
   advancePct         Decimal  @default(0) @db.Decimal(6, 3)
+  // Package 2 · P2-2 (ADR-01 as amended 2026-10-29): the approval and activation trail.
+  submittedAt        DateTime?
+  approvedAt         DateTime?
+  approvedById       String?
+  activatedAt        DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -2381,6 +2390,8 @@ enum ApprovalDocument {
   // CRM Phase 1 · Step 4: a proposal is banded on its selling total and signed
   // by the executive before it may be sent to the customer.
   PROPOSAL
+  // Package 2 · P2-2 (migration 0038): the contract, signed once by the general manager.
+  CONTRACT
 }
 
 enum ApprovalStatus {

@@ -32,12 +32,14 @@ export function buildProposalStack(prisma: PrismaService) {
   const settings = new OrgSettingsService(prisma, audit);
   const opportunities = new OpportunitiesService(prisma, numbering, audit, outbox);
   const itemCosts = new ItemCostService(prisma);
+  // Package 2: the contract is drafted when a proposal is accepted, so it is built first.
+  const contracts = new ContractsService(prisma, numbering, audit, notifications, opportunities, approvals);
   const proposals = new ProposalsService(
-    prisma, numbering, audit, opportunities, engine, approvals, itemCosts, settings, notifications,
+    prisma, numbering, audit, opportunities, engine, approvals, itemCosts, settings, notifications, contracts,
   );
-  // What Nest does on start: hand the matrix the proposal's applier and rejecter.
+  // What Nest does on start: hand the matrix the proposal's and the contract's appliers and rejecters.
   proposals.onModuleInit();
-  const contracts = new ContractsService(prisma, numbering, audit, notifications, opportunities);
+  contracts.onModuleInit();
   const expiry = new ProposalExpiryScheduler(prisma, proposals);
   return { numbering, audit, notifications, approvals, outbox, engine, settings, opportunities, itemCosts, proposals, contracts, expiry };
 }

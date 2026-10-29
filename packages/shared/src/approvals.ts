@@ -15,7 +15,9 @@ export type ApprovalDocumentType =
   | 'PROGRESS_CLAIM'
   | 'CHANGE_ORDER'
   // CRM Phase 1 · Step 4: a proposal is signed before it may be sent to the customer.
-  | 'PROPOSAL';
+  | 'PROPOSAL'
+  // Package 2 · P2-2: the contract, signed once before it may be activated.
+  | 'CONTRACT';
 
 export interface ApprovalDocumentMeta {
   value: ApprovalDocumentType;
@@ -76,6 +78,17 @@ export const APPROVAL_DOCUMENTS: ApprovalDocumentMeta[] = [
     permission: PERMISSIONS.PROPOSAL_APPROVE,
     amountLabelAr: 'إجمالي العرض (سعر البيع)',
     amountLabelEn: 'Proposal total (selling price)',
+  },
+  {
+    value: 'CONTRACT',
+    labelAr: 'عقد',
+    labelEn: 'Contract',
+    // Owner decision 2026-10-29: the general manager's approval of the accepted
+    // offer IS the contract's approval — one signature, the proposal's key. No
+    // contract-approve key of its own (ADR-01 as amended).
+    permission: PERMISSIONS.PROPOSAL_APPROVE,
+    amountLabelAr: 'قيمة العقد',
+    amountLabelEn: 'Contract value',
   },
 ];
 

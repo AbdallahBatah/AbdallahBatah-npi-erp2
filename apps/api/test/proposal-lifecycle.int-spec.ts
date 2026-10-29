@@ -383,10 +383,18 @@ describe('the full road: cost capture → approval → sent → a new revision �
     ).rejects.toThrow('Proposal is accepted — changes go through a change order');
   });
 
-  it('a contract can be created from the accepted revision (D-01) and it wins the opportunity', async () => {
-    const c = await contracts.create(SALES, { proposalRevisionId: rev2, contractType: 'EPC' } as never);
+  it('acceptance drafted the contract (P2-3): accepted price, 50 / 30 / 20, the opportunity won; a second one is refused', async () => {
+    const c = await prisma.contract.findUniqueOrThrow({
+      where: { proposalRevisionId: rev2 },
+      include: { milestones: { orderBy: { sequence: 'asc' } } },
+    });
+    expect(c.status).toBe('DRAFT');
     expect(Number(c.totalValue)).toBe(1470);
+    expect(c.milestones.map((m) => Number(m.amount))).toEqual([735, 441, 294]);
     expect((await prisma.opportunity.findUniqueOrThrow({ where: { id: oppId } })).stage).toBe('WON');
+    await expect(
+      contracts.create(SALES, { proposalRevisionId: rev2, contractType: 'EPC' } as never),
+    ).rejects.toThrow('This proposal revision already has a contract');
   });
 });
 

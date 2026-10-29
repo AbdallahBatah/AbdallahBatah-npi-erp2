@@ -193,3 +193,15 @@ export class UpdateBudgetTemplateDto {
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => BudgetTemplateLineDto)
   lines?: BudgetTemplateLineDto[];
 }
+
+// ─── Contract draft (Package 2 · P2-1, ADR-01 task 1 as amended) ─────────
+export class UpdateContractDto {
+  @IsOptional() @IsEnum(CONTRACT_TYPES) contractType?: (typeof CONTRACT_TYPES)[number];
+  @IsOptional() @IsString() startDate?: string | null;
+  @IsOptional() @IsString() endDate?: string | null;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) retentionPct?: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) advancePct?: number;
+  /** When given, replaces every milestone (a draft has none invoiced). */
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => MilestoneInputDto)
+  milestones?: MilestoneInputDto[];
+}

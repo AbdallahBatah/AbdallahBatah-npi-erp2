@@ -21,6 +21,9 @@ import { OutboxService } from '../src/common/workflow/outbox.service';
 import { OpportunitiesService } from '../src/modules/crm/opportunities.service';
 import { LossReasonsService } from '../src/modules/crm/loss-reasons.service';
 import { ContractsService } from '../src/modules/commercial/contracts.service';
+import { ApprovalService } from '../src/common/approval.service';
+import { DelegationService } from '../src/common/delegation.service';
+import { EffectivePermissionsService } from '../src/common/effective-permissions.service';
 import type { AuthUser } from '../src/common/auth-user';
 import { buildProposalStack, cloneProposalFlow } from './support/proposal-stack';
 
@@ -32,7 +35,10 @@ const opportunities = new OpportunitiesService(prisma, numbering, audit, outbox)
 const lossReasons = new LossReasonsService(prisma, audit);
 // Step 4: a proposal opens its workflow instance at creation, so the services come from the shared wiring.
 const proposals = buildProposalStack(prisma).proposals;
-const contracts = new ContractsService(prisma, numbering, audit, new NotificationService(prisma), opportunities);
+const contracts = new ContractsService(
+  prisma, numbering, audit, new NotificationService(prisma), opportunities,
+  new ApprovalService(prisma, audit, new NotificationService(prisma), new DelegationService(prisma), new EffectivePermissionsService(prisma)),
+);
 
 const suffix = `${Date.now()}`;
 let ORG = '';

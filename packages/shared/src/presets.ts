@@ -197,6 +197,8 @@ export const PROPOSED_APPROVAL_RULES: readonly ProposedApprovalRule[] = [
   { documentType: 'PROGRESS_CLAIM', minAmount: 0, steps: ['pm', 'executive'] },
   { documentType: 'CHANGE_ORDER', minAmount: 0, steps: ['executive'] },
   { documentType: 'PROPOSAL', minAmount: 0, steps: ['executive'] },
+  // Package 2 · P2-2: the general manager signs every contract (owner, 2026-10-29).
+  { documentType: 'CONTRACT', minAmount: 0, steps: ['executive'] },
 ];
 
 /** The preset of `key`, or undefined for a key that has none (`admin`, `sales`, anything else). */

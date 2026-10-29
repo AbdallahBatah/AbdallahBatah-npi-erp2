@@ -199,13 +199,14 @@ describe('ROLE_PRESETS and PROPOSED_APPROVAL_RULES (@npi/shared)', () => {
     });
   });
 
-  it('proposes the five rules from zero in order, each step a preset that holds the document approve key', () => {
+  it('proposes the six rules from zero in order (P2-2 added CONTRACT), each step a preset that holds the document approve key', () => {
     expect(PROPOSED_APPROVAL_RULES.map((r) => [r.documentType, r.minAmount, [...r.steps]])).toEqual([
       ['PURCHASE_REQUISITION', 0, ['pm']],
       ['PURCHASE_ORDER', 0, ['executive']],
       ['PROGRESS_CLAIM', 0, ['pm', 'executive']],
       ['CHANGE_ORDER', 0, ['executive']],
       ['PROPOSAL', 0, ['executive']],
+      ['CONTRACT', 0, ['executive']],
     ]);
     for (const r of PROPOSED_APPROVAL_RULES) {
       for (const key of r.steps) {
@@ -466,7 +467,7 @@ describe('RolePresetsService.applyPreset', () => {
     expect(audit.record.mock.calls[0][0].after.removed).toHaveLength(18);
     expect(out).toMatchObject({ applied: true, role: { id: accountant.id } });
     expect(out.presets).toHaveLength(7);
-    expect(out.rules).toHaveLength(5);
+    expect(out.rules).toHaveLength(6);
   });
 
   it('creates a missing role through createRole, with its separation-of-duties pairs acknowledged', async () => {
