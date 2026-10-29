@@ -25,6 +25,7 @@ import { AuditService } from '../../common/audit.service';
 import { ApprovalService, type ApprovalRequestView } from '../../common/approval.service';
 import { OrgSettingsService, ORG_SETTING_DEFAULTS, ORG_SETTING_KEYS } from '../../common/org-settings.service';
 import { WorkflowEngine } from '../../common/workflow/workflow.engine';
+import { NotificationService } from '../../common/notification.service';
 import { budgetTotals, priceRevision, sellingPrice } from '../../common/proposal-pricing';
 import { holdsEffectively, holdsRole } from '../../common/permission-predicates';
 import type { AuthUser } from '../../common/auth-user';
@@ -147,6 +148,7 @@ export class ProposalsService implements OnModuleInit {
     private readonly approvals: ApprovalService,
     private readonly itemCosts: ItemCostService,
     private readonly settings: OrgSettingsService,
+    private readonly notifications: NotificationService,
   ) {}
 
   /**
@@ -778,6 +780,22 @@ export class ProposalsService implements OnModuleInit {
       await this.expireRevision(user.organizationId, proposal, current, new Date());
       throw new ConflictException('Proposal revision has expired');
     }
+    // Package 3 · P3-8 (owner work cycle step 8): acceptance is recorded with the
+    // customer's approval attached — a file filed on the proposal after this
+    // revision went to the customer (an older file approved an older offer).
+    const approval = await this.prisma.attachment.findFirst({
+      where: {
+        organizationId: user.organizationId,
+        entityType: 'PROPOSAL',
+        entityId: proposal.id,
+        ...(current.sentAt ? { createdAt: { gte: current.sentAt } } : {}),
+      },
+      select: { id: true, fileName: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!approval) {
+      throw new BadRequestException("Attach the customer's approval to the proposal before accepting it");
+    }
 
     const out: { winning?: ProposalRevision } = {};
     await this.engine.transition(user, {
@@ -795,6 +813,20 @@ export class ProposalsService implements OnModuleInit {
       },
     });
     const winning = out.winning!;
+
+    // Owner work cycle step 8: «ترحيله إلى المدير العام». Whoever approves
+    // proposals hears of it (best effort: the acceptance has committed).
+    await this.notifications.notifyBestEffort({
+      organizationId: user.organizationId,
+      permission: PERMISSIONS.PROPOSAL_APPROVE,
+      excludeUserId: user.userId,
+      type: 'PROPOSAL_ACCEPTED',
+      titleAr: `قَبِل العميل عرض السعر ${proposal.code}`,
+      titleEn: `The customer accepted quote ${proposal.code}`,
+      bodyAr: `النسخة ${current.revisionNo} مقبولة وموافقة العميل مرفقة (${approval.fileName}). التالي: العقد.`,
+      bodyEn: `Revision ${current.revisionNo} is accepted with the customer's approval attached (${approval.fileName}). Next: the contract.`,
+      linkPath: `/proposals/${proposal.id}`,
+    });
     return canViewCosts(user) ? winning : hideRevisionPricing(winning);
   }
 

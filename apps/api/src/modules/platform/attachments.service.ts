@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -38,12 +39,16 @@ const ENTITY_READ_PERMISSION: Record<AttachmentEntity, string> = {
   OPPORTUNITY: 'crm.opportunity.read',
   // CRM Step 5: a file on a communication-log entry — seen and added by whoever sees the customer.
   ACTIVITY: 'crm.customer.read',
+  // Package 3 · P3-8: the customer's approval of a quote (and anything else filed on it).
+  PROPOSAL: 'commercial.proposal.read',
 };
 
 // Adding a file to — or removing one from — a log entry also needs the right to edit
 // customers (CRM Step 5); every other entity keeps the single read-access rule above.
 const ENTITY_WRITE_PERMISSION: Partial<Record<AttachmentEntity, string>> = {
   ACTIVITY: 'crm.customer.write',
+  // P3-8: only whoever works the proposal files the customer's approval on it.
+  PROPOSAL: 'commercial.proposal.write',
 };
 
 @Injectable()
@@ -84,6 +89,7 @@ export class AttachmentsService {
       : entityType === 'CUSTOMER' ? await this.prisma.customer.findFirst({ where, select: { id: true } })
       : entityType === 'OPPORTUNITY' ? await this.prisma.opportunity.findFirst({ where, select: { id: true } })
       : entityType === 'ACTIVITY' ? await this.prisma.activity.findFirst({ where, select: { id: true } })
+      : entityType === 'PROPOSAL' ? await this.prisma.proposal.findFirst({ where, select: { id: true } })
       : await this.prisma.workOrder.findFirst({ where, select: { id: true } });
     if (!found) throw new NotFoundException('Entity not found');
   }
@@ -168,6 +174,13 @@ export class AttachmentsService {
   async remove(user: AuthUser, id: string) {
     const attachment = await this.getOwned(user, id);
     this.requireEntityWrite(user, attachment.entityType);
+    // P3-8: once a quote is accepted, the customer's approval filed on it is evidence — never removed.
+    if (attachment.entityType === 'PROPOSAL') {
+      const accepted = await this.prisma.proposalRevision.count({
+        where: { proposalId: attachment.entityId, status: 'ACCEPTED' },
+      });
+      if (accepted > 0) throw new ConflictException('The proposal is accepted — its attachments are kept');
+    }
     await this.prisma.attachment.delete({ where: { id: attachment.id } });
     // Best-effort unlink — the DB row is the source of truth; an orphan file
     // is harmless, a dangling row is not.

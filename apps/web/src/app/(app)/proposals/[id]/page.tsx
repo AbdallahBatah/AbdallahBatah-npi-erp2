@@ -3,7 +3,7 @@
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, apiUpload } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { useAct } from '@/lib/useAct';
@@ -17,6 +17,7 @@ import { PageHeader, StatusBadge, Modal, Field, LoadError, useConfirm, Btn, Page
 import { ApprovalChain, type ApprovalRequestView } from '@/components/approvals';
 import { daysUntil } from '@/components/opportunity-bits';
 import { Icon } from '@/components/icons';
+import { AttachmentsCard } from '@/components/attachments';
 
 // Cost-side fields arrive as null for a user without finance.costs.view — the
 // server nulls them (CostRedactionInterceptor + hideRevisionPricing) and the page
@@ -219,6 +220,11 @@ export default function ProposalDetailPage() {
   const lump = pricingMode === 'LUMP_SUM';
   const [contractOpen, setContractOpen] = useState(false);
   const [contractErr, setContractErr] = useState('');
+  // P3-8: acceptance needs the customer's approval file.
+  const [acceptFor, setAcceptFor] = useState<string | null>(null);
+  const [acceptFile, setAcceptFile] = useState<File | null>(null);
+  const [acceptErr, setAcceptErr] = useState('');
+  const [filesKey, setFilesKey] = useState(0);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectErr, setRejectErr] = useState('');
@@ -569,10 +575,33 @@ export default function ProposalDetailPage() {
     load();
   }
 
-  async function accept(revId: string) {
-    if (!(await confirm({ title: t('confirm.acceptRevTitle'), message: t('confirm.acceptRevMsg') }))) return;
+  function openAccept(revId: string) {
+    setAcceptFile(null);
+    setAcceptErr('');
+    setAcceptFor(revId);
+  }
+
+  /**
+   * Package 3 · P3-8 (owner work cycle step 8): the customer's approval is filed
+   * on the proposal, then the revision is accepted — the server refuses the
+   * acceptance without a file filed since the quote was sent.
+   */
+  async function accept(e: FormEvent) {
+    e.preventDefault();
+    const revId = acceptFor;
+    if (!revId) return;
+    if (!acceptFile) {
+      setAcceptErr(t('proposals.acceptFileRequired'));
+      return;
+    }
+    setAcceptErr('');
+    const ok = await act(`accept:${revId}`, async () => {
+      await apiUpload(`/attachments/PROPOSAL/${id}`, acceptFile);
+      await api.post(`/proposals/${id}/revisions/${revId}/accept`, {});
+    });
+    if (ok) setAcceptFor(null);
+    setFilesKey((k) => k + 1);
     // Same as send: acceptance of a lapsed revision expires it server-side.
-    await act(`accept:${revId}`, () => api.post(`/proposals/${id}/revisions/${revId}/accept`, {}));
     load();
   }
 
@@ -951,7 +980,7 @@ export default function ProposalDetailPage() {
             </Btn>
           )}
           {has('ACCEPT') && current && (
-            <Btn variant="solar" icon="check" busy={busy(`accept:${current.id}`)} disabled={busy()} onClick={() => accept(current.id)}>
+            <Btn variant="solar" icon="check" busy={busy(`accept:${current.id}`)} disabled={busy()} onClick={() => openAccept(current.id)}>
               {t('proposals.customerAccept')}
             </Btn>
           )}
@@ -1311,6 +1340,34 @@ export default function ProposalDetailPage() {
           </ol>
         </details>
       )}
+
+      {/* P3-8: files on the proposal — the customer's approval among them. */}
+      {can('platform.attachment.read') && (
+        <div className="mt-6">
+          <AttachmentsCard key={filesKey} entityType="PROPOSAL" entityId={proposal.id} />
+        </div>
+      )}
+
+      {/* The customer's acceptance: their written approval is attached first. */}
+      <Modal open={acceptFor !== null} title={t('confirm.acceptRevTitle')} onClose={() => setAcceptFor(null)} dirty={!!acceptFile}>
+        <form onSubmit={accept} className="grid gap-4">
+          <p className="text-sm text-slate-600">{t('confirm.acceptRevMsg')}</p>
+          <Field label={t('proposals.acceptFile')} error={acceptErr || undefined} hint={t('proposals.acceptFileHint')}>
+            <input
+              type="file"
+              className="input"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.docx"
+              onChange={(e) => setAcceptFile(e.target.files?.[0] ?? null)}
+            />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Btn onClick={() => setAcceptFor(null)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="solar" icon="check" busy={busy(`accept:${acceptFor}`)} disabled={busy()}>
+              {t('proposals.customerAccept')}
+            </Btn>
+          </div>
+        </form>
+      </Modal>
 
       {/* The customer's refusal: the reason is mandatory. */}
       <Modal open={rejectOpen} title={t('proposals.rejectTitle')} onClose={() => setRejectOpen(false)} dirty={rejectReason.trim().length > 0}>

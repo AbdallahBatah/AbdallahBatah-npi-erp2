@@ -35,7 +35,7 @@ export function AttachmentsCard({
   entityId,
   onChange,
 }: {
-  entityType: 'CONTRACT' | 'INVOICE' | 'PROJECT' | 'WORK_ORDER' | 'CUSTOMER' | 'OPPORTUNITY' | 'ACTIVITY';
+  entityType: 'CONTRACT' | 'INVOICE' | 'PROJECT' | 'WORK_ORDER' | 'CUSTOMER' | 'OPPORTUNITY' | 'ACTIVITY' | 'PROPOSAL';
   entityId: string;
   /** Called after a file was added or removed (the log entry shows a count). */
   onChange?: () => void;

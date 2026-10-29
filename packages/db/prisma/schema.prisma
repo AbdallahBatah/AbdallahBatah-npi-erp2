@@ -2315,6 +2315,8 @@ enum AttachmentEntity {
   OPPORTUNITY
   // CRM Phase 1 · Step 5 (migration 0028): a file hangs off a log entry.
   ACTIVITY
+  // Package 3 · P3-8 (migration 0037): the customer's written approval of a quote.
+  PROPOSAL
 }
 
 model Attachment {

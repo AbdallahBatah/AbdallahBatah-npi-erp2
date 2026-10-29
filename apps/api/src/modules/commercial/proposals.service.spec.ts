@@ -96,6 +96,8 @@ function build(over: { proposal?: unknown; costs?: Map<string, unknown>; approve
     },
     approvalDelegation: { count: jest.fn().mockResolvedValue(0) },
     notification: { create: jest.fn().mockResolvedValue({}) },
+    // P3-8: the customer's approval, filed on the proposal after it was sent.
+    attachment: { findFirst: jest.fn().mockResolvedValue({ id: 'att1', fileName: 'موافقة العميل.pdf' }) },
     $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
   };
   const numbering = { next: jest.fn().mockResolvedValue('PRP-00001') };
@@ -126,11 +128,13 @@ function build(over: { proposal?: unknown; costs?: Map<string, unknown>; approve
     lastPurchaseCosts: jest.fn().mockResolvedValue(over.costs ?? new Map([['i1', COST('100.00')]])),
   };
   const settings = { get: jest.fn().mockImplementation(async (_o: string, _k: string, d: number) => d) };
+  const notifications = { notifyBestEffort: jest.fn().mockResolvedValue(1) };
   const svc = new ProposalsService(
     prisma as never, numbering as never, audit as never, opportunities as never,
     engine as never, approvals as never, itemCosts as never, settings as never,
+    notifications as never,
   );
-  return { svc, prisma, tx, engine, approvals, itemCosts, audit, opportunities, settings };
+  return { svc, prisma, tx, engine, approvals, itemCosts, audit, opportunities, settings, notifications };
 }
 
 // ───────────────────────────── Step 3 (kept) ─────────────────────────────
@@ -858,5 +862,41 @@ describe('ProposalsService.awaitingMyApproval — the general manager card (P3-6
     const { svc, prisma } = withInbox([]);
     await expect(svc.awaitingMyApproval(exec)).resolves.toEqual({ minMarginPct: 15, rows: [] });
     expect(prisma.proposal.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProposalsService.acceptRevision — the customer approval is attached (P3-8)', () => {
+  const sentAt = new Date('2026-10-20T09:00:00Z');
+  const sentProposal = () =>
+    proposalRow({ status: 'SENT', revisions: [revision({ id: 'rev1', status: 'SENT', sentAt, revisionNo: 3 })] });
+
+  it('refuses acceptance without a file filed on the proposal since it was sent (400), and moves nothing', async () => {
+    const { svc, prisma, engine } = build({ proposal: sentProposal() });
+    prisma.attachment.findFirst.mockResolvedValue(null);
+    await expect(svc.acceptRevision(sales, 'p1', 'rev1')).rejects.toThrow(
+      "Attach the customer's approval to the proposal before accepting it",
+    );
+    expect(prisma.attachment.findFirst.mock.calls[0][0].where).toEqual({
+      organizationId: 'org1',
+      entityType: 'PROPOSAL',
+      entityId: 'p1',
+      createdAt: { gte: sentAt },
+    });
+    expect(engine.transition).not.toHaveBeenCalled();
+  });
+
+  it('with the approval attached it accepts and tells the approvers (not the one who accepted)', async () => {
+    const { svc, engine, notifications } = build({ proposal: sentProposal() });
+    await svc.acceptRevision(sales, 'p1', 'rev1');
+    expect(engine.transition.mock.calls[0][1].actionCode).toBe(WF_ACTIONS.ACCEPT);
+    expect(notifications.notifyBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: 'org1',
+        permission: PERMISSIONS.PROPOSAL_APPROVE,
+        excludeUserId: 'u-sales',
+        type: 'PROPOSAL_ACCEPTED',
+        linkPath: '/proposals/p1',
+      }),
+    );
   });
 });
