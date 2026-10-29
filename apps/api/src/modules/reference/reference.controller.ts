@@ -175,6 +175,12 @@ export class ReferenceController {
     return this.lookups.vendors(user.organizationId);
   }
 
+  @RequireAnyPermission(...LOOKUP_ACCESS.workItems)
+  @Get('lookups/work-items')
+  lookupWorkItems(@CurrentUser() user: AuthUser) {
+    return this.lookups.workItems(user.organizationId);
+  }
+
   @RequireAnyPermission(...LOOKUP_ACCESS.locations)
   @Get('lookups/locations')
   lookupLocations(@CurrentUser() user: AuthUser) {

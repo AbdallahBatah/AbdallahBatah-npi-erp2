@@ -3,9 +3,11 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   MinLength,
   ValidateNested,
@@ -14,6 +16,7 @@ import {
 const ITEM_CATEGORIES = ['MODULE', 'INVERTER', 'MOUNTING', 'CABLE', 'BOS', 'SPARE', 'SERVICE'] as const;
 const CONTRACT_TYPES = ['EPC', 'PPA', 'OM', 'LEASE'] as const;
 const MILESTONE_TRIGGER_TYPES = ['DATE', 'PROGRESS', 'EVENT'] as const;
+export const WORK_ITEM_KINDS = ['MATERIAL', 'LABOUR', 'EQUIPMENT', 'SUBCONTRACT', 'EXPENSE', 'FINANCING'] as const;
 
 // ─── Items ───────────────────────────────────────────────────────────────
 export class CreateItemDto {
@@ -106,4 +109,30 @@ export class CreateContractDto {
 
 export class VerifyMilestoneDto {
   @IsString() milestoneId!: string;
+}
+
+// ─── Work items (Package 3 · P3-3, ADR-03 §4-3) ─────────────────────────
+export class CreateWorkItemDto {
+  @IsString() @MinLength(1) @MaxLength(40) code!: string;
+  @IsString() @MinLength(1) @MaxLength(200) nameAr!: string;
+  @IsString() @MinLength(1) @MaxLength(200) nameEn!: string;
+  @IsEnum(WORK_ITEM_KINDS) kind!: (typeof WORK_ITEM_KINDS)[number];
+  @IsOptional() @IsString() @MaxLength(40) uom?: string;
+  /** A cost figure: setting it needs finance.costs.view, like Item.unitCost. */
+  @IsOptional() @IsNumber() @Min(0) defaultUnitCost?: number;
+  /** Only for a MATERIAL work item: the stock item it stands for. */
+  @IsOptional() @IsString() itemId?: string;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+}
+
+export class UpdateWorkItemDto {
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) nameAr?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) nameEn?: string;
+  @IsOptional() @IsEnum(WORK_ITEM_KINDS) kind?: (typeof WORK_ITEM_KINDS)[number];
+  @IsOptional() @IsString() @MaxLength(40) uom?: string;
+  @IsOptional() @IsNumber() @Min(0) defaultUnitCost?: number;
+  /** null unlinks the stock item. */
+  @IsOptional() @IsString() itemId?: string | null;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+  @IsOptional() @IsBoolean() isActive?: boolean;
 }

@@ -230,6 +230,8 @@ export const COST_FIELDS: readonly string[] = [
   // bomLines[].item.unitCost, requisition/PO item lookups, WorkOrderPart.unitCost
   // (schema.prisma:1426).
   'unitCost',
+  // WorkItem.defaultUnitCost (Package 3 · P3-3): a work item's cost per unit.
+  'defaultUnitCost',
   // BomLine.originalUnitCost (CRM Step 4): the cost the system fetched before a manual
   // change; the changed cost itself is covered by 'unitCost'.
   'originalUnitCost',

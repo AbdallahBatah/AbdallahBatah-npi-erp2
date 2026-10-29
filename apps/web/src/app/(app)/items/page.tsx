@@ -8,8 +8,9 @@ import { useAct } from '@/lib/useAct';
 import { translateError } from '@/lib/errors';
 import { useEnums, optionLabel } from '@/lib/useEnums';
 import { formatMoney } from '@/lib/format';
-import { PageHeader, Modal, Field, EmptyRow, LoadError, Can, Btn, TableSkeleton } from '@/components/ui';
+import { PageHeader, Modal, Field, EmptyRow, LoadError, Can, Btn, TableSkeleton, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
+import { WorkItemsTab } from './work-items-tab';
 
 interface Item {
   id: string;
@@ -22,7 +23,30 @@ interface Item {
   isSerialised: boolean;
 }
 
+/**
+ * The items screen (commercial.item.read): stock items, and since Package 3
+ * (ADR-03 §4-3) the project work items an estimated budget is built from.
+ */
 export default function ItemsPage() {
+  const { t } = useI18n();
+  const [tab, setTab] = useState<'items' | 'workItems'>('items');
+  return (
+    <div>
+      <PageHeader title={t('items.title')} />
+      <Tabs
+        tabs={[
+          { key: 'items', label: t('items.tabStock') },
+          { key: 'workItems', label: t('workItems.title') },
+        ]}
+        value={tab}
+        onChange={(k) => setTab(k as 'items' | 'workItems')}
+      />
+      {tab === 'items' ? <StockItemsTab /> : <WorkItemsTab />}
+    </div>
+  );
+}
+
+function StockItemsTab() {
   const { t, locale, pick } = useI18n();
   const { can } = useAuth();
   // Unit cost is cost data: the server nulls it (and refuses writes) without
@@ -73,16 +97,13 @@ export default function ItemsPage() {
 
   return (
     <div>
-      <PageHeader
-        title={t('items.title')}
-        action={
-          <Can perm="commercial.item.write">
-            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
-              {t('items.new')}
-            </Btn>
-          </Can>
-        }
-      />
+      <div className="mb-4 flex justify-end">
+        <Can perm="commercial.item.write">
+          <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+            {t('items.new')}
+          </Btn>
+        </Can>
+      </div>
       {loadErr && !loading ? <div className="mb-6"><LoadError message={loadErr} onRetry={load} /></div> : null}
 
       <div className="card table-sticky">

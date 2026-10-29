@@ -1,10 +1,10 @@
 import { PATH_METADATA } from '@nestjs/common/constants';
-import { LOOKUP_ACCESS, PERMISSIONS, canUseLookup, type LookupKind } from '@npi/shared';
+import { LOOKUP_ACCESS, LOOKUP_PATH, PERMISSIONS, canUseLookup, type LookupKind } from '@npi/shared';
 import { ANY_PERMISSIONS_KEY, PERMISSIONS_KEY } from '../../common/decorators';
 import { ReferenceController } from './reference.controller';
 import { ReferenceLookupsService } from './reference-lookups.service';
 
-const KINDS: LookupKind[] = ['items', 'projects', 'customers', 'vendors', 'locations'];
+const KINDS: LookupKind[] = ['items', 'projects', 'customers', 'vendors', 'locations', 'workItems'];
 
 /** The controller method serving each list. */
 const HANDLER: Record<LookupKind, string> = {
@@ -13,6 +13,7 @@ const HANDLER: Record<LookupKind, string> = {
   customers: 'lookupCustomers',
   vendors: 'lookupVendors',
   locations: 'lookupLocations',
+  workItems: 'lookupWorkItems',
 };
 
 describe('LOOKUP_ACCESS — the ADR-02 §3-3 table', () => {
@@ -29,6 +30,7 @@ describe('LOOKUP_ACCESS — the ADR-02 §3-3 table', () => {
       customers: ['crm.customer.read', 'crm.opportunity.write'],
       vendors: ['scm.procurement.read', 'projects.project.write'],
       locations: ['scm.procurement.read', 'assets.serialunit.read', 'fsm.workorder.write'],
+      workItems: ['commercial.item.read', 'commercial.proposal.write'],
     });
   });
 
@@ -38,16 +40,18 @@ describe('LOOKUP_ACCESS — the ADR-02 §3-3 table', () => {
     expect(canUseLookup('customers', [PERMISSIONS.OPPORTUNITY_WRITE, PERMISSIONS.LEAD_READ])).toBe(true);
     expect(canUseLookup('customers', [PERMISSIONS.OPPORTUNITY_READ])).toBe(false);
     expect(canUseLookup('locations', [PERMISSIONS.ASSET_READ])).toBe(true);
+    expect(canUseLookup('workItems', [PERMISSIONS.PROPOSAL_WRITE])).toBe(true);
+    expect(canUseLookup('workItems', [PERMISSIONS.PROPOSAL_READ])).toBe(false);
     for (const kind of KINDS) expect(canUseLookup(kind, [])).toBe(false);
   });
 });
 
-describe('ReferenceController — the five lookup routes', () => {
+describe('ReferenceController — the lookup routes', () => {
   const proto = ReferenceController.prototype as unknown as Record<string, object>;
 
   it.each(KINDS)('%s: GET lookups/<kind>, any-of exactly its LOOKUP_ACCESS row, no all-of list', (kind) => {
     const handler = proto[HANDLER[kind]];
-    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(`lookups/${kind}`);
+    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(`lookups/${LOOKUP_PATH[kind]}`);
     expect(Reflect.getMetadata(ANY_PERMISSIONS_KEY, handler)).toEqual([...LOOKUP_ACCESS[kind]]);
     expect(Reflect.getMetadata(PERMISSIONS_KEY, handler)).toBeUndefined();
   });
@@ -75,6 +79,7 @@ describe('ReferenceLookupsService — one findMany per list, names only', () => 
       customer: model(),
       vendor: model(),
       location: model(),
+      workItem: model(),
     };
   };
 
@@ -134,6 +139,24 @@ describe('ReferenceLookupsService — one findMany per list, names only', () => 
           projectId: true,
         },
         orderBy: { code: 'asc' },
+      },
+    },
+    workItems: {
+      model: 'workItem',
+      args: {
+        // A switched-off work item is not offered to a new budget.
+        where: { organizationId: 'org1', isActive: true },
+        select: {
+          id: true,
+          code: true,
+          nameAr: true,
+          nameEn: true,
+          kind: true,
+          uom: true,
+          defaultUnitCost: true,
+          itemId: true,
+        },
+        orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
       },
     },
   };

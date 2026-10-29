@@ -89,6 +89,9 @@ const GUARDED_ROUTES = [
   ['/reference/lookups/customers', ['crm.customer.read', 'crm.opportunity.write']],
   ['/reference/lookups/vendors', ['scm.procurement.read', 'projects.project.write']],
   ['/reference/lookups/locations', ['scm.procurement.read', 'assets.serialunit.read', 'fsm.workorder.write']],
+  // P3-3: the work-item list (items screen) and its pick list.
+  ['/work-items', 'commercial.item.read'],
+  ['/reference/lookups/work-items', ['commercial.item.read', 'commercial.proposal.write']],
 ];
 
 // ── tiny harness ───────────────────────────────────────────────────────────

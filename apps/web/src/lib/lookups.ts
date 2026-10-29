@@ -18,7 +18,7 @@
  * Not cached across pages: a list must show the item or vendor added a minute ago.
  */
 import { useEffect, useState } from 'react';
-import { canUseLookup, type LookupKind } from '@npi/shared';
+import { LOOKUP_PATH, canUseLookup, type LookupKind } from '@npi/shared';
 import { api } from './api';
 import { useAuth } from './auth';
 
@@ -47,7 +47,7 @@ export function useLookup<T>(kind: LookupKind, opts: { enabled?: boolean } = {})
     if (!allowed || !enabled) return;
     let active = true;
     api
-      .get<T[]>(`/reference/lookups/${kind}`)
+      .get<T[]>(`/reference/lookups/${LOOKUP_PATH[kind]}`)
       .then((rows) => {
         if (active) setResult({ rows, state: 'ready' });
       })

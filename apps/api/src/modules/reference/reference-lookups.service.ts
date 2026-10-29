@@ -70,4 +70,24 @@ export class ReferenceLookupsService {
       orderBy: { code: 'asc' },
     });
   }
+
+  /** Package 3 · P3-3: the active work items, in the company's budget order.
+   *  `defaultUnitCost` is nulled by the CostRedactionInterceptor for a caller
+   *  without finance.costs.view. */
+  workItems(organizationId: string) {
+    return this.prisma.workItem.findMany({
+      where: { organizationId, isActive: true },
+      select: {
+        id: true,
+        code: true,
+        nameAr: true,
+        nameEn: true,
+        kind: true,
+        uom: true,
+        defaultUnitCost: true,
+        itemId: true,
+      },
+      orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
+    });
+  }
 }

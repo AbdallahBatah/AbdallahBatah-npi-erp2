@@ -236,6 +236,7 @@ model Organization {
   leads               Lead[]
   opportunities       Opportunity[]
   items               Item[]
+  workItems           WorkItem[]
   pricingSchemes      PricingScheme[]
   designVersions      DesignVersion[]
   proposals           Proposal[]
@@ -684,6 +685,7 @@ model Item {
   updatedAt      DateTime @updatedAt
 
   bomLines       BomLine[]
+  workItems      WorkItem[]
   poLines        PurchaseOrderLine[]
   prLines        PurchaseRequisitionLine[]
   serialUnits    SerialUnit[]
@@ -693,6 +695,45 @@ model Item {
 
   @@unique([organizationId, sku])
   @@index([organizationId])
+}
+
+/// Package 3 · P3-3 (ADR-03 §4-3): what a project's estimated budget is made
+/// of — materials, labour, equipment rental, subcontract, expenses, financing.
+/// Not a stock item: a MATERIAL work item may point at the stock item it
+/// stands for (and then takes its latest cost from it), the others never do.
+enum WorkItemKind {
+  MATERIAL
+  LABOUR
+  EQUIPMENT
+  SUBCONTRACT
+  EXPENSE
+  FINANCING
+}
+
+/// بند مشروع — one row of the company's list of project work items (ADR-03 §4-3).
+/// Never deleted once used: switching it off hides it from new budgets.
+model WorkItem {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code            String
+  nameAr          String
+  nameEn          String
+  kind            WorkItemKind
+  uom             String   @default("unit")
+  /// Cost per unit offered when the item is added to a budget (a cost field:
+  /// redacted for a caller without finance.costs.view).
+  defaultUnitCost Decimal  @default(0) @db.Decimal(18, 2)
+  itemId          String?
+  item            Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive, sortOrder])
+  @@index([itemId])
 }
 
 model PricingScheme {
