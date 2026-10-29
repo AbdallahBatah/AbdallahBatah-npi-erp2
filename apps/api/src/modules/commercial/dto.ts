@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -44,8 +45,20 @@ export class CreateProposalDto {
   @IsOptional() @IsString() currency?: string;
 }
 
+export const PRICING_MODES = ['PER_LINE', 'LUMP_SUM'] as const;
+
+/**
+ * One line of a revision — since Package 3 (ADR-03 §4-4) one line of the
+ * estimated budget. It names a work item, a stock item, or both (a MATERIAL
+ * work item brings its own stock item); at least one is required.
+ */
 export class BomLineDto {
-  @IsString() itemId!: string;
+  @IsOptional() @IsString() itemId?: string;
+  /** Package 3 · P3-4: the project work item this line is. */
+  @IsOptional() @IsString() workItemId?: string;
+  /** The line's wording on the budget, when it differs from the work item's name. */
+  @IsOptional() @IsString() @MaxLength(500) description?: string;
+  @IsOptional() @IsString() @MaxLength(40) uom?: string;
   @IsNumber() @Min(0) qty!: number;
   /**
    * CRM Step 4. Normally omitted: the server fetches the cost itself (last accepted
@@ -71,6 +84,17 @@ export class CreateRevisionDto {
   @IsOptional() @IsString() validUntil?: string;
   @IsOptional() @IsString() pricingSchemeId?: string;
   @IsOptional() @IsNumber() @Min(0) marginPct?: number;
+  /**
+   * Package 3 · P3-4. PER_LINE (default, the old behaviour): every line carries its
+   * selling price. LUMP_SUM: the lines carry cost only and `sellingTotal` is the price.
+   */
+  @IsOptional() @IsEnum(PRICING_MODES) pricingMode?: (typeof PRICING_MODES)[number];
+  /** LUMP_SUM only: the budget's selling price (before VAT). Needed to submit, not to save a draft. */
+  @IsOptional() @IsNumber() @Min(0) sellingTotal?: number;
+  /** Risk contingency on the estimated cost, in percent (cost data). */
+  @IsOptional() @IsNumber() @Min(0) @Max(100) contingencyPct?: number;
+  /** The risks behind the contingency, for the general manager (cost data). */
+  @IsOptional() @IsString() @MaxLength(4000) riskNotes?: string;
   @IsOptional() @ValidateNested() @Type(() => DesignVersionInputDto)
   designVersion?: DesignVersionInputDto;
   @IsArray() @ValidateNested({ each: true }) @Type(() => BomLineDto)

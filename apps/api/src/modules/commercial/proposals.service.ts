@@ -25,7 +25,7 @@ import { AuditService } from '../../common/audit.service';
 import { ApprovalService, type ApprovalRequestView } from '../../common/approval.service';
 import { OrgSettingsService, ORG_SETTING_DEFAULTS, ORG_SETTING_KEYS } from '../../common/org-settings.service';
 import { WorkflowEngine } from '../../common/workflow/workflow.engine';
-import { priceRevision, sellingPrice } from '../../common/proposal-pricing';
+import { budgetTotals, priceRevision, sellingPrice } from '../../common/proposal-pricing';
 import { holdsEffectively, holdsRole } from '../../common/permission-predicates';
 import type { AuthUser } from '../../common/auth-user';
 import { BomLineDto, CreateProposalDto, CreateRevisionDto, RejectProposalDto } from './dto';
@@ -79,7 +79,10 @@ type CurrentRevision = LoadedProposal['revisions'][number];
 
 /** One BOM line, costed and priced, ready to be written. */
 interface PreparedLine {
-  itemId: string;
+  itemId: string | null;
+  workItemId: string | null;
+  description: string | null;
+  uom: string | null;
   qty: Prisma.Decimal;
   isAdder: boolean;
   unitCost: Prisma.Decimal;
@@ -102,7 +105,27 @@ interface PreparedRevision {
   marginAmount: Prisma.Decimal;
   totalAmount: Prisma.Decimal;
   overridden: number;
+  // Package 3 · P3-4 (ADR-03 §4-4)
+  pricingMode: 'PER_LINE' | 'LUMP_SUM';
+  sellingTotal: Prisma.Decimal | null;
+  contingencyPct: Prisma.Decimal;
+  contingencyAmount: Prisma.Decimal;
+  riskNotes: string | null;
 }
+
+/** The revision columns a write sets from a PreparedRevision (both add and edit). */
+const revisionFigures = (p: PreparedRevision) => ({
+  pricingSchemeId: p.pricingSchemeId,
+  subtotal: p.subtotal,
+  marginAmount: p.marginAmount,
+  totalAmount: p.totalAmount,
+  validUntil: p.validUntil,
+  pricingMode: p.pricingMode,
+  sellingTotal: p.sellingTotal,
+  contingencyPct: p.contingencyPct,
+  contingencyAmount: p.contingencyAmount,
+  riskNotes: p.riskNotes,
+});
 
 const round2 = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 
@@ -171,7 +194,12 @@ export class ProposalsService implements OnModuleInit {
         revisions: {
           orderBy: { revisionNo: 'asc' },
           include: {
-            bomLines: { include: { item: true } },
+            bomLines: {
+              include: {
+                item: true,
+                workItem: { select: { id: true, code: true, nameAr: true, nameEn: true, kind: true, uom: true } },
+              },
+            },
             designVersion: true,
             pricingScheme: true,
             createdBy: { select: { id: true, nameAr: true, nameEn: true } },
@@ -349,12 +377,8 @@ export class ProposalsService implements OnModuleInit {
           proposalId,
           revisionNo,
           designVersionId,
-          pricingSchemeId: prepared.pricingSchemeId,
-          subtotal: prepared.subtotal,
-          marginAmount: prepared.marginAmount,
-          totalAmount: prepared.totalAmount,
+          ...revisionFigures(prepared),
           status: 'DRAFT',
-          validUntil: prepared.validUntil,
           createdById: user.userId,
           bomLines: { create: prepared.lines.map((l) => this.lineData(l)) },
         },
@@ -379,7 +403,9 @@ export class ProposalsService implements OnModuleInit {
           action: 'CREATE',
           after: {
             revisionNo,
+            pricingMode: prepared.pricingMode,
             subtotal: prepared.subtotal.toFixed(2),
+            contingencyAmount: prepared.contingencyAmount.toFixed(2),
             marginAmount: prepared.marginAmount.toFixed(2),
             totalAmount: prepared.totalAmount.toFixed(2),
             validUntil: prepared.validUntil,
@@ -459,11 +485,7 @@ export class ProposalsService implements OnModuleInit {
         where: { id: revisionId },
         data: {
           designVersionId,
-          pricingSchemeId: prepared.pricingSchemeId,
-          subtotal: prepared.subtotal,
-          marginAmount: prepared.marginAmount,
-          totalAmount: prepared.totalAmount,
-          validUntil: prepared.validUntil,
+          ...revisionFigures(prepared),
           bomLines: { create: prepared.lines.map((l) => this.lineData(l)) },
         },
         include: { bomLines: true },
@@ -477,8 +499,10 @@ export class ProposalsService implements OnModuleInit {
           action: 'UPDATE',
           before: { totalAmount: String(current.totalAmount), validUntil: current.validUntil, lines: current.bomLines.length },
           after: {
+            pricingMode: prepared.pricingMode,
             totalAmount: prepared.totalAmount.toFixed(2),
             subtotal: prepared.subtotal.toFixed(2),
+            contingencyAmount: prepared.contingencyAmount.toFixed(2),
             validUntil: prepared.validUntil,
             lines: prepared.lines.length,
             manualCostLines: prepared.overridden,
@@ -513,6 +537,10 @@ export class ProposalsService implements OnModuleInit {
       }
       if (current.bomLines.length === 0) {
         throw new BadRequestException('Proposal needs at least one line');
+      }
+      // Package 3 · P3-4: a budget goes to the general manager with a price on it.
+      if (new Prisma.Decimal(current.totalAmount).lte(0)) {
+        throw new BadRequestException('The budget needs a selling price before it is raised for approval');
       }
       if (!current.validUntil || !isValidityFuture(current.validUntil)) {
         throw new BadRequestException('Validity date must be in the future');
@@ -768,6 +796,8 @@ export class ProposalsService implements OnModuleInit {
     if (
       dto.marginPct !== undefined ||
       dto.pricingSchemeId !== undefined ||
+      dto.contingencyPct !== undefined ||
+      dto.riskNotes !== undefined ||
       dto.bomLines.some((l) => l.unitCost !== undefined || l.costOverrideReason !== undefined)
     ) {
       assertCanSetCosts(user);
@@ -810,15 +840,8 @@ export class ProposalsService implements OnModuleInit {
       throw new BadRequestException('Validity date must be in the future');
     }
 
-    // All BOM items belong to this tenant.
-    const itemIds = dto.bomLines.map((l) => l.itemId);
-    const items = await this.prisma.item.findMany({
-      where: { id: { in: itemIds }, organizationId: user.organizationId },
-      select: { id: true },
-    });
-    if (items.length !== new Set(itemIds).size) {
-      throw new BadRequestException('One or more BOM items are invalid for this tenant');
-    }
+    const pricingMode = dto.pricingMode ?? 'PER_LINE';
+    const lineSpec = await this.resolveLineSubjects(user.organizationId, dto.bomLines);
 
     // The margin: an explicit one wins, else the pricing scheme's.
     let marginPct: Prisma.Decimal | null = dto.marginPct !== undefined ? new Prisma.Decimal(dto.marginPct) : null;
@@ -830,36 +853,112 @@ export class ProposalsService implements OnModuleInit {
       if (marginPct === null) marginPct = new Prisma.Decimal(scheme.marginPct);
     }
 
-    // The cost is the server's to fetch — never taken on trust from the client.
-    const costs = await this.itemCosts.lastPurchaseCosts(user.organizationId, itemIds, currency);
+    // The cost is the server's to fetch — never taken on trust from the client:
+    // the last purchase of the stock item, else the work item's default cost.
+    const itemIds = [...new Set(lineSpec.map((l) => l.itemId).filter((id): id is string => !!id))];
+    const costs = itemIds.length
+      ? await this.itemCosts.lastPurchaseCosts(user.organizationId, itemIds, currency)
+      : new Map<string, LastCost>();
     const mayPrice = canViewCosts(user);
     let overridden = 0;
-    const lines: Array<Omit<PreparedLine, 'lineTotal'>> = dto.bomLines.map((l) => {
-      const fetched = costs.get(l.itemId);
+    const lines: Array<Omit<PreparedLine, 'lineTotal'>> = dto.bomLines.map((l, idx) => {
+      const subject = lineSpec[idx];
+      const fetched: LastCost | undefined = subject.itemId
+        ? costs.get(subject.itemId)
+        : { unitCost: subject.workItemCost!, costSource: 'CATALOGUE', costDate: null };
       if (!fetched) throw new BadRequestException('One or more BOM items are invalid for this tenant');
       const cost = this.resolveCost(user, l, fetched, now);
       if (cost.costSource === 'MANUAL') overridden += 1;
       let unitPrice: Prisma.Decimal;
-      if (l.unitPrice !== undefined) {
+      if (pricingMode === 'LUMP_SUM') {
+        // A lump-sum budget is priced as a whole: the lines carry cost only.
+        if (l.unitPrice !== undefined) {
+          throw new BadRequestException('Line prices are not used in a lump-sum budget — set the selling total');
+        }
+        unitPrice = new Prisma.Decimal(0);
+      } else if (l.unitPrice !== undefined) {
         unitPrice = round2(new Prisma.Decimal(l.unitPrice));
       } else if (mayPrice) {
         unitPrice = sellingPrice(cost.unitCost, marginPct ?? 0);
       } else {
         throw new BadRequestException('Selling price is required');
       }
-      return { itemId: l.itemId, qty: new Prisma.Decimal(l.qty), isAdder: l.isAdder ?? false, ...cost, unitPrice };
+      return {
+        itemId: subject.itemId,
+        workItemId: subject.workItemId,
+        description: l.description?.trim() || null,
+        uom: l.uom?.trim() || subject.uom,
+        qty: new Prisma.Decimal(l.qty),
+        isAdder: l.isAdder ?? false,
+        ...cost,
+        unitPrice,
+      };
     });
 
     const priced = priceRevision(lines.map((l) => ({ qty: l.qty, unitCost: l.unitCost, unitPrice: l.unitPrice })));
+    const totals = budgetTotals({
+      pricingMode,
+      subtotal: priced.subtotal,
+      lineTotal: priced.totalAmount,
+      sellingTotal: dto.sellingTotal,
+      contingencyPct: dto.contingencyPct,
+    });
     return {
       validUntil,
       pricingSchemeId: dto.pricingSchemeId ?? null,
       lines: lines.map((l, i) => ({ ...l, lineTotal: priced.lines[i].lineTotal })),
       subtotal: priced.subtotal,
-      marginAmount: priced.marginAmount,
-      totalAmount: priced.totalAmount,
+      ...totals,
+      riskNotes: dto.riskNotes?.trim() || null,
       overridden,
     };
+  }
+
+  /**
+   * Package 3 · P3-4 — what each line is about: its stock item, its work item, or
+   * both. A work item of the tenant brings its own stock item (MATERIAL) and its
+   * default cost; a stock item named beside a work item must be that one. Every
+   * id is checked against the caller's organization.
+   */
+  private async resolveLineSubjects(organizationId: string, bomLines: BomLineDto[]) {
+    const workItemIds = [...new Set(bomLines.map((l) => l.workItemId).filter((id): id is string => !!id))];
+    const workItems = workItemIds.length
+      ? await this.prisma.workItem.findMany({
+          where: { id: { in: workItemIds }, organizationId },
+          select: { id: true, itemId: true, uom: true, defaultUnitCost: true },
+        })
+      : [];
+    if (workItems.length !== workItemIds.length) {
+      throw new BadRequestException('One or more work items are invalid for this tenant');
+    }
+    const byId = new Map(workItems.map((w) => [w.id, w]));
+
+    const spec = bomLines.map((l) => {
+      if (!l.itemId && !l.workItemId) throw new BadRequestException('Each line needs a work item or a stock item');
+      const w = l.workItemId ? byId.get(l.workItemId)! : null;
+      if (w && l.itemId && w.itemId && w.itemId !== l.itemId) {
+        throw new BadRequestException('The stock item does not match the work item');
+      }
+      return {
+        itemId: l.itemId ?? w?.itemId ?? null,
+        workItemId: w?.id ?? null,
+        uom: w?.uom ?? null,
+        workItemCost: w ? round2(new Prisma.Decimal(w.defaultUnitCost)) : null,
+      };
+    });
+
+    // Every stock item (named or brought by a work item) belongs to this tenant.
+    const itemIds = [...new Set(spec.map((x) => x.itemId).filter((id): id is string => !!id))];
+    if (itemIds.length) {
+      const items = await this.prisma.item.findMany({
+        where: { id: { in: itemIds }, organizationId },
+        select: { id: true },
+      });
+      if (items.length !== itemIds.length) {
+        throw new BadRequestException('One or more BOM items are invalid for this tenant');
+      }
+    }
+    return spec;
   }
 
   /** A line's cost: what the server fetched, unless the author changed it — which needs a reason, and keeps the original. */
@@ -898,6 +997,9 @@ export class ProposalsService implements OnModuleInit {
   private lineData(l: PreparedLine): Prisma.BomLineUncheckedCreateWithoutProposalRevisionInput {
     return {
       itemId: l.itemId,
+      workItemId: l.workItemId,
+      description: l.description,
+      uom: l.uom,
       qty: l.qty,
       isAdder: l.isAdder,
       unitCost: l.unitCost,

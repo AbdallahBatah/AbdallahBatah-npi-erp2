@@ -232,6 +232,11 @@ export const COST_FIELDS: readonly string[] = [
   'unitCost',
   // WorkItem.defaultUnitCost (Package 3 · P3-3): a work item's cost per unit.
   'defaultUnitCost',
+  // ProposalRevision risk contingency (Package 3 · P3-4): a share of the
+  // estimated cost, and the notes behind it — both reveal the cost build-up.
+  'contingencyPct',
+  'contingencyAmount',
+  'riskNotes',
   // BomLine.originalUnitCost (CRM Step 4): the cost the system fetched before a manual
   // change; the changed cost itself is covered by 'unitCost'.
   'originalUnitCost',

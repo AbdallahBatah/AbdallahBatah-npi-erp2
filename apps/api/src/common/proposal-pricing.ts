@@ -46,3 +46,46 @@ export function priceRevision(lines: PricingLineInput[]): PricedRevision {
 export function sellingPrice(unitCost: Money, marginPct: Money): Prisma.Decimal {
   return round2(D(unitCost).mul(D(1).add(D(marginPct).div(100))));
 }
+
+/**
+ * Package 3 · P3-4 (ADR-03 §4-4) — the estimated budget's head figures.
+ *
+ *   contingencyAmount = subtotal × contingencyPct ÷ 100        (risk reserve on cost)
+ *   totalAmount       = PER_LINE: Σ line selling totals
+ *                       LUMP_SUM: the selling total (0 until one is set)
+ *   marginAmount      = totalAmount − subtotal − contingencyAmount
+ *
+ * With no contingency a PER_LINE revision keeps exactly the old meaning
+ * (margin = total − cost base).
+ */
+export function budgetTotals(input: {
+  pricingMode: 'PER_LINE' | 'LUMP_SUM';
+  subtotal: Money;
+  lineTotal: Money;
+  sellingTotal?: Money | null;
+  contingencyPct?: Money | null;
+}): {
+  pricingMode: 'PER_LINE' | 'LUMP_SUM';
+  sellingTotal: Prisma.Decimal | null;
+  contingencyPct: Prisma.Decimal;
+  contingencyAmount: Prisma.Decimal;
+  totalAmount: Prisma.Decimal;
+  marginAmount: Prisma.Decimal;
+} {
+  const subtotal = D(input.subtotal);
+  const contingencyPct = D(input.contingencyPct ?? 0);
+  const contingencyAmount = round2(subtotal.mul(contingencyPct).div(100));
+  const sellingTotal =
+    input.pricingMode === 'LUMP_SUM' && input.sellingTotal !== undefined && input.sellingTotal !== null
+      ? round2(D(input.sellingTotal))
+      : null;
+  const totalAmount = input.pricingMode === 'LUMP_SUM' ? (sellingTotal ?? D(0)) : D(input.lineTotal);
+  return {
+    pricingMode: input.pricingMode,
+    sellingTotal,
+    contingencyPct,
+    contingencyAmount,
+    totalAmount,
+    marginAmount: totalAmount.sub(subtotal).sub(contingencyAmount),
+  };
+}

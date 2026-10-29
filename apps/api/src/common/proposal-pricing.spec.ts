@@ -14,7 +14,7 @@ import {
   normalizeValidUntil,
   riyadhDayStart,
 } from '@npi/shared';
-import { priceRevision, sellingPrice } from './proposal-pricing';
+import { budgetTotals, priceRevision, sellingPrice } from './proposal-pricing';
 
 const D = (v: string | number) => new Prisma.Decimal(v);
 
@@ -121,5 +121,41 @@ describe('validity dates — the whole of the valid-until day is valid (Asia/Riy
     expect(isValidityFuture(new Date('2026-10-09T00:00:00Z'), now)).toBe(true);
     expect(isValidityFuture(new Date('2026-10-08T00:00:00Z'), now)).toBe(false); // today is not "after today"
     expect(isValidityFuture(new Date('2026-10-01T00:00:00Z'), now)).toBe(false);
+  });
+});
+
+describe('budgetTotals — the estimated budget head (Package 3 · P3-4)', () => {
+  it('lump sum: the selling total is the price; margin = price − cost − contingency', () => {
+    const t = budgetTotals({
+      pricingMode: 'LUMP_SUM',
+      subtotal: '800000.00',
+      lineTotal: '0',
+      sellingTotal: 1_000_000,
+      contingencyPct: 5,
+    });
+    expect(t.totalAmount.toFixed(2)).toBe('1000000.00');
+    expect(t.contingencyAmount.toFixed(2)).toBe('40000.00');
+    expect(t.marginAmount.toFixed(2)).toBe('160000.00');
+    expect(t.sellingTotal?.toFixed(2)).toBe('1000000.00');
+  });
+
+  it('lump sum without a selling total yet: a draft with a zero price and a negative margin', () => {
+    const t = budgetTotals({ pricingMode: 'LUMP_SUM', subtotal: '100.00', lineTotal: '0' });
+    expect(t.sellingTotal).toBeNull();
+    expect(t.totalAmount.toFixed(2)).toBe('0.00');
+    expect(t.marginAmount.toFixed(2)).toBe('-100.00');
+  });
+
+  it('per line without contingency keeps the old meaning: margin = Σ prices − Σ costs', () => {
+    const t = budgetTotals({ pricingMode: 'PER_LINE', subtotal: '700.00', lineTotal: '1000.00', sellingTotal: 5 });
+    expect(t.totalAmount.toFixed(2)).toBe('1000.00');
+    expect(t.marginAmount.toFixed(2)).toBe('300.00');
+    // a stray selling total is ignored per line
+    expect(t.sellingTotal).toBeNull();
+  });
+
+  it('rounds the contingency half-up to two decimals', () => {
+    const t = budgetTotals({ pricingMode: 'PER_LINE', subtotal: '333.33', lineTotal: '400', contingencyPct: '2.5' });
+    expect(t.contingencyAmount.toFixed(2)).toBe('8.33');
   });
 });

@@ -24,9 +24,25 @@ import { Icon } from '@/components/icons';
 // on a revision made since the approval flow existed.
 interface Item { id: string; sku: string; nameAr: string; nameEn: string; unitCost: string | null }
 interface Scheme { id: string; code: string; nameAr: string; nameEn: string; marginPct: string | null }
+/** Package 3 · P3-3/P3-4: a project work item, from GET /reference/lookups/work-items. */
+interface WorkItemRef {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  kind: string;
+  uom: string;
+  /** null without finance.costs.view (server redaction). */
+  defaultUnitCost?: string | null;
+  itemId?: string | null;
+}
 interface BomLine {
   id: string;
-  itemId: string;
+  itemId: string | null;
+  workItemId?: string | null;
+  workItem?: WorkItemRef | null;
+  description?: string | null;
+  uom?: string | null;
   qty: string;
   unitPrice: string | null;
   lineTotal: string | null;
@@ -36,7 +52,7 @@ interface BomLine {
   costDate?: string | null;
   costAgeDays?: number | null;
   costOverrideReason?: string | null;
-  item: Item;
+  item: Item | null;
 }
 interface Revision {
   id: string;
@@ -55,6 +71,13 @@ interface Revision {
   createdBy?: { id: string; nameAr: string; nameEn: string } | null;
   bomLines: BomLine[];
   designVersion?: { capacityKwp: string; expectedAnnualKwh: string; sourceTool: string } | null;
+  // Package 3 · P3-4 (ADR-03 §4-4): the estimated budget. Cost-side ones arrive
+  // null without finance.costs.view.
+  pricingMode?: 'PER_LINE' | 'LUMP_SUM';
+  sellingTotal?: string | null;
+  contingencyPct?: string | null;
+  contingencyAmount?: string | null;
+  riskNotes?: string | null;
 }
 interface HistoryRow {
   id: string;
@@ -92,6 +115,9 @@ interface Fetched {
 
 /** One line of the form. Costs are text so a half-typed number is not rewritten under the cursor. */
 interface DraftLine {
+  /** Package 3: the work item this line is (a lump-sum budget line always has one). */
+  workItemId: string;
+  description: string;
   itemId: string;
   qty: number;
   unitCost: string;
@@ -101,7 +127,19 @@ interface DraftLine {
   reason: string;
   fetched: Fetched | null;
 }
-const blankLine = (): DraftLine => ({ itemId: '', qty: 1, unitCost: '', unitPrice: '', priceTouched: false, reason: '', fetched: null });
+const blankLine = (): DraftLine => ({
+  workItemId: '',
+  description: '',
+  itemId: '',
+  qty: 1,
+  unitCost: '',
+  unitPrice: '',
+  priceTouched: false,
+  reason: '',
+  fetched: null,
+});
+/** A line names something: a work item, or (per-line pricing) a stock item. */
+const filled = (l: DraftLine) => !!(l.workItemId || l.itemId);
 
 type FormState = { mode: 'create' | 'edit'; revisionId?: string } | null;
 
@@ -117,6 +155,19 @@ const inDays = (n: number) => {
 };
 const costChanged = (l: DraftLine) =>
   !!l.fetched && l.unitCost !== '' && Math.abs(Number(l.unitCost) - Number(l.fetched.unitCost)) >= 0.005;
+/** A work item's default cost, shaped like a fetched cost (no age: it is a catalogue figure). */
+const workItemCost = (w: WorkItemRef): Fetched | null =>
+  w.defaultUnitCost == null
+    ? null
+    : {
+        itemId: '',
+        unitCost: String(Number(w.defaultUnitCost).toFixed(2)),
+        costSource: 'CATALOGUE',
+        costDate: null,
+        costAgeDays: null,
+        stale: false,
+        warnDays: 0,
+      };
 
 export default function ProposalDetailPage() {
   const { t, locale, pick } = useI18n();
@@ -137,6 +188,9 @@ export default function ProposalDetailPage() {
   // itself (ADR-02 §3-3); only the form uses it, so only a writer asks.
   const itemList = useLookup<Item>('items', { enabled: canWrite });
   const items = itemList.rows;
+  // Package 3 · P3-3: the work items a budget is built from (same keys as the items).
+  const workItemList = useLookup<WorkItemRef>('workItems', { enabled: canWrite });
+  const workItems = workItemList.rows;
   const [schemes, setSchemes] = useState<Scheme[]>([]);
   const [form, setForm] = useState<FormState>(null);
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
@@ -144,6 +198,12 @@ export default function ProposalDetailPage() {
   const [schemeId, setSchemeId] = useState('');
   const [capacityKwp, setCapacityKwp] = useState('');
   const [annualKwh, setAnnualKwh] = useState('');
+  // Package 3 · P3-4: lump-sum budget (the default for a new revision) or per-line prices.
+  const [pricingMode, setPricingMode] = useState<'PER_LINE' | 'LUMP_SUM'>('LUMP_SUM');
+  const [sellingTotal, setSellingTotal] = useState('');
+  const [contingencyPct, setContingencyPct] = useState('');
+  const [riskNotes, setRiskNotes] = useState('');
+  const lump = pricingMode === 'LUMP_SUM';
   const [contractOpen, setContractOpen] = useState(false);
   const [contractErr, setContractErr] = useState('');
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -168,13 +228,20 @@ export default function ProposalDetailPage() {
 
   const marginPct = Number(schemes.find((s) => s.id === schemeId)?.marginPct ?? 0);
   const draftTotal = useMemo(
-    () => lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0),
-    [lines],
+    () =>
+      pricingMode === 'LUMP_SUM'
+        ? Number(sellingTotal) || 0
+        : lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0),
+    [lines, pricingMode, sellingTotal],
   );
   const draftSubtotal = useMemo(
     () => lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitCost) || 0), 0),
     [lines],
   );
+  // Display arithmetic only; the server computes the stored figures (budgetTotals).
+  const draftContingency = (draftSubtotal * (Number(contingencyPct) || 0)) / 100;
+  const draftProfit = draftTotal - draftSubtotal - draftContingency;
+  const draftMarginPct = draftTotal > 0 ? (draftProfit / draftTotal) * 100 : null;
 
   // Newest first on the page; the highest revision number is the current one.
   const revisions = useMemo(() => [...(proposal?.revisions ?? [])].sort((a, b) => b.revisionNo - a.revisionNo), [proposal]);
@@ -194,8 +261,8 @@ export default function ProposalDetailPage() {
   // is the single most expensive accident on this screen. Keyed by proposal so two
   // tabs on different proposals do not overwrite each other.
   const draft = useDraft(
-    `revision2:${id}`,
-    { form, lines, schemeId, validUntil, capacityKwp, annualKwh },
+    `revision3:${id}`,
+    { form, lines, schemeId, validUntil, capacityKwp, annualKwh, pricingMode, sellingTotal, contingencyPct, riskNotes },
     (saved) => {
       setForm(saved.form);
       setLines(saved.lines);
@@ -203,18 +270,23 @@ export default function ProposalDetailPage() {
       setValidUntil(saved.validUntil);
       setCapacityKwp(saved.capacityKwp);
       setAnnualKwh(saved.annualKwh);
+      setPricingMode(saved.pricingMode ?? 'LUMP_SUM');
+      setSellingTotal(saved.sellingTotal ?? '');
+      setContingencyPct(saved.contingencyPct ?? '');
+      setRiskNotes(saved.riskNotes ?? '');
     },
     {
       // A pristine form (one blank line, nothing typed) is not a draft.
       shouldSave: (v) =>
-        v.form !== null && Boolean(v.capacityKwp || v.annualKwh || v.schemeId || v.lines.some((l) => l.itemId)),
+        v.form !== null &&
+        Boolean(v.capacityKwp || v.annualKwh || v.schemeId || v.sellingTotal || v.lines.some((l) => filled(l))),
     },
   );
 
   // The design figures are optional, but if one is given the other is expected
   // and neither may be negative — the server would reject silently otherwise.
   const validation = useValidate(
-    { capacityKwp, annualKwh, lines, validUntil },
+    { capacityKwp, annualKwh, lines, validUntil, pricingMode },
     {
       capacityKwp: (v) =>
         Number(v.capacityKwp) < 0
@@ -230,15 +302,17 @@ export default function ProposalDetailPage() {
             : undefined,
       validUntil: (v) => (v.validUntil && v.validUntil > dayKey(new Date()) ? undefined : t('proposals.err.validUntil')),
       lines: (v) =>
-        v.lines.some((l) => l.itemId && (!l.qty || l.qty <= 0))
+        v.lines.some((l) => filled(l) && (!l.qty || l.qty <= 0))
           ? t('valid.qtyPositive')
-          : v.lines.filter((l) => l.itemId && l.qty > 0).length === 0
+          : v.lines.filter((l) => filled(l) && l.qty > 0).length === 0
             ? t('valid.needLine')
-            : v.lines.some((l) => l.itemId && costChanged(l) && !l.reason.trim())
+            : v.lines.some((l) => filled(l) && costChanged(l) && !l.reason.trim())
               ? t('proposals.overrideReasonRequired')
-              : !showCosts && v.lines.some((l) => l.itemId && l.unitPrice === '')
-                ? t('proposals.err.price')
-                : undefined,
+              : v.pricingMode === 'LUMP_SUM' && v.lines.some((l) => l.itemId && !l.workItemId)
+                ? t('budget.err.workItem')
+                : v.pricingMode === 'PER_LINE' && !showCosts && v.lines.some((l) => filled(l) && l.unitPrice === '')
+                  ? t('proposals.err.price')
+                  : undefined,
     },
   );
 
@@ -283,6 +357,27 @@ export default function ProposalDetailPage() {
     );
   }
 
+  /** Package 3 · P3-4: picking a work item brings its stock item (materials) or its default cost. */
+  async function onWorkItemChange(i: number, workItemId: string) {
+    const w = workItems.find((x) => x.id === workItemId) ?? null;
+    const itemId = w?.itemId ?? '';
+    updateLine(i, { workItemId, itemId, fetched: null, unitCost: '', reason: '' });
+    if (!w || !showCosts) return;
+    const f = itemId ? ((await fetchCosts([itemId])).get(itemId) ?? null) : workItemCost(w);
+    setLines((prev) =>
+      prev.map((l, idx) =>
+        idx === i && l.workItemId === workItemId
+          ? {
+              ...l,
+              fetched: f,
+              unitCost: f ? f.unitCost : '',
+              unitPrice: lump || l.priceTouched || !f ? l.unitPrice : suggest(Number(f.unitCost), marginPct),
+            }
+          : l,
+      ),
+    );
+  }
+
   function onSchemeChange(value: string) {
     setSchemeId(value);
     const pct = Number(schemes.find((s) => s.id === value)?.marginPct ?? 0);
@@ -312,19 +407,29 @@ export default function ProposalDetailPage() {
     setSchemeId('');
     setCapacityKwp(base?.designVersion ? String(Number(base.designVersion.capacityKwp)) : '');
     setAnnualKwh(base?.designVersion ? String(Number(base.designVersion.expectedAnnualKwh)) : '');
+    // A revision keeps the pricing it was written in; the first one is a lump-sum budget.
+    setPricingMode(base?.pricingMode ?? 'LUMP_SUM');
+    setSellingTotal(base?.sellingTotal != null ? String(Number(base.sellingTotal)) : '');
+    setContingencyPct(base?.contingencyPct != null && Number(base.contingencyPct) > 0 ? String(Number(base.contingencyPct)) : '');
+    setRiskNotes(base?.riskNotes ?? '');
     validation.reset();
     if (!base || base.bomLines.length === 0) {
       setLines([blankLine()]);
       return;
     }
-    const fetched = await fetchCosts([...new Set(base.bomLines.map((l) => l.itemId))]);
+    const fetched = await fetchCosts([
+      ...new Set(base.bomLines.map((l) => l.itemId).filter((x): x is string => !!x)),
+    ]);
     const costBased = base.validUntil !== null; // made since the approval flow: unitPrice is the selling price
     setLines(
       base.bomLines.map((l) => {
-        const f = fetched.get(l.itemId) ?? null;
+        const w = l.workItemId ? (workItems.find((x) => x.id === l.workItemId) ?? null) : null;
+        const f = l.itemId ? (fetched.get(l.itemId) ?? null) : w ? workItemCost(w) : null;
         const own = costBased && l.unitCost != null ? String(Number(l.unitCost)) : f ? f.unitCost : '';
         return {
-          itemId: l.itemId,
+          workItemId: l.workItemId ?? '',
+          description: l.description ?? '',
+          itemId: l.itemId ?? '',
           qty: Number(l.qty),
           unitCost: showCosts ? own : '',
           unitPrice: costBased && l.unitPrice != null ? String(Number(l.unitPrice)) : '',
@@ -342,6 +447,10 @@ export default function ProposalDetailPage() {
     setSchemeId('');
     setCapacityKwp('');
     setAnnualKwh('');
+    setPricingMode('LUMP_SUM');
+    setSellingTotal('');
+    setContingencyPct('');
+    setRiskNotes('');
     validation.reset();
     draft.clear();
   }
@@ -351,15 +460,23 @@ export default function ProposalDetailPage() {
     if (!form) return;
     // Reveals every message at once rather than failing on the server.
     if (!validation.validateAll()) return;
-    const valid = lines.filter((l) => l.itemId && l.qty > 0);
+    const valid = lines.filter((l) => filled(l) && l.qty > 0);
     const body = {
       validUntil,
+      pricingMode,
+      sellingTotal: lump && sellingTotal !== '' ? Number(sellingTotal) : undefined,
+      // Contingency and risk notes are cost data: only a caller who may see costs sends them.
+      contingencyPct: lump && showCosts && contingencyPct !== '' ? Number(contingencyPct) : undefined,
+      riskNotes: lump && showCosts && riskNotes.trim() ? riskNotes.trim() : undefined,
       // The server refuses a pricing scheme from a caller without costs.view.
-      pricingSchemeId: showCosts ? schemeId || undefined : undefined,
+      pricingSchemeId: showCosts && !lump ? schemeId || undefined : undefined,
       bomLines: valid.map((l) => ({
-        itemId: l.itemId,
+        workItemId: l.workItemId || undefined,
+        // A work item brings its own stock item; only a bare stock-item line names one.
+        itemId: l.workItemId ? undefined : l.itemId || undefined,
+        description: l.description.trim() || undefined,
         qty: Number(l.qty),
-        unitPrice: l.unitPrice !== '' ? Number(l.unitPrice) : undefined,
+        unitPrice: !lump && l.unitPrice !== '' ? Number(l.unitPrice) : undefined,
         // Only a cost the author CHANGED is sent: otherwise the server's own fetch decides.
         unitCost: showCosts && costChanged(l) ? Number(l.unitCost) : undefined,
         costOverrideReason: showCosts && costChanged(l) ? l.reason.trim() : undefined,
@@ -566,7 +683,9 @@ export default function ProposalDetailPage() {
     const superseded = rev.status === 'SUPERSEDED';
     const costBased = rev.validUntil !== null;
     const newer = rev.supersededById ? proposal!.revisions.find((r) => r.id === rev.supersededById) : null;
-    const showPriceCols = costBased || showCosts;
+    // A lump-sum budget has no line prices: the lines carry cost, the head carries the price.
+    const revLump = rev.pricingMode === 'LUMP_SUM';
+    const showPriceCols = !revLump && (costBased || showCosts);
     const body = (
       <>
         {rev.designVersion && (
@@ -583,6 +702,7 @@ export default function ProposalDetailPage() {
                 <th scope="col" className="th text-end">{t('proposals.qty')}</th>
                 {costBased && showCosts && <th scope="col" className="th text-end">{t('proposals.cost')}</th>}
                 {costBased && showCosts && <th scope="col" className="th">{t('proposals.costSource')}</th>}
+                {revLump && showCosts && <th scope="col" className="th text-end">{t('budget.lineCost')}</th>}
                 {showPriceCols && (
                   <th scope="col" className="th text-end">{costBased ? t('proposals.sellingPrice') : t('proposals.unitPrice')}</th>
                 )}
@@ -595,7 +715,14 @@ export default function ProposalDetailPage() {
                 return (
                   <tr key={bl.id} className={`border-b border-slate-50 ${manual && showCosts ? 'bg-warning-50/70' : ''}`}>
                     <td className="py-2">
-                      <div>{bl.item.sku} · {pick(bl.item, 'name')}</div>
+                      <div>
+                        {bl.workItem
+                          ? `${bl.workItem.code} · ${pick(bl.workItem, 'name')}`
+                          : bl.item
+                            ? `${bl.item.sku} · ${pick(bl.item, 'name')}`
+                            : '—'}
+                      </div>
+                      {bl.description && <div className="text-xs text-slate-500">{bl.description}</div>}
                       {manual && showCosts && (
                         <div className="mt-0.5 flex items-start gap-1 text-xs text-warning-800">
                           <Icon name="alert-triangle" className="mt-0.5 h-3 w-3 shrink-0" />
@@ -606,7 +733,10 @@ export default function ProposalDetailPage() {
                         </div>
                       )}
                     </td>
-                    <td className="td-num">{Number(bl.qty)}</td>
+                    <td className="td-num">
+                      {Number(bl.qty)}
+                      {(bl.uom ?? bl.workItem?.uom) && <span className="ms-1 text-xs text-slate-400">{bl.uom ?? bl.workItem?.uom}</span>}
+                    </td>
                     {costBased && showCosts && (
                       <td className="td-num">
                         {manual && bl.originalUnitCost != null && (
@@ -625,6 +755,9 @@ export default function ProposalDetailPage() {
                         </div>
                       </td>
                     )}
+                    {revLump && showCosts && (
+                      <td className="td-num">{formatMoney((Number(bl.qty) || 0) * (Number(bl.unitCost) || 0), locale)}</td>
+                    )}
                     {showPriceCols && <td className="td-num">{formatMoney(bl.unitPrice ?? 0, locale)}</td>}
                     {showPriceCols && <td className="td-num">{formatMoney(bl.lineTotal ?? 0, locale)}</td>}
                   </tr>
@@ -637,11 +770,25 @@ export default function ProposalDetailPage() {
           {showCosts && (
             <>
               <span className="text-slate-500">
-                {costBased ? t('proposals.cost') : t('proposals.subtotal')}: {formatMoney(rev.subtotal ?? 0, locale)}
+                {revLump ? t('budget.estimatedCost') : costBased ? t('proposals.cost') : t('proposals.subtotal')}:{' '}
+                {formatMoney(rev.subtotal ?? 0, locale)}
               </span>
-              <span className="text-slate-500">
-                {t('proposals.margin')}: {formatMoney(rev.marginAmount ?? 0, locale)}
+              {revLump && Number(rev.contingencyAmount ?? 0) > 0 && (
+                <span className="text-slate-500">
+                  {t('budget.contingency')} ({Number(rev.contingencyPct ?? 0)}%): {formatMoney(rev.contingencyAmount ?? 0, locale)}
+                </span>
+              )}
+              <span className={`text-slate-500 ${Number(rev.marginAmount ?? 0) < 0 ? 'font-semibold text-danger-600' : ''}`}>
+                {revLump ? t('budget.profit') : t('proposals.margin')}: {formatMoney(rev.marginAmount ?? 0, locale)}
+                {revLump && Number(rev.totalAmount) > 0 && (
+                  <> · {((Number(rev.marginAmount ?? 0) / Number(rev.totalAmount)) * 100).toFixed(1)}%</>
+                )}
               </span>
+              {revLump && rev.riskNotes && (
+                <span className="max-w-xl text-end text-xs text-slate-500">
+                  {t('budget.riskNotes')}: {rev.riskNotes}
+                </span>
+              )}
             </>
           )}
           <span className="text-lg font-bold text-slate-900">
@@ -789,7 +936,45 @@ export default function ProposalDetailPage() {
             </div>
           )}
 
-          <div className={`mb-4 grid gap-4 ${showCosts ? 'grid-cols-1 sm:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'}`}>
+          <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-4">
+            <Field label={t('budget.pricingMode')} hint={lump ? t('budget.lumpHint') : undefined}>
+              <select
+                className="input"
+                value={pricingMode}
+                onChange={(e) => {
+                  setPricingMode(e.target.value as 'PER_LINE' | 'LUMP_SUM');
+                  validation.onBlur('lines');
+                }}
+              >
+                <option value="LUMP_SUM">{t('budget.mode.LUMP_SUM')}</option>
+                <option value="PER_LINE">{t('budget.mode.PER_LINE')}</option>
+              </select>
+            </Field>
+            {lump && (
+              <Field label={t('budget.sellingTotal')}>
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="input"
+                  value={sellingTotal}
+                  onChange={(e) => setSellingTotal(e.target.value)}
+                />
+              </Field>
+            )}
+            {lump && showCosts && (
+              <Field label={t('budget.contingencyPct')}>
+                <input
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={100}
+                  className="input"
+                  value={contingencyPct}
+                  onChange={(e) => setContingencyPct(e.target.value)}
+                />
+              </Field>
+            )}
             <Field label={t('proposals.validUntilField')} error={validation.errorOf('validUntil')} hint={t('proposals.validHint')}>
               <input
                 type="date"
@@ -800,7 +985,7 @@ export default function ProposalDetailPage() {
                 onBlur={() => validation.onBlur('validUntil')}
               />
             </Field>
-            {showCosts && (
+            {showCosts && !lump && (
               <Field label={t('proposals.pricingScheme')}>
                 <select className="input" value={schemeId} onChange={(e) => onSchemeChange(e.target.value)}>
                   <option value="">{t('proposals.marginPct')}: 0%</option>
@@ -836,8 +1021,24 @@ export default function ProposalDetailPage() {
             </Field>
           </div>
 
-          <label className="label">{t('proposals.bom')}</label>
-          {showCosts && <p className="mb-2 text-xs text-slate-500">{t('proposals.marginHint')}</p>}
+          {lump && showCosts && (
+            <div className="mb-4">
+              <Field label={t('budget.riskNotes')}>
+                <textarea
+                  className="input min-h-[60px]"
+                  maxLength={4000}
+                  value={riskNotes}
+                  onChange={(e) => setRiskNotes(e.target.value)}
+                />
+              </Field>
+            </div>
+          )}
+
+          <label className="label">{lump ? t('budget.lines') : t('proposals.bom')}</label>
+          {showCosts && !lump && <p className="mb-2 text-xs text-slate-500">{t('proposals.marginHint')}</p>}
+          {workItemList.state === 'unavailable' && (
+            <p className="mb-2 text-xs text-slate-500">{t('lookup.unavailable')}</p>
+          )}
           {itemList.state === 'unavailable' && (
             <p className="mb-2 text-xs text-slate-500">{t('lookup.unavailable')}</p>
           )}
@@ -853,24 +1054,40 @@ export default function ProposalDetailPage() {
                 <div key={i} className={`rounded-lg border p-2 ${changed ? 'border-warning-300 bg-warning-50/50' : 'border-transparent'}`}>
                   <div className="flex flex-wrap items-center gap-2">
                     <select
-                      aria-label={t('proposals.item')}
+                      aria-label={t('budget.workItem')}
                       className="input min-w-[12rem] flex-1"
-                      value={l.itemId}
-                      onChange={(e) => onItemChange(i, e.target.value)}
-                      disabled={itemList.state === 'unavailable'}
+                      value={l.workItemId}
+                      onChange={(e) => onWorkItemChange(i, e.target.value)}
+                      disabled={workItemList.state === 'unavailable'}
                     >
-                      <option value="">—</option>
-                      {items.map((it) => (
-                        <option key={it.id} value={it.id}>
-                          {it.sku} · {pick(it, 'name')}
+                      <option value="">{lump ? `${t('budget.workItem')} —` : `${t('budget.workItem')} (${t('common.optional')})`}</option>
+                      {workItems.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.code} · {pick(w, 'name')}
                         </option>
                       ))}
                     </select>
+                    {!lump && !l.workItemId && (
+                      <select
+                        aria-label={t('proposals.item')}
+                        className="input min-w-[12rem] flex-1"
+                        value={l.itemId}
+                        onChange={(e) => onItemChange(i, e.target.value)}
+                        disabled={itemList.state === 'unavailable'}
+                      >
+                        <option value="">—</option>
+                        {items.map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.sku} · {pick(it, 'name')}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <input
                       type="number"
                       step="0.001"
                       min={0}
-                      className={`input w-24 ${l.itemId && (!l.qty || l.qty <= 0) ? '!border-danger-300' : ''}`}
+                      className={`input w-24 ${filled(l) && (!l.qty || l.qty <= 0) ? '!border-danger-300' : ''}`}
                       aria-label={t('proposals.qty')}
                       placeholder={t('proposals.qty')}
                       value={l.qty}
@@ -889,20 +1106,24 @@ export default function ProposalDetailPage() {
                         onChange={(e) => onCostChange(i, e.target.value)}
                       />
                     )}
-                    <input
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      className="input w-28"
-                      aria-label={t('proposals.sellingPrice')}
-                      placeholder={t('proposals.sellingPrice')}
-                      value={l.unitPrice}
-                      onChange={(e) => updateLine(i, { unitPrice: e.target.value, priceTouched: true })}
-                      onBlur={() => validation.onBlur('lines')}
-                    />
-                    <span className="w-28 text-end text-sm text-slate-500">
-                      {formatMoney((Number(l.qty) || 0) * (Number(l.unitPrice) || 0), locale)}
-                    </span>
+                    {!lump && (
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        className="input w-28"
+                        aria-label={t('proposals.sellingPrice')}
+                        placeholder={t('proposals.sellingPrice')}
+                        value={l.unitPrice}
+                        onChange={(e) => updateLine(i, { unitPrice: e.target.value, priceTouched: true })}
+                        onBlur={() => validation.onBlur('lines')}
+                      />
+                    )}
+                    {(!lump || showCosts) && (
+                      <span className="w-28 text-end text-sm text-slate-500">
+                        {formatMoney((Number(l.qty) || 0) * (Number(lump ? l.unitCost : l.unitPrice) || 0), locale)}
+                      </span>
+                    )}
                     <button
                       type="button"
                       aria-label={`${t('proposals.removeLine')} ${i + 1}`}
@@ -912,6 +1133,16 @@ export default function ProposalDetailPage() {
                       <Icon name="x" className="h-4 w-4" />
                     </button>
                   </div>
+                  {filled(l) && (
+                    <input
+                      className="input mt-1.5 w-full text-xs"
+                      aria-label={t('budget.description')}
+                      placeholder={`${t('budget.description')} (${t('common.optional')})`}
+                      maxLength={500}
+                      value={l.description}
+                      onChange={(e) => updateLine(i, { description: e.target.value })}
+                    />
+                  )}
                   {showCosts && l.fetched && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                       <span>{sourceLabel(l.fetched.costSource)}</span>
@@ -960,11 +1191,22 @@ export default function ProposalDetailPage() {
             <div className="text-sm text-slate-600">
               {showCosts && (
                 <>
-                  {t('proposals.cost')}: {formatMoney(draftSubtotal, locale)} ·{' '}
+                  {lump ? t('budget.estimatedCost') : t('proposals.cost')}: {formatMoney(draftSubtotal, locale)} ·{' '}
+                  {lump && draftContingency > 0 && (
+                    <>
+                      {t('budget.contingency')}: {formatMoney(draftContingency, locale)} ·{' '}
+                    </>
+                  )}
+                  {lump && (
+                    <span className={draftProfit < 0 ? 'font-semibold text-danger-600' : ''}>
+                      {t('budget.profit')}: {formatMoney(draftProfit, locale)}
+                      {draftMarginPct !== null && <> ({draftMarginPct.toFixed(1)}%)</>} ·{' '}
+                    </span>
+                  )}
                 </>
               )}
               <span className="font-semibold text-slate-900">
-                {t('common.total')}: {formatMoney(draftTotal, locale)}
+                {lump ? t('budget.sellingTotal') : t('common.total')}: {formatMoney(draftTotal, locale)}
               </span>
             </div>
             <div className="flex items-center gap-2">

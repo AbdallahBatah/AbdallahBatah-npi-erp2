@@ -442,6 +442,8 @@ export class ReportsService {
         customer: { select: { nameAr: true, nameEn: true } },
         proposalRevision: {
           include: { bomLines: { include: { item: { select: { unitCost: true } } } } },
+          // Package 3 · P3-4: a work-item line without a stock item has no catalogue
+          // cost; its own recorded cost (BomLine.unitCost) is the estimate.
         },
         invoices: {
           where: { status: { in: [...REPORTED_INVOICE_STATUSES] } },
@@ -468,7 +470,7 @@ export class ReportsService {
       const contractValue = Number(c.totalValue);
       const estCost = round2(
         (c.proposalRevision?.bomLines ?? []).reduce(
-          (s, l) => s + Number(l.qty) * Number(l.item.unitCost),
+          (s, l) => s + Number(l.qty) * Number(l.item ? l.item.unitCost : (l.unitCost ?? 0)),
           0,
         ),
       );

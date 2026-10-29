@@ -80,6 +80,15 @@ function build(over: { proposal?: unknown; costs?: Map<string, unknown>; approve
     proposal: { findFirst: jest.fn().mockResolvedValue(over.proposal ?? proposalRow()), findMany: jest.fn().mockResolvedValue([]) },
     opportunity: { findFirst: jest.fn().mockResolvedValue({ id: 'opp1', organizationId: 'org1', stage: 'COST_STUDY' }) },
     item: { findMany: jest.fn().mockResolvedValue([{ id: 'i1' }]) },
+    // Package 3 · P3-4: a labour work item (no stock item) and a material one bringing i1.
+    workItem: {
+      findMany: jest.fn().mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
+        [
+          { id: 'w-lab', itemId: null, uom: 'kW', defaultUnitCost: D('35.00') },
+          { id: 'w-mat', itemId: 'i1', uom: 'panel', defaultUnitCost: D('0') },
+        ].filter((w) => where.id.in.includes(w.id)),
+      ),
+    },
     pricingScheme: { findFirst: jest.fn().mockResolvedValue(null) },
     user: {
       findUnique: jest.fn().mockResolvedValue({ departmentId: null, roleId: 'role-sales' }),
@@ -674,5 +683,103 @@ describe('ProposalsService.costLookup', () => {
   it('is for those who may see costs (403)', async () => {
     const { svc } = build();
     await expect(svc.costLookup(salesNoCosts, { itemIds: ['i1'], currency: 'SAR' })).rejects.toThrow(ForbiddenException);
+  });
+});
+
+// ─────────────── Package 3 · P3-4: the estimated budget (ADR-03 §4-4) ───────────────
+describe('ProposalsService.addRevision — budget lines and lump-sum pricing', () => {
+  it('a labour work item without a stock item is costed from its default cost (CATALOGUE)', async () => {
+    const { svc, tx, itemCosts } = build();
+    await svc.addRevision(sales, 'p1', {
+      validUntil: FUTURE,
+      pricingMode: 'LUMP_SUM',
+      sellingTotal: 5000,
+      bomLines: [{ workItemId: 'w-lab', qty: 100 }],
+    });
+    // no stock item to look up
+    expect(itemCosts.lastPurchaseCosts).not.toHaveBeenCalled();
+    const data = tx.proposalRevision.create.mock.calls[0][0].data;
+    const line = data.bomLines.create[0];
+    expect(line).toMatchObject({ itemId: null, workItemId: 'w-lab', uom: 'kW', costSource: 'CATALOGUE' });
+    expect(new Prisma.Decimal(line.unitCost).toFixed(2)).toBe('35.00');
+    expect(new Prisma.Decimal(line.unitPrice).toFixed(2)).toBe('0.00');
+    expect(data.pricingMode).toBe('LUMP_SUM');
+    expect(new Prisma.Decimal(data.subtotal).toFixed(2)).toBe('3500.00');
+    expect(new Prisma.Decimal(data.totalAmount).toFixed(2)).toBe('5000.00');
+    expect(new Prisma.Decimal(data.marginAmount).toFixed(2)).toBe('1500.00');
+  });
+
+  it('a material work item brings its stock item, costed from the last purchase', async () => {
+    const { svc, tx, itemCosts } = build();
+    await svc.addRevision(sales, 'p1', {
+      validUntil: FUTURE,
+      pricingMode: 'LUMP_SUM',
+      sellingTotal: 1000,
+      contingencyPct: 10,
+      bomLines: [{ workItemId: 'w-mat', qty: 2 }],
+    });
+    expect(itemCosts.lastPurchaseCosts).toHaveBeenCalledWith('org1', ['i1'], 'SAR');
+    const data = tx.proposalRevision.create.mock.calls[0][0].data;
+    expect(data.bomLines.create[0]).toMatchObject({ itemId: 'i1', workItemId: 'w-mat', costSource: 'GRN' });
+    expect(new Prisma.Decimal(data.contingencyAmount).toFixed(2)).toBe('20.00'); // 10 % of 200
+    expect(new Prisma.Decimal(data.marginAmount).toFixed(2)).toBe('780.00'); // 1000 − 200 − 20
+  });
+
+  it('refuses a line naming neither a work item nor a stock item (400)', async () => {
+    const { svc, tx } = build();
+    await expect(svc.addRevision(sales, 'p1', { validUntil: FUTURE, bomLines: [{ qty: 1 }] })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(tx.proposalRevision.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a work item of another organization (400)', async () => {
+    const { svc } = build();
+    await expect(
+      svc.addRevision(sales, 'p1', { validUntil: FUTURE, bomLines: [{ workItemId: 'w-foreign', qty: 1 }] }),
+    ).rejects.toThrow('One or more work items are invalid for this tenant');
+  });
+
+  it('refuses line prices in a lump-sum budget (400)', async () => {
+    const { svc } = build();
+    await expect(
+      svc.addRevision(sales, 'p1', {
+        validUntil: FUTURE,
+        pricingMode: 'LUMP_SUM',
+        bomLines: [{ workItemId: 'w-lab', qty: 1, unitPrice: 50 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('a stock item that contradicts the work item is refused (400)', async () => {
+    const { svc } = build();
+    await expect(
+      svc.addRevision(sales, 'p1', { validUntil: FUTURE, bomLines: [{ workItemId: 'w-mat', itemId: 'i2', qty: 1 }] }),
+    ).rejects.toThrow('The stock item does not match the work item');
+  });
+
+  it('contingency and risk notes are cost inputs: refused without finance.costs.view (403)', async () => {
+    const { svc } = build();
+    await expect(
+      svc.addRevision(salesNoCosts, 'p1', {
+        validUntil: FUTURE,
+        pricingMode: 'LUMP_SUM',
+        sellingTotal: 100,
+        contingencyPct: 5,
+        bomLines: [{ workItemId: 'w-lab', qty: 1 }],
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('ProposalsService.submit — a budget needs a price (P3-4)', () => {
+  it('refuses to raise a revision whose selling total is zero (400), before any chain opens', async () => {
+    const { svc, approvals } = build({
+      proposal: proposalRow({ revisions: [revision({ status: 'DRAFT', totalAmount: D('0.00') })] }),
+    });
+    await expect(svc.submit(sales, 'p1')).rejects.toThrow(
+      'The budget needs a selling price before it is raised for approval',
+    );
+    expect(approvals.gate).not.toHaveBeenCalled();
   });
 });

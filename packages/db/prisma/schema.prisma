@@ -71,6 +71,12 @@ enum OpportunityStage {
   LOST
 }
 
+/// Package 3 · P3-4: how a revision is priced (ADR-03 §4-4).
+enum PricingMode {
+  PER_LINE
+  LUMP_SUM
+}
+
 /// CRM Phase 1 (Step 3): a direct sale or a tender. A tender adds a close date
 /// (mandatory) and the bid-bond particulars on the opportunity itself.
 enum OpportunityType {
@@ -731,6 +737,8 @@ model WorkItem {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  bomLines        BomLine[]
+
   @@unique([organizationId, code])
   @@index([organizationId, isActive, sortOrder])
   @@index([itemId])
@@ -809,6 +817,17 @@ model ProposalRevision {
   isWinning      Boolean  @default(false)
   createdAt      DateTime @default(now())
 
+  // Package 3 · P3-4 (ADR-03 §4-4): the revision IS the estimated budget.
+  // LUMP_SUM: the lines carry cost only and `sellingTotal` is the price;
+  // PER_LINE: every line carries its selling price (all revisions before 0035).
+  pricingMode       PricingMode @default(PER_LINE)
+  sellingTotal      Decimal?  @db.Decimal(18, 2)
+  /// Risk contingency on the estimated cost, as a percentage (5 = 5 %) and the
+  /// amount it gives. Both are cost fields.
+  contingencyPct    Decimal   @default(0) @db.Decimal(6, 3)
+  contingencyAmount Decimal   @default(0) @db.Decimal(18, 2)
+  riskNotes         String?
+
   // CRM Phase 1 · Step 4 (spec 4.3). All nullable: a revision written before
   // this step has none of them and keeps its old meaning.
   /// The last day the offer is valid (UTC midnight of a Riyadh calendar day).
@@ -835,8 +854,16 @@ model BomLine {
   id                 String @id @default(cuid())
   proposalRevisionId String
   proposalRevision   ProposalRevision @relation(fields: [proposalRevisionId], references: [id], onDelete: Cascade)
-  itemId             String
-  item               Item   @relation(fields: [itemId], references: [id])
+  /// Optional since Package 3 (migration 0035): a budget line is a work item,
+  /// which may or may not be a stock item. A CHECK keeps at least one of the two.
+  itemId             String?
+  item               Item?  @relation(fields: [itemId], references: [id])
+  /// Package 3 · P3-4 (ADR-03 §4-4): the project work item this line is.
+  workItemId         String?
+  workItem           WorkItem? @relation(fields: [workItemId], references: [id], onDelete: Restrict)
+  /// The line's own wording and unit (default: the work item's / item's).
+  description        String?
+  uom                String?
   qty                Decimal @default(1) @db.Decimal(14, 3)
   unitPrice          Decimal @default(0) @db.Decimal(18, 2)
   isAdder            Boolean @default(false)
@@ -857,6 +884,7 @@ model BomLine {
   costOverriddenById String?
 
   @@index([proposalRevisionId])
+  @@index([workItemId])
 }
 
 model Contract {

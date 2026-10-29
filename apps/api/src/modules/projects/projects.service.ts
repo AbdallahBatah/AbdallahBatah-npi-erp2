@@ -26,6 +26,33 @@ const WBS_BUCKETS: Record<string, { code: string; nameAr: string; nameEn: string
   SERVICE: { code: 'SRV', nameAr: 'الخدمات والتركيب', nameEn: 'Services & Installation' },
 };
 
+/**
+ * Package 3 · P3-4 (ADR-03 §4-7): a budget line that is a work item without a
+ * stock item (labour, rental, expenses…) is bucketed by its kind. Turning the
+ * budget lines into WBS elements one by one is package 4's first task.
+ */
+const WORK_KIND_BUCKETS: Record<string, { code: string; nameAr: string; nameEn: string }> = {
+  MATERIAL: { code: 'MAT', nameAr: 'مواد', nameEn: 'Materials' },
+  LABOUR: { code: 'LAB', nameAr: 'المصنعيات', nameEn: 'Labour' },
+  EQUIPMENT: { code: 'EQP', nameAr: 'إيجار المعدات', nameEn: 'Equipment rental' },
+  SUBCONTRACT: { code: 'SUB', nameAr: 'مقاولو الباطن', nameEn: 'Subcontract' },
+  EXPENSE: { code: 'EXP', nameAr: 'المصاريف', nameEn: 'Expenses' },
+  FINANCING: { code: 'FIN', nameAr: 'التمويل', nameEn: 'Financing' },
+};
+
+/** Where a budget line's cost lands in the project budget: its item's category, else its work item's kind. */
+function bucketOf(line: {
+  item: { itemCategory: string } | null;
+  workItem: { kind: string } | null;
+}): { key: string; code: string; nameAr: string; nameEn: string } {
+  if (line.item) {
+    const cat = line.item.itemCategory;
+    return { key: cat, ...(WBS_BUCKETS[cat] ?? { code: cat, nameAr: cat, nameEn: cat }) };
+  }
+  const kind = line.workItem?.kind ?? 'EXPENSE';
+  return { key: `WK_${kind}`, ...WORK_KIND_BUCKETS[kind] };
+}
+
 @Injectable()
 export class ProjectsService implements OnModuleInit {
   constructor(
@@ -73,7 +100,12 @@ export class ProjectsService implements OnModuleInit {
         proposalRevision: {
           include: {
             designVersion: { select: { capacityKwp: true } },
-            bomLines: { include: { item: { select: { itemCategory: true, unitCost: true } } } },
+            bomLines: {
+              include: {
+                item: { select: { itemCategory: true, unitCost: true } },
+                workItem: { select: { kind: true } },
+              },
+            },
           },
         },
       },
@@ -86,12 +118,17 @@ export class ProjectsService implements OnModuleInit {
       throw new BadRequestException('Contract already has a project');
     }
 
-    // Budget per WBS bucket from the BOM at cost.
-    const buckets = new Map<string, number>();
+    // Budget per WBS bucket from the BOM at cost. A stock-item line keeps the old
+    // rule (catalogue cost); a work-item line without one has no catalogue cost and
+    // brings the cost the approved budget recorded for it.
+    const buckets = new Map<string, { code: string; nameAr: string; nameEn: string; budget: number }>();
     for (const l of contract.proposalRevision?.bomLines ?? []) {
-      const cat = l.item.itemCategory as string;
-      const cost = Number(l.qty) * Number(l.item.unitCost);
-      buckets.set(cat, (buckets.get(cat) ?? 0) + cost);
+      const b = bucketOf(l);
+      const unit = l.item ? Number(l.item.unitCost) : Number(l.unitCost ?? 0);
+      const cost = Number(l.qty) * unit;
+      const row = buckets.get(b.key) ?? { code: b.code, nameAr: b.nameAr, nameEn: b.nameEn, budget: 0 };
+      row.budget += cost;
+      buckets.set(b.key, row);
     }
 
     const capacity =
@@ -116,11 +153,11 @@ export class ProjectsService implements OnModuleInit {
           wbsElements: {
             create:
               buckets.size > 0
-                ? [...buckets.entries()].map(([cat, budget]) => ({
-                    code: WBS_BUCKETS[cat]?.code ?? cat,
-                    nameAr: WBS_BUCKETS[cat]?.nameAr ?? cat,
-                    nameEn: WBS_BUCKETS[cat]?.nameEn ?? cat,
-                    budgetAmount: round2(budget),
+                ? [...buckets.values()].map((b) => ({
+                    code: b.code,
+                    nameAr: b.nameAr,
+                    nameEn: b.nameEn,
+                    budgetAmount: round2(b.budget),
                   }))
                 : [{ code: 'GEN', nameAr: 'عام', nameEn: 'General', budgetAmount: 0 }],
           },

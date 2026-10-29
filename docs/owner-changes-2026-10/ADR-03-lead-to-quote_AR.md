@@ -88,6 +88,7 @@
 - `BomLine`: يصير `itemId` اختيارياً، ويُضاف `workItemId` و`description` و`uom`، بقيد في القاعدة: لا يخلو السطر من البند والصنف معاً.
 - `ProposalRevision`: يُضاف `pricingMode` (`PER_LINE` للنسخ القديمة، `LUMP_SUM` افتراضي الجديدة)، و`sellingTotal` (سعر البيع المقطوع)، و`contingencyPct` (احتياطي المخاطر)، و`riskNotes`، و`templateId` (القالب المصدر للتتبع).
 - **المجاميع** تُحسب في الخادم وحده: `estimatedCost = Σ(qty × unitCost)`، `contingency = estimatedCost × contingencyPct`، `totalAmount = sellingTotal` في الوضع المقطوع، و`marginAmount = totalAmount − estimatedCost − contingency`.
+- **عند التنفيذ (P3-4):** الافتراضي `LUMP_SUM` في شاشة الموازنة لكل نسخة جديدة، أما الواجهة البرمجية فتفترض `PER_LINE` حين لا يُذكر الوضع، حتى لا ينكسر أي مستدعٍ قائم (بيانات العرض، سكربت قبول CRM). وتُرفض أسعار السطور في الوضع المقطوع (400) بدل تجاهلها بصمت، ولا يُرفع للاعتماد عرض سعر بيعه صفر.
 - **مسار التكلفة القائم** (`costLookup`، آخر استلام ثم أمر شراء ثم الفهرس، وتعديل التكلفة بسبب إلزامي) يبقى لسطور المواد المرتبطة بصنف؛ وسطور البنود الأخرى تأخذ `defaultUnitCost` ويُعدَّل بالسبب نفسه.
 
 ### 4-5. القوالب المعيارية (الخطوة 5)
