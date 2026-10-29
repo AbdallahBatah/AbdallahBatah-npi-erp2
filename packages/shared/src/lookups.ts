@@ -18,7 +18,7 @@
  */
 import { PERMISSIONS, type PermissionKey } from './permissions';
 
-export type LookupKind = 'items' | 'projects' | 'customers' | 'vendors' | 'locations' | 'workItems';
+export type LookupKind = 'items' | 'projects' | 'customers' | 'vendors' | 'locations' | 'workItems' | 'budgetTemplates';
 
 /** The URL segment of each list (`GET /reference/lookups/<segment>`). */
 export const LOOKUP_PATH: Record<LookupKind, string> = {
@@ -28,6 +28,7 @@ export const LOOKUP_PATH: Record<LookupKind, string> = {
   vendors: 'vendors',
   locations: 'locations',
   workItems: 'work-items',
+  budgetTemplates: 'budget-templates',
 };
 
 /** Holding ANY one of a list's keys is enough to read it. */
@@ -58,6 +59,8 @@ export const LOOKUP_ACCESS: Record<LookupKind, readonly PermissionKey[]> = {
   // Package 3 · P3-3 (ADR-03 §4-3): the work-item list's own screen key (the
   // items screen) and the budget editor, which is the proposal form.
   workItems: [PERMISSIONS.ITEM_READ, PERMISSIONS.PROPOSAL_WRITE],
+  // P3-5: the standard budgets, same rule as the work items they are made of.
+  budgetTemplates: [PERMISSIONS.ITEM_READ, PERMISSIONS.PROPOSAL_WRITE],
 };
 
 /** True when `permissions` holds at least one of the list's keys. */

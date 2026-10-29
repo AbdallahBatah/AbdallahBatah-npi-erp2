@@ -111,6 +111,7 @@ interface PreparedRevision {
   contingencyPct: Prisma.Decimal;
   contingencyAmount: Prisma.Decimal;
   riskNotes: string | null;
+  templateId: string | null;
 }
 
 /** The revision columns a write sets from a PreparedRevision (both add and edit). */
@@ -125,6 +126,7 @@ const revisionFigures = (p: PreparedRevision) => ({
   contingencyPct: p.contingencyPct,
   contingencyAmount: p.contingencyAmount,
   riskNotes: p.riskNotes,
+  templateId: p.templateId,
 });
 
 const round2 = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
@@ -842,6 +844,14 @@ export class ProposalsService implements OnModuleInit {
 
     const pricingMode = dto.pricingMode ?? 'PER_LINE';
     const lineSpec = await this.resolveLineSubjects(user.organizationId, dto.bomLines);
+    // P3-5: the template the lines came from is recorded, never followed.
+    if (dto.templateId) {
+      const template = await this.prisma.budgetTemplate.findFirst({
+        where: { id: dto.templateId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!template) throw new BadRequestException('Unknown budget template');
+    }
 
     // The margin: an explicit one wins, else the pricing scheme's.
     let marginPct: Prisma.Decimal | null = dto.marginPct !== undefined ? new Prisma.Decimal(dto.marginPct) : null;
@@ -910,6 +920,7 @@ export class ProposalsService implements OnModuleInit {
       subtotal: priced.subtotal,
       ...totals,
       riskNotes: dto.riskNotes?.trim() || null,
+      templateId: dto.templateId ?? null,
       overridden,
     };
   }

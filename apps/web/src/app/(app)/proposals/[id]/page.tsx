@@ -78,6 +78,17 @@ interface Revision {
   contingencyPct?: string | null;
   contingencyAmount?: string | null;
   riskNotes?: string | null;
+  templateId?: string | null;
+}
+/** Package 3 · P3-5: a standard budget, from GET /reference/lookups/budget-templates. */
+interface TemplateRef {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  panelCount: number | null;
+  capacityKwp: string | null;
+  lines: { workItemId: string; qty: string; description: string | null }[];
 }
 interface HistoryRow {
   id: string;
@@ -191,6 +202,7 @@ export default function ProposalDetailPage() {
   // Package 3 · P3-3: the work items a budget is built from (same keys as the items).
   const workItemList = useLookup<WorkItemRef>('workItems', { enabled: canWrite });
   const workItems = workItemList.rows;
+  const templateList = useLookup<TemplateRef>('budgetTemplates', { enabled: canWrite });
   const [schemes, setSchemes] = useState<Scheme[]>([]);
   const [form, setForm] = useState<FormState>(null);
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
@@ -203,6 +215,7 @@ export default function ProposalDetailPage() {
   const [sellingTotal, setSellingTotal] = useState('');
   const [contingencyPct, setContingencyPct] = useState('');
   const [riskNotes, setRiskNotes] = useState('');
+  const [templateId, setTemplateId] = useState('');
   const lump = pricingMode === 'LUMP_SUM';
   const [contractOpen, setContractOpen] = useState(false);
   const [contractErr, setContractErr] = useState('');
@@ -262,7 +275,7 @@ export default function ProposalDetailPage() {
   // tabs on different proposals do not overwrite each other.
   const draft = useDraft(
     `revision3:${id}`,
-    { form, lines, schemeId, validUntil, capacityKwp, annualKwh, pricingMode, sellingTotal, contingencyPct, riskNotes },
+    { form, lines, schemeId, validUntil, capacityKwp, annualKwh, pricingMode, sellingTotal, contingencyPct, riskNotes, templateId },
     (saved) => {
       setForm(saved.form);
       setLines(saved.lines);
@@ -274,6 +287,7 @@ export default function ProposalDetailPage() {
       setSellingTotal(saved.sellingTotal ?? '');
       setContingencyPct(saved.contingencyPct ?? '');
       setRiskNotes(saved.riskNotes ?? '');
+      setTemplateId(saved.templateId ?? '');
     },
     {
       // A pristine form (one blank line, nothing typed) is not a draft.
@@ -378,6 +392,42 @@ export default function ProposalDetailPage() {
     );
   }
 
+  /**
+   * Package 3 · P3-5: start the budget from a standard one. Its lines replace the
+   * form's (after a confirmation when something was typed), each costed as a
+   * freshly picked work item would be; the template is recorded on the revision.
+   */
+  async function applyTemplate(id: string) {
+    const tpl = templateList.rows.find((x) => x.id === id);
+    if (!tpl) return;
+    if (lines.some((l) => filled(l)) && !(await confirm({ title: t('budget.fromTemplate'), message: t('budget.fromTemplateConfirm') })))
+      return;
+    const picked = tpl.lines.map((tl) => ({ tl, w: workItems.find((x) => x.id === tl.workItemId) ?? null }));
+    const fetched = await fetchCosts([
+      ...new Set(picked.map((p) => p.w?.itemId).filter((x): x is string => !!x)),
+    ]);
+    setTemplateId(tpl.id);
+    setPricingMode('LUMP_SUM');
+    if (!capacityKwp && tpl.capacityKwp) setCapacityKwp(String(Number(tpl.capacityKwp)));
+    setLines(
+      picked.length === 0
+        ? [blankLine()]
+        : picked.map(({ tl, w }) => {
+            const f = !showCosts ? null : w?.itemId ? (fetched.get(w.itemId) ?? null) : w ? workItemCost(w) : null;
+            return {
+              ...blankLine(),
+              workItemId: tl.workItemId,
+              itemId: w?.itemId ?? '',
+              description: tl.description ?? '',
+              qty: Number(tl.qty),
+              fetched: f,
+              unitCost: f ? f.unitCost : '',
+            };
+          }),
+    );
+    validation.onBlur('lines');
+  }
+
   function onSchemeChange(value: string) {
     setSchemeId(value);
     const pct = Number(schemes.find((s) => s.id === value)?.marginPct ?? 0);
@@ -412,6 +462,7 @@ export default function ProposalDetailPage() {
     setSellingTotal(base?.sellingTotal != null ? String(Number(base.sellingTotal)) : '');
     setContingencyPct(base?.contingencyPct != null && Number(base.contingencyPct) > 0 ? String(Number(base.contingencyPct)) : '');
     setRiskNotes(base?.riskNotes ?? '');
+    setTemplateId(base?.templateId ?? '');
     validation.reset();
     if (!base || base.bomLines.length === 0) {
       setLines([blankLine()]);
@@ -451,6 +502,7 @@ export default function ProposalDetailPage() {
     setSellingTotal('');
     setContingencyPct('');
     setRiskNotes('');
+    setTemplateId('');
     validation.reset();
     draft.clear();
   }
@@ -468,6 +520,7 @@ export default function ProposalDetailPage() {
       // Contingency and risk notes are cost data: only a caller who may see costs sends them.
       contingencyPct: lump && showCosts && contingencyPct !== '' ? Number(contingencyPct) : undefined,
       riskNotes: lump && showCosts && riskNotes.trim() ? riskNotes.trim() : undefined,
+      templateId: templateId || undefined,
       // The server refuses a pricing scheme from a caller without costs.view.
       pricingSchemeId: showCosts && !lump ? schemeId || undefined : undefined,
       bomLines: valid.map((l) => ({
@@ -1034,7 +1087,24 @@ export default function ProposalDetailPage() {
             </div>
           )}
 
-          <label className="label">{lump ? t('budget.lines') : t('proposals.bom')}</label>
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <label className="label">{lump ? t('budget.lines') : t('proposals.bom')}</label>
+            {templateList.state === 'ready' && templateList.rows.length > 0 && (
+              <select
+                aria-label={t('budget.fromTemplate')}
+                className="input mb-2 w-auto"
+                value=""
+                onChange={(e) => applyTemplate(e.target.value)}
+              >
+                <option value="">{t('budget.fromTemplate')}…</option>
+                {templateList.rows.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.code} · {pick(tpl, 'name')}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
           {showCosts && !lump && <p className="mb-2 text-xs text-slate-500">{t('proposals.marginHint')}</p>}
           {workItemList.state === 'unavailable' && (
             <p className="mb-2 text-xs text-slate-500">{t('lookup.unavailable')}</p>

@@ -11,6 +11,7 @@ import { formatMoney } from '@/lib/format';
 import { PageHeader, Modal, Field, EmptyRow, LoadError, Can, Btn, TableSkeleton, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { WorkItemsTab } from './work-items-tab';
+import { BudgetTemplatesTab } from './budget-templates-tab';
 
 interface Item {
   id: string;
@@ -29,7 +30,7 @@ interface Item {
  */
 export default function ItemsPage() {
   const { t } = useI18n();
-  const [tab, setTab] = useState<'items' | 'workItems'>('items');
+  const [tab, setTab] = useState<'items' | 'workItems' | 'templates'>('items');
   return (
     <div>
       <PageHeader title={t('items.title')} />
@@ -37,11 +38,12 @@ export default function ItemsPage() {
         tabs={[
           { key: 'items', label: t('items.tabStock') },
           { key: 'workItems', label: t('workItems.title') },
+          { key: 'templates', label: t('templates.title') },
         ]}
         value={tab}
-        onChange={(k) => setTab(k as 'items' | 'workItems')}
+        onChange={(k) => setTab(k as 'items' | 'workItems' | 'templates')}
       />
-      {tab === 'items' ? <StockItemsTab /> : <WorkItemsTab />}
+      {tab === 'items' ? <StockItemsTab /> : tab === 'workItems' ? <WorkItemsTab /> : <BudgetTemplatesTab />}
     </div>
   );
 }

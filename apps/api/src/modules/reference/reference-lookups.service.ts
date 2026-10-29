@@ -90,4 +90,24 @@ export class ReferenceLookupsService {
       orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
     });
   }
+
+  /** Package 3 · P3-5: the active standard budgets, each with its lines in order. */
+  budgetTemplates(organizationId: string) {
+    return this.prisma.budgetTemplate.findMany({
+      where: { organizationId, isActive: true },
+      select: {
+        id: true,
+        code: true,
+        nameAr: true,
+        nameEn: true,
+        panelCount: true,
+        capacityKwp: true,
+        lines: {
+          select: { workItemId: true, qty: true, description: true },
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+      orderBy: { code: 'asc' },
+    });
+  }
 }

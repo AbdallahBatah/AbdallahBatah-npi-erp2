@@ -92,6 +92,9 @@ const GUARDED_ROUTES = [
   // P3-3: the work-item list (items screen) and its pick list.
   ['/work-items', 'commercial.item.read'],
   ['/reference/lookups/work-items', ['commercial.item.read', 'commercial.proposal.write']],
+  // P3-5: the standard budgets and their pick list.
+  ['/budget-templates', 'commercial.item.read'],
+  ['/reference/lookups/budget-templates', ['commercial.item.read', 'commercial.proposal.write']],
 ];
 
 // ── tiny harness ───────────────────────────────────────────────────────────

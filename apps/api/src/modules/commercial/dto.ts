@@ -91,6 +91,8 @@ export class CreateRevisionDto {
   @IsOptional() @IsEnum(PRICING_MODES) pricingMode?: (typeof PRICING_MODES)[number];
   /** LUMP_SUM only: the budget's selling price (before VAT). Needed to submit, not to save a draft. */
   @IsOptional() @IsNumber() @Min(0) sellingTotal?: number;
+  /** P3-5: the standard budget the lines were copied from (provenance only). */
+  @IsOptional() @IsString() templateId?: string;
   /** Risk contingency on the estimated cost, in percent (cost data). */
   @IsOptional() @IsNumber() @Min(0) @Max(100) contingencyPct?: number;
   /** The risks behind the contingency, for the general manager (cost data). */
@@ -159,4 +161,35 @@ export class UpdateWorkItemDto {
   @IsOptional() @IsString() itemId?: string | null;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
+}
+
+// ─── Budget templates (Package 3 · P3-5, ADR-03 §4-5) ───────────────────
+export class BudgetTemplateLineDto {
+  @IsString() workItemId!: string;
+  @IsNumber() @Min(0) qty!: number;
+  @IsOptional() @IsString() @MaxLength(500) description?: string;
+}
+
+export class CreateBudgetTemplateDto {
+  @IsString() @MinLength(1) @MaxLength(40) code!: string;
+  @IsString() @MinLength(1) @MaxLength(200) nameAr!: string;
+  @IsString() @MinLength(1) @MaxLength(200) nameEn!: string;
+  @IsOptional() @IsInt() @Min(0) panelCount?: number;
+  @IsOptional() @IsNumber() @Min(0) capacityKwp?: number;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  /** In order: the budget lists them as given. */
+  @IsArray() @ValidateNested({ each: true }) @Type(() => BudgetTemplateLineDto)
+  lines!: BudgetTemplateLineDto[];
+}
+
+export class UpdateBudgetTemplateDto {
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) nameAr?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) nameEn?: string;
+  @IsOptional() @IsInt() @Min(0) panelCount?: number | null;
+  @IsOptional() @IsNumber() @Min(0) capacityKwp?: number | null;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string | null;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+  /** When given, replaces every line. */
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => BudgetTemplateLineDto)
+  lines?: BudgetTemplateLineDto[];
 }

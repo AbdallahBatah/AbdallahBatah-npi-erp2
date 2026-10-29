@@ -243,6 +243,7 @@ model Organization {
   opportunities       Opportunity[]
   items               Item[]
   workItems           WorkItem[]
+  budgetTemplates     BudgetTemplate[]
   pricingSchemes      PricingScheme[]
   designVersions      DesignVersion[]
   proposals           Proposal[]
@@ -738,10 +739,51 @@ model WorkItem {
   updatedAt       DateTime @updatedAt
 
   bomLines        BomLine[]
+  templateLines   BudgetTemplateLine[]
 
   @@unique([organizationId, code])
   @@index([organizationId, isActive, sortOrder])
   @@index([itemId])
+}
+
+/// Package 3 · P3-5 (ADR-03 §4-5): a standard estimated budget («نموذج تكلفة
+/// تقديرية لمشروع معياري»), e.g. 990 or 1230 panels. Choosing one copies its
+/// lines into a draft budget once; the budget never follows later edits.
+model BudgetTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  nameAr         String
+  nameEn         String
+  panelCount     Int?
+  capacityKwp    Decimal? @db.Decimal(12, 3)
+  notes          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lines          BudgetTemplateLine[]
+  revisions      ProposalRevision[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive])
+}
+
+/// A template line: a work item and its quantity. No cost here — the budget
+/// takes the work item's (or its stock item's) current cost when it is built.
+model BudgetTemplateLine {
+  id          String   @id @default(cuid())
+  templateId  String
+  template    BudgetTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  workItemId  String
+  workItem    WorkItem @relation(fields: [workItemId], references: [id], onDelete: Restrict)
+  qty         Decimal  @db.Decimal(14, 3)
+  description String?
+  sortOrder   Int      @default(0)
+
+  @@index([templateId])
+  @@index([workItemId])
 }
 
 model PricingScheme {
@@ -827,6 +869,9 @@ model ProposalRevision {
   contingencyPct    Decimal   @default(0) @db.Decimal(6, 3)
   contingencyAmount Decimal   @default(0) @db.Decimal(18, 2)
   riskNotes         String?
+  /// P3-5: the standard budget this revision was started from (provenance only).
+  templateId        String?
+  template          BudgetTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   // CRM Phase 1 · Step 4 (spec 4.3). All nullable: a revision written before
   // this step has none of them and keeps its old meaning.

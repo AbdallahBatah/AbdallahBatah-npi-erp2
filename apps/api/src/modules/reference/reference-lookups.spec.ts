@@ -4,7 +4,7 @@ import { ANY_PERMISSIONS_KEY, PERMISSIONS_KEY } from '../../common/decorators';
 import { ReferenceController } from './reference.controller';
 import { ReferenceLookupsService } from './reference-lookups.service';
 
-const KINDS: LookupKind[] = ['items', 'projects', 'customers', 'vendors', 'locations', 'workItems'];
+const KINDS: LookupKind[] = ['items', 'projects', 'customers', 'vendors', 'locations', 'workItems', 'budgetTemplates'];
 
 /** The controller method serving each list. */
 const HANDLER: Record<LookupKind, string> = {
@@ -14,6 +14,7 @@ const HANDLER: Record<LookupKind, string> = {
   vendors: 'lookupVendors',
   locations: 'lookupLocations',
   workItems: 'lookupWorkItems',
+  budgetTemplates: 'lookupBudgetTemplates',
 };
 
 describe('LOOKUP_ACCESS — the ADR-02 §3-3 table', () => {
@@ -31,6 +32,7 @@ describe('LOOKUP_ACCESS — the ADR-02 §3-3 table', () => {
       vendors: ['scm.procurement.read', 'projects.project.write'],
       locations: ['scm.procurement.read', 'assets.serialunit.read', 'fsm.workorder.write'],
       workItems: ['commercial.item.read', 'commercial.proposal.write'],
+      budgetTemplates: ['commercial.item.read', 'commercial.proposal.write'],
     });
   });
 
@@ -80,6 +82,7 @@ describe('ReferenceLookupsService — one findMany per list, names only', () => 
       vendor: model(),
       location: model(),
       workItem: model(),
+      budgetTemplate: model(),
     };
   };
 
@@ -157,6 +160,25 @@ describe('ReferenceLookupsService — one findMany per list, names only', () => 
           itemId: true,
         },
         orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
+      },
+    },
+    budgetTemplates: {
+      model: 'budgetTemplate',
+      args: {
+        where: { organizationId: 'org1', isActive: true },
+        select: {
+          id: true,
+          code: true,
+          nameAr: true,
+          nameEn: true,
+          panelCount: true,
+          capacityKwp: true,
+          lines: {
+            select: { workItemId: true, qty: true, description: true },
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+        orderBy: { code: 'asc' },
       },
     },
   };
