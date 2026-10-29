@@ -783,3 +783,80 @@ describe('ProposalsService.submit — a budget needs a price (P3-4)', () => {
     expect(approvals.gate).not.toHaveBeenCalled();
   });
 });
+
+describe('ProposalsService.awaitingMyApproval — the general manager card (P3-6)', () => {
+  const exec = user([PERMISSIONS.PROPOSAL_APPROVE, PERMISSIONS.PROPOSAL_READ, COSTS], { userId: 'u-exec' });
+  const req = (over: Record<string, unknown> = {}) => ({
+    id: 'req1',
+    documentType: 'PROPOSAL',
+    documentId: 'p1',
+    canDecide: true,
+    raisedBy: { id: 'u-sales', nameAr: 'م', nameEn: 'S' },
+    currentStepAt: new Date('2026-10-29T08:00:00Z'),
+    ...over,
+  });
+  const loaded = {
+    id: 'p1',
+    code: 'PRP-00001',
+    opportunity: { id: 'opp1', name: 'مزرعة', customer: { nameAr: 'ع', nameEn: 'C' } },
+    revisions: [
+      {
+        revisionNo: 2,
+        pricingMode: 'LUMP_SUM',
+        totalAmount: D('1000000.00'),
+        subtotal: D('850000.00'),
+        contingencyAmount: D('42500.00'),
+        marginAmount: D('107500.00'),
+        designVersion: { capacityKwp: D('643.500') },
+      },
+    ],
+  };
+
+  function withInbox(rows: unknown[]) {
+    const b = build();
+    (b.approvals as Record<string, unknown>).inbox = jest.fn().mockResolvedValue(rows);
+    (b.prisma.proposal.findMany as jest.Mock).mockResolvedValue([loaded]);
+    return b;
+  }
+
+  it('lists only proposals the caller can sign now, with margin % and the 15 % floor flag', async () => {
+    const { svc, prisma } = withInbox([
+      req(),
+      req({ id: 'req2', documentId: 'p2', canDecide: false }), // raised by them, or already signed
+      req({ id: 'req3', documentType: 'PURCHASE_ORDER', documentId: 'po1' }),
+    ]);
+    const out = await svc.awaitingMyApproval(exec);
+    expect(prisma.proposal.findMany.mock.calls[0][0].where).toEqual({ id: { in: ['p1'] }, organizationId: 'org1' });
+    expect(out.minMarginPct).toBe(15);
+    expect(out.rows).toHaveLength(1);
+    expect(out.rows[0]).toMatchObject({
+      requestId: 'req1',
+      code: 'PRP-00001',
+      revisionNo: 2,
+      totalAmount: '1000000.00',
+      estimatedCost: '850000.00',
+      contingencyAmount: '42500.00',
+      marginAmount: '107500.00',
+      marginPct: 10.8,
+      belowFloor: true,
+    });
+  });
+
+  it('without finance.costs.view the cost figures are null — the price stays', async () => {
+    const { svc } = withInbox([req()]);
+    const out = await svc.awaitingMyApproval(user([PERMISSIONS.PROPOSAL_APPROVE], { userId: 'u-x' }));
+    expect(out.rows[0]).toMatchObject({
+      totalAmount: '1000000.00',
+      estimatedCost: null,
+      marginAmount: null,
+      marginPct: null,
+      belowFloor: null,
+    });
+  });
+
+  it('nothing waiting → no proposal read at all', async () => {
+    const { svc, prisma } = withInbox([]);
+    await expect(svc.awaitingMyApproval(exec)).resolves.toEqual({ minMarginPct: 15, rows: [] });
+    expect(prisma.proposal.findMany).not.toHaveBeenCalled();
+  });
+});

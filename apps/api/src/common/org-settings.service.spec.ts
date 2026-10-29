@@ -30,11 +30,12 @@ describe('the proposal settings and their defaults', () => {
     expect(ORG_SETTING_DEFAULTS[ORG_SETTING_KEYS.PROPOSAL_COST_AGE_WARN_DAYS]).toBe(30);
   });
 
-  it('lists exactly the five editable keys (Step 5 added the two task-reminder ones) — the merge switch is not among them', () => {
+  it('lists exactly the six editable keys (Step 5 added the two task-reminder ones, P3-6 the margin floor) — the merge switch is not among them', () => {
     expect(Object.keys(ORG_SETTING_EDITABLE).sort()).toEqual(
       [
         ORG_SETTING_KEYS.CUSTOMER_SIMILARITY_THRESHOLD,
         ORG_SETTING_KEYS.PROPOSAL_COST_AGE_WARN_DAYS,
+        ORG_SETTING_KEYS.PROPOSAL_MIN_MARGIN_PCT,
         ORG_SETTING_KEYS.PROPOSAL_VALIDITY_DAYS,
         ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE,
         ORG_SETTING_KEYS.TASK_REMINDER_HOUR,
@@ -92,6 +93,7 @@ describe('OrgSettingsService.getEditable', () => {
     await expect(svc.getEditable('org1')).resolves.toEqual({
       [ORG_SETTING_KEYS.PROPOSAL_VALIDITY_DAYS]: 45,
       [ORG_SETTING_KEYS.PROPOSAL_COST_AGE_WARN_DAYS]: 30,
+      [ORG_SETTING_KEYS.PROPOSAL_MIN_MARGIN_PCT]: 15,
       [ORG_SETTING_KEYS.CUSTOMER_SIMILARITY_THRESHOLD]: 0.8,
       [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE]: 1,
       [ORG_SETTING_KEYS.TASK_REMINDER_HOUR]: 8,

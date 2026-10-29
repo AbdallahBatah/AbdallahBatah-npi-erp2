@@ -9,6 +9,7 @@ import { formatMoney, formatNumber } from '@/lib/format';
 import { PageHeader } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { QuickActions } from '@/components/quick-actions';
+import { BudgetApprovalsCard } from '@/components/budget-approvals-card';
 
 interface Summary {
   openLeads: number;
@@ -66,9 +67,12 @@ export default function DashboardPage() {
     { key: 'inv.summary.issued', value: fin?.issuedInvoices, icon: 'receipt', href: '/invoices', show: canFin },
   ].filter((c) => c.show);
 
+  // The company's cycle up to the contract (owner work cycle 2026-10-29, steps 1–9).
   const steps = [
     { key: 'dash.step.lead', icon: 'target' },
     { key: 'dash.step.opp', icon: 'lightbulb' },
+    { key: 'dash.step.budget', icon: 'coins' },
+    { key: 'dash.step.approval', icon: 'stamp' },
     { key: 'dash.step.proposal', icon: 'file-text' },
     { key: 'dash.step.contract', icon: 'file-signature' },
   ];
@@ -81,6 +85,9 @@ export default function DashboardPage() {
       <PageHeader title={t('dash.title')} subtitle={t('app.tagline')} />
 
       <QuickActions />
+
+      {/* P3-6: the general manager's budgets waiting on his signature (owner work cycle step 6). */}
+      {can('commercial.proposal.approve') && <BudgetApprovalsCard />}
 
       {/* The caller's own follow-ups: due today and already late. Same key as the page it links to. */}
       {canTasks && tasksSum && (

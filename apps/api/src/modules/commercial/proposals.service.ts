@@ -260,6 +260,68 @@ export class ProposalsService implements OnModuleInit {
   }
 
   /**
+   * Package 3 · P3-6 (ADR-03 §4-6, owner work cycle step 6) — the general
+   * manager's card: every estimated budget waiting on a signature the caller
+   * can give now, with the figures he decides on (price, cost, contingency,
+   * profit, margin) and whether the margin is under the configured floor. The
+   * cost figures are omitted (null) for a caller without finance.costs.view.
+   */
+  async awaitingMyApproval(user: AuthUser) {
+    const minMarginPct = await this.settings.get(
+      user.organizationId,
+      ORG_SETTING_KEYS.PROPOSAL_MIN_MARGIN_PCT,
+      ORG_SETTING_DEFAULTS[ORG_SETTING_KEYS.PROPOSAL_MIN_MARGIN_PCT],
+    );
+    const inbox = await this.approvals.inbox(user);
+    const mine = inbox.filter((r) => r.documentType === 'PROPOSAL' && r.canDecide);
+    if (mine.length === 0) return { minMarginPct, rows: [] };
+
+    const proposals = await this.prisma.proposal.findMany({
+      where: { id: { in: mine.map((r) => r.documentId) }, organizationId: user.organizationId },
+      include: {
+        opportunity: { select: { id: true, name: true, customer: { select: { nameAr: true, nameEn: true } } } },
+        revisions: {
+          orderBy: { revisionNo: 'desc' },
+          take: 1,
+          include: { designVersion: { select: { capacityKwp: true } } },
+        },
+      },
+    });
+    const byId = new Map(proposals.map((p) => [p.id, p]));
+    const costs = canViewCosts(user);
+
+    const rows = mine.flatMap((req) => {
+      const p = byId.get(req.documentId);
+      const rev = p?.revisions[0];
+      if (!p || !rev) return [];
+      const total = new Prisma.Decimal(rev.totalAmount);
+      const margin = new Prisma.Decimal(rev.marginAmount);
+      const pct = total.gt(0) ? margin.div(total).mul(100).toDecimalPlaces(1) : null;
+      return [
+        {
+          requestId: req.id,
+          proposalId: p.id,
+          code: p.code,
+          revisionNo: rev.revisionNo,
+          opportunity: { id: p.opportunity.id, name: p.opportunity.name },
+          customer: p.opportunity.customer,
+          capacityKwp: rev.designVersion?.capacityKwp ?? null,
+          pricingMode: rev.pricingMode,
+          totalAmount: total.toFixed(2),
+          estimatedCost: costs ? new Prisma.Decimal(rev.subtotal).toFixed(2) : null,
+          contingencyAmount: costs ? new Prisma.Decimal(rev.contingencyAmount).toFixed(2) : null,
+          marginAmount: costs ? margin.toFixed(2) : null,
+          marginPct: costs && pct ? Number(pct) : null,
+          belowFloor: costs && pct !== null ? pct.lt(minMarginPct) : null,
+          raisedBy: req.raisedBy,
+          waitingSince: req.currentStepAt,
+        },
+      ];
+    });
+    return { minMarginPct, rows };
+  }
+
+  /**
    * The cost of items as a new line would get it, for the form to show before the
    * author commits (cost, where it came from, how old it is, whether that is too old).
    * For those who may see costs; items of other organizations are simply absent.

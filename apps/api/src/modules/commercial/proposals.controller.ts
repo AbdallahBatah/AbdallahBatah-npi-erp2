@@ -31,6 +31,13 @@ export class ProposalsController {
    * Declared before `:id` — Nest matches in declaration order, so `cost-lookup`
    * must never be reachable as an id. Cost figures: costs.view is checked in the service.
    */
+  /** Package 3 · P3-6: budgets waiting on the caller's signature, with their profitability. */
+  @Get('awaiting-me')
+  @RequirePermissions(PERMISSIONS.PROPOSAL_APPROVE)
+  awaitingMe(@CurrentUser() user: AuthUser) {
+    return this.proposals.awaitingMyApproval(user);
+  }
+
   @Get('cost-lookup')
   @RequirePermissions(PERMISSIONS.PROPOSAL_WRITE)
   costLookup(

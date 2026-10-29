@@ -16,6 +16,8 @@ export const ORG_SETTING_KEYS = {
   PROPOSAL_VALIDITY_DAYS: 'crm.proposal.validityDays',
   /** A line cost older than this many days (or of unknown age) is warned about. */
   PROPOSAL_COST_AGE_WARN_DAYS: 'crm.proposal.costAgeWarnDays',
+  /** Package 3 · P3-6: a budget whose margin is under this percentage is flagged to the approver. */
+  PROPOSAL_MIN_MARGIN_PCT: 'crm.proposal.minMarginPct',
   /** A follow-up task's reminder goes this many days before its due day (0 = on the day). */
   TASK_REMINDER_DAYS_BEFORE: 'crm.task.reminderDaysBefore',
   /** ...at this hour, Riyadh time (0..23). */
@@ -28,6 +30,7 @@ export const ORG_SETTING_DEFAULTS = {
   [ORG_SETTING_KEYS.CUSTOMER_MERGE_ENABLED]: false,
   [ORG_SETTING_KEYS.PROPOSAL_VALIDITY_DAYS]: 30,
   [ORG_SETTING_KEYS.PROPOSAL_COST_AGE_WARN_DAYS]: 30,
+  [ORG_SETTING_KEYS.PROPOSAL_MIN_MARGIN_PCT]: 15,
   [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE]: 1,
   [ORG_SETTING_KEYS.TASK_REMINDER_HOUR]: 8,
 } as const;
@@ -44,6 +47,7 @@ const isIntBetween = (lo: number, hi: number) => (v: unknown): boolean =>
 export const ORG_SETTING_EDITABLE: Record<string, { valid: (v: unknown) => boolean }> = {
   [ORG_SETTING_KEYS.PROPOSAL_VALIDITY_DAYS]: { valid: isDays },
   [ORG_SETTING_KEYS.PROPOSAL_COST_AGE_WARN_DAYS]: { valid: isDays },
+  [ORG_SETTING_KEYS.PROPOSAL_MIN_MARGIN_PCT]: { valid: isIntBetween(0, 100) },
   [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE]: { valid: isIntBetween(0, 30) },
   [ORG_SETTING_KEYS.TASK_REMINDER_HOUR]: { valid: isIntBetween(0, 23) },
   [ORG_SETTING_KEYS.CUSTOMER_SIMILARITY_THRESHOLD]: {

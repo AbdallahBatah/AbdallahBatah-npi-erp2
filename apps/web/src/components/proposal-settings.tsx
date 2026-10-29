@@ -18,20 +18,24 @@ import { Btn, Field, LoadError } from '@/components/ui';
 
 const VALIDITY = 'crm.proposal.validityDays';
 const WARN = 'crm.proposal.costAgeWarnDays';
+/** Package 3 · P3-6: the margin under which a budget is flagged to the general manager. */
+const MIN_MARGIN = 'crm.proposal.minMarginPct';
 
 type Settings = Record<string, number | string | boolean>;
 
 export function ProposalSettingsCard() {
   const { t, locale } = useI18n();
   const { act, busy } = useAct();
-  const [values, setValues] = useState<{ validity: string; warn: string } | null>(null);
+  const [values, setValues] = useState<{ validity: string; warn: string; minMargin: string } | null>(null);
   const [err, setErr] = useState('');
 
   const load = useCallback(() => {
     setErr('');
     api
       .get<Settings>('/admin/settings')
-      .then((s) => setValues({ validity: String(s[VALIDITY] ?? 30), warn: String(s[WARN] ?? 30) }))
+      .then((s) =>
+        setValues({ validity: String(s[VALIDITY] ?? 30), warn: String(s[WARN] ?? 30), minMargin: String(s[MIN_MARGIN] ?? 15) }),
+      )
       .catch((e) => setErr(translateError(e, locale)));
   }, [locale]);
   useEffect(load, [load]);
@@ -40,7 +44,11 @@ export function ProposalSettingsCard() {
     e.preventDefault();
     if (!values) return;
     const ok = await act('proposalSettings', () =>
-      api.patch('/admin/settings', { [VALIDITY]: Number(values.validity), [WARN]: Number(values.warn) }),
+      api.patch('/admin/settings', {
+        [VALIDITY]: Number(values.validity),
+        [WARN]: Number(values.warn),
+        [MIN_MARGIN]: Number(values.minMargin),
+      }),
     );
     if (ok) load();
   }
@@ -80,6 +88,17 @@ export function ProposalSettingsCard() {
               className="input"
               value={values.warn}
               onChange={(e) => setValues({ ...values, warn: e.target.value })}
+            />
+          </Field>
+          <Field label={t('adm.settings.proposals.minMarginPct')}>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              className="input"
+              value={values.minMargin}
+              onChange={(e) => setValues({ ...values, minMargin: e.target.value })}
             />
           </Field>
           <div className="flex justify-end sm:col-span-2">

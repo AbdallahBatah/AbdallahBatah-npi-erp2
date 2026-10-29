@@ -867,7 +867,13 @@ export default function ProposalDetailPage() {
     const head = (
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-semibold text-slate-800">
-          {t('proposals.revision')} #{rev.revisionNo}
+          {/* Owner work cycle step 6: an estimated budget becomes the quote once approved. */}
+          {rev.pricingMode === 'LUMP_SUM'
+            ? ['DRAFT', 'PENDING_APPROVAL'].includes(rev.status)
+              ? t('budget.title')
+              : t('budget.quote')
+            : t('proposals.revision')}{' '}
+          #{rev.revisionNo}
         </span>
         <StatusBadge status={rev.status} />
         {isCurrent && !superseded && <span className="badge bg-brand-50 text-brand-700">{t('proposals.current')}</span>}
