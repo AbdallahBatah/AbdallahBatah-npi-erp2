@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ProposalsService } from './proposals.service';
+import { ProposalPrintService } from './proposal-print.service';
 import { CreateProposalDto, CreateRevisionDto, RejectProposalDto } from './dto';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
@@ -18,7 +19,10 @@ import type { AuthUser } from '../../common/auth-user';
 @Controller('proposals')
 @UseGuards(PermissionsGuard)
 export class ProposalsController {
-  constructor(private readonly proposals: ProposalsService) {}
+  constructor(
+    private readonly proposals: ProposalsService,
+    private readonly print: ProposalPrintService,
+  ) {}
 
   @Get()
   @RequirePermissions(PERMISSIONS.PROPOSAL_READ)
@@ -47,6 +51,17 @@ export class ProposalsController {
   ) {
     const ids = (itemIds ?? '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 200);
     return this.proposals.costLookup(user, { itemIds: ids, currency });
+  }
+
+  /**
+   * Package 3 · P3-7: the printable quote — selling side only, approved
+   * revisions only (`revision` picks one by number, default the latest).
+   */
+  @Get(':id/print')
+  @RequirePermissions(PERMISSIONS.PROPOSAL_READ)
+  printQuote(@CurrentUser() user: AuthUser, @Param('id') id: string, @Query('revision') revision?: string) {
+    const n = revision !== undefined && revision !== '' ? Number(revision) : undefined;
+    return this.print.quote(user, id, n !== undefined && Number.isInteger(n) && n > 0 ? n : undefined);
   }
 
   @Get(':id')

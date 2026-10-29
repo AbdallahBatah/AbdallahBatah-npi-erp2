@@ -961,6 +961,16 @@ export default function ProposalDetailPage() {
 
       {renderBanner()}
 
+      {/* P3-7: an approved budget is the quote — print it (browser PDF). */}
+      {current && ['APPROVED', 'SENT', 'ACCEPTED'].includes(current.status) && (
+        <div className="mb-3 flex justify-end">
+          <Link href={`/proposals/${proposal.id}/print?revision=${current.revisionNo}`} className="btn-ghost text-xs">
+            <Icon name="printer" className="me-1.5 inline h-4 w-4" />
+            {t('quote.print')}
+          </Link>
+        </div>
+      )}
+
       {/* What the engine allows on the current revision, as buttons. */}
       {canWrite && !formOpen && (canEditDraft || has('SUBMIT') || has('SEND') || has('ACCEPT') || has('REJECT') || reviseAvailable) && (
         <div className="mb-4 flex flex-wrap items-center gap-2">

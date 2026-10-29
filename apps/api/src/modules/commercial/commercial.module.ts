@@ -8,6 +8,7 @@ import { BudgetTemplatesController } from './budget-templates.controller';
 import { BudgetTemplatesService } from './budget-templates.service';
 import { ProposalsController } from './proposals.controller';
 import { ProposalsService } from './proposals.service';
+import { ProposalPrintService } from './proposal-print.service';
 import { ContractsController } from './contracts.controller';
 import { ContractsService } from './contracts.service';
 import { ItemCostService } from './item-cost.service';
@@ -17,6 +18,6 @@ import { ProposalExpiryScheduler } from './proposal-expiry.scheduler';
   // Proposals and contracts move the opportunity through its stage rules.
   imports: [CrmModule],
   controllers: [ItemsController, WorkItemsController, BudgetTemplatesController, ProposalsController, ContractsController],
-  providers: [ItemsService, WorkItemsService, BudgetTemplatesService, ProposalsService, ContractsService, ItemCostService, ProposalExpiryScheduler],
+  providers: [ItemsService, WorkItemsService, BudgetTemplatesService, ProposalsService, ProposalPrintService, ContractsService, ItemCostService, ProposalExpiryScheduler],
 })
 export class CommercialModule {}
