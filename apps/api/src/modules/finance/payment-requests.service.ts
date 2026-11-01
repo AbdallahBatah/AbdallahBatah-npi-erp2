@@ -85,6 +85,13 @@ export class PaymentRequestsService implements OnModuleInit {
     return { ...r, bill, approval: chain };
   }
 
+  async openBills(user: AuthUser, vendorId: string) {
+    const rows = await this.payables.outstanding(user, vendorId);
+    return rows
+      .filter((r) => r.kind === 'BILL' && r.outstanding > 0.005)
+      .map((r) => ({ kind: r.kind, id: r.id, code: r.code, outstanding: r.outstanding }));
+  }
+
   async create(user: AuthUser, dto: CreatePaymentRequestDto) {
     const vendor = await this.prisma.vendor.findFirst({
       where: { id: dto.vendorId, organizationId: user.organizationId },

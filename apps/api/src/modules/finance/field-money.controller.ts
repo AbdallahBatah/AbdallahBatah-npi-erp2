@@ -29,6 +29,13 @@ export class PaymentRequestsController {
     return this.requests.list(user, status);
   }
 
+  /** The vendor's approved, unpaid bills — for the engineer, who cannot read payables. */
+  @Get('open-bills')
+  @RequirePermissions(PERMISSIONS.REQUISITION_WRITE)
+  openBills(@CurrentUser() user: AuthUser, @Query('vendorId') vendorId: string) {
+    return this.requests.openBills(user, vendorId);
+  }
+
   @Get(':id')
   @RequireAnyPermission(PERMISSIONS.REQUISITION_READ, PERMISSIONS.PAYMENT_READ, PERMISSIONS.PROCUREMENT_APPROVE)
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {

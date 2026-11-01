@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
@@ -123,7 +125,17 @@ export default function PayablesPage() {
 
   return (
     <div>
-      <PageHeader title={t('ap.title')} subtitle={t('ap.hint')} />
+      <PageHeader
+        title={t('ap.title')}
+        subtitle={t('ap.hint')}
+        action={
+          <div className="flex flex-wrap gap-2">
+            {/* Package 6: approved payment requests to pay, and petty cash. */}
+            <Link href="/payables/payment-requests" className="btn-ghost">{t('vpr.title')}</Link>
+            <Link href="/payables/petty-cash" className="btn-ghost">{t('pc.title')}</Link>
+          </div>
+        }
+      />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <div className="stat">

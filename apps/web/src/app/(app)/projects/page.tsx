@@ -90,11 +90,17 @@ export default function ProjectsPage() {
       <PageHeader
         title={t('prj.title')}
         action={
-          <Can perm="projects.project.write">
-            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
-              {t('prj.new')}
-            </Btn>
-          </Can>
+          <div className="flex flex-wrap gap-2">
+            {/* Packages 6 and 7: field money and the warranty register. */}
+            <Link href="/projects/payment-requests" className="btn-ghost">{t('vpr.title')}</Link>
+            <Link href="/projects/petty-cash" className="btn-ghost">{t('pc.title')}</Link>
+            <Link href="/projects/warranties" className="btn-ghost">{t('wty.title')}</Link>
+            <Can perm="projects.project.write">
+              <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+                {t('prj.new')}
+              </Btn>
+            </Can>
+          </div>
         }
       />
       {loadErr && <div className="mb-6"><LoadError message={loadErr} onRetry={load} /></div>}

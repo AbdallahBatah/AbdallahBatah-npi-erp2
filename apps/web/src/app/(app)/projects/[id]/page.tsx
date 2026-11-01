@@ -326,7 +326,13 @@ export default function ProjectDetailPage() {
             <Link href={`/projects/${p.id}/execution`} className="btn-ghost btn-sm">
               {t('exe.title')}
             </Link>
-            {p.stage !== 'CLOSED' && (
+            {/* Package 7: commissioning ends in the handover; closing is its approval, not a click. */}
+            {['COMMISSIONING', 'CLOSED'].includes(p.stage) && (
+              <Link href={`/projects/${p.id}/handover`} className="btn-primary btn-sm">
+                {t('hnd.title')}
+              </Link>
+            )}
+            {!['COMMISSIONING', 'CLOSED'].includes(p.stage) && (
               <Can perm="projects.project.write">
                 <Btn variant="primary" sm icon="skip-forward" iconClassName="rtl:-scale-x-100" busy={busy('stage')} disabled={busy()} onClick={nextStage}>
                   {t('prj.nextStage')}: {optionLabel(enums?.projectStages, STAGE_FLOW[STAGE_FLOW.indexOf(p.stage) + 1] ?? '', locale)}

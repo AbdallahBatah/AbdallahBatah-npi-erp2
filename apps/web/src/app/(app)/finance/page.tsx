@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
@@ -148,7 +150,14 @@ export default function FinanceReportsPage() {
 
   return (
     <div>
-      <PageHeader title={t('fin.title')} />
+      <PageHeader
+        title={t('fin.title')}
+        action={
+          <Link href="/finance/cash-flow" className="btn-ghost">
+            {t('cf.title')}
+          </Link>
+        }
+      />
       {loadErr ? <div className="mb-6"><LoadError message={loadErr} onRetry={loadAll} /></div> : null}
       {confirmNode}
 
