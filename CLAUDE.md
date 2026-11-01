@@ -2,6 +2,13 @@
 
 NOTION_PROJECT_NAME: NPI ERP — التحويل إلى وورك فلو متكامل   (PRJ-2, page 3d4ca444-c12c-815a-8295-c41ea9b972ac)
 
+## Standalone project (since 2026-11-01)
+This copy is an independent project: no link to `eyad62689-lab/npi-erp` (remote removed). `main` = the owner's
+2026-10-31 source export (old `main`, demo server address redacted as `SERVER_IP` / `DEMO_HOST`) + owner-change
+packages 3, 2 and 4 (P3-1…P3-10, P2-1…P2-4, P4-1…P4-4), full history kept. The pre-merge `main` is
+`archive/main-before-standalone`. Target remote when available: `AbdallahBatah/npi-erp`. Work on `main` directly
+or short branches off it; the `feat/owner-changes-p*` branches are history now.
+
 ## What this repository is
 Modular-monolith ERP for a Saudi solar company (`apps/api` NestJS + Prisma on PostgreSQL, `apps/web` Next.js,
 `packages/*` shared). Since 2026-09 the active work is **Madar**, a conversational copilot layer in `apps/copilot`
