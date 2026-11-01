@@ -9,12 +9,22 @@ import { FiscalController } from './fiscal.controller';
 import { FiscalService } from './fiscal.service';
 import { ZatcaService } from './zatca.service';
 import { CashFlowService } from './cash-flow.service';
+import { PaymentRequestsController, PettyCashController } from './field-money.controller';
+import { PaymentRequestsService } from './payment-requests.service';
+import { PettyCashService } from './petty-cash.service';
 
 @Module({
   // Fixed-prefix controllers first: their 'finance/reports/*',
   // 'finance/payables/*' and 'finance/fiscal/*' paths must not be swallowed by
   // InvoicesController's parameterised 'finance/...' routes.
-  controllers: [ReportsController, PayablesController, FiscalController, InvoicesController],
-  providers: [InvoicesService, ReportsService, PayablesService, FiscalService, ZatcaService, CashFlowService],
+  controllers: [
+    ReportsController,
+    PayablesController,
+    FiscalController,
+    PaymentRequestsController,
+    PettyCashController,
+    InvoicesController,
+  ],
+  providers: [InvoicesService, ReportsService, PayablesService, FiscalService, ZatcaService, CashFlowService, PaymentRequestsService, PettyCashService],
 })
 export class FinanceModule {}

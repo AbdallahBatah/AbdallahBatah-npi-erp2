@@ -74,7 +74,8 @@ export const LOOKUP_ACCESS: Record<LookupKind, readonly PermissionKey[]> = {
   budgetTemplates: [PERMISSIONS.ITEM_READ, PERMISSIONS.PROPOSAL_WRITE],
   // P4-1: the active users' names, for naming a project's engineer (the
   // projects general manager holds the contract write key).
-  users: [PERMISSIONS.USER_MANAGE, PERMISSIONS.CONTRACT_WRITE],
+  // P6-2: the accountant names a petty-cash custodian.
+  users: [PERMISSIONS.USER_MANAGE, PERMISSIONS.CONTRACT_WRITE, PERMISSIONS.PAYMENT_WRITE],
 };
 
 /** True when `permissions` holds at least one of the list's keys. */
