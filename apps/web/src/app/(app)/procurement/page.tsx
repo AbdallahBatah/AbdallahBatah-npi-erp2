@@ -229,6 +229,8 @@ export default function ProcurementPage() {
         action={
           <Can perm="scm.procurement.write">
             <div className="flex gap-2">
+              {/* P4-7: receipt without a purchase order. */}
+              <Link href="/procurement/direct-receipts" className="btn-ghost">{t('drn.title')}</Link>
               <Btn icon="plus" onClick={() => setVOpen(true)}>{t('po.newVendor')}</Btn>
               <Btn variant="primary" icon="cart" onClick={() => { setPOpen(true); if (pLines.length === 0) addLine(); }}>
                 {t('po.new')}

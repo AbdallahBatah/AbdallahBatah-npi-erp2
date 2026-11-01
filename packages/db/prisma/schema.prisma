@@ -258,6 +258,7 @@ model Organization {
   projectWarranties   ProjectWarranty[]
   vendorPaymentRequests VendorPaymentRequest[]
   pettyCashCustodies  PettyCashCustody[]
+  directReceipts      DirectReceipt[]
   pricingSchemes      PricingScheme[]
   designVersions      DesignVersion[]
   proposals           Proposal[]
@@ -712,6 +713,7 @@ model Item {
   materialRequestLines MaterialRequestLine[]
   materialIssueLines   MaterialIssueLine[]
   materialReturnLines  MaterialReturnLine[]
+  directReceiptLines   DirectReceiptLine[]
   serialUnits    SerialUnit[]
   stockLevels    StockLevel[]
   stockMovements StockMovement[]
@@ -1313,6 +1315,7 @@ model Vendor {
   warrantyClaims WarrantyClaim[]
   payments       VendorPayment[]
   paymentRequests VendorPaymentRequest[]
+  directReceipts  DirectReceipt[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -1764,6 +1767,7 @@ model Location {
   issuesFrom     MaterialIssue[] @relation("IssueFrom")
   issuesTo       MaterialIssue[] @relation("IssueTo")
   returnsFrom    MaterialReturn[] @relation("ReturnFrom")
+  directReceipts DirectReceipt[]
   returnsTo      MaterialReturn[] @relation("ReturnTo")
   requisitionsDeliveredHere PurchaseRequisition[] @relation("PrDeliverTo")
   ordersDeliveredHere       PurchaseOrder[]       @relation("PoDeliverTo")
@@ -3382,4 +3386,44 @@ model PettyCashLine {
 
   @@index([movementId])
   @@index([projectId])
+}
+
+// ─── Package 4 deferred item · P4-7: receipt without a purchase order (migration 0049) ──
+
+/// «استلام مواد بدون أمر شراء» (owner work cycle step 15): the keeper books
+/// what a vendor delivered with no order; stock rises at once and finance is
+/// told to record the vendor's invoice. Bulk items only — serialised items
+/// are received on an order, where their units are registered.
+model DirectReceipt {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  vendorId       String
+  vendor         Vendor   @relation(fields: [vendorId], references: [id])
+  locationId     String
+  location       Location @relation(fields: [locationId], references: [id])
+  projectId      String?
+  deliveryNoteRef String?
+  notes          String?
+  receivedById   String
+  receivedAt     DateTime @default(now())
+
+  lines          DirectReceiptLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, receivedAt])
+}
+
+model DirectReceiptLine {
+  id            String  @id @default(cuid())
+  receiptId     String
+  receipt       DirectReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  itemId        String
+  item          Item    @relation(fields: [itemId], references: [id])
+  qty           Decimal @db.Decimal(14, 3)
+  /// The vendor's price if known — finance confirms it on the invoice.
+  unitCost      Decimal? @db.Decimal(18, 2)
+
+  @@index([receiptId])
 }

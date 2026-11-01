@@ -220,6 +220,7 @@ async function main() {
     { documentType: 'VENDOR_PAYMENT_REQUEST', prefix: 'VPR' },
     { documentType: 'PETTY_CASH_CUSTODY', prefix: 'PCC' },
     { documentType: 'PETTY_CASH_MOVEMENT', prefix: 'PCM' },
+    { documentType: 'DIRECT_RECEIPT', prefix: 'DRN' },
     { documentType: 'MATERIAL_ISSUE', prefix: 'MIS' },
     // CRM Step 5: follow-up tasks (TSK-00001 …).
     { documentType: 'FOLLOWUP_TASK', prefix: 'TSK' },
