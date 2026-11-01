@@ -22,6 +22,8 @@ export const ORG_SETTING_KEYS = {
   TASK_REMINDER_DAYS_BEFORE: 'crm.task.reminderDaysBefore',
   /** ...at this hour, Riyadh time (0..23). */
   TASK_REMINDER_HOUR: 'crm.task.reminderHour',
+  /** Package 7 · P7-3: an invoice falls due this many days after it is raised. */
+  INVOICE_PAYMENT_TERMS_DAYS: 'finance.invoice.paymentTermsDays',
 } as const;
 
 /** What a missing row means. Migration 0022 also writes these as rows. */
@@ -33,6 +35,7 @@ export const ORG_SETTING_DEFAULTS = {
   [ORG_SETTING_KEYS.PROPOSAL_MIN_MARGIN_PCT]: 15,
   [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE]: 1,
   [ORG_SETTING_KEYS.TASK_REMINDER_HOUR]: 8,
+  [ORG_SETTING_KEYS.INVOICE_PAYMENT_TERMS_DAYS]: 30,
 } as const;
 
 const isDays = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 365;
@@ -50,6 +53,7 @@ export const ORG_SETTING_EDITABLE: Record<string, { valid: (v: unknown) => boole
   [ORG_SETTING_KEYS.PROPOSAL_MIN_MARGIN_PCT]: { valid: isIntBetween(0, 100) },
   [ORG_SETTING_KEYS.TASK_REMINDER_DAYS_BEFORE]: { valid: isIntBetween(0, 30) },
   [ORG_SETTING_KEYS.TASK_REMINDER_HOUR]: { valid: isIntBetween(0, 23) },
+  [ORG_SETTING_KEYS.INVOICE_PAYMENT_TERMS_DAYS]: { valid: isDays },
   [ORG_SETTING_KEYS.CUSTOMER_SIMILARITY_THRESHOLD]: {
     valid: (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0.5 && v <= 1,
   },

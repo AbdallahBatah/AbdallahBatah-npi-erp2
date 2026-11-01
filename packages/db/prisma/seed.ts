@@ -216,6 +216,10 @@ async function main() {
     { documentType: 'MATERIAL_REQUEST', prefix: 'MR' },
     { documentType: 'EXECUTION_OVERRUN', prefix: 'OVR' },
     { documentType: 'MATERIAL_RETURN', prefix: 'MRT' },
+    { documentType: 'PROJECT_HANDOVER', prefix: 'HND' },
+    { documentType: 'VENDOR_PAYMENT_REQUEST', prefix: 'VPR' },
+    { documentType: 'PETTY_CASH_CUSTODY', prefix: 'PCC' },
+    { documentType: 'PETTY_CASH_MOVEMENT', prefix: 'PCM' },
     { documentType: 'MATERIAL_ISSUE', prefix: 'MIS' },
     // CRM Step 5: follow-up tasks (TSK-00001 …).
     { documentType: 'FOLLOWUP_TASK', prefix: 'TSK' },
@@ -273,6 +277,9 @@ async function main() {
     { code: '2050', nameAr: 'محتجزات دائنة — مقاولو باطن', nameEn: 'Retention Payable (Subcontractors)', accountType: 'LIABILITY' },
     // W7 payments.
     { code: '1000', nameAr: 'البنك — الحساب الجاري', nameEn: 'Bank — Current Account', accountType: 'ASSET' },
+    // Package 6: cash held by custodians, and advances paid to suppliers.
+    { code: '1050', nameAr: 'العُهد النقدية', nameEn: 'Petty Cash (Custody)', accountType: 'ASSET' },
+    { code: '1500', nameAr: 'دفعات مقدمة للموردين', nameEn: 'Advances to Suppliers', accountType: 'ASSET' },
     // M1: the two sides the statements could not be drawn without — cost of
     // revenue (WIP relieved on recognition) and equity.
     { code: '5000', nameAr: 'تكلفة الإيرادات', nameEn: 'Cost of Revenue', accountType: 'EXPENSE' },
@@ -305,6 +312,8 @@ async function main() {
     ['AP', '2000'],
     ['RETENTION_PAYABLE', '2050'],
     ['BANK', '1000'],
+    ['PETTY_CASH', '1050'],
+    ['VENDOR_ADVANCE', '1500'],
     ['CAPITAL', '3000'],
     ['RETAINED_EARNINGS', '3100'],
   ];

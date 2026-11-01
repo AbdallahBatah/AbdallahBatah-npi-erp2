@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ReportsService } from './reports.service';
+import { CashFlowService } from './cash-flow.service';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
 import { PERMISSIONS } from '@npi/shared';
@@ -8,7 +9,18 @@ import type { AuthUser } from '../../common/auth-user';
 @Controller('finance/reports')
 @UseGuards(PermissionsGuard)
 export class ReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(
+    private readonly reports: ReportsService,
+    private readonly cashFlow: CashFlowService,
+  ) {}
+
+  /** Package 7 · P7-3: receivables aging and the six-month cash forecast. */
+  @Get('cash-flow')
+  @RequirePermissions(PERMISSIONS.REPORT_READ)
+  cashFlowReport(@CurrentUser() user: AuthUser, @Query('months') months?: string) {
+    const n = Math.min(Math.max(Number(months) || 6, 1), 24);
+    return this.cashFlow.report(user, n);
+  }
 
   /** FIN-05: IFRS-15 percentage-of-completion per contract. */
   @Get('poc')

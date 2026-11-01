@@ -1,0 +1,6 @@
+DELETE FROM "ApprovalRuleStep" WHERE "ruleId" IN (SELECT "id" FROM "ApprovalRule" WHERE "documentType" IN ('VENDOR_PAYMENT_REQUEST', 'PETTY_CASH_SETTLEMENT'));
+DELETE FROM "ApprovalRule" WHERE "documentType" IN ('VENDOR_PAYMENT_REQUEST', 'PETTY_CASH_SETTLEMENT');
+DELETE FROM "NumberingSequence" WHERE "documentType" IN ('VENDOR_PAYMENT_REQUEST', 'PETTY_CASH_CUSTODY', 'PETTY_CASH_MOVEMENT');
+DELETE FROM "AccountMapping" WHERE "purpose" IN ('PETTY_CASH', 'VENDOR_ADVANCE');
+DELETE FROM "Account" a WHERE a."code" IN ('1050', '1500')
+  AND NOT EXISTS (SELECT 1 FROM "JournalLine" l WHERE l."accountId" = a."id");

@@ -19,7 +19,12 @@ export type ApprovalDocumentType =
   // Package 2 · P2-2: the contract, signed once before it may be activated.
   | 'CONTRACT'
   // Package 5 · P5-2: executing beyond a budget line's approved quantity.
-  | 'EXECUTION_OVERRUN';
+  | 'EXECUTION_OVERRUN'
+  // Package 7 · P7-1: closing a project on its handover.
+  | 'PROJECT_CLOSURE'
+  // Package 6: paying a vendor on request, and a petty-cash settlement.
+  | 'VENDOR_PAYMENT_REQUEST'
+  | 'PETTY_CASH_SETTLEMENT';
 
 export interface ApprovalDocumentMeta {
   value: ApprovalDocumentType;
@@ -101,6 +106,32 @@ export const APPROVAL_DOCUMENTS: ApprovalDocumentMeta[] = [
     permission: PERMISSIONS.PROCUREMENT_APPROVE,
     amountLabelAr: 'الكمية الزائدة × تكلفة الوحدة في الموازنة',
     amountLabelEn: 'Extra quantity × the line\'s budgeted unit cost',
+  },
+  {
+    value: 'PROJECT_CLOSURE',
+    labelAr: 'إغلاق مشروع (تسليم)',
+    labelEn: 'Project closure (handover)',
+    // Owner work cycle step 16: the projects GM and the general manager approve
+    // the closure. Both hold this key; no new key (Madar's catalogue pin).
+    permission: PERMISSIONS.PROCUREMENT_APPROVE,
+    amountLabelAr: 'قيمة العقد',
+    amountLabelEn: 'Contract value',
+  },
+  {
+    value: 'VENDOR_PAYMENT_REQUEST',
+    labelAr: 'طلب صرف دفعة لمورد',
+    labelEn: 'Vendor payment request',
+    permission: PERMISSIONS.PROCUREMENT_APPROVE,
+    amountLabelAr: 'المبلغ المطلوب صرفه',
+    amountLabelEn: 'Amount requested',
+  },
+  {
+    value: 'PETTY_CASH_SETTLEMENT',
+    labelAr: 'تسوية عُهدة',
+    labelEn: 'Petty cash settlement',
+    permission: PERMISSIONS.PROCUREMENT_APPROVE,
+    amountLabelAr: 'مجموع المصروفات المسوّاة',
+    amountLabelEn: 'Total spending settled',
   },
 ];
 

@@ -254,6 +254,10 @@ model Organization {
   executionOverruns   ExecutionOverrun[]
   siteAttendance      SiteAttendance[]
   materialReturns     MaterialReturn[]
+  projectHandovers    ProjectHandover[]
+  projectWarranties   ProjectWarranty[]
+  vendorPaymentRequests VendorPaymentRequest[]
+  pettyCashCustodies  PettyCashCustody[]
   pricingSchemes      PricingScheme[]
   designVersions      DesignVersion[]
   proposals           Proposal[]
@@ -1063,6 +1067,8 @@ model Invoice {
   total          Decimal  @default(0) @db.Decimal(18, 2) // subtotal + vat (gross billed)
   netPayable     Decimal  @default(0) @db.Decimal(18, 2) // total - retention (amount due now)
   status         InvoiceStatus @default(DRAFT)
+  /// Package 7 · P7-3 (migration 0045): issue date + the organization's payment terms.
+  dueDate        DateTime?
   // Credit notes (ZATCA InvoiceTypeCode 381) point back at the invoice they
   // correct. The original is never edited — a cleared e-invoice is a statutory
   // record, so a correction is always a new, separately-reported document.
@@ -1306,6 +1312,7 @@ model Vendor {
   subcontracts   SubcontractAgreement[]
   warrantyClaims WarrantyClaim[]
   payments       VendorPayment[]
+  paymentRequests VendorPaymentRequest[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -1424,6 +1431,10 @@ model Project {
   overruns         ExecutionOverrun[]
   attendance       SiteAttendance[]
   materialReturns  MaterialReturn[]
+  handover         ProjectHandover?
+  warranties       ProjectWarranty[]
+  paymentRequests  VendorPaymentRequest[]
+  pettyCashLines   PettyCashLine[]
   commitments    ProjectCommitment[]
   // CRM Phase 1 · Step 5 (optional link; the screens do not offer it yet)
   activities     Activity[]
@@ -1459,6 +1470,7 @@ model WbsElement {
   materialRequestLines MaterialRequestLine[]
   progressEntries WorkProgressEntry[]
   overruns        ExecutionOverrun[]
+  pettyCashLines  PettyCashLine[]
   costEntries  ProjectCostEntry[]
   commitments  ProjectCommitment[]
   changeOrders ChangeOrder[]
@@ -2284,6 +2296,8 @@ enum PostingPurpose {
   AP                   // trade payables
   RETENTION_PAYABLE    // retention we withhold from subcontractors
   BANK                 // operating bank account
+  VENDOR_ADVANCE       // Package 6: advances paid to suppliers before their bill
+  PETTY_CASH           // Package 6: cash held by custodians (عُهد)
   CAPITAL              // owners' capital
   RETAINED_EARNINGS    // accumulated result carried forward
 }
@@ -2435,6 +2449,11 @@ enum ApprovalDocument {
   // Package 5 · P5-2 (migration 0043): executing more than a budget line's
   // quantity — signed by the projects GM and the general manager (owner, 2026-10-29).
   EXECUTION_OVERRUN
+  // Package 7 · P7-1 (migration 0045): closing a project on its handover — projects GM, then general manager.
+  PROJECT_CLOSURE
+  // Package 6 (migration 0047): a request to pay a vendor (advance or against a bill), and a petty-cash settlement.
+  VENDOR_PAYMENT_REQUEST
+  PETTY_CASH_SETTLEMENT
 }
 
 enum ApprovalStatus {
@@ -3175,4 +3194,192 @@ model MaterialReturnLine {
   serialUnitIds String[]
 
   @@index([returnId])
+}
+
+// ─── Package 7 · handover and warranty (ADR-07, migration 0045) ─────────────
+
+enum HandoverStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+/// The engineer's proof of completion and the acceptance & commissioning
+/// certificate (owner work cycle step 16, contract annex 2). Approved by the
+/// projects GM and the general manager (PROJECT_CLOSURE): the project closes,
+/// warranties start, the final payment milestone becomes due.
+model ProjectHandover {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  projectId      String   @unique
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status         HandoverStatus @default(DRAFT)
+  completionDate DateTime? @db.Date
+  commissionedAt DateTime? @db.Date
+  /// [{ key, ok, note }] — the certificate's inspection items.
+  checklist      Json     @default("[]")
+  /// [{ label, value, unit }] — test readings (voltage, current, frequency…).
+  readings       Json     @default("[]")
+  snags          String?
+  snagsDueDate   DateTime? @db.Date
+  clientRepName  String?
+  /// { KIND: years } — the warranty periods that start on acceptance.
+  warrantyYears  Json     @default("{}")
+  notes          String?
+  createdById    String
+  submittedById  String?
+  submittedAt    DateTime?
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, code])
+}
+
+enum WarrantyKind {
+  PANELS_PRODUCT
+  PANELS_PERFORMANCE
+  INVERTER
+  STRUCTURE
+  WORKMANSHIP
+}
+
+model ProjectWarranty {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind           WarrantyKind
+  years          Int
+  startsAt       DateTime @db.Date
+  endsAt         DateTime @db.Date
+  createdAt      DateTime @default(now())
+
+  @@unique([projectId, kind])
+  @@index([organizationId, endsAt])
+}
+
+// ─── Package 6 · field money (ADR-06, migration 0047) ──────────────────────
+
+enum VendorPaymentKind {
+  ADVANCE
+  AGAINST_BILL
+}
+
+enum PaymentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+  CANCELLED
+}
+
+/// «طلب صرف دفعة للموردين»: raised by the engineer, signed by the projects GM
+/// and the general manager (VENDOR_PAYMENT_REQUEST), paid by the accountant.
+model VendorPaymentRequest {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  vendorId       String
+  vendor         Vendor   @relation(fields: [vendorId], references: [id])
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id])
+  kind           VendorPaymentKind
+  vendorBillId   String?
+  purchaseOrderId String?
+  amount         Decimal  @db.Decimal(18, 2)
+  reason         String
+  status         PaymentRequestStatus @default(PENDING)
+  requestedById  String
+  decidedAt      DateTime?
+  decisionNote   String?
+  paidAt         DateTime?
+  paidById       String?
+  paymentRef     String?
+  vendorPaymentId String?
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+}
+
+enum CustodyStatus {
+  OPEN
+  CLOSED
+}
+
+/// «العُهدة»: cash held by one custodian; its balance is what was funded less
+/// what was settled or returned.
+model PettyCashCustody {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  custodianId    String
+  status         CustodyStatus @default(OPEN)
+  balance        Decimal  @default(0) @db.Decimal(18, 2)
+  notes          String?
+  createdById    String
+  createdAt      DateTime @default(now())
+  closedAt       DateTime?
+
+  movements      PettyCashMovement[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, custodianId])
+}
+
+enum PettyCashMovementKind {
+  FUND        // the accountant hands cash (Dr petty cash / Cr bank)
+  SETTLEMENT  // the custodian's spending, approved (Dr WIP / Cr petty cash)
+  RETURN      // cash handed back (Dr bank / Cr petty cash)
+}
+
+enum PettyCashMovementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  POSTED
+}
+
+model PettyCashMovement {
+  id             String   @id @default(cuid())
+  custodyId      String
+  custody        PettyCashCustody @relation(fields: [custodyId], references: [id], onDelete: Cascade)
+  code           String
+  kind           PettyCashMovementKind
+  status         PettyCashMovementStatus @default(POSTED)
+  amount         Decimal  @db.Decimal(18, 2)
+  memo           String?
+  createdById    String
+  createdAt      DateTime @default(now())
+  decidedAt      DateTime?
+  decisionNote   String?
+
+  lines          PettyCashLine[]
+
+  @@index([custodyId])
+}
+
+/// One spending line of a settlement, charged to a project and budget line.
+model PettyCashLine {
+  id             String   @id @default(cuid())
+  movementId     String
+  movement       PettyCashMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  wbsElementId   String?
+  wbsElement     WbsElement? @relation(fields: [wbsElementId], references: [id])
+  description    String
+  amount         Decimal  @db.Decimal(18, 2)
+  spentOn        DateTime @db.Date
+
+  @@index([movementId])
+  @@index([projectId])
 }

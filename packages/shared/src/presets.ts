@@ -216,6 +216,12 @@ export const PROPOSED_APPROVAL_RULES: readonly ProposedApprovalRule[] = [
   { documentType: 'CONTRACT', minAmount: 0, steps: ['executive'] },
   // Package 5 · P5-2 (owner, 2026-10-29 (a)): an overrun needs both signatures.
   { documentType: 'EXECUTION_OVERRUN', minAmount: 0, steps: ['pm', 'executive'] },
+  // Package 7 · P7-1 (owner work cycle step 16): closure on handover.
+  { documentType: 'PROJECT_CLOSURE', minAmount: 0, steps: ['pm', 'executive'] },
+  // Package 6: the payment request form's signatures after the engineer's;
+  // a petty-cash settlement is the projects GM's.
+  { documentType: 'VENDOR_PAYMENT_REQUEST', minAmount: 0, steps: ['pm', 'executive'] },
+  { documentType: 'PETTY_CASH_SETTLEMENT', minAmount: 0, steps: ['pm'] },
 ];
 
 /** The preset of `key`, or undefined for a key that has none (`admin`, `sales`, anything else). */

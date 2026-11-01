@@ -575,6 +575,13 @@ export class ProjectsService implements OnModuleInit {
         `Cannot move a project from ${project.stage} to ${dto.stage}`,
       );
     }
+    // Package 7 (ADR-07): a project closes only when its handover is approved
+    // by the projects GM and the general manager — never on a bare click.
+    if (dto.stage === 'CLOSED') {
+      throw new BadRequestException(
+        'A project is closed by approving its handover (projects GM and general manager), not by a stage change',
+      );
+    }
 
     const updated = await this.prisma.project.update({
       where: { id },

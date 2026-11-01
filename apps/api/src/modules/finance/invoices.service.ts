@@ -148,12 +148,23 @@ export class InvoicesService {
     const total = round2(subtotal + vatAmount);
     const netPayable = round2(total - retentionAmount);
 
+    // P7-3: due date = raised + the organization's payment terms (read here
+    // rather than through OrgSettingsService to keep this service's constructor).
+    // `?.`: unit tests build this service on a partial Prisma double.
+    const terms = await this.prisma.orgSetting?.findUnique({
+      where: { organizationId_key: { organizationId: user.organizationId, key: 'finance.invoice.paymentTermsDays' } },
+    });
+    const raw = terms?.valueJson;
+    const termsDays = typeof raw === 'number' && Number.isInteger(raw) && raw > 0 ? raw : 30;
+    const dueDate = new Date(Date.now() + termsDays * 864e5);
+
     return this.prisma.$transaction(async (tx) => {
       const code = await this.numbering.next(user.organizationId, 'INVOICE', tx);
       const invoice = await tx.invoice.create({
         data: {
           organizationId: user.organizationId,
           code,
+          dueDate,
           invoiceType: 'MILESTONE',
           customerId: milestone.contract.customerId,
           contractId: milestone.contractId,

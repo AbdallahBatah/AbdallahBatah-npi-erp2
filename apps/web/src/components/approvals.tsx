@@ -26,7 +26,10 @@ export type ApprovalDocType =
   | 'PROPOSAL'
   // P2-2 and P5-2: without a label here the inbox row would have none to read.
   | 'CONTRACT'
-  | 'EXECUTION_OVERRUN';
+  | 'EXECUTION_OVERRUN'
+  | 'PROJECT_CLOSURE'
+  | 'VENDOR_PAYMENT_REQUEST'
+  | 'PETTY_CASH_SETTLEMENT';
 
 export interface ApprovalStepView {
   sequence: number;
@@ -61,6 +64,9 @@ export const DOC_LABEL: Record<ApprovalDocType, { ar: string; en: string }> = {
   CHANGE_ORDER: { ar: 'أمر تغيير', en: 'Change order' },
   CONTRACT: { ar: 'عقد', en: 'Contract' },
   EXECUTION_OVERRUN: { ar: 'تجاوز كمية بند', en: 'Budget line overrun' },
+  PROJECT_CLOSURE: { ar: 'إغلاق مشروع (تسليم)', en: 'Project closure' },
+  VENDOR_PAYMENT_REQUEST: { ar: 'طلب صرف دفعة لمورد', en: 'Vendor payment request' },
+  PETTY_CASH_SETTLEMENT: { ar: 'تسوية عُهدة', en: 'Petty cash settlement' },
 };
 
 /** Where a signer reads the document before deciding. */
@@ -68,6 +74,9 @@ const DOC_HREF: Partial<Record<ApprovalDocType, (id: string) => string>> = {
   PROPOSAL: (id) => `/proposals/${id}`,
   CONTRACT: (id) => `/contracts/${id}`,
   EXECUTION_OVERRUN: (id) => `/projects/overruns/${id}`,
+  PROJECT_CLOSURE: (id) => `/projects/handovers/${id}`,
+  VENDOR_PAYMENT_REQUEST: (id) => `/projects/payment-requests/${id}`,
+  PETTY_CASH_SETTLEMENT: (id) => `/projects/petty-cash/movements/${id}`,
   PURCHASE_REQUISITION: (id) => `/requisitions/${id}`,
   PURCHASE_ORDER: (id) => `/procurement/${id}`,
 };
