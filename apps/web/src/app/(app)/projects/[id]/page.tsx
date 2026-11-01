@@ -322,6 +322,10 @@ export default function ProjectDetailPage() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={p.stage} />
+            {/* Package 5: daily progress, overruns, photos, attendance. */}
+            <Link href={`/projects/${p.id}/execution`} className="btn-ghost btn-sm">
+              {t('exe.title')}
+            </Link>
             {p.stage !== 'CLOSED' && (
               <Can perm="projects.project.write">
                 <Btn variant="primary" sm icon="skip-forward" iconClassName="rtl:-scale-x-100" busy={busy('stage')} disabled={busy()} onClick={nextStage}>

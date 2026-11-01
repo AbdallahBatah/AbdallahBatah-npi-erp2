@@ -40,6 +40,13 @@ export class ExecutionController {
     return this.execution.requestOverrun(user, id, dto);
   }
 
+  /** The approvals inbox links an overrun by its own id; this resolves its project. */
+  @Get('overruns/:overrunId')
+  @RequirePermissions(PERMISSIONS.PROJECT_READ)
+  overrunRef(@CurrentUser() user: AuthUser, @Param('overrunId') overrunId: string) {
+    return this.execution.overrunRef(user, overrunId);
+  }
+
   @Get(':id/attendance')
   @RequirePermissions(PERMISSIONS.PROJECT_READ)
   attendance(@CurrentUser() user: AuthUser, @Param('id') id: string, @Query('date') date?: string) {

@@ -23,7 +23,10 @@ export type ApprovalDocType =
   | 'PURCHASE_ORDER'
   | 'PROGRESS_CLAIM'
   | 'CHANGE_ORDER'
-  | 'PROPOSAL';
+  | 'PROPOSAL'
+  // P2-2 and P5-2: without a label here the inbox row would have none to read.
+  | 'CONTRACT'
+  | 'EXECUTION_OVERRUN';
 
 export interface ApprovalStepView {
   sequence: number;
@@ -56,6 +59,17 @@ export const DOC_LABEL: Record<ApprovalDocType, { ar: string; en: string }> = {
   PURCHASE_ORDER: { ar: 'أمر شراء', en: 'Purchase order' },
   PROGRESS_CLAIM: { ar: 'مستخلص مقاول', en: 'Subcontractor claim' },
   CHANGE_ORDER: { ar: 'أمر تغيير', en: 'Change order' },
+  CONTRACT: { ar: 'عقد', en: 'Contract' },
+  EXECUTION_OVERRUN: { ar: 'تجاوز كمية بند', en: 'Budget line overrun' },
+};
+
+/** Where a signer reads the document before deciding. */
+const DOC_HREF: Partial<Record<ApprovalDocType, (id: string) => string>> = {
+  PROPOSAL: (id) => `/proposals/${id}`,
+  CONTRACT: (id) => `/contracts/${id}`,
+  EXECUTION_OVERRUN: (id) => `/projects/overruns/${id}`,
+  PURCHASE_REQUISITION: (id) => `/requisitions/${id}`,
+  PURCHASE_ORDER: (id) => `/procurement/${id}`,
 };
 
 /** The ordered trail of signatures — who signed, who is next, who has not. */
@@ -190,9 +204,9 @@ export function ApprovalInbox({ onDecided }: { onDecided?: () => void }) {
                     <div className="text-xs font-semibold text-slate-700">
                       {ar ? DOC_LABEL[r.documentType].ar : DOC_LABEL[r.documentType].en}
                     </div>
-                    {r.documentType === 'PROPOSAL' && (
+                    {DOC_HREF[r.documentType] && (
                       <Link
-                        href={`/proposals/${r.documentId}`}
+                        href={DOC_HREF[r.documentType]!(r.documentId)}
                         className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 underline"
                       >
                         <Icon name="file-text" className="h-3 w-3" />

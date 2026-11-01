@@ -344,6 +344,8 @@ const STATUS_META: Record<string, { ar: string; en: string; cls: string; dot: st
   PARTIALLY_REJECTED: { ar: 'مرفوض جزئياً', en: 'Partly rejected', cls: 'bg-danger-50 text-danger-700', dot: 'bg-danger-500' },
   MATCHED: { ar: 'مطابَقة', en: 'Matched', cls: 'bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
   SCHEDULED: { ar: 'مجدولة للسداد', en: 'Scheduled', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },
+  // P5-4: a material return in transit.
+  RAISED: { ar: 'بانتظار الاستلام', en: 'In transit', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
   // P4-2: material request progress.
   PARTIAL: { ar: 'مستلم جزئياً', en: 'Partly received', cls: 'bg-warning-50 text-warning-700', dot: 'bg-warning-500' },
   FULFILLED: { ar: 'مستوفى', en: 'Fulfilled', cls: 'bg-success-50 text-success-700', dot: 'bg-success-500' },

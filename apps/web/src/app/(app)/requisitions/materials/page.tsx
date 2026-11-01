@@ -101,11 +101,17 @@ export default function MaterialRequestsPage() {
         backHref="/requisitions"
         backLabel={t('nav.requisitions')}
         action={
-          <Can perm="scm.requisition.write">
-            <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
-              {t('mr.new')}
-            </Btn>
-          </Can>
+          <div className="flex flex-wrap gap-2">
+            {/* P5-4: what is left on site goes back on a return voucher. */}
+            <Link href="/requisitions/returns" className="btn-ghost">
+              {t('ret.title')}
+            </Link>
+            <Can perm="scm.requisition.write">
+              <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>
+                {t('mr.new')}
+              </Btn>
+            </Can>
+          </div>
         }
       />
       {loadErr && !loading ? <LoadError message={loadErr} onRetry={load} /> : null}

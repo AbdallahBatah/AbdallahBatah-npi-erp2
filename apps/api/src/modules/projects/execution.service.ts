@@ -7,6 +7,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@npi/db';
+import { PERMISSIONS } from '@npi/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NumberingService } from '../../common/numbering.service';
 import { AuditService } from '../../common/audit.service';
@@ -123,7 +124,7 @@ export class ExecutionService implements OnModuleInit {
       costSummary: project.costSummary,
       lines,
       entries,
-      overruns: overruns.map((o) => ({ ...o, pendingApproval: pending.get(o.id) ?? null })),
+      overruns: overruns.map((o) => this.redact(user, { ...o, pendingApproval: pending.get(o.id) ?? null })),
     };
   }
 
@@ -270,7 +271,19 @@ export class ExecutionService implements OnModuleInit {
         'No approval rule routes budget overruns — the administrator must set the EXECUTION_OVERRUN rule (projects GM, then general manager)',
       );
     }
-    return { ...overrun, pendingApproval: verdict.request };
+    return this.redact(user, { ...overrun, pendingApproval: verdict.request });
+  }
+
+  /**
+   * An overrun's amount is extra quantity × the line's cost per unit, so it
+   * would hand the unit cost to anyone who can see the quantity. `amount` is
+   * too generic a key for COST_FIELDS, so it is removed here, with the chain's
+   * copy of it, for a user without finance.costs.view.
+   */
+  private redact<T extends { amount: unknown; pendingApproval: unknown }>(user: AuthUser, o: T): T {
+    if (user.permissions.includes(PERMISSIONS.COSTS_VIEW)) return o;
+    const chain = o.pendingApproval as Record<string, unknown> | null;
+    return { ...o, amount: null, pendingApproval: chain ? { ...chain, amount: null } : null };
   }
 
   /** The matrix's applier and rejecter: the chain has already decided. */
@@ -314,6 +327,15 @@ export class ExecutionService implements OnModuleInit {
       linkPath: `/projects/${o.projectId}/execution`,
     });
     return updated;
+  }
+
+  async overrunRef(user: AuthUser, id: string) {
+    const o = await this.prisma.executionOverrun.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true, code: true, projectId: true },
+    });
+    if (!o) throw new NotFoundException('Overrun not found');
+    return o;
   }
 
   // ── attendance (P5-3) ─────────────────────────────────────────────────────
