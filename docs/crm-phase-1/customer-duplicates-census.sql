@@ -13,7 +13,7 @@
 -- الخادم لأن deploy/pack.ps1 يستثني مجلد docs من الحزمة، فيُمرَّر من الجهاز عبر
 -- المدخل القياسي لـ ssh، وتُحفظ النتيجة محلياً في census-live.txt (غير متتبَّع):
 --
---   cd /c/dev/npi-erp-crm && ssh root@204.168.182.109 "cd /opt/npi-erp && \
+--   cd /c/dev/npi-erp-crm && ssh root@SERVER_IP "cd /opt/npi-erp && \
 --     docker compose -f docker-compose.prod.yml --env-file deploy/.env exec -T postgres \
 --     psql -U npi -d npi_erp -v ON_ERROR_STOP=1" \
 --     < docs/crm-phase-1/customer-duplicates-census.sql > census-live.txt 2>&1

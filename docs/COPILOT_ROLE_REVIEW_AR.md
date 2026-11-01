@@ -82,7 +82,7 @@
 
 ## 8. ما لم أتحقق منه وما يلزم منك
 
-- **سجل محادثتك 06:22 على الخادم**: المصنّف منع القراءة من هنا. لمعرفة الأدوات التي نُوديت فعلاً في «كم عقد متأخر؟»، نفّذ داخل `ssh root@204.168.182.109`:
+- **سجل محادثتك 06:22 على الخادم**: المصنّف منع القراءة من هنا. لمعرفة الأدوات التي نُوديت فعلاً في «كم عقد متأخر؟»، نفّذ داخل `ssh root@SERVER_IP`:
 
 ```bash
 docker exec -i $(docker ps -qf name=postgres) psql -U npi -d npi_copilot -Atc "select to_char(ts at time zone 'Asia/Riyadh','HH24:MI'), event, left(regexp_replace(coalesce(\"outboundRedactedText\",''),'\s+',' ','g'),300) from llm_audit where ts >= '2026-10-13 02:30+00' order by ts"

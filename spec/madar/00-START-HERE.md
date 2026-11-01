@@ -18,7 +18,7 @@
 | Docker Desktop + Postgres عبر `npm run docker:up` | يعمل | |
 | Claude Code | يعمل داخل `C:\dev\npi-erp` | |
 | مفتاح Anthropic API | في `deploy/.env` و`.env` المحلي | |
-| وصول SSH إلى خادم العرض `204.168.182.109` | للمرحلة ٥ | |
+| وصول SSH إلى خادم العرض `SERVER_IP` | للمرحلة ٥ | |
 
 ## ٤. خطوات الاستخدام بالترتيب
 1. ضع ملفات هذه الحزمة في `C:\dev\npi-erp\spec\madar\`.

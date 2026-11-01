@@ -27,7 +27,7 @@ itself: the owner's change requests (seven packages), on branch `feat/owner-chan
 ## Environments
 - Local: api :4000, web :3000, copilot :3110 (`preview_start copilot`; port 3100 is **not** the copilot). Local DBs
   `npi_erp` and `npi_copilot`. Copilot tests: `npx jest` / `npx playwright test` inside `apps/copilot`, not `npm test`.
-- Demo server (Hetzner, `root@204.168.182.109`, host `npi-erp-demo`, site `https://204-168-182-109.sslip.io`):
+- Demo server (Hetzner, `root@SERVER_IP`, host `npi-erp-demo`, site `https://DEMO_HOST`):
   Docker compose in `/opt/npi-erp` (**not** a git checkout; deployed from `deploy/pack.ps1` tarball). Image tag
   `20260927144531` = `main@4756ba6`. `main` is ahead only by deploy-script/comment fixes (PR #7, #8). The copilot
   (`feat/copilot`) is **not** deployed there yet (M5 tasks T-41…T-46).
