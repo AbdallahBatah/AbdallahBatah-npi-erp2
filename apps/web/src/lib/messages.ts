@@ -863,6 +863,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     'pr.sourceHint': 'حدّد المورد والأسعار والموعد ومكان التسليم. عند آخر توقيع يتحول الطلب إلى أمر شراء معتمد باسم هذا المورد. لا يجوز أن يتجاوز الإجمالي المبلغ المرفوع للاعتماد.',
     'pr.vendor': 'المورد',
     'pr.deliverTo': 'مكان التسليم',
+    'po.email': 'إرسال بالبريد للمورد',
+    'po.emailTo': 'إلى (بريد المورد)',
+    'po.emailMarkSent': 'وسجّل الأمر «مُرسَلاً للمورد» ليبدأ الاستلام',
+    'po.emailHint': 'يُرسَل أمر الشراء بالأصناف والأسعار والضريبة ومكان وموعد التسليم من بريد الشركة المضبوط على الخادم.',
     // Packages 7 and 6 (ADR-07, ADR-06): handover, warranties, cash flow, payment requests, petty cash.
     'hnd.title': 'التسليم',
     'hnd.submit': 'رفع التسليم للاعتماد',
@@ -2484,6 +2488,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     'pr.sourceHint': 'Set the vendor, prices, date and delivery place. On the last signature the requisition becomes an approved purchase order to this vendor. The total may not exceed the amount submitted for approval.',
     'pr.vendor': 'Vendor',
     'pr.deliverTo': 'Delivery place',
+    'po.email': 'E-mail to vendor',
+    'po.emailTo': 'To (vendor e-mail)',
+    'po.emailMarkSent': "And mark the order 'sent to vendor' so receiving can start",
+    'po.emailHint': "The order goes with its items, prices, VAT, delivery place and date, from the company mailbox configured on the server.",
     // Packages 7 and 6 (ADR-07, ADR-06): handover, warranties, cash flow, payment requests, petty cash.
     'hnd.title': 'Handover',
     'hnd.submit': 'Submit handover for approval',

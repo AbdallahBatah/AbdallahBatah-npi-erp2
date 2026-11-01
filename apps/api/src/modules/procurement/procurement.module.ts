@@ -7,6 +7,8 @@ import { MaterialRequestsController } from './material-requests.controller';
 import { MaterialRequestsService } from './material-requests.service';
 import { MaterialReturnsController } from './material-returns.controller';
 import { MaterialReturnsService } from './material-returns.service';
+import { PoMailController } from './po-mail.controller';
+import { PoMailService } from './po-mail.service';
 
 /**
  * Procurement owns the whole purchasing cycle §7 describes, requisition
@@ -15,7 +17,7 @@ import { MaterialReturnsService } from './material-returns.service';
  * across the middle of one business process.
  */
 @Module({
-  controllers: [ProcurementController, RequisitionsController, MaterialRequestsController, MaterialReturnsController],
-  providers: [ProcurementService, RequisitionsService, MaterialRequestsService, MaterialReturnsService],
+  controllers: [ProcurementController, RequisitionsController, MaterialRequestsController, MaterialReturnsController, PoMailController],
+  providers: [ProcurementService, RequisitionsService, MaterialRequestsService, MaterialReturnsService, PoMailService],
 })
 export class ProcurementModule {}

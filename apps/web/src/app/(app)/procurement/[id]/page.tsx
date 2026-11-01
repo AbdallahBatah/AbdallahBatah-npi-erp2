@@ -38,7 +38,7 @@ interface Po {
   subtotal: string;
   vatAmount: string;
   total: string;
-  vendor: { code: string; nameAr: string; nameEn: string };
+  vendor: { code: string; nameAr: string; nameEn: string; email?: string | null };
   project?: { id: string; code: string; nameAr: string; nameEn: string } | null;
   lines: PoLine[];
   goodsReceipts: Receipt[];
@@ -68,6 +68,7 @@ export default function PoDetailPage() {
   const toast = useToast();
   const [billGrn, setBillGrn] = useState<string | null>(null);
   const [rejectId, setRejectId] = useState<string | null>(null);
+  const [mailOpen, setMailOpen] = useState(false);
 
   const load = useCallback(() => {
     setLoadErr('');
@@ -176,6 +177,23 @@ export default function PoDetailPage() {
     }
   }
 
+  // P4 deferred item: e-mail the approved order to the vendor (company SMTP).
+  async function emailPo(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const to = String(f.get('to') || '')
+      .split(/[,;\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const ok = await act('mail', () =>
+      api.post(`/procurement/purchase-orders/${id}/email`, { to, markSent: f.get('markSent') === 'on' }),
+    );
+    if (ok) {
+      setMailOpen(false);
+      load();
+    }
+  }
+
   async function approveBill(billId: string) {
     if (!(await confirm({ title: t('confirm.postBillTitle'), message: t('confirm.postBillMsg'), danger: true }))) return;
     await step(`bapprove:${billId}`, `/procurement/bills/${billId}/approve`);
@@ -205,6 +223,11 @@ export default function PoDetailPage() {
               {po.status === 'APPROVED' && !po.pendingApproval && (
                 <Btn variant="primary" sm icon="upload" busy={busy('send')} disabled={busy()} onClick={send}>
                   {t('po.send')}
+                </Btn>
+              )}
+              {['APPROVED', 'SENT', 'PARTIALLY_RECEIVED'].includes(po.status) && !po.pendingApproval && (
+                <Btn sm icon="upload" disabled={busy()} onClick={() => setMailOpen(true)}>
+                  {t('po.email')}
                 </Btn>
               )}
               {receivable && (
@@ -425,6 +448,27 @@ export default function PoDetailPage() {
           </tbody>
         </table>
       </div>
+
+      <Modal open={mailOpen} title={t('po.email')} onClose={() => setMailOpen(false)}>
+        <form onSubmit={emailPo} className="space-y-4">
+          <Field label={t('po.emailTo')}>
+            <input name="to" className="input" defaultValue={po.vendor.email ?? ''} required />
+          </Field>
+          {po.status === 'APPROVED' && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="markSent" defaultChecked />
+              {t('po.emailMarkSent')}
+            </label>
+          )}
+          <p className="text-xs text-slate-500">{t('po.emailHint')}</p>
+          <div className="flex justify-end gap-2">
+            <Btn sm onClick={() => setMailOpen(false)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" sm busy={busy('mail')} disabled={busy()}>
+              {t('po.email')}
+            </Btn>
+          </div>
+        </form>
+      </Modal>
 
       <Modal open={!!billGrn} title={t('po.createBill')} onClose={() => setBillGrn(null)}>
         <form onSubmit={bill} className="space-y-4">
