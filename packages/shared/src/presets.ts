@@ -214,6 +214,8 @@ export const PROPOSED_APPROVAL_RULES: readonly ProposedApprovalRule[] = [
   { documentType: 'PROPOSAL', minAmount: 0, steps: ['executive'] },
   // Package 2 · P2-2: the general manager signs every contract (owner, 2026-10-29).
   { documentType: 'CONTRACT', minAmount: 0, steps: ['executive'] },
+  // Package 5 · P5-2 (owner, 2026-10-29 (a)): an overrun needs both signatures.
+  { documentType: 'EXECUTION_OVERRUN', minAmount: 0, steps: ['pm', 'executive'] },
 ];
 
 /** The preset of `key`, or undefined for a key that has none (`admin`, `sales`, anything else). */

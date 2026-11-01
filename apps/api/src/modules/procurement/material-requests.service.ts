@@ -13,6 +13,7 @@ import { AuditService } from '../../common/audit.service';
 import { NotificationService } from '../../common/notification.service';
 import type { AuthUser } from '../../common/auth-user';
 import { RequisitionsService } from './requisitions.service';
+import { moveBulk, moveSerials } from './site-stock';
 import {
   CreateMaterialIssueDto,
   CreateMaterialRequestDto,
@@ -363,8 +364,8 @@ export class MaterialRequestsService {
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
       for (const l of issue.lines) {
-        if (l.serialUnitIds.length > 0) await this.moveSerials(tx, user, issue, l);
-        else await this.moveBulk(tx, user, issue, l);
+        if (l.serialUnitIds.length > 0) await moveSerials(tx, user, issue, l, 'MaterialIssue');
+        else await moveBulk(tx, user, issue, l, 'MaterialIssue');
         await tx.materialRequestLine.update({ where: { id: l.requestLineId }, data: { receivedQty: { increment: l.qty } } });
       }
       const received = await tx.materialIssue.update({
@@ -483,82 +484,6 @@ export class MaterialRequestsService {
       where: { serialUnitIds: { hasSome: ids }, issue: { organizationId: user.organizationId, status: 'ISSUED' } },
     });
     if (busy > 0) throw new BadRequestException('A unit is already on a voucher in transit');
-  }
-
-  private async moveBulk(
-    tx: Tx,
-    user: AuthUser,
-    issue: { id: string; code: string; fromLocationId: string; toLocationId: string },
-    l: { itemId: string; qty: Prisma.Decimal },
-  ) {
-    const level = await tx.stockLevel.findFirst({
-      where: { organizationId: user.organizationId, itemId: l.itemId, locationId: issue.fromLocationId },
-    });
-    if (!level || D(level.qty).lt(l.qty)) {
-      throw new ConflictException(`Not enough stock left at the source to receive ${issue.code} — ask the warehouse`);
-    }
-    await tx.stockLevel.update({ where: { id: level.id }, data: { qty: { decrement: l.qty } } });
-    await tx.stockLevel.upsert({
-      where: {
-        organizationId_itemId_locationId: {
-          organizationId: user.organizationId,
-          itemId: l.itemId,
-          locationId: issue.toLocationId,
-        },
-      },
-      update: { qty: { increment: l.qty } },
-      create: { organizationId: user.organizationId, itemId: l.itemId, locationId: issue.toLocationId, qty: l.qty },
-    });
-    await tx.stockMovement.create({
-      data: {
-        organizationId: user.organizationId,
-        itemId: l.itemId,
-        fromLocationId: issue.fromLocationId,
-        toLocationId: issue.toLocationId,
-        qty: l.qty,
-        movementType: 'TRANSFER',
-        sourceType: 'MaterialIssue',
-        sourceId: issue.id,
-      },
-    });
-  }
-
-  private async moveSerials(
-    tx: Tx,
-    user: AuthUser,
-    issue: { id: string; code: string; fromLocationId: string; toLocationId: string; request?: unknown },
-    l: { itemId: string; serialUnitIds: string[] },
-  ) {
-    const units = await tx.serialUnit.findMany({
-      where: {
-        id: { in: l.serialUnitIds },
-        organizationId: user.organizationId,
-        locationId: issue.fromLocationId,
-        currentState: 'IN_STOCK',
-      },
-      select: { id: true },
-    });
-    if (units.length !== l.serialUnitIds.length) {
-      throw new ConflictException(`A unit on ${issue.code} is no longer in stock at the source — ask the warehouse`);
-    }
-    const project = await tx.location.findUniqueOrThrow({ where: { id: issue.toLocationId }, select: { projectId: true } });
-    await tx.serialUnit.updateMany({
-      where: { id: { in: l.serialUnitIds } },
-      data: { locationId: issue.toLocationId, ...(project.projectId ? { projectId: project.projectId } : {}) },
-    });
-    await tx.stockMovement.createMany({
-      data: l.serialUnitIds.map((serialUnitId) => ({
-        organizationId: user.organizationId,
-        itemId: l.itemId,
-        serialUnitId,
-        fromLocationId: issue.fromLocationId,
-        toLocationId: issue.toLocationId,
-        qty: 1,
-        movementType: 'TRANSFER',
-        sourceType: 'MaterialIssue',
-        sourceId: issue.id,
-      })),
-    });
   }
 
   private async ownedIssue(user: AuthUser, issueId: string) {

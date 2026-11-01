@@ -214,6 +214,8 @@ async function main() {
     { documentType: 'CREDIT_NOTE', prefix: 'CN' },
     // Package 4: material requests (MR-00001 …) and issue vouchers (MIS-00001 …).
     { documentType: 'MATERIAL_REQUEST', prefix: 'MR' },
+    { documentType: 'EXECUTION_OVERRUN', prefix: 'OVR' },
+    { documentType: 'MATERIAL_RETURN', prefix: 'MRT' },
     { documentType: 'MATERIAL_ISSUE', prefix: 'MIS' },
     // CRM Step 5: follow-up tasks (TSK-00001 …).
     { documentType: 'FOLLOWUP_TASK', prefix: 'TSK' },

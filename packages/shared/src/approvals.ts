@@ -17,7 +17,9 @@ export type ApprovalDocumentType =
   // CRM Phase 1 · Step 4: a proposal is signed before it may be sent to the customer.
   | 'PROPOSAL'
   // Package 2 · P2-2: the contract, signed once before it may be activated.
-  | 'CONTRACT';
+  | 'CONTRACT'
+  // Package 5 · P5-2: executing beyond a budget line's approved quantity.
+  | 'EXECUTION_OVERRUN';
 
 export interface ApprovalDocumentMeta {
   value: ApprovalDocumentType;
@@ -89,6 +91,16 @@ export const APPROVAL_DOCUMENTS: ApprovalDocumentMeta[] = [
     permission: PERMISSIONS.PROPOSAL_APPROVE,
     amountLabelAr: 'قيمة العقد',
     amountLabelEn: 'Contract value',
+  },
+  {
+    value: 'EXECUTION_OVERRUN',
+    labelAr: 'تجاوز كمية بند الموازنة',
+    labelEn: 'Budget line overrun',
+    // Owner decision 2026-10-29 (a): the projects GM and the general manager —
+    // both hold the spending-approval key; no new key (Madar's catalogue pin).
+    permission: PERMISSIONS.PROCUREMENT_APPROVE,
+    amountLabelAr: 'الكمية الزائدة × تكلفة الوحدة في الموازنة',
+    amountLabelEn: 'Extra quantity × the line\'s budgeted unit cost',
   },
 ];
 

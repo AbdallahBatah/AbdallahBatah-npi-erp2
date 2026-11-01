@@ -250,6 +250,10 @@ model Organization {
   budgetTemplates     BudgetTemplate[]
   materialRequests    MaterialRequest[]
   materialIssues      MaterialIssue[]
+  progressEntries     WorkProgressEntry[]
+  executionOverruns   ExecutionOverrun[]
+  siteAttendance      SiteAttendance[]
+  materialReturns     MaterialReturn[]
   pricingSchemes      PricingScheme[]
   designVersions      DesignVersion[]
   proposals           Proposal[]
@@ -703,6 +707,7 @@ model Item {
   prLines        PurchaseRequisitionLine[]
   materialRequestLines MaterialRequestLine[]
   materialIssueLines   MaterialIssueLine[]
+  materialReturnLines  MaterialReturnLine[]
   serialUnits    SerialUnit[]
   stockLevels    StockLevel[]
   stockMovements StockMovement[]
@@ -1414,6 +1419,11 @@ model Project {
   journalEntries JournalEntry[]
   requisitions   PurchaseRequisition[]
   materialRequests MaterialRequest[]
+  // Package 5 (ADR-05, migration 0043): execution tracking.
+  progressEntries  WorkProgressEntry[]
+  overruns         ExecutionOverrun[]
+  attendance       SiteAttendance[]
+  materialReturns  MaterialReturn[]
   commitments    ProjectCommitment[]
   // CRM Phase 1 · Step 5 (optional link; the screens do not offer it yet)
   activities     Activity[]
@@ -1447,6 +1457,8 @@ model WbsElement {
   poLines      PurchaseOrderLine[]
   prLines      PurchaseRequisitionLine[]
   materialRequestLines MaterialRequestLine[]
+  progressEntries WorkProgressEntry[]
+  overruns        ExecutionOverrun[]
   costEntries  ProjectCostEntry[]
   commitments  ProjectCommitment[]
   changeOrders ChangeOrder[]
@@ -1739,6 +1751,8 @@ model Location {
   movementsTo    StockMovement[] @relation("MoveTo")
   issuesFrom     MaterialIssue[] @relation("IssueFrom")
   issuesTo       MaterialIssue[] @relation("IssueTo")
+  returnsFrom    MaterialReturn[] @relation("ReturnFrom")
+  returnsTo      MaterialReturn[] @relation("ReturnTo")
   requisitionsDeliveredHere PurchaseRequisition[] @relation("PrDeliverTo")
   ordersDeliveredHere       PurchaseOrder[]       @relation("PoDeliverTo")
 
@@ -2418,6 +2432,9 @@ enum ApprovalDocument {
   PROPOSAL
   // Package 2 · P2-2 (migration 0038): the contract, signed once by the general manager.
   CONTRACT
+  // Package 5 · P5-2 (migration 0043): executing more than a budget line's
+  // quantity — signed by the projects GM and the general manager (owner, 2026-10-29).
+  EXECUTION_OVERRUN
 }
 
 enum ApprovalStatus {
@@ -3040,4 +3057,122 @@ model MaterialIssueLine {
 
   @@index([issueId])
   @@index([requestLineId])
+}
+
+// ─── Package 5 · execution tracking (ADR-05, migration 0043) ────────────────
+
+/// What was executed on one budget line on one day (owner work cycle step 14).
+/// The cap is the line's quantity plus its approved overruns.
+model WorkProgressEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsElementId   String
+  wbsElement     WbsElement @relation(fields: [wbsElementId], references: [id], onDelete: Cascade)
+  workDate       DateTime @db.Date
+  qty            Decimal  @db.Decimal(14, 3)
+  notes          String?
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@index([projectId, workDate])
+  @@index([wbsElementId])
+}
+
+enum OverrunStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Extra quantity on a budget line beyond the approved estimate. Signed in the
+/// approval matrix (EXECUTION_OVERRUN): projects GM, then general manager.
+model ExecutionOverrun {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsElementId   String
+  wbsElement     WbsElement @relation(fields: [wbsElementId], references: [id], onDelete: Cascade)
+  extraQty       Decimal  @db.Decimal(14, 3)
+  /// extraQty × the line's unit cost — the amount the matrix bands on.
+  amount         Decimal  @default(0) @db.Decimal(18, 2)
+  reason         String
+  status         OverrunStatus @default(PENDING)
+  requestedById  String
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, code])
+  @@index([projectId, status])
+  @@index([wbsElementId])
+}
+
+/// Who was on site, when they came and left, and in what role.
+model SiteAttendance {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workDate       DateTime @db.Date
+  workerName     String
+  trade          String?
+  checkInAt      DateTime
+  checkOutAt     DateTime?
+  notes          String?
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@index([projectId, workDate])
+}
+
+enum MaterialReturnStatus {
+  RAISED
+  RECEIVED
+  CANCELLED
+}
+
+/// Materials left on site going back to the store. Stock moves only when the
+/// keeper confirms receipt.
+model MaterialReturn {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  fromLocationId String
+  fromLocation   Location @relation("ReturnFrom", fields: [fromLocationId], references: [id])
+  toLocationId   String
+  toLocation     Location @relation("ReturnTo", fields: [toLocationId], references: [id])
+  status         MaterialReturnStatus @default(RAISED)
+  raisedById     String
+  raisedAt       DateTime @default(now())
+  receivedById   String?
+  receivedAt     DateTime?
+  notes          String?
+
+  lines          MaterialReturnLine[]
+
+  @@unique([organizationId, code])
+  @@index([projectId])
+  @@index([organizationId, status])
+}
+
+model MaterialReturnLine {
+  id            String  @id @default(cuid())
+  returnId      String
+  materialReturn MaterialReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  itemId        String
+  item          Item    @relation(fields: [itemId], references: [id])
+  qty           Decimal @db.Decimal(14, 3)
+  serialUnitIds String[]
+
+  @@index([returnId])
 }
