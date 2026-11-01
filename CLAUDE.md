@@ -6,8 +6,9 @@ NOTION_PROJECT_NAME: NPI ERP — التحويل إلى وورك فلو متكا�
 This copy is an independent project: no link to `eyad62689-lab/npi-erp` (remote removed). `main` = the owner's
 2026-10-31 source export (old `main`, demo server address redacted as `SERVER_IP` / `DEMO_HOST`) + owner-change
 packages 3, 2 and 4 (P3-1…P3-10, P2-1…P2-4, P4-1…P4-4), full history kept. The pre-merge `main` is
-`archive/main-before-standalone`. Target remote when available: `AbdallahBatah/npi-erp`. Work on `main` directly
-or short branches off it; the `feat/owner-changes-p*` branches are history now.
+`archive/main-before-standalone`. Remote `origin` = `AbdallahBatah/AbdallahBatah-npi-erp2` (private, all branches
+pushed 2026-11-01; tags not pushed — the session proxy refused them). The owner asked that every change go to this
+repository: commit per task on `main` and push `origin main` after each. The `feat/owner-changes-p*` branches are history.
 
 ## What this repository is
 Modular-monolith ERP for a Saudi solar company (`apps/api` NestJS + Prisma on PostgreSQL, `apps/web` Next.js,
@@ -42,6 +43,6 @@ itself: the owner's change requests (seven packages), on branch `feat/owner-chan
 
 ## Conventions
 - Owner reads Arabic only: reports and owner docs in Arabic; code, comments and commits in English.
-- One commit per task (`T-xx: summary`), then a `chore(copilot): PROGRESS.md …` commit. Never push to `main` directly;
-  `main` changes go through a PR. Keep `feat/copilot` and `feature/crm-phase-1` pushed to `origin` after each task.
+- One commit per task (`T-xx` / `P<n>-<m>: summary`). Standalone project: commits go straight to `main` and are
+  pushed to `origin` after each task (owner's instruction 2026-11-01); the old PR-only rule applied to the eyad repo.
 - Routing table and Notion protocol: `~/.claude/CLAUDE.md`. Testing skill: `.claude/skills/npi-erp-testing`.
