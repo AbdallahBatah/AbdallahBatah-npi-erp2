@@ -148,6 +148,8 @@ export class ProcurementService implements OnModuleInit {
       include: {
         vendor: true,
         project: { select: { id: true, code: true, nameAr: true, nameEn: true } },
+        // P4-4: where the vendor delivers (from the requisition's sourcing).
+        deliveryLocation: { select: { id: true, code: true, nameAr: true, nameEn: true } },
         lines: {
           include: {
             item: { select: { sku: true, nameAr: true, nameEn: true, isSerialised: true, uom: true } },

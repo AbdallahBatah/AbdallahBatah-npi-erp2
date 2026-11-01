@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -24,6 +24,9 @@ interface PoLine {
 interface Receipt {
   id: string;
   code: string;
+  /** P4-5: DRAFT → INSPECTED → ACCEPTED | PARTIALLY_REJECTED. Only an accepted receipt is billed. */
+  status: string;
+  rejectionNote?: string | null;
   receivedAt: string;
   serialUnits: { id: string }[];
   vendorBills: { id: string; code: string; status: string }[];
@@ -39,6 +42,11 @@ interface Po {
   project?: { id: string; code: string; nameAr: string; nameEn: string } | null;
   lines: PoLine[];
   goodsReceipts: Receipt[];
+  /** P4-5: DRAFT (recorded) → MATCHED (three-way) → APPROVED (journal) → SCHEDULED. */
+  vendorBills: Array<{ id: string; code: string; status: string; total: string; vendorRef: string | null; createdAt: string }>;
+  /** P4-4: delivery place and date set while the requisition was sourced. */
+  deliveryLocation?: { code: string; nameAr: string; nameEn: string } | null;
+  expectedDelivery?: string | null;
   /** Set while the PO is sitting in the approval matrix (package و). */
   pendingApproval: ApprovalRequestView | null;
 }
@@ -58,6 +66,8 @@ export default function PoDetailPage() {
   const { act, busy } = useAct();
   const { confirm, confirmNode } = useConfirm();
   const toast = useToast();
+  const [billGrn, setBillGrn] = useState<string | null>(null);
+  const [rejectId, setRejectId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoadErr('');
@@ -140,13 +150,35 @@ export default function PoDetailPage() {
     }
   }
 
-  async function bill(grnId: string) {
-    if (
-      !(await confirm({ title: t('confirm.postBillTitle'), message: t('confirm.postBillMsg'), danger: true }))
-    )
-      return;
-    if (await act(`bill:${grnId}`, () => api.post('/procurement/bills', { goodsReceiptId: grnId })))
+  // P4-5: recording the vendor's invoice posts nothing; approving it does.
+  async function bill(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!billGrn) return;
+    const vendorRef = String(new FormData(e.currentTarget).get('vendorRef') || '').trim() || undefined;
+    if (await act(`bill:${billGrn}`, () => api.post('/procurement/bills', { goodsReceiptId: billGrn, vendorRef }))) {
+      setBillGrn(null);
       load();
+    }
+  }
+
+  /** One receipt or bill step: inspect, accept, match, approve, schedule. */
+  async function step(key: string, path: string, comment?: string) {
+    if (await act(key, () => api.post(path, comment ? { comment } : {}))) load();
+  }
+
+  async function rejectGrn(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!rejectId) return;
+    const comment = String(new FormData(e.currentTarget).get('comment') || '').trim();
+    if (await act(`rej:${rejectId}`, () => api.post(`/procurement/receipts/${rejectId}/reject`, { comment }))) {
+      setRejectId(null);
+      load();
+    }
+  }
+
+  async function approveBill(billId: string) {
+    if (!(await confirm({ title: t('confirm.postBillTitle'), message: t('confirm.postBillMsg'), danger: true }))) return;
+    await step(`bapprove:${billId}`, `/procurement/bills/${billId}/approve`);
   }
 
   if (loadErr && !po) return <LoadError message={loadErr} onRetry={load} />;
@@ -187,6 +219,21 @@ export default function PoDetailPage() {
       {confirmNode}
 
       {po.pendingApproval && <ApprovalBanner request={po.pendingApproval} />}
+
+      {(po.deliveryLocation || po.expectedDelivery) && (
+        <p className="mb-4 text-sm text-slate-600">
+          {po.deliveryLocation && (
+            <span className="me-4">
+              {t('pr.deliverTo')}: {po.deliveryLocation.code} · {pick(po.deliveryLocation, 'name')}
+            </span>
+          )}
+          {po.expectedDelivery && (
+            <span>
+              {t('pr.col.neededBy')}: {formatDate(po.expectedDelivery, locale)}
+            </span>
+          )}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <div className="card p-4">
@@ -261,6 +308,7 @@ export default function PoDetailPage() {
             <tr>
               <th scope="col" className="th">{t('common.code')}</th>
               <th scope="col" className="th">{t('common.date')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
               <th scope="col" className="th text-center">{t('prj.serials')}</th>
               <th scope="col" className="th">{t('po.bill')}</th>
               <th scope="col" className="th">{t('common.actions')}</th>
@@ -268,12 +316,16 @@ export default function PoDetailPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {po.goodsReceipts.length === 0 ? (
-              <EmptyRow colSpan={5} text={t('common.none')} />
+              <EmptyRow colSpan={6} text={t('common.none')} />
             ) : (
               po.goodsReceipts.map((g) => (
                 <tr key={g.id}>
                   <td className="td font-mono text-xs">{g.code}</td>
                   <td className="td text-xs text-slate-500">{formatDate(g.receivedAt, locale)}</td>
+                  <td className="td">
+                    <StatusBadge status={g.status} />
+                    {g.rejectionNote && <p className="mt-1 text-xs text-danger-700">{g.rejectionNote}</p>}
+                  </td>
                   <td className="td text-center">{g.serialUnits.length}</td>
                   <td className="td">
                     {g.vendorBills.length > 0 ? (
@@ -285,13 +337,30 @@ export default function PoDetailPage() {
                     )}
                   </td>
                   <td className="td">
-                    {g.vendorBills.length === 0 && (
-                      <Can perm="scm.procurement.write">
-                        <Btn variant="primary" sm icon="receipt" busy={busy(`bill:${g.id}`)} disabled={busy()} onClick={() => bill(g.id)}>
-                          {t('po.createBill')}
-                        </Btn>
-                      </Can>
-                    )}
+                    <Can perm="scm.procurement.write">
+                      <div className="flex flex-wrap gap-2">
+                        {g.status === 'DRAFT' && (
+                          <Btn sm icon="search" busy={busy(`insp:${g.id}`)} disabled={busy()} onClick={() => step(`insp:${g.id}`, `/procurement/receipts/${g.id}/inspect`)}>
+                            {t('grn.inspect')}
+                          </Btn>
+                        )}
+                        {g.status === 'INSPECTED' && (
+                          <>
+                            <Btn variant="primary" sm icon="check" busy={busy(`acc:${g.id}`)} disabled={busy()} onClick={() => step(`acc:${g.id}`, `/procurement/receipts/${g.id}/accept`)}>
+                              {t('grn.accept')}
+                            </Btn>
+                            <Btn variant="danger" sm disabled={busy()} onClick={() => setRejectId(g.id)}>
+                              {t('grn.rejectPartial')}
+                            </Btn>
+                          </>
+                        )}
+                        {g.status === 'ACCEPTED' && g.vendorBills.length === 0 && (
+                          <Btn variant="primary" sm icon="receipt" disabled={busy()} onClick={() => setBillGrn(g.id)}>
+                            {t('po.createBill')}
+                          </Btn>
+                        )}
+                      </div>
+                    </Can>
                   </td>
                 </tr>
               ))
@@ -299,6 +368,92 @@ export default function PoDetailPage() {
           </tbody>
         </table>
       </div>
+
+      {/* P4-5: vendor bills — record → three-way match → approve (journal) → schedule. */}
+      <div className="card mt-6 overflow-hidden">
+        <h2 className="card-title">{t('bill.title')}</h2>
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-50">
+            <tr>
+              <th scope="col" className="th">{t('common.code')}</th>
+              <th scope="col" className="th">{t('bill.vendorRef')}</th>
+              <th scope="col" className="th text-end">{t('po.total')}</th>
+              <th scope="col" className="th">{t('common.status')}</th>
+              <th scope="col" className="th">{t('common.actions')}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {po.vendorBills.length === 0 ? (
+              <EmptyRow colSpan={5} text={t('common.none')} />
+            ) : (
+              po.vendorBills.map((b) => (
+                <tr key={b.id}>
+                  <td className="td font-mono text-xs">{b.code}</td>
+                  <td className="td text-xs">{b.vendorRef ?? '—'}</td>
+                  <td className="td-num">{formatMoney(b.total, locale)}</td>
+                  <td className="td">
+                    <StatusBadge status={b.status} />
+                  </td>
+                  <td className="td">
+                    <div className="flex flex-wrap gap-2">
+                      {b.status === 'DRAFT' && (
+                        <Can perm="scm.procurement.write">
+                          <Btn sm icon="scale" busy={busy(`match:${b.id}`)} disabled={busy()} onClick={() => step(`match:${b.id}`, `/procurement/bills/${b.id}/match`)}>
+                            {t('bill.match')}
+                          </Btn>
+                        </Can>
+                      )}
+                      {b.status === 'MATCHED' && (
+                        <Can perm="finance.payment.write">
+                          <Btn variant="primary" sm icon="check" busy={busy(`bapprove:${b.id}`)} disabled={busy()} onClick={() => approveBill(b.id)}>
+                            {t('bill.approve')}
+                          </Btn>
+                        </Can>
+                      )}
+                      {b.status === 'APPROVED' && (
+                        <Can perm="finance.payment.write">
+                          <Btn sm icon="clock" busy={busy(`sched:${b.id}`)} disabled={busy()} onClick={() => step(`sched:${b.id}`, `/procurement/bills/${b.id}/schedule`)}>
+                            {t('bill.schedule')}
+                          </Btn>
+                        </Can>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={!!billGrn} title={t('po.createBill')} onClose={() => setBillGrn(null)}>
+        <form onSubmit={bill} className="space-y-4">
+          <p className="text-xs text-slate-500">{t('bill.recordHint')}</p>
+          <Field label={`${t('bill.vendorRef')} (${t('common.optional')})`}>
+            <input name="vendorRef" className="input" maxLength={100} />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Btn sm onClick={() => setBillGrn(null)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="primary" sm busy={busy(`bill:${billGrn}`)} disabled={busy()}>
+              {t('po.createBill')}
+            </Btn>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={!!rejectId} title={t('grn.rejectPartial')} onClose={() => setRejectId(null)}>
+        <form onSubmit={rejectGrn} className="space-y-4">
+          <Field label={t('grn.rejectReason')}>
+            <textarea name="comment" className="input" rows={3} required minLength={3} maxLength={1000} />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Btn sm onClick={() => setRejectId(null)}>{t('common.cancel')}</Btn>
+            <Btn type="submit" variant="danger" sm busy={busy(`rej:${rejectId}`)} disabled={busy()}>
+              {t('grn.rejectPartial')}
+            </Btn>
+          </div>
+        </form>
+      </Modal>
 
       {/* Receive modal */}
       <Modal
